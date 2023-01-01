@@ -1,0 +1,2 @@
+fetch = {'id': 8289, 'results': [{'iso_639_1': 'en', 'iso_3166_1': 'US', 'name': 'Gorky Park (1983) ORIGINAL TRAILER [HD 1080p]', 'key': '2WgOZ6W6Ug4', 'site': 'YouTube', 'size': 1080, 'type': 'Trailer', 'official': False, 'published_at': '2018-06-10T19:48:14.000Z', 'id': '62e9646ef1b5710059576859'}]}
+print(fetch["results"]["key"])
