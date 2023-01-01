@@ -1,3 +1,6 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:e4604596310054e72f519ffecd0b20fd173f4e0ac9afa3d2dbb69a5b863e1ba2
-size 942
+ABSTRACT
+A Recommendation System is a filtering program whose primary goal is to predict the “rating” or “preference” of a user towards a domain-specific element.  In our project, this domain-specific element is a movie. Hence the main focus of our recommendation system is to provide a total of ten movie recommendations to users who searched for a movie that they like. These results are based on tags of the movie that has been searched. Content based filtering is a technique that is used to recommend movies. 
+Apart from providing recommendations the system also provides posters, trailers/relevant videos of the Movies along with Release Date, Budget, Collection, Popularity, Similarity between selected Movie, Overview of Movie and More. 
+The System uses the concept of vectorization based on common features and uses Cosine Similarity with respect to each other vectors to determine the most similar movies.
+
+
