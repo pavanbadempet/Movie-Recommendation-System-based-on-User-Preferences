@@ -1,7 +1,3 @@
-services:
-  streamlit:
-    build:
-      dockerfile: ./Dockerfile
-      context: ./
-    ports:
-      - "8081:8501"
+version https://git-lfs.github.com/spec/v1
+oid sha256:cf00d94f489a963d96d34255379929fd4a360bad088299f5d42dd760cc01c8ea
+size 113

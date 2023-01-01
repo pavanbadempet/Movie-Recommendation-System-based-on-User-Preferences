@@ -1,8 +1,3 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<project version="4">
-  <component name="ProjectModuleManager">
-    <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/movie-recommender-system.iml" filepath="$PROJECT_DIR$/.idea/movie-recommender-system.iml" />
-    </modules>
-  </component>
-</project>
+version https://git-lfs.github.com/spec/v1
+oid sha256:2c8d4b203efc5faa36c39b6629ebd20a8e5365718a8c69e4d800711c22cc453f
+size 300
