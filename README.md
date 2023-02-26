@@ -7,8 +7,6 @@ The System uses the concept of vectorization based on common features and uses C
 ## Test It Online
 Hosted on Azure: http://mrsbup.azurewebsites.net/
 
-## Screenshots
-
 
 ## Installation Local
 
