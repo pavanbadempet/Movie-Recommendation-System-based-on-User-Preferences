@@ -5,7 +5,7 @@ Apart from providing recommendations the system also provides posters, trailers/
 The System uses the concept of vectorization based on common features and uses Cosine Similarity with respect to each other vectors to determine the most similar movies.
 
 ## Test It Online
-Hosted on Azure: http://mrsbup.azurewebsites.net/
+Hosted on Azure: ~~http://mrsbup.azurewebsites.net/~~
 
 
 ## Installation Local
