@@ -29,7 +29,7 @@ class Recommender:
         self._vectors: np.ndarray | None = None
     
     def load(self) -> "Recommender":
-        """Load all required artifacts."""
+        """Load all required artifacts with minimal memory footprint."""
         logger.info("Loading recommendation engine...")
         
         # Load FAISS index
@@ -39,32 +39,36 @@ class Recommender:
         self._index = faiss.read_index(str(index_path))
         logger.info(f"Loaded FAISS index with {self._index.ntotal:,} vectors")
         
-        # Load SBERT embeddings (replacing TF-IDF)
+        # Load SBERT embeddings with memory-mapping (reads from disk, not RAM)
         vectors_path = MODELS_DIR / "sbert_embeddings.npy"
         if vectors_path.exists():
-            self._vectors = np.load(vectors_path)
-            # SBERT vectors are usually normalized, but let's ensure it for Cosine Similarity
-            # (If transformation step did it, checking here is cheap safety)
-            norms = np.linalg.norm(self._vectors, axis=1, keepdims=True)
-            norms[norms == 0] = 1
-            self._vectors = self._vectors / norms
-            logger.info(f"Loaded SBERT embeddings with shape {self._vectors.shape}")
+            # Memory-mapped mode: doesn't load entire array into RAM
+            self._vectors = np.load(vectors_path, mmap_mode='r')
+            logger.info(f"Loaded SBERT embeddings with shape {self._vectors.shape} (memory-mapped)")
         else:
-             # Fallback to TF-IDF if SBERT not found (during transition)
+            # Fallback to TF-IDF if SBERT not found
             vectors_path = MODELS_DIR / "tfidf_vectors.npy"
             if vectors_path.exists():
-                self._vectors = np.load(vectors_path)
-                logger.warning("SBERT embeddings not found, falling back to TF-IDF vectors.")
+                self._vectors = np.load(vectors_path, mmap_mode='r')
+                logger.warning("SBERT embeddings not found, using TF-IDF vectors.")
             else:
-                 logger.warning("No vectors found.")
+                logger.warning("No vectors found.")
         
-        # Load movie metadata
+        # Load movie metadata - only essential columns to save memory
         movies_path = DATA_DIR / "movies_transformed.parquet"
         if not movies_path.exists():
             movies_path = DATA_DIR / "movies.parquet"
         
         if movies_path.exists():
-            self._movies = pd.read_parquet(movies_path)
+            # Only load columns we actually need for recommendations
+            essential_cols = ['id', 'title', 'overview', 'genres', 'vote_average', 
+                            'vote_count', 'popularity', 'release_date', 'poster_path',
+                            'director', 'cast', 'original_language']
+            try:
+                self._movies = pd.read_parquet(movies_path, columns=essential_cols)
+            except Exception:
+                # Fallback if some columns don't exist
+                self._movies = pd.read_parquet(movies_path)
             logger.info(f"Loaded {len(self._movies):,} movies")
         else:
             raise FileNotFoundError(f"Movie data not found. Run the ETL pipeline first.")
