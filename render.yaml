@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: movie-recs-api
+    plan: free
+    region: singapore
+    autoDeploy: true
+    healthCheckPath: /health
+    buildFilter:
+      paths:
+        - backend/**
+        - models/**
+        - data/processed/**
+        - requirements.txt
+        - render.yaml
+      ignoredPaths:
+        - streamlit_app.py
+        - docs/**
+        - legacy/**
+        - .github/**
+        - README.md
+    env: python
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: GIT_LFS_SKIP_SMUDGE
+        value: "1"
+      - key: TMDB_API_KEY
+        sync: false
+
