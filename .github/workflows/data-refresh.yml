@@ -1,0 +1,71 @@
+# Daily data refresh workflow for Movie Recommendation System
+# Fetches latest TMDB data from Kaggle and rebuilds the index
+
+name: Daily Data Refresh
+
+on:
+  schedule:
+    # Run daily at 6 AM UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  refresh-data:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install kaggle
+
+      - name: Download latest Kaggle dataset
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          mkdir -p data/raw
+          kaggle datasets download -d alanvourch/tmdb-movies-daily-updates -p data/raw --unzip
+          ls -la data/raw/
+
+      - name: Run ETL pipeline
+        run: |
+          python -m etl.pipeline --data data/raw/TMDB_movie_dataset_v11.csv
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-artifacts-${{ github.run_number }}
+          path: |
+            models/
+            data/processed/
+          retention-days: 7
+
+      - name: Commit updated artifacts
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          
+          # Only commit if there are changes
+          git add models/ data/processed/
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: Daily data refresh $(date +%Y-%m-%d)"
+            git push
+          fi
