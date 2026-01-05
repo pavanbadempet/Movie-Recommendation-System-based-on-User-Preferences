@@ -19,7 +19,7 @@ services:
         - .github/**
         - README.md
     env: python
-    buildCommand: git lfs install && git lfs pull && pip install --upgrade pip && pip install -r requirements.txt
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
