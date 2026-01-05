@@ -1,0 +1,5 @@
+# Git LFS - Only truly large binary files
+*.npy filter=lfs diff=lfs merge=lfs -text
+*.index filter=lfs diff=lfs merge=lfs -text
+*.parquet filter=lfs diff=lfs merge=lfs -text
+models/faiss.index filter=lfs diff=lfs merge=lfs -text
