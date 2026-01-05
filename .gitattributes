@@ -1,6 +1,8 @@
-# Git LFS - Only truly large binary files
+# Git LFS - ONLY large binary files (not text files!)
+*.pkl filter=lfs diff=lfs merge=lfs -text
 *.npy filter=lfs diff=lfs merge=lfs -text
 *.index filter=lfs diff=lfs merge=lfs -text
+*.joblib filter=lfs diff=lfs merge=lfs -text
 *.parquet filter=lfs diff=lfs merge=lfs -text
 models/faiss.index filter=lfs diff=lfs merge=lfs -text
 *.tq filter=lfs diff=lfs merge=lfs -text
@@ -8,4 +10,3 @@ models/faiss.index filter=lfs diff=lfs merge=lfs -text
 *.mp4 filter=lfs diff=lfs merge=lfs -text
 data/raw/ml-25m/tags.csv filter=lfs diff=lfs merge=lfs -text
 *.pt filter=lfs diff=lfs merge=lfs -text
-*.joblib filter=lfs diff=lfs merge=lfs -text
