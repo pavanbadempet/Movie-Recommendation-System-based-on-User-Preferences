@@ -110,7 +110,7 @@ def fetch_trailer(movie_id):
                 return v.get("key")
         if data.get("results"):
             return data["results"][0].get("key")
-    except:
+    except (requests.RequestException, KeyError, IndexError):
         pass
     return None
 
@@ -133,7 +133,7 @@ def fetch_tmdb_details(movie_id):
             timeout=3
         )
         return r.json()
-    except:
+    except (requests.RequestException, ValueError):
         return {}
 
 
@@ -150,7 +150,7 @@ def fetch_credits(movie_id):
         cast = [c["name"] for c in data.get("cast", [])[:3]]
         director = next((c["name"] for c in data.get("crew", []) if c.get("job") == "Director"), "Unknown")
         return {"cast": ", ".join(cast), "director": director}
-    except:
+    except (requests.RequestException, KeyError, TypeError):
         return {"cast": "N/A", "director": "N/A"}
 
 
@@ -172,7 +172,7 @@ def fetch_watch_providers(movie_id):
         # We only care about "flatrate" (subscription) for now
         flatrate = providers.get("flatrate", [])
         return flatrate
-    except:
+    except (requests.RequestException, KeyError, TypeError):
         return []
 
 
@@ -182,7 +182,7 @@ def search_movies(query):
         r = requests.get(f"{API_URL}/search", params={"q": query, "limit": 100}, timeout=10)
         if r.ok:
             return r.json()
-    except:
+    except requests.RequestException:
         st.error("⚠️ Backend not running. Start: `uvicorn backend.main:app`")
     return []
 
@@ -410,7 +410,6 @@ if search and len(search) >= 2:
             # Get Recommendations button
             if st.button("🎯 Get Recommendations", type="primary"):
                 st.session_state.selected_rec = None
-                st.session_state.selected_idx = None
                 
                 with st.spinner("Loading recommendations..."):
                     # Use the new ENRICHED endpoint - parallel fetch on backend!
