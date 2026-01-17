@@ -5,6 +5,7 @@ Provides REST API endpoints for movie search and recommendations.
 import asyncio
 import logging
 import os
+from contextlib import asynccontextmanager
 from typing import Optional
 
 import httpx
@@ -22,11 +23,25 @@ logger = logging.getLogger(__name__)
 TMDB_KEY = os.getenv("TMDB_API_KEY")
 TMDB_BASE = "https://api.themoviedb.org/3"
 
+# Async HTTP client (initialized via lifespan)
+http_client: httpx.AsyncClient | None = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage async resources for app lifetime."""
+    global http_client
+    http_client = httpx.AsyncClient(timeout=10.0)
+    yield
+    await http_client.aclose()
+
+
 # Create FastAPI app
 app = FastAPI(
     title="Movie Recommendation API",
     description="Content-based movie recommendation engine using FAISS",
     version="2.0.0",
+    lifespan=lifespan,
 )
 
 # CORS configuration for Streamlit frontend
@@ -37,22 +52,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Async HTTP client
-http_client: httpx.AsyncClient | None = None
-
-
-@app.on_event("startup")
-async def startup():
-    global http_client
-    http_client = httpx.AsyncClient(timeout=10.0)
-
-
-@app.on_event("shutdown")
-async def shutdown():
-    global http_client
-    if http_client:
-        await http_client.aclose()
 
 
 # Response models
@@ -275,7 +274,7 @@ async def recommend_by_id_enriched(
     # Get recommendations
     recommendations = rec.recommend_by_id(movie_id, n=n)
     
-    # Enrich ALL movies in PARALLEL (this is the magic!)
+    # Enrich all movies in parallel
     enriched = await asyncio.gather(*[enrich_movie(m) for m in recommendations])
     
     return EnrichedRecommendationResponse(

@@ -1,54 +1,37 @@
-# Automation Guide: Movie Recommendation System
+# Automation Guide
 
-This document explains the automated data pipeline for the Movie Recommendation System.
+How the daily data refresh works.
 
-## 🔄 Daily Data Refresh
-The system is configured to **automatically update** every day at **3:00 AM**.
+## Daily Schedule
 
-### What happens daily?
-1.  **Download:** Fetches the latest movie dataset from Kaggle (`alanvourch/tmdb-movies-daily-updates`).
-2.  **ETL (Extract, Transform, Load):** 
-    -   Reads the CSV (1M+ movies).
-    -   Filters for high-quality movies (Vote Count ≥ 50).
-    -   Generates AI Embeddings (SBERT) for the new movies.
-3.  **Index:** Rebuilds the FAISS Search Index.
-4.  **Result:** When you wake up, the recommendation engine has the latest movies (like "Avatar: Fire and Ash").
+The system updates at 3:00 AM daily:
+1. Downloads latest TMDB data from Kaggle
+2. Filters for quality movies (vote count >= 50)
+3. Generates embeddings for new movies
+4. Rebuilds the FAISS index
 
----
+## Manual refresh
 
-## 🛠 Manual Execution
-If you want to trigger an update **right now** (e.g., to fix a data issue or test changes):
+Run the refresh script directly:
 
-### 1. Reliable Mode (Recommended)
-This uses **Pandas**, which is rock-solid on Windows. It takes about **20-30 minutes**.
 ```powershell
-python refresh.py
-```
-*(No arguments needed - it defaults to Pandas)*
+# Standard mode (Pandas, ~20-30 min)
+python daily_refresh.py
 
-### 2. Fast/Experimental Mode (PySpark)
-This uses **Spark** (local cluster). It is faster (~10-15 mins) but requires careful memory management.
+# Fast mode (PySpark, ~10-15 min, may need more memory)
+python daily_refresh.py --spark
+```
+
+## Logs
+
+Check `logs/` directory:
+
 ```powershell
-python refresh.py --spark
+Get-Content logs/refresh_LATEST.log -Tail 20
 ```
-*Note: If Spark fails, the system will automatically fall back to Pandas.*
 
----
+## Files
 
-## 📂 Logs & Monitoring
-All activity is logged to the `logs/` directory.
-
--   **Check the latest run:**
-    ```powershell
-    Get-Content logs/refresh_LATEST.log -Tail 20
-    ```
--   **Troubleshooting:**
-    -   `refresh_*.log`: Main orchestrator logs.
-    -   `pipeline_*.log`: Pandas ETL specific logs.
-
----
-
-## ⚙️ Configuration
--   **Schedule Script:** `schedule_refresh.ps1` (Run as Admin to re-register task).
--   **Orchestrator:** `refresh.py`.
--   **Pipeline Code:** `etl/pipeline.py`.
+- `schedule_refresh.ps1` - Windows Task Scheduler setup
+- `daily_refresh.py` - Main refresh script
+- `etl/pipeline.py` - ETL logic

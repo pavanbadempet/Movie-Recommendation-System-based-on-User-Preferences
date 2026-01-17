@@ -3,13 +3,13 @@ Recommendation engine for the Movie Recommendation System.
 Loads FAISS index and movie metadata for fast similarity search.
 """
 import logging
+from datetime import datetime
 from pathlib import Path
 from functools import lru_cache
 
 import numpy as np
 import pandas as pd
 import faiss
-import joblib
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 logger = logging.getLogger(__name__)
@@ -66,7 +66,7 @@ class Recommender:
                             'director', 'cast', 'original_language']
             try:
                 self._movies = pd.read_parquet(movies_path, columns=essential_cols)
-            except Exception:
+            except (KeyError, ValueError):
                 # Fallback if some columns don't exist
                 self._movies = pd.read_parquet(movies_path)
             logger.info(f"Loaded {len(self._movies):,} movies")
@@ -201,7 +201,7 @@ class Recommender:
             if is_cand_doc and not is_query_doc:
                 final_score -= 0.15 # Strong penalty to push them down
             
-            # === PEAK QUALITY BOOSTING ===
+            # Quality-based score adjustments
             
             # Quality Boost (Favor well-rated films)
             cand_rating = cand.get("vote_average", 0) or 0
@@ -221,17 +221,17 @@ class Recommender:
                     final_score += 0.03  # Same era boost
                 elif year_gap >= 30:
                     final_score -= 0.05  # Different generation penalty
-            except:
+            except (ValueError, TypeError, IndexError):
                 pass  # Skip if dates are invalid
             
             # Recency Boost (Slight preference for newer films)
             try:
                 c_year = int(str(cand.get("release_date", ""))[:4])
-                current_year = 2026
+                current_year = datetime.now().year
                 years_old = current_year - c_year
                 if years_old <= 5:
                     final_score += 0.02  # Recent film boost
-            except:
+            except (ValueError, TypeError, IndexError):
                 pass
             
             # Same Language Preference
@@ -265,7 +265,7 @@ class Recommender:
                 c_year = int(str(cand.get("release_date", ""))[:4])
                 if abs(q_year - c_year) <= 5:
                     explanation_tags.append(f"Same era ({c_year})")
-            except:
+            except (ValueError, TypeError, IndexError):
                 pass
             
             # High quality

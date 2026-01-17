@@ -15,24 +15,30 @@ PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 
 @dataclass
 class Paths:
-    """File and directory paths for the ETL pipeline."""
+    """File and directory paths for the ETL pipeline.
     
-    # Raw data from Kaggle
-    raw_data: Path = PROJECT_ROOT / "data" / "raw"
+    CLOUD-NATIVE READY:
+    Can be overridden by env vars to point to S3/GCS paths.
+    """
+    
+    # Raw data (supports s3:// or local paths)
+    raw_data: Path | str = os.getenv("RAW_DATA_PATH", PROJECT_ROOT / "data" / "raw")
     
     # Processed Parquet files
-    processed_data: Path = PROJECT_ROOT / "data" / "processed"
+    processed_data: Path | str = os.getenv("PROCESSED_DATA_PATH", PROJECT_ROOT / "data" / "processed")
     
-    # Model artifacts (FAISS index, vectorizer)
-    models: Path = PROJECT_ROOT / "models"
+    # Model artifacts
+    models: Path | str = os.getenv("MODELS_PATH", PROJECT_ROOT / "models")
     
     # Logs directory
-    logs: Path = PROJECT_ROOT / "logs"
+    logs: Path | str = os.getenv("LOGS_PATH", PROJECT_ROOT / "logs")
     
     def __post_init__(self):
-        """Create directories if they don't exist."""
+        """Create local directories if they don't exist and are local paths."""
         for path in [self.raw_data, self.processed_data, self.models, self.logs]:
-            path.mkdir(parents=True, exist_ok=True)
+            # Only mkdir if it's a local Path object, not a cloud URL string
+            if isinstance(path, Path) or (isinstance(path, str) and not path.startswith(("s3://", "gs://", "abfs://"))):
+                Path(path).mkdir(parents=True, exist_ok=True)
 
 
 @dataclass

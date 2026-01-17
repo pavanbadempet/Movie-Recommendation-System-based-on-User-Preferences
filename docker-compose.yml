@@ -70,7 +70,7 @@ services:
   airflow-scheduler:
     <<: *airflow-common
     container_name: airflow-scheduler
-    command: bash -c "pip install kaggle faiss-cpu scikit-learn pandas pyarrow pandera joblib && airflow scheduler"
+    command: bash -c "pip install kaggle faiss-cpu scikit-learn pandas pyarrow pandera joblib pyspark sentence-transformers httpx && airflow scheduler"
     healthcheck:
       test: [ "CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname $(hostname)" ]
       interval: 30s

@@ -60,3 +60,7 @@ models/tfidf_vectors.npy
 # Temp debug scripts
 analyze_features.py
 test_punctuation_fix.py
+
+# Personal files (don't push to public repo)
+resume*.tex
+docs/INTERVIEW_GUIDE.md
