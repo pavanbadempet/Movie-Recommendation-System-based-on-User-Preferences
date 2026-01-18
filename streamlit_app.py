@@ -553,36 +553,47 @@ if st.session_state.page == "home":
         st.markdown("<h1>MOVIE RECOMMENDATION<br>SYSTEM</h1>", unsafe_allow_html=True)
         st.markdown("<p style='color: #888; font-size: 1rem; margin-bottom: 30px;'>AI-Powered Curator • Deep Search • Semantic Analysis</p>", unsafe_allow_html=True)
         
-        # Compact Controls
-        st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
-        
-        # Search Card
+        # Compact Controls - CLICKABLE CARDS (No separate buttons!)
         st.markdown("""
-        <div class="holo-card-row">
-            <div class="holo-icon">🔍</div>
-            <div class="holo-text">
-                <h3>Deep Search</h3>
-                <p>Find matches by plot, vibe, or detailed queries.</p>
-            </div>
-        </div>
+        <style>
+        /* Make card buttons look like cards, not buttons */
+        .card-button > button {
+            background: rgba(255,255,255,0.03) !important;
+            border: 1px solid rgba(255,255,255,0.1) !important;
+            border-radius: 15px !important;
+            padding: 20px !important;
+            text-align: left !important;
+            transition: all 0.3s ease !important;
+            width: 100% !important;
+        }
+        .card-button > button:hover {
+            background: rgba(229, 9, 20, 0.1) !important;
+            border-color: #e50914 !important;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(229, 9, 20, 0.2) !important;
+        }
+        .card-button > button p {
+            margin: 0 !important;
+            color: #fff !important;
+        }
+        </style>
         """, unsafe_allow_html=True)
-        if st.button("LAUNCH SEARCH", key="btn_h_search", use_container_width=True):
+        
+        # Search Card - Entire card is clickable
+        st.markdown('<div class="card-button">', unsafe_allow_html=True)
+        if st.button("🔍  **DEEP SEARCH**\n\nFind matches by plot, vibe, or detailed queries.", key="btn_h_search", use_container_width=True):
             go_search()
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
-        # Chat Card
-        st.markdown("""
-        <div class="holo-card-row" style="margin-top: 10px;">
-            <div class="holo-icon">🧬</div>
-            <div class="holo-text">
-                <h3>CineBot AI</h3>
-                <p>Interactive chat for complex recommendations.</p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("LAUNCH ASSISTANT", key="btn_h_chat", use_container_width=True):
+        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+
+        # Chat Card - Entire card is clickable
+        st.markdown('<div class="card-button">', unsafe_allow_html=True)
+        if st.button("🧬  **CINEBOT AI**\n\nInteractive chat for complex recommendations.", key="btn_h_chat", use_container_width=True):
             go_chat()
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
     # RIGHT COLUMN: Visual Showcase (Trending)
     with c2:
