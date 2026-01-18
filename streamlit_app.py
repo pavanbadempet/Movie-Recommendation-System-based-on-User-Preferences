@@ -492,56 +492,85 @@ def fetch_trending_movies():
 
 # ===== PAGE 1: LANDING SCREEN (MAIN SCENE) =====
 if st.session_state.page == "home":
-    st.markdown("<div style='text-align: center; margin-top: 5vh; margin-bottom: 20px;'>", unsafe_allow_html=True)
-    st.markdown("<h1 style='font-size: 4rem; margin-bottom: 10px; background: -webkit-linear-gradient(eee, #999); -webkit-background-clip: text; -webkit-text-fill-color: transparent;'>Movie Recommendation System</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='color: #aaa; font-size: 1.4rem;'>Discover your next favorite movie with AI-powered Deep Search</p>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    # Hero Section with Split Layout to prevent scrolling
+    # Top Padding
+    st.markdown("<div style='margin-top: 2vh;'></div>", unsafe_allow_html=True)
     
-    # Navigation Cards (Glassmorphism)
-    c1, c2, c3 = st.columns([1, 10, 1]) 
-    with c2:
-        col1, col2 = st.columns(2, gap="large")
+    c1, c2 = st.columns([4, 6], gap="large") 
+    
+    # LEFT COLUMN: Action Center
+    with c1:
+        st.markdown("<h1 style='font-size: 3rem; margin-bottom: 5px; background: -webkit-linear-gradient(#eee, #999); -webkit-background-clip: text; -webkit-text-fill-color: transparent;'>MovieGenius</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #bbb; font-size: 1.1rem; margin-bottom: 30px;'>Your personal AI film curator.</p>", unsafe_allow_html=True)
         
-        with col1:
-            st.markdown("""
-            <div class="glass-card">
-                <div class="card-icon">🔍</div>
-                <div class="card-title">Deep Search</div>
-                <div class="card-desc">Find movies by plot, genre, or vibe. Perfect for "I want a movie like X but..."</div>
+        # Stacked Cards (More compact height)
+        st.markdown("""
+        <style>
+        .glass-card-compact {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            margin-bottom: 15px;
+        }
+        .glass-card-compact:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(229, 9, 20, 0.5);
+            transform: translateX(5px);
+        }
+        .compact-icon { font-size: 2.5rem; }
+        .compact-text h3 { margin: 0; font-size: 1.2rem; color: #fff; }
+        .compact-text p { margin: 0; font-size: 0.8rem; color: #aaa; }
+        </style>
+        
+        <div class="glass-card-compact">
+            <div class="compact-icon">🔍</div>
+            <div class="compact-text">
+                <h3>Deep Search</h3>
+                <p>Find movies by plot, vibe, or specific details.</p>
             </div>
-            """, unsafe_allow_html=True)
-            if st.button("Enter Search", key="btn_search", use_container_width=True):
-                go_search()
-                st.rerun()
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("Launch Search", key="btn_search", use_container_width=True):
+            go_search()
+            st.rerun()
 
-        with col2:
-            st.markdown("""
-            <div class="glass-card">
-                <div class="card-icon">🤖</div>
-                <div class="card-title">AI Assistant</div>
-                <div class="card-desc">Chat with our Gemini Agent for complex queries and personalized suggestions.</div>
+        st.markdown("""
+        <div class="glass-card-compact" style="margin-top: 10px;">
+            <div class="compact-icon">🤖</div>
+            <div class="compact-text">
+                <h3>AI Assistant</h3>
+                <p>Chat with Gemini for complex recommendations.</p>
             </div>
-            """, unsafe_allow_html=True)
-            if st.button("Start Chat", key="btn_chat", use_container_width=True):
-                go_chat()
-                st.rerun()
-    
-    # Trending Section
-    st.markdown("---")
-    st.subheader("🔥 Trending This Week")
-    
-    trending = fetch_trending_movies()
-    if trending:
-        # Display as a horizontal scrollable row (CSS trick or just columns)
-        # Using columns for simplicity and reliability
-        cols = st.columns(7) # 7 posters in a row
-        for idx, m in enumerate(trending[:7]):
-            with cols[idx]:
-                poster = fetch_poster(m.get("poster_path"))
-                st.image(poster, use_container_width=True)
-                st.caption(m.get("title", "")[:20] + "...")
-    else:
-        st.info("Trending movies unavailable (Check API Key).")
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("Launch Chat", key="btn_chat", use_container_width=True):
+            go_chat()
+            st.rerun()
+
+    # RIGHT COLUMN: Visual Showcase (Trending)
+    with c2:
+        st.markdown("<h3 style='margin-bottom: 15px;'>🔥 Trending Now</h3>", unsafe_allow_html=True)
+        trending = fetch_trending_movies()
+        
+        if trending:
+            # 3x2 Grid for visuals (Fits perfectly without scrolling)
+            t_cols = st.columns(3)
+            for i in range(6): # Show top 6
+                if i < len(trending):
+                    m = trending[i]
+                    with t_cols[i % 3]:
+                        poster = fetch_poster(m.get("poster_path"))
+                        st.image(poster, use_container_width=True)
+                        # No title text to save space, just pure visuals
+        else:
+            st.info("Loading trends...")
 
 
 # ===== PAGE 2: SEARCH ENGINE =====
