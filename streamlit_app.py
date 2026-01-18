@@ -593,18 +593,9 @@ if st.session_state.page == "home":
                 st.session_state.hero_index = 0
                 
             # Circular Buffer Logic
-            # CLICKABLE IMAGE LOGIC (Query Param Workaround)
-            # Check if user clicked an image (reloaded with param)
-            if "hero_index" in st.query_params:
-                try:
-                    new_index = int(st.query_params["hero_index"])
-                    if 0 <= new_index < 5:
-                        st.session_state.hero_index = new_index
-                except ValueError:
-                    pass
-                # Clear param to clean URL
-                st.query_params.clear()
-
+            # CLICKABLE IMAGE LOGIC (Invisible Overlay Button Hack)
+            # We use st.button(type="primary") as a dedicated "Invisible Click Layer"
+            
             # Current Hero Movie
             if "hero_index" not in st.session_state:
                  st.session_state.hero_index = 0
@@ -623,6 +614,39 @@ if st.session_state.page == "home":
             # HERO BILLBOARD LAYOUT
             st.markdown(f"""
             <style>
+            /* INVISIBLE BUTTON OVERLAY HACK */
+            /* Force columns to be relative for absolute positioning of buttons */
+            [data-testid="column"] {{
+                position: relative;
+            }}
+            
+            /* Make PRIMARY buttons invisible overlays */
+            button[kind="primary"] {{
+                position: absolute !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100% !important;
+                height: 100% !important;
+                opacity: 0 !important; /* Invisible */
+                z-index: 5 !important;
+                cursor: pointer !important;
+            }}
+            
+            /* Hover Effect: When hovering the invisible button, highlight the sibling image */
+            div:has(> button[kind="primary"]:hover) img {{
+                border: 2px solid #e50914 !important;
+                transform: scale(1.05);
+                transition: all 0.3s ease;
+                box-shadow: 0 10px 20px rgba(229, 9, 20, 0.4);
+            }}
+            
+            /* Selected State Style for Images */
+            img.selected-img {{
+                border: 2px solid #e50914;
+                box-shadow: 0 0 15px rgba(229, 9, 20, 0.6);
+                transform: scale(1.02);
+            }}
+
             .billboard-container {{
                 background: linear-gradient(135deg, rgba(26, 26, 46, 0.9), rgba(0, 0, 0, 0.95));
                 border: 1px solid rgba(255, 255, 255, 0.1);
@@ -687,24 +711,6 @@ if st.session_state.page == "home":
                 border-top: 1px solid rgba(255,255,255,0.1);
                 padding-top: 8px;
             }}
-            /* Clickable Image Styles */
-            .clickable-img {{
-                width: 100%;
-                border-radius: 10px;
-                transition: transform 0.3s, box-shadow 0.3s;
-                cursor: pointer;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-            }}
-            .clickable-img:hover {{
-                transform: scale(1.05);
-                box-shadow: 0 8px 15px rgba(229, 9, 20, 0.4);
-                border: 2px solid #e50914;
-            }}
-            .clickable-img-selected {{
-                border: 2px solid #e50914;
-                transform: scale(1.05);
-                box-shadow: 0 0 15px rgba(229, 9, 20, 0.6);
-            }}
             </style>
             """, unsafe_allow_html=True)
             
@@ -733,7 +739,7 @@ if st.session_state.page == "home":
             </div>
             """, unsafe_allow_html=True)
             
-            # SUB-GRID w/ CLICKABLE IMAGES (No Buttons)
+            # SUB-GRID w/ INVISIBLE BUTTONS
             st.markdown("<div style='margin-bottom: 8px; color: #666; font-size: 0.75rem; letter-spacing: 2px; text-transform: uppercase; margin-top: 15px;'>Select Movie to Preview</div>", unsafe_allow_html=True)
             
             t_cols = st.columns(5)
@@ -741,16 +747,17 @@ if st.session_state.page == "home":
                 if i < len(trending):
                     m = trending[i]
                     with t_cols[i]:
+                        # The "Invisible" Button covers the column
+                        # We use type="primary" to target it with the CSS above
+                        if st.button("Select", key=f"sel_{i}_{m['id']}", type="primary", use_container_width=True):
+                            st.session_state.hero_index = i
+                            st.rerun()
+
+                        # The Visual Image
                         poster = fetch_poster(m.get("poster_path"))
-                        # Determine class for selected state
-                        img_class = "clickable-img-selected" if i == st.session_state.hero_index else "clickable-img"
-                        
-                        # Render HTML Link Image
-                        st.markdown(f"""
-                            <a href="?hero_index={i}" target="_self">
-                                <img src="{poster}" class="{img_class}">
-                            </a>
-                        """, unsafe_allow_html=True)
+                        # Add class for selected state highlight
+                        img_class = "selected-img" if i == st.session_state.hero_index else ""
+                        st.markdown(f'<img src="{poster}" style="width:100%; border-radius:10px;" class="{img_class}">', unsafe_allow_html=True)
         else:
             st.info("Loading trends...")
 
