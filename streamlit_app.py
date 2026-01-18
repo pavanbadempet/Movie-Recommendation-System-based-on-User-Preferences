@@ -614,39 +614,49 @@ if st.session_state.page == "home":
             # HERO BILLBOARD LAYOUT
             st.markdown(f"""
             <style>
-            /* INVISIBLE BUTTON OVERLAY HACK */
-            /* Force columns to be relative for absolute positioning of buttons */
+            /* INVISIBLE BUTTON OVERLAY HACK V2 */
+            
+            /* 1. Force the Column to be the anchor */
             [data-testid="column"] {{
-                position: relative;
+                position: relative !important;
             }}
             
-            /* Make PRIMARY buttons invisible overlays */
-            button[kind="primary"] {{
+            /* 2. Target the BUTTON WRAPPER div */
+            div:has(> button[kind="primary"]) {{
                 position: absolute !important;
-                top: 0 !important;
-                left: 0 !important;
+                inset: 0 !important;
+                width: 100% !important;
+                height: 100% !important;
+                z-index: 10 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }}
+            
+            /* 3. Style the BUTTON itself to be invisible but clickable */
+            button[kind="primary"] {{
                 width: 100% !important;
                 height: 100% !important;
                 opacity: 0 !important; /* Invisible */
-                z-index: 5 !important;
+                background-color: transparent !important;
+                border: none !important;
                 cursor: pointer !important;
             }}
             
-            /* Hover Effect: When hovering the invisible button, highlight the sibling image */
-            div:has(> button[kind="primary"]:hover) img {{
+            /* 4. Visual Feedback: When hovering the invisible button, highlight the image below */
+            div:has(> div > button[kind="primary"]:hover) ~ div img {{
                 border: 2px solid #e50914 !important;
                 transform: scale(1.05);
-                transition: all 0.3s ease;
                 box-shadow: 0 10px 20px rgba(229, 9, 20, 0.4);
             }}
-            
-            /* Selected State Style for Images */
-            img.selected-img {{
+
+            /* Selected State */
+            img.selected-poster {{
                 border: 2px solid #e50914;
                 box-shadow: 0 0 15px rgba(229, 9, 20, 0.6);
                 transform: scale(1.02);
+                transition: all 0.3s ease;
             }}
-
+            
             .billboard-container {{
                 background: linear-gradient(135deg, rgba(26, 26, 46, 0.9), rgba(0, 0, 0, 0.95));
                 border: 1px solid rgba(255, 255, 255, 0.1);
@@ -711,6 +721,11 @@ if st.session_state.page == "home":
                 border-top: 1px solid rgba(255,255,255,0.1);
                 padding-top: 8px;
             }}
+            div.stButton > button:hover {{
+                border-color: #e50914;
+                color: #fff;
+                background: rgba(229, 9, 20, 0.2);
+            }}
             </style>
             """, unsafe_allow_html=True)
             
@@ -747,17 +762,16 @@ if st.session_state.page == "home":
                 if i < len(trending):
                     m = trending[i]
                     with t_cols[i]:
-                        # The "Invisible" Button covers the column
-                        # We use type="primary" to target it with the CSS above
+                        # 1. Image FIRST (Sets Height)
+                        poster = fetch_poster(m.get("poster_path"))
+                        img_class = "selected-poster" if i == st.session_state.hero_index else ""
+                        st.markdown(f'<img src="{poster}" style="width:100%; border-radius:10px;" class="{img_class}">', unsafe_allow_html=True)
+
+                        # 2. Overlay Button SECOND (Absolute Positioned over Previous Element)
+                        # We use type="primary" to target it with our CSS
                         if st.button("Select", key=f"sel_{i}_{m['id']}", type="primary", use_container_width=True):
                             st.session_state.hero_index = i
                             st.rerun()
-
-                        # The Visual Image
-                        poster = fetch_poster(m.get("poster_path"))
-                        # Add class for selected state highlight
-                        img_class = "selected-img" if i == st.session_state.hero_index else ""
-                        st.markdown(f'<img src="{poster}" style="width:100%; border-radius:10px;" class="{img_class}">', unsafe_allow_html=True)
         else:
             st.info("Loading trends...")
 
