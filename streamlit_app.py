@@ -499,122 +499,106 @@ if st.session_state.page == "home":
     
     /* Animated Background Layer */
     .stApp {
-        background: radial-gradient(circle at 50% 10%, #1a1a2e 0%, #000000 100%);
+        background: radial-gradient(circle at 60% 50%, #1a1a2e 0%, #000000 100%);
         background-attachment: fixed;
     }
     
-    /* Typography Overrides */
     h1 {
         font-family: 'Bebas Neue', sans-serif !important;
-        letter-spacing: 2px;
-        text-transform: uppercase;
+        font-size: 3.5rem !important;
+        line-height: 1 !important;
+        margin-bottom: 5px !important;
         background: linear-gradient(to right, #ffffff, #a5a5a5);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        text-shadow: 0 10px 30px rgba(0,0,0,0.5);
     }
     
-    p, div, button {
-        font-family: 'Montserrat', sans-serif !important;
-    }
+    p, button, div { font-family: 'Montserrat', sans-serif !important; }
     
-    /* Holographic Card */
-    .holo-card {
-        background: rgba(20, 20, 25, 0.4);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 20px;
-        padding: 30px;
-        transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+    /* Compact Holographic Row Card */
+    .holo-card-row {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        padding: 15px 20px;
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        margin-bottom: 12px;
+        transition: all 0.3s ease;
         cursor: pointer;
-        position: relative;
-        overflow: hidden;
-        backdrop-filter: blur(12px);
-        box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5);
+        backdrop-filter: blur(10px);
     }
     
-    .holo-card::before {
-        content: '';
-        position: absolute;
-        top: 0; left: 0; width: 100%; height: 100%;
-        background: linear-gradient(45deg, transparent, rgba(255,255,255,0.03), transparent);
-        transform: translateX(-100%);
-        transition: 0.6s;
+    .holo-card-row:hover {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(229, 9, 20, 0.5);
+        transform: translateX(5px);
     }
     
-    .holo-card:hover {
-        transform: translateY(-5px);
-        border-color: rgba(229, 9, 20, 0.6);
-        box-shadow: 0 15px 40px -10px rgba(229, 9, 20, 0.3);
-    }
+    .holo-icon { font-size: 2rem; }
+    .holo-text h3 { margin: 0; color: #fff; font-size: 1.1rem; text-transform: uppercase; letter-spacing: 1px; }
+    .holo-text p { margin: 0; color: #888; font-size: 0.8rem; }
     
-    .holo-card:hover::before {
-        transform: translateX(100%);
-    }
-
-    /* Icon Glow */
-    .holo-icon {
-        font-size: 3rem;
-        margin-bottom: 15px;
-        filter: drop-shadow(0 0 10px rgba(255,255,255,0.3));
-    }
-    
-    /* Bottom Dock for Trending */
-    .dock-container {
-        margin-top: 5vh;
-        border-top: 1px solid rgba(255,255,255,0.05);
-        padding-top: 20px;
-        background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
-    }
     </style>
     """, unsafe_allow_html=True)
     
-    # Hero Title (Centered)
-    st.markdown("<div style='text-align: center; margin-top: 3vh;'><h1>Movie Recommendation System</h1></div>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #888; font-size: 1rem; margin-bottom: 5vh; letter-spacing: 1px;'>AI-POWERED INTELLIGENCE • DEEP SEARCH • REAL-TIME TRENDS</p>", unsafe_allow_html=True)
+    # Split Layout: Left (Controls) | Right (Visuals)
+    st.markdown("<div style='margin-top: 2vh;'></div>", unsafe_allow_html=True)
+    c1, c2 = st.columns([5, 7], gap="large")
     
-    # Dual Holographic Portals
-    c1, c2, c3 = st.columns([1, 8, 1])
-    with c2:
-        col1, col2 = st.columns(2, gap="large")
+    # LEFT COLUMN: Title & Tools
+    with c1:
+        st.markdown("<h1>MOVIE RECOMMENDATION<br>SYSTEM</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #888; font-size: 1rem; margin-bottom: 30px;'>AI-Powered Curator • Deep Search • Semantic Analysis</p>", unsafe_allow_html=True)
         
-        with col1:
-            st.markdown("""
-            <div class="holo-card">
-                <div class="holo-icon">🔍</div>
-                <h3 style="color: #fff; margin:0;">Deep Search</h3>
-                <p style="color: #aaa; font-size: 0.9rem; margin-top: 5px;">Analyze plot vectors to find exact matches.</p>
+        # Compact Controls
+        st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
+        
+        # Search Card
+        st.markdown("""
+        <div class="holo-card-row">
+            <div class="holo-icon">🔍</div>
+            <div class="holo-text">
+                <h3>Deep Search</h3>
+                <p>Find matches by plot, vibe, or detailed queries.</p>
             </div>
-            """, unsafe_allow_html=True)
-            if st.button("ENTER SEARCH", key="btn_h_search", use_container_width=True):
-                go_search()
-                st.rerun()
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("LAUNCH SEARCH", key="btn_h_search", use_container_width=True):
+            go_search()
+            st.rerun()
 
-        with col2:
-            st.markdown("""
-            <div class="holo-card">
-                <div class="holo-icon">�</div>
-                <h3 style="color: #fff; margin:0;">AI Assistant</h3>
-                <p style="color: #aaa; font-size: 0.9rem; margin-top: 5px;">Consult Gemini 1.5 for semantic recommendations.</p>
+        # Chat Card
+        st.markdown("""
+        <div class="holo-card-row" style="margin-top: 10px;">
+            <div class="holo-icon">🧬</div>
+            <div class="holo-text">
+                <h3>CineBot AI</h3>
+                <p>Interactive chat for complex recommendations.</p>
             </div>
-            """, unsafe_allow_html=True)
-            if st.button("ENTER CHAT", key="btn_h_chat", use_container_width=True):
-                go_chat()
-                st.rerun()
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("LAUNCH ASSISTANT", key="btn_h_chat", use_container_width=True):
+            go_chat()
+            st.rerun()
 
-    # Bottom Dock: Trending
-    st.markdown("<div class='dock-container'></div>", unsafe_allow_html=True)
-    st.markdown("<h4 style='text-align: center; color: #666; font-family: Montserrat; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 15px;'>Trending Worldwide</h4>", unsafe_allow_html=True)
-    
-    trending = fetch_trending_movies()
-    if trending:
-        t_cols = st.columns(6) # 6 items for wider spread
-        for i in range(6):
-            if i < len(trending):
-                with t_cols[i]:
-                    poster = fetch_poster(trending[i].get("poster_path"))
-                    st.image(poster, use_container_width=True)
-    else:
-        st.info("Loading system...")
+    # RIGHT COLUMN: Trending Grid (Hero Visuals)
+    with c2:
+        st.markdown("<h4 style='color: #666; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 2px; font-size: 0.8rem;'>Trending This Week</h4>", unsafe_allow_html=True)
+        trending = fetch_trending_movies()
+        
+        if trending:
+            # 3x2 Grid - Fits perfectly alongside controls
+            t_cols = st.columns(3)
+            for i in range(6):
+                if i < len(trending):
+                    with t_cols[i % 3]:
+                        poster = fetch_poster(trending[i].get("poster_path"))
+                        st.image(poster, use_container_width=True)
+                        st.markdown(f"<div style='margin-bottom: 1px;'></div>", unsafe_allow_html=True)
+        else:
+            st.info("Loading trends...")
 
 
 # ===== PAGE 2: SEARCH ENGINE =====
