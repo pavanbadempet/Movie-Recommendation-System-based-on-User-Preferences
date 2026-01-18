@@ -409,22 +409,78 @@ def format_option(m):
 
 # ===== APP MODES =====
 
-# Sidebar Mode Selection
-with st.sidebar:
-    st.header("Mode Selection")
-    mode = st.radio("Choose Experience:", ["🔍 Movie Search", "🤖 AI Chatbot"], index=0)
-    
-    st.markdown("---")
-    st.caption("Powered by:")
-    st.caption("• FastAPI Backend")
-    st.caption("• FAISS Vector DB")
-    st.caption("• Google Gemini 1.5")
+# ===== CUSTOM CSS FOR GLASS RADIO BUTTONS =====
+st.markdown("""
+<style>
+/* Hide the default radio circle and label structure */
+div[role="radiogroup"] > label > div:first-of-type {
+    display: none; 
+}
+div[role="radiogroup"] {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    background: transparent;
+}
+div[role="radiogroup"] label {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    padding: 15px 30px;
+    border-radius: 15px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: center;
+    width: 45%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
 
+/* Hover Effect - Glow */
+div[role="radiogroup"] label:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 15px rgba(229, 9, 20, 0.3);
+    border-color: rgba(229, 9, 20, 0.5);
+}
+
+/* Selected State - Red Border & Bright Text */
+div[role="radiogroup"] label[data-checked="true"] {
+    background: linear-gradient(135deg, rgba(229, 9, 20, 0.2) 0%, rgba(0, 0, 0, 0.8) 100%);
+    border: 1px solid #e50914;
+    box-shadow: 0 0 20px rgba(229, 9, 20, 0.4);
+    transform: scale(1.02);
+}
+
+div[role="radiogroup"] label p {
+    font-size: 1.2rem !important;
+    font-weight: 700 !important;
+    margin: 0 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+# ===== APP MODES =====
+
+# Top-level Mode Selection (Styled as Glass Cards)
+st.markdown("<h1 style='text-align: center; margin-bottom: 20px;'>🎬 Movie Recommendation System</h1>", unsafe_allow_html=True)
+
+# We use the standard radio, but the CSS above creates the visual magic.
+mode = st.radio(
+    "Experience Mode", 
+    ["🔍 Search Engine", "🤖 AI Assistant"], 
+    index=0, 
+    horizontal=True, 
+    label_visibility="collapsed"
+)
+
+st.markdown("---")
 
 # ===== MODE 1: CLASSIC SEARCH =====
-if mode == "🔍 Movie Search":
-    st.title("🎬 Movie Search Engine")
-    
+if mode == "🔍 Search Engine":
     # Simple Search Interface
     search = st.text_input("Find movies by title, plot, or genre...", placeholder="Type 'Inception' or 'Time Travel'...")
     
@@ -433,11 +489,6 @@ if mode == "🔍 Movie Search":
             movies = search_movies(search)
         
         if movies:
-            # Show results in a grid immediately (Deep Search style)
-            # Use 'format_option' logic if we want a dropdown, OR just a grid.
-            # The user liked the "Unified" grid, so let's keep the Grid but in Search Mode.
-            # BUT: Classic Search usually has a dropdown or list. Let's do Dropdown -> Detail for precision.
-            
             options = {format_option(m): m for m in movies}
             selected_option = st.selectbox(f"Found {len(movies)} matches:", list(options.keys()))
             movie = options.get(selected_option)
@@ -511,7 +562,7 @@ if mode == "🔍 Movie Search":
 
 
 # ===== MODE 2: AI CHATBOT =====
-elif mode == "🤖 AI Chatbot":
+elif mode == "🤖 AI Assistant":
     st.title("🤖 CineBot Assistant")
     st.caption("Ask complex questions like: *'I want a thriller with a plot twist like Shutter Island'*")
     
