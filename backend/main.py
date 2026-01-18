@@ -19,6 +19,19 @@ from backend.recommender import get_recommender, Recommender
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Sentry (Error Monitoring)
+import sentry_sdk
+SENTRY_DSN = os.getenv("SENTRY_DSN")
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        traces_sample_rate=1.0,
+        profiles_sample_rate=1.0,
+    )
+    logger.info("✅ Sentry Monitoring Enabled")
+else:
+    logger.warning("⚠️ SENTRY_DSN not set. Error monitoring disabled.")
+
 # TMDB API config
 TMDB_KEY = os.getenv("TMDB_API_KEY")
 TMDB_BASE = "https://api.themoviedb.org/3"
@@ -305,6 +318,36 @@ async def recommend_by_title(
         query_movie=query_movie,
         recommendations=recommendations,
     )
+
+
+# ===== CHATBOT (RAG) =====
+from backend.chat import generate_chat_response
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage]
+
+class ChatResponse(BaseModel):
+    role: str
+    content: str
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat_endpoint(request: ChatRequest):
+    """
+    RAG Chatbot Endpoint.
+    Consumes user messages, retrieves movie context, and generates AI response.
+    """
+    try:
+        # Convert Pydantic models to dicts for internal function
+        msgs = [m.model_dump() for m in request.messages]
+        response = generate_chat_response(msgs)
+        return ChatResponse(**response)
+    except Exception as e:
+        logger.error(f"Chat endpoint failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
