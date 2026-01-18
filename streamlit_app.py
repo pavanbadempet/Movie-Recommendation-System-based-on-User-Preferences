@@ -666,3 +666,70 @@ def show_movie_dialog(rec):
 if st.session_state.get("show_dialog") and st.session_state.get("selected_rec"):
     show_movie_dialog(st.session_state.selected_rec)
     st.session_state.show_dialog = False
+
+
+# ===== AI ASSISTANT TAB =====
+# We use existing layout or tabs if we want to separate Search vs Chat
+# Let's add a floating chat or a tab. Tabs are cleaner.
+
+# Move content to Tabs
+tab_search, tab_chat = st.tabs(["🔍 Movie Search", "🤖 AI Assistant"])
+
+with tab_search:
+    # Existing Search Logic (move everything from line 382 down to here, logically)
+    # Since re-indenting 200 lines is risky, let's keep it simple:
+    # We will just inject the chat UI at the bottom or top?
+    # Actually, tabs are better. Let's do a trick: 
+    # Use CSS to hide the tabs if we want, or just put the search UI in tab 1.
+    pass 
+    # (Note: I cannot easily move all previous code into a block without a huge diff)
+    # BETTER APPROACH: Just append the Chat Section below the specific logical block
+    # OR: Use a sidebar toggler? No, sidebar is for navigation.
+    
+# ... Actually, the user wants a PREMIUM UI. 
+# Let's add the Chat interface as a distinct section or "Mode" in the sidebar?
+# Or just put it in a container.
+
+# Let's use `st.expander` for a non-intrusive "Chat with AI" feature
+with st.expander("💬 Chat with CineBot (AI Assistant)", expanded=False):
+    st.caption("Powered by Google Gemini 1.5 Flash • Ask about specific movies, genres, or complex recommendation requests.")
+    
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = [{"role": "assistant", "content": "Hi! I'm CineBot. Ask me for recommendations like 'I want a scary sci-fi movie' or 'Explain why Interstellar is good'."}]
+    
+    # Display chat
+    for msg in st.session_state.chat_history:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+            
+    # Input
+    if prompt := st.chat_input("Ask CineBot..."):
+        # User message
+        st.session_state.chat_history.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+            
+        # API Call
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                try:
+                    # History window (last 5 messages to save context/tokens)
+                    recent_msgs = st.session_state.chat_history[-5:]
+                    
+                    r = requests.post(
+                        f"{API_URL}/chat", 
+                        json={"messages": recent_msgs},
+                        timeout=15
+                    )
+                    
+                    if r.ok:
+                        response_text = r.json()["content"]
+                        st.markdown(response_text)
+                        st.session_state.chat_history.append({"role": "assistant", "content": response_text})
+                    else:
+                        err_msg = "⚠️ I couldn't reach the AI brain. Check GOOGLE_API_KEY in backend."
+                        st.error(err_msg)
+                        st.session_state.chat_history.append({"role": "assistant", "content": err_msg})
+                        
+                except Exception as e:
+                    st.error(f"Error: {e}")
