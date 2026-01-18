@@ -22,6 +22,7 @@ google-generativeai>=0.3.0  # Gemini API for RAG
 
 # Frontend
 streamlit>=1.28.0
+streamlit-clickable-images>=0.0.3  # Clickable image grid
 requests>=2.31.0
 
 # Utilities

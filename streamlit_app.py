@@ -5,6 +5,7 @@ import streamlit as st
 import requests
 import time
 import os
+from streamlit_clickable_images import clickable_images
 
 st.set_page_config(
     page_title="Movie Recommendation System",
@@ -725,27 +726,37 @@ if st.session_state.page == "home":
             </div>
             """, unsafe_allow_html=True)
             
-            # SUB-GRID - CLICKABLE POSTER CARDS
+            # SUB-GRID - TRUE CLICKABLE IMAGES (No Buttons!)
             st.markdown("<div style='margin-bottom: 8px; color: #666; font-size: 0.75rem; letter-spacing: 2px; text-transform: uppercase; margin-top: 15px;'>More Trending</div>", unsafe_allow_html=True)
             
-            t_cols = st.columns(5)
-            for i in range(5):
-                if i < len(trending):
-                    m = trending[i]
-                    with t_cols[i]:
-                        poster = fetch_poster(m.get("poster_path"))
-                        
-                        # Show poster image
-                        if i == st.session_state.hero_index:
-                            st.markdown(f'<img src="{poster}" style="width:100%; border-radius:10px; border: 2px solid #e50914; box-shadow: 0 0 15px rgba(229,9,20,0.5);">', unsafe_allow_html=True)
-                        else:
-                            st.markdown(f'<img src="{poster}" style="width:100%; border-radius:10px; border: 2px solid transparent; transition: all 0.3s; cursor: pointer;" onmouseover="this.style.border=\'2px solid #e50914\'" onmouseout="this.style.border=\'2px solid transparent\'">', unsafe_allow_html=True)
-                        
-                        # Small clickable title button
-                        title = m.get('title', 'Movie')[:15] + ('...' if len(m.get('title', '')) > 15 else '')
-                        if st.button(title, key=f"pick_{i}_{m['id']}", use_container_width=True):
-                            st.session_state.hero_index = i
-                            st.rerun()
+            # Prepare image URLs for clickable_images
+            poster_urls = [fetch_poster(m.get("poster_path")) for m in trending[:5]]
+            
+            # Clickable Images Component - returns index of clicked image
+            clicked = clickable_images(
+                paths=poster_urls,
+                titles=[m.get('title', '') for m in trending[:5]],
+                div_style={
+                    "display": "flex", 
+                    "justify-content": "center", 
+                    "flex-wrap": "wrap",
+                    "gap": "10px"
+                },
+                img_style={
+                    "width": "18%",
+                    "border-radius": "10px",
+                    "cursor": "pointer",
+                    "border": "2px solid transparent",
+                    "transition": "all 0.3s ease",
+                    "box-shadow": "0 4px 10px rgba(0,0,0,0.3)"
+                },
+                key="trending_selector"
+            )
+            
+            # Handle click - update hero when image is clicked
+            if clicked > -1 and clicked != st.session_state.hero_index:
+                st.session_state.hero_index = clicked
+                st.rerun()
         else:
             st.info("Loading trends...")
 
