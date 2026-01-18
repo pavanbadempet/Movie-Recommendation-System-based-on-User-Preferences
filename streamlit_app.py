@@ -553,10 +553,70 @@ if st.session_state.page == "home":
         st.markdown("<h1>MOVIE RECOMMENDATION<br>SYSTEM</h1>", unsafe_allow_html=True)
         st.markdown("<p style='color: #888; font-size: 1rem; margin-bottom: 30px;'>AI-Powered Curator • Deep Search • Semantic Analysis</p>", unsafe_allow_html=True)
         
-        # 1. DEEP SEARCH CARD
-        # Render the visual card (HTML/CSS) for full fidelity
+        # ROBUST CSS GRID OVERLAY
+        # We use strict grid stacking to place the button exactly ON TOP of the card
         st.markdown("""
-        <div class="holo-card-row" id="card-search">
+        <style>
+        /* The Container holding both the Card and the Button */
+        .card-stack {
+            display: grid;
+            grid-template-areas: "stack";
+            width: 100%;
+            margin-bottom: 15px;
+            position: relative;
+        }
+        
+        /* The Visual Card (HTML) */
+        .card-stack > .holo-card-row {
+            grid-area: stack;
+            z-index: 1;
+            /* Ensure it fills the area */
+            width: 100%;
+            height: auto;
+            min-height: 100px;
+        }
+        
+        /* The Streamlit Button Wrapper */
+        .card-stack > .stButton {
+            grid-area: stack;
+            z-index: 2;
+            width: 100%;
+            height: 100%;
+            min-height: 100px;
+        }
+        
+        /* The Actual Button inside the wrapper - Make Invisible & Full Size */
+        .card-stack > .stButton > button {
+            width: 100% !important;
+            height: 100% !important;
+            min-height: 100px !important;
+            background: transparent !important;
+            border: none !important;
+            color: transparent !important;
+            cursor: pointer !important;
+            opacity: 0 !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        
+        /* Hover Effect: Pass through to card */
+        .card-stack:hover .holo-card-row {
+            border-color: #e50914 !important;
+            background: rgba(229, 9, 20, 0.08) !important;
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(229, 9, 20, 0.2) !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
+        # 1. DEEP SEARCH STACK
+        st.markdown('<div class="card-stack">', unsafe_allow_html=True)
+        # Visual
+        st.markdown("""
+        <div class="holo-card-row">
             <div class="holo-icon">🔍</div>
             <div class="holo-text">
                 <h3>Deep Search</h3>
@@ -564,41 +624,17 @@ if st.session_state.page == "home":
             </div>
         </div>
         """, unsafe_allow_html=True)
-        
-        # Overlay invisible button for click handling
-        # We start the button immediately after the HTML
-        st.markdown("""
-        <style>
-        /* Pull button up to cover the card */
-        div.stButton.search-btn {
-            margin-top: -100px; /* Adjust based on card height */
-            height: 100px;
-            position: relative;
-            z-index: 5;
-        }
-        div.stButton.search-btn > button {
-            height: 100px;
-            width: 100%;
-            opacity: 0; /* Invisible */
-            cursor: pointer;
-        }
-        /* Hover effect: When button is hovered, style the sibling card */
-        /* Note: This is tricky in Streamlit DOM. 
-           Instead, we rely on the card's own hover + the cursor pointer of the button */
-        </style>
-        """, unsafe_allow_html=True)
-        
-        # Unique key and class for targeting
-        st.markdown('<div class="search-btn">', unsafe_allow_html=True)
-        if st.button("Search", key="nav_btn_search", use_container_width=True):
+        # Interaction
+        if st.button("Search", key="btn_nav_search", use_container_width=True):
             go_search()
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
-
-        # 2. CINEBOT AI CARD
+        # 2. CINEBOT AI STACK
+        st.markdown('<div class="card-stack">', unsafe_allow_html=True)
+        # Visual
         st.markdown("""
-        <div class="holo-card-row" id="card-chat" style="margin-top: 15px;">
+        <div class="holo-card-row">
             <div class="holo-icon">🧬</div>
             <div class="holo-text">
                 <h3>CineBot AI</h3>
@@ -606,26 +642,8 @@ if st.session_state.page == "home":
             </div>
         </div>
         """, unsafe_allow_html=True)
-        
-        st.markdown("""
-        <style>
-        div.stButton.chat-btn {
-            margin-top: -100px; 
-            height: 100px;
-            position: relative;
-            z-index: 5;
-        }
-        div.stButton.chat-btn > button {
-            height: 100px;
-            width: 100%;
-            opacity: 0;
-            cursor: pointer;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-        
-        st.markdown('<div class="chat-btn">', unsafe_allow_html=True)
-        if st.button("Chat", key="nav_btn_chat", use_container_width=True):
+        # Interaction
+        if st.button("Chat", key="btn_nav_chat", use_container_width=True):
             go_chat()
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
