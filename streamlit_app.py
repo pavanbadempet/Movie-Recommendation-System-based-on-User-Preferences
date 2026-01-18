@@ -553,66 +553,54 @@ if st.session_state.page == "home":
         st.markdown("<h1>MOVIE RECOMMENDATION<br>SYSTEM</h1>", unsafe_allow_html=True)
         st.markdown("<p style='color: #888; font-size: 1rem; margin-bottom: 30px;'>AI-Powered Curator • Deep Search • Semantic Analysis</p>", unsafe_allow_html=True)
         
-        # Compact Controls - Cards with invisible click overlay
+        # Handle navigation via query params (from card clicks)
+        if "nav" in st.query_params:
+            nav_target = st.query_params["nav"]
+            st.query_params.clear()
+            if nav_target == "search":
+                go_search()
+                st.rerun()
+            elif nav_target == "chat":
+                go_chat()
+                st.rerun()
+        
+        # Clickable Cards with anchor links (NO BUTTONS!)
         st.markdown("""
         <style>
-        /* Card container with relative positioning for overlay */
-        .nav-card-wrapper {
-            position: relative;
+        /* Clickable card link styling */
+        a.nav-card-link {
+            text-decoration: none !important;
+            display: block;
             margin-bottom: 15px;
         }
-        /* The invisible button overlay */
-        .nav-card-wrapper > div > button {
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
-            opacity: 0 !important;
-            z-index: 10 !important;
-            cursor: pointer !important;
-        }
-        /* Hover effect on card when button is hovered */
-        .nav-card-wrapper:hover .holo-card-row {
+        a.nav-card-link:hover .holo-card-row {
             border-color: #e50914 !important;
             background: rgba(229, 9, 20, 0.08) !important;
             transform: translateY(-3px);
             box-shadow: 0 10px 30px rgba(229, 9, 20, 0.2) !important;
         }
         </style>
-        """, unsafe_allow_html=True)
         
-        # Search Card - Original design with invisible overlay
-        st.markdown('<div class="nav-card-wrapper">', unsafe_allow_html=True)
-        st.markdown("""
-        <div class="holo-card-row">
-            <div class="holo-icon">🔍</div>
-            <div class="holo-text">
-                <h3>Deep Search</h3>
-                <p>Find matches by plot, vibe, or detailed queries.</p>
+        <a href="?nav=search" class="nav-card-link">
+            <div class="holo-card-row">
+                <div class="holo-icon">🔍</div>
+                <div class="holo-text">
+                    <h3>Deep Search</h3>
+                    <p>Find matches by plot, vibe, or detailed queries.</p>
+                </div>
             </div>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("", key="btn_h_search", use_container_width=True):
-            go_search()
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        # Chat Card - Original design with invisible overlay
-        st.markdown('<div class="nav-card-wrapper">', unsafe_allow_html=True)
-        st.markdown("""
-        <div class="holo-card-row">
-            <div class="holo-icon">🧬</div>
-            <div class="holo-text">
-                <h3>CineBot AI</h3>
-                <p>Interactive chat for complex recommendations.</p>
+        </a>
+        
+        <a href="?nav=chat" class="nav-card-link">
+            <div class="holo-card-row">
+                <div class="holo-icon">🧬</div>
+                <div class="holo-text">
+                    <h3>CineBot AI</h3>
+                    <p>Interactive chat for complex recommendations.</p>
+                </div>
             </div>
-        </div>
+        </a>
         """, unsafe_allow_html=True)
-        if st.button("", key="btn_h_chat", use_container_width=True):
-            go_chat()
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
 
     # RIGHT COLUMN: Visual Showcase (Trending)
     with c2:
