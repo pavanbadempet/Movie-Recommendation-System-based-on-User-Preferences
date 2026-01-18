@@ -593,37 +593,34 @@ if st.session_state.page == "home":
                 st.session_state.hero_index = 0
                 
             # Circular Buffer Logic
-            def next_slide():
-                st.session_state.hero_index = (st.session_state.hero_index + 1) % 5
-                
-            # AUTO-ROTATION LOGIC
-            # Initialize State
-            if "hero_index" not in st.session_state:
-                st.session_state.hero_index = 0
-            if "last_slide_time" not in st.session_state:
-                st.session_state.last_slide_time = time.time()
-                
-            # Check Time Delta (Every 10 seconds)
-            if time.time() - st.session_state.last_slide_time > 10:
-                st.session_state.hero_index = (st.session_state.hero_index + 1) % 5
-                st.session_state.last_slide_time = time.time()
-                st.rerun()
-                
+            # CLICKABLE IMAGE LOGIC (Query Param Workaround)
+            # Check if user clicked an image (reloaded with param)
+            if "hero_index" in st.query_params:
+                try:
+                    new_index = int(st.query_params["hero_index"])
+                    if 0 <= new_index < 5:
+                        st.session_state.hero_index = new_index
+                except ValueError:
+                    pass
+                # Clear param to clean URL
+                st.query_params.clear()
+
             # Current Hero Movie
+            if "hero_index" not in st.session_state:
+                 st.session_state.hero_index = 0
+            
             hero = trending[st.session_state.hero_index]
             
-            # FETCH FULL DETAILS (Directly)
+            # FETCH FULL DETAILS
             trailer_key = fetch_trailer(hero["id"])
             credits = fetch_credits(hero["id"])
-            details = fetch_tmdb_details(hero["id"]) # New: Get Genres/Runtime
+            details = fetch_tmdb_details(hero["id"])
             
             # Extract Metadata
             genres = ", ".join([g["name"] for g in details.get("genres", [])[:2]])
             runtime = f"{details.get('runtime', 0)} min" if details.get('runtime') else ""
             
-            # HERO BILLBOARD LAYOUT (Direct Details, No Popup)
-            # Reduced height to 40vh to ensure fit
-            
+            # HERO BILLBOARD LAYOUT
             st.markdown(f"""
             <style>
             .billboard-container {{
@@ -633,7 +630,7 @@ if st.session_state.page == "home":
                 padding: 20px;
                 display: flex;
                 gap: 20px;
-                height: 40vh; /* Reduced height to fix scrolling */
+                height: 40vh;
                 box-shadow: 0 10px 40px rgba(0,0,0,0.5);
                 backdrop-filter: blur(10px);
             }}
@@ -650,11 +647,11 @@ if st.session_state.page == "home":
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
-                overflow-y: hidden; /* Hide overflow */
+                overflow-y: hidden;
             }}
             .bb-title {{
                 font-family: 'Bebas Neue', sans-serif;
-                font-size: 2.2rem; /* Slightly smaller */
+                font-size: 2.2rem;
                 line-height: 1;
                 margin-bottom: 8px;
                 color: #fff;
@@ -679,7 +676,7 @@ if st.session_state.page == "home":
                 line-height: 1.4;
                 margin-bottom: 15px;
                 display: -webkit-box;
-                -webkit-line-clamp: 4; /* Limit lines */
+                -webkit-line-clamp: 4;
                 -webkit-box-orient: vertical;
                 overflow: hidden;
             }}
@@ -690,10 +687,28 @@ if st.session_state.page == "home":
                 border-top: 1px solid rgba(255,255,255,0.1);
                 padding-top: 8px;
             }}
+            /* Clickable Image Styles */
+            .clickable-img {{
+                width: 100%;
+                border-radius: 10px;
+                transition: transform 0.3s, box-shadow 0.3s;
+                cursor: pointer;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            }}
+            .clickable-img:hover {{
+                transform: scale(1.05);
+                box-shadow: 0 8px 15px rgba(229, 9, 20, 0.4);
+                border: 2px solid #e50914;
+            }}
+            .clickable-img-selected {{
+                border: 2px solid #e50914;
+                transform: scale(1.05);
+                box-shadow: 0 0 15px rgba(229, 9, 20, 0.6);
+            }}
             </style>
             """, unsafe_allow_html=True)
             
-            # Python Logic for Content
+            # Render Billboard (Left Video | Right Details)
             video_embed = ""
             if trailer_key:
                 video_embed = f'<iframe src="https://www.youtube.com/embed/{trailer_key}?autoplay=1&mute=1&controls=0&disablekb=1&modestbranding=1&loop=1&playlist={trailer_key}" style="width:100%; height:100%; border:none; pointer-events: none;"></iframe>'
@@ -701,7 +716,6 @@ if st.session_state.page == "home":
                 poster_url = fetch_poster(hero.get("backdrop_path"))
                 video_embed = f'<img src="{poster_url}" style="width:100%; height:100%; object-fit:cover;">'
 
-            # Render Billboard
             st.markdown(f"""
             <div class="billboard-container">
                 <div class="billboard-video">
@@ -719,20 +733,23 @@ if st.session_state.page == "home":
             </div>
             """, unsafe_allow_html=True)
             
-            # SUB-GRID (Next 4 Movies)
-            st.markdown("<div style='margin-bottom: 8px; color: #666; font-size: 0.75rem; letter-spacing: 2px; text-transform: uppercase; margin-top: 15px;'>You May Also Like</div>", unsafe_allow_html=True)
+            # SUB-GRID w/ CLICKABLE IMAGES (No Buttons)
+            st.markdown("<div style='margin-bottom: 8px; color: #666; font-size: 0.75rem; letter-spacing: 2px; text-transform: uppercase; margin-top: 15px;'>Select Movie to Preview</div>", unsafe_allow_html=True)
             
-            t_cols = st.columns(4)
-            for i in range(1, 5): # Show #2 to #5
+            t_cols = st.columns(5)
+            for i in range(5):
                 if i < len(trending):
-                    with t_cols[i-1]:
-                        m = trending[i]
+                    m = trending[i]
+                    with t_cols[i]:
                         poster = fetch_poster(m.get("poster_path"))
+                        # Determine class for selected state
+                        img_class = "clickable-img-selected" if i == st.session_state.hero_index else "clickable-img"
+                        
+                        # Render HTML Link Image
                         st.markdown(f"""
-                        <div style="transition: transform 0.3s;">
-                            <img src="{poster}" style="width: 100%; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.3);">
-                            <div style="font-size: 0.8rem; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #ccc;">{m.get('title')}</div>
-                        </div>
+                            <a href="?hero_index={i}" target="_self">
+                                <img src="{poster}" class="{img_class}">
+                            </a>
                         """, unsafe_allow_html=True)
         else:
             st.info("Loading trends...")
