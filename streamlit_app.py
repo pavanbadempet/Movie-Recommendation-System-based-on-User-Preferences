@@ -553,96 +553,81 @@ if st.session_state.page == "home":
         st.markdown("<h1>MOVIE RECOMMENDATION<br>SYSTEM</h1>", unsafe_allow_html=True)
         st.markdown("<p style='color: #888; font-size: 1rem; margin-bottom: 30px;'>AI-Powered Curator • Deep Search • Semantic Analysis</p>", unsafe_allow_html=True)
         
-        # "BUTTON AS CARD" - Fixed Selectors & Overrides
-        # We target the buttons specifically to override the theme
-        st.markdown("""
-        <style>
-        /* Base Button Reset - Strict */
-        div[data-testid="stButton"] button {
-            width: 100% !important;
-            height: auto !important;
-            background: rgba(255, 255, 255, 0.05) !important;
-            border: 1px solid rgba(255, 255, 255, 0.1) !important;
-            border-radius: 12px !important;
-            padding: 20px !important;
-            text-align: left !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: flex-start !important;
-            transition: all 0.3s ease !important;
-            box-shadow: none !important;
-        }
-
-        /* Hide the text content (" ") inside the button */
-        div[data-testid="stButton"] button p {
-            display: none !important;
-        }
-
-        /* Hover Styles */
-        div[data-testid="stButton"] button:hover {
-            border-color: #e50914 !important;
-            background: rgba(229, 9, 20, 0.1) !important;
-            transform: translateY(-2px) !important;
-            box-shadow: 0 10px 30px rgba(229, 9, 20, 0.2) !important;
-        }
+        import base64
         
-        /* SEARCH CARD CONTENT (1st Button in this col) */
-        /* Note: We need a way to distinguish. We'll use specific container isolation. */
-        </style>
-        """, unsafe_allow_html=True)
-        
-        # SEARCH CARD
-        st.markdown("""
-        <style>
-        /* Isolate this block */
-        div.element-container:has(button#btn_nav_search_hack) button::before {
-            content: "🔍";
-            font-size: 2.5rem;
-            margin-right: 20px;
-            filter: drop-shadow(0 0 5px rgba(255,255,255,0.3));
-        }
-        div.element-container:has(button#btn_nav_search_hack) button::after {
-            content: "DEEP SEARCH\\a Find matches by plot, vibe, or detailed queries.";
-            white-space: pre-wrap;
-            font-family: 'Helvetica Neue', sans-serif;
-            color: white;
-            font-size: 1.1rem;
-            font-weight: bold;
-            line-height: 1.4;
-            text-transform: uppercase;
-        }
-        </style>
-        """, unsafe_allow_html=True)
+        # Pure SVG Generator (No CSS Hacks, No HTML embedding)
+        # This draws the card using standard vector graphics for 100% consistency
+        def create_native_svg(icon, title, desc):
+            bg_color = "rgba(255,255,255,0.05)"
+            border_color = "rgba(255,255,255,0.1)"
+            
+            svg = f"""
+            <svg width="600" height="120" viewBox="0 0 600 120" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:{bg_color};stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:{bg_color};stop-opacity:1" />
+                    </linearGradient>
+                    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                        <feGaussianBlur stdDeviation="2" result="blur"/>
+                        <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+                    </filter>
+                </defs>
+                
+                <!-- Card Background -->
+                <rect x="2" y="2" width="596" height="116" rx="15" ry="15" 
+                      fill="url(#grad1)" stroke="{border_color}" stroke-width="2"/>
+                
+                <!-- Icon -->
+                <text x="30" y="75" font-family="Arial, sans-serif" font-size="50" fill="white">{icon}</text>
+                
+                <!-- Title -->
+                <text x="100" y="45" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="white" letter-spacing="1">
+                    {title.upper()}
+                </text>
+                
+                <!-- Description -->
+                <text x="100" y="80" font-family="Arial, sans-serif" font-size="16" fill="#aaaaaa">
+                    {desc}
+                </text>
+            </svg>
+            """
+            b64 = base64.b64encode(svg.encode('utf-8')).decode('utf-8')
+            return f"data:image/svg+xml;base64,{b64}"
 
-        if st.button(" ", key="btn_nav_search_hack", use_container_width=True):
+        # Generate Pure SVGs
+        svg_search = create_native_svg("🔍", "Deep Search", "Find matches by plot, vibe, or detailed queries.")
+        svg_chat = create_native_svg("🧬", "CineBot AI", "Interactive chat for complex recommendations.")
+
+        # Render via clickable_images
+        # Note: We split them ensuring no layout collisions
+        
+        st.markdown("<style>div.stMarkdown { margin-bottom: -15px; }</style>", unsafe_allow_html=True)
+        
+        # 1. Search Card
+        click_search = clickable_images(
+            paths=[svg_search],
+            titles=["Go to Search"],
+            div_style={"justify-content": "center", "margin-bottom": "15px"},
+            img_style={"width": "100%", "height": "auto", "border-radius": "15px", "box-shadow": "0 4px 6px rgba(0,0,0,0.3)"},
+            key="nav_pure_svg_search"
+        )
+        
+        # 2. Chat Card
+        click_chat = clickable_images(
+            paths=[svg_chat],
+            titles=["Go to Chat"],
+            div_style={"justify-content": "center"},
+            img_style={"width": "100%", "height": "auto", "border-radius": "15px", "box-shadow": "0 4px 6px rgba(0,0,0,0.3)"},
+            key="nav_pure_svg_chat"
+        )
+        
+        # Navigation
+        if click_search == 0:
             go_search()
             st.rerun()
-
-        st.markdown("<div style='height:15px'></div>", unsafe_allow_html=True)
-
-        # CHAT CARD
-        st.markdown("""
-        <style>
-        div.element-container:has(button#btn_nav_chat_hack) button::before {
-            content: "🧬";
-            font-size: 2.5rem;
-            margin-right: 20px;
-            filter: drop-shadow(0 0 5px rgba(255,255,255,0.3));
-        }
-        div.element-container:has(button#btn_nav_chat_hack) button::after {
-            content: "CINEBOT AI\\a Interactive chat for complex recommendations.";
-            white-space: pre-wrap;
-            font-family: 'Helvetica Neue', sans-serif;
-            color: white;
-            font-size: 1.1rem;
-            font-weight: bold;
-            line-height: 1.4;
-            text-transform: uppercase;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
-        if st.button(" ", key="btn_nav_chat_hack", use_container_width=True):
+            
+        if click_chat == 0:
             go_chat()
             st.rerun()
 
