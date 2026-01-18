@@ -477,26 +477,40 @@ def go_chat():
     st.session_state.page = "chat"
 
 
+@st.cache_data(ttl=3600)
+def fetch_trending_movies():
+    """Fetch trending movies from TMDB for the welcome page."""
+    try:
+        r = requests.get(
+            "https://api.themoviedb.org/3/trending/movie/week",
+            params={"api_key": TMDB_KEY},
+            timeout=3
+        )
+        return r.json().get("results", [])
+    except Exception:
+        return []
+
 # ===== PAGE 1: LANDING SCREEN (MAIN SCENE) =====
 if st.session_state.page == "home":
-    st.markdown("<h1 style='text-align: center; font-size: 3.5rem; margin-top: 5vh; margin-bottom: 10px;'>🎬 MovieGenius</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #888; font-size: 1.2rem; margin-bottom: 50px;'>The Ultimate AI-Powered Recommendation Engine</p>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align: center; margin-top: 5vh; margin-bottom: 20px;'>", unsafe_allow_html=True)
+    st.markdown("<h1 style='font-size: 4rem; margin-bottom: 10px; background: -webkit-linear-gradient(eee, #999); -webkit-background-clip: text; -webkit-text-fill-color: transparent;'>Movie Recommendation System</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #aaa; font-size: 1.4rem;'>Discover your next favorite movie with AI-powered Deep Search</p>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
     
-    # Two Columns for the Massive Cards
-    c1, c2, c3 = st.columns([1, 10, 1]) # Centered Layout
+    # Navigation Cards (Glassmorphism)
+    c1, c2, c3 = st.columns([1, 10, 1]) 
     with c2:
         col1, col2 = st.columns(2, gap="large")
         
         with col1:
-            # We use a container to create the visual card, and a button inside/below to trigger
             st.markdown("""
             <div class="glass-card">
                 <div class="card-icon">🔍</div>
                 <div class="card-title">Deep Search</div>
-                <div class="card-desc">Find movies by title, plot, or specific criteria using vector search.</div>
+                <div class="card-desc">Find movies by plot, genre, or vibe. Perfect for "I want a movie like X but..."</div>
             </div>
             """, unsafe_allow_html=True)
-            if st.button("Enter Search Engine", key="btn_search", use_container_width=True):
+            if st.button("Enter Search", key="btn_search", use_container_width=True):
                 go_search()
                 st.rerun()
 
@@ -505,12 +519,29 @@ if st.session_state.page == "home":
             <div class="glass-card">
                 <div class="card-icon">🤖</div>
                 <div class="card-title">AI Assistant</div>
-                <div class="card-desc">Chat with CineBot (Gemini 1.5) for complex, semantic recommendations.</div>
+                <div class="card-desc">Chat with our Gemini Agent for complex queries and personalized suggestions.</div>
             </div>
             """, unsafe_allow_html=True)
-            if st.button("Start AI Chat", key="btn_chat", use_container_width=True):
+            if st.button("Start Chat", key="btn_chat", use_container_width=True):
                 go_chat()
                 st.rerun()
+    
+    # Trending Section
+    st.markdown("---")
+    st.subheader("🔥 Trending This Week")
+    
+    trending = fetch_trending_movies()
+    if trending:
+        # Display as a horizontal scrollable row (CSS trick or just columns)
+        # Using columns for simplicity and reliability
+        cols = st.columns(7) # 7 posters in a row
+        for idx, m in enumerate(trending[:7]):
+            with cols[idx]:
+                poster = fetch_poster(m.get("poster_path"))
+                st.image(poster, use_container_width=True)
+                st.caption(m.get("title", "")[:20] + "...")
+    else:
+        st.info("Trending movies unavailable (Check API Key).")
 
 
 # ===== PAGE 2: SEARCH ENGINE =====
