@@ -578,32 +578,33 @@ if st.session_state.page == "home":
         card_search = create_nav_card("🔍", "Deep Search", "Find matches by plot, vibe, or detailed queries.")
         card_chat = create_nav_card("🧬", "CineBot AI", "Interactive chat for complex recommendations.")
         
-        # Render Cards via st-clickable-images
-        st.markdown("<style>div.stMarkdown { margin-bottom: -20px; }</style>", unsafe_allow_html=True) # visual tweak
+        # Render Cards via st-clickable-images (Split to avoid overlap)
+        st.markdown("<style>div.stMarkdown { margin-bottom: -10px; }</style>", unsafe_allow_html=True) 
         
-        clicked_nav = clickable_images(
-            paths=[card_search, card_chat],
-            titles=["Go to Search", "Go to AI Chat"],
-            div_style={
-                "display": "flex",
-                "flex-direction": "column", # Stack vertically
-                "gap": "15px"
-            },
-            img_style={
-                "width": "100%",
-                "cursor": "pointer",
-                "border-radius": "15px",
-                "transition": "transform 0.3s",
-                "box-shadow": "0 4px 6px rgba(0,0,0,0.2)"
-            },
-            key="nav_selector"
+        # 1. Deep Search Card
+        click_search = clickable_images(
+            paths=[card_search],
+            titles=["Go to Search"],
+            div_style={"justify-content": "center", "margin-bottom": "15px"},
+            img_style={"width": "100%", "cursor": "pointer", "border-radius": "15px", "box-shadow": "0 4px 6px rgba(0,0,0,0.2)"},
+            key="nav_search"
+        )
+        
+        # 2. CineBot Card
+        click_chat = clickable_images(
+            paths=[card_chat],
+            titles=["Go to AI Chat"],
+            div_style={"justify-content": "center"},
+            img_style={"width": "100%", "cursor": "pointer", "border-radius": "15px", "box-shadow": "0 4px 6px rgba(0,0,0,0.2)"},
+            key="nav_chat"
         )
         
         # Navigation Logic
-        if clicked_nav == 0:
+        if click_search == 0:
             go_search()
             st.rerun()
-        elif clicked_nav == 1:
+        
+        if click_chat == 0:
             go_chat()
             st.rerun()
 
