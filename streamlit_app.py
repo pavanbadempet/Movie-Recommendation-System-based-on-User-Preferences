@@ -177,7 +177,7 @@ def fetch_watch_providers(movie_id):
         return []
 
 
-@st.cache_resource
+
 def wake_up_backend():
     """
     Wake up the Render backend if it's sleeping.
