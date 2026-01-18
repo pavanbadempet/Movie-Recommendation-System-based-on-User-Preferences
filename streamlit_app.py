@@ -564,16 +564,16 @@ if st.session_state.page == "home":
                 go_chat()
                 st.rerun()
         
-        # Clickable Cards with anchor links (NO BUTTONS!)
+        # Clickable Cards with JavaScript onclick (NO BUTTONS!)
         st.markdown("""
         <style>
-        /* Clickable card link styling */
-        a.nav-card-link {
-            text-decoration: none !important;
+        /* Clickable card styling */
+        .nav-card-link {
+            cursor: pointer;
             display: block;
             margin-bottom: 15px;
         }
-        a.nav-card-link:hover .holo-card-row {
+        .nav-card-link:hover .holo-card-row {
             border-color: #e50914 !important;
             background: rgba(229, 9, 20, 0.08) !important;
             transform: translateY(-3px);
@@ -581,7 +581,7 @@ if st.session_state.page == "home":
         }
         </style>
         
-        <a href="?nav=search" class="nav-card-link">
+        <div class="nav-card-link" onclick="window.location.href = window.location.pathname + '?nav=search';">
             <div class="holo-card-row">
                 <div class="holo-icon">🔍</div>
                 <div class="holo-text">
@@ -589,9 +589,9 @@ if st.session_state.page == "home":
                     <p>Find matches by plot, vibe, or detailed queries.</p>
                 </div>
             </div>
-        </a>
+        </div>
         
-        <a href="?nav=chat" class="nav-card-link">
+        <div class="nav-card-link" onclick="window.location.href = window.location.pathname + '?nav=chat';">
             <div class="holo-card-row">
                 <div class="holo-icon">🧬</div>
                 <div class="holo-text">
@@ -599,7 +599,7 @@ if st.session_state.page == "home":
                     <p>Interactive chat for complex recommendations.</p>
                 </div>
             </div>
-        </a>
+        </div>
         """, unsafe_allow_html=True)
 
     # RIGHT COLUMN: Visual Showcase (Trending)
