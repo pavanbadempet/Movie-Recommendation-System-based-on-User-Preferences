@@ -492,85 +492,129 @@ def fetch_trending_movies():
 
 # ===== PAGE 1: LANDING SCREEN (MAIN SCENE) =====
 if st.session_state.page == "home":
-    # Hero Section with Split Layout to prevent scrolling
-    # Top Padding
-    st.markdown("<div style='margin-top: 2vh;'></div>", unsafe_allow_html=True)
+    # 1. Google Fonts Import & Cinematic CSS
+    st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@300;400;600&display=swap');
     
-    c1, c2 = st.columns([4, 6], gap="large") 
+    /* Animated Background Layer */
+    .stApp {
+        background: radial-gradient(circle at 50% 10%, #1a1a2e 0%, #000000 100%);
+        background-attachment: fixed;
+    }
     
-    # LEFT COLUMN: Action Center
-    with c1:
-        st.markdown("<h1 style='font-size: 3rem; margin-bottom: 5px; background: -webkit-linear-gradient(#eee, #999); -webkit-background-clip: text; -webkit-text-fill-color: transparent;'>MovieGenius</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='color: #bbb; font-size: 1.1rem; margin-bottom: 30px;'>Your personal AI film curator.</p>", unsafe_allow_html=True)
-        
-        # Stacked Cards (More compact height)
-        st.markdown("""
-        <style>
-        .glass-card-compact {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 15px;
-            padding: 20px;
-            display: flex;
-            align-items: center;
-            gap: 20px;
-            transition: all 0.3s ease;
-            cursor: pointer;
-            margin-bottom: 15px;
-        }
-        .glass-card-compact:hover {
-            background: rgba(255, 255, 255, 0.1);
-            border-color: rgba(229, 9, 20, 0.5);
-            transform: translateX(5px);
-        }
-        .compact-icon { font-size: 2.5rem; }
-        .compact-text h3 { margin: 0; font-size: 1.2rem; color: #fff; }
-        .compact-text p { margin: 0; font-size: 0.8rem; color: #aaa; }
-        </style>
-        
-        <div class="glass-card-compact">
-            <div class="compact-icon">🔍</div>
-            <div class="compact-text">
-                <h3>Deep Search</h3>
-                <p>Find movies by plot, vibe, or specific details.</p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Launch Search", key="btn_search", use_container_width=True):
-            go_search()
-            st.rerun()
+    /* Typography Overrides */
+    h1 {
+        font-family: 'Bebas Neue', sans-serif !important;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        background: linear-gradient(to right, #ffffff, #a5a5a5);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+    
+    p, div, button {
+        font-family: 'Montserrat', sans-serif !important;
+    }
+    
+    /* Holographic Card */
+    .holo-card {
+        background: rgba(20, 20, 25, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 20px;
+        padding: 30px;
+        transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+        backdrop-filter: blur(12px);
+        box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5);
+    }
+    
+    .holo-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: linear-gradient(45deg, transparent, rgba(255,255,255,0.03), transparent);
+        transform: translateX(-100%);
+        transition: 0.6s;
+    }
+    
+    .holo-card:hover {
+        transform: translateY(-5px);
+        border-color: rgba(229, 9, 20, 0.6);
+        box-shadow: 0 15px 40px -10px rgba(229, 9, 20, 0.3);
+    }
+    
+    .holo-card:hover::before {
+        transform: translateX(100%);
+    }
 
-        st.markdown("""
-        <div class="glass-card-compact" style="margin-top: 10px;">
-            <div class="compact-icon">🤖</div>
-            <div class="compact-text">
-                <h3>AI Assistant</h3>
-                <p>Chat with Gemini for complex recommendations.</p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Launch Chat", key="btn_chat", use_container_width=True):
-            go_chat()
-            st.rerun()
-
-    # RIGHT COLUMN: Visual Showcase (Trending)
+    /* Icon Glow */
+    .holo-icon {
+        font-size: 3rem;
+        margin-bottom: 15px;
+        filter: drop-shadow(0 0 10px rgba(255,255,255,0.3));
+    }
+    
+    /* Bottom Dock for Trending */
+    .dock-container {
+        margin-top: 5vh;
+        border-top: 1px solid rgba(255,255,255,0.05);
+        padding-top: 20px;
+        background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Hero Title (Centered)
+    st.markdown("<div style='text-align: center; margin-top: 3vh;'><h1>Movie Recommendation System</h1></div>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #888; font-size: 1rem; margin-bottom: 5vh; letter-spacing: 1px;'>AI-POWERED INTELLIGENCE • DEEP SEARCH • REAL-TIME TRENDS</p>", unsafe_allow_html=True)
+    
+    # Dual Holographic Portals
+    c1, c2, c3 = st.columns([1, 8, 1])
     with c2:
-        st.markdown("<h3 style='margin-bottom: 15px;'>🔥 Trending Now</h3>", unsafe_allow_html=True)
-        trending = fetch_trending_movies()
+        col1, col2 = st.columns(2, gap="large")
         
-        if trending:
-            # 3x2 Grid for visuals (Fits perfectly without scrolling)
-            t_cols = st.columns(3)
-            for i in range(6): # Show top 6
-                if i < len(trending):
-                    m = trending[i]
-                    with t_cols[i % 3]:
-                        poster = fetch_poster(m.get("poster_path"))
-                        st.image(poster, use_container_width=True)
-                        # No title text to save space, just pure visuals
-        else:
-            st.info("Loading trends...")
+        with col1:
+            st.markdown("""
+            <div class="holo-card">
+                <div class="holo-icon">🔍</div>
+                <h3 style="color: #fff; margin:0;">Deep Search</h3>
+                <p style="color: #aaa; font-size: 0.9rem; margin-top: 5px;">Analyze plot vectors to find exact matches.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button("ENTER SEARCH", key="btn_h_search", use_container_width=True):
+                go_search()
+                st.rerun()
+
+        with col2:
+            st.markdown("""
+            <div class="holo-card">
+                <div class="holo-icon">�</div>
+                <h3 style="color: #fff; margin:0;">AI Assistant</h3>
+                <p style="color: #aaa; font-size: 0.9rem; margin-top: 5px;">Consult Gemini 1.5 for semantic recommendations.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button("ENTER CHAT", key="btn_h_chat", use_container_width=True):
+                go_chat()
+                st.rerun()
+
+    # Bottom Dock: Trending
+    st.markdown("<div class='dock-container'></div>", unsafe_allow_html=True)
+    st.markdown("<h4 style='text-align: center; color: #666; font-family: Montserrat; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 15px;'>Trending Worldwide</h4>", unsafe_allow_html=True)
+    
+    trending = fetch_trending_movies()
+    if trending:
+        t_cols = st.columns(6) # 6 items for wider spread
+        for i in range(6):
+            if i < len(trending):
+                with t_cols[i]:
+                    poster = fetch_poster(trending[i].get("poster_path"))
+                    st.image(poster, use_container_width=True)
+    else:
+        st.info("Loading system...")
 
 
 # ===== PAGE 2: SEARCH ENGINE =====
