@@ -553,60 +553,82 @@ if st.session_state.page == "home":
         st.markdown("<h1>MOVIE RECOMMENDATION<br>SYSTEM</h1>", unsafe_allow_html=True)
         st.markdown("<p style='color: #888; font-size: 1rem; margin-bottom: 30px;'>AI-Powered Curator • Deep Search • Semantic Analysis</p>", unsafe_allow_html=True)
         
-        import base64
+        # 1. DEEP SEARCH CARD
+        # Render the visual card (HTML/CSS) for full fidelity
+        st.markdown("""
+        <div class="holo-card-row" id="card-search">
+            <div class="holo-icon">🔍</div>
+            <div class="holo-text">
+                <h3>Deep Search</h3>
+                <p>Find matches by plot, vibe, or detailed queries.</p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         
-        def create_nav_card(icon, title, desc):
-            """Generates an SVG Data URI for a navigation card."""
-            svg = f"""
-            <svg width="400" height="100" viewBox="0 0 400 100" xmlns="http://www.w3.org/2000/svg">
-                <style>
-                    .bg {{ fill: rgba(255,255,255,0.05); stroke: rgba(255,255,255,0.1); stroke-width: 1; transition: all 0.3s; }}
-                    .text-title {{ font-family: sans-serif; font-size: 20px; font-weight: bold; fill: #fff; text-transform: uppercase; }}
-                    .text-desc {{ font-family: sans-serif; font-size: 14px; fill: #aaa; }}
-                    .icon {{ font-size: 40px; }}
-                </style>
-                <rect x="0" y="0" width="400" height="100" rx="15" ry="15" class="bg" />
-                <text x="25" y="65" class="icon">{icon}</text>
-                <text x="80" y="40" class="text-title">{title}</text>
-                <text x="80" y="70" class="text-desc">{desc}</text>
-            </svg>
-            """
-            b64 = base64.b64encode(svg.encode('utf-8')).decode('utf-8')
-            return f"data:image/svg+xml;base64,{b64}"
-
-        # Generate Card "Images"
-        card_search = create_nav_card("🔍", "Deep Search", "Find matches by plot, vibe, or detailed queries.")
-        card_chat = create_nav_card("🧬", "CineBot AI", "Interactive chat for complex recommendations.")
+        # Overlay invisible button for click handling
+        # We start the button immediately after the HTML
+        st.markdown("""
+        <style>
+        /* Pull button up to cover the card */
+        div.stButton.search-btn {
+            margin-top: -100px; /* Adjust based on card height */
+            height: 100px;
+            position: relative;
+            z-index: 5;
+        }
+        div.stButton.search-btn > button {
+            height: 100px;
+            width: 100%;
+            opacity: 0; /* Invisible */
+            cursor: pointer;
+        }
+        /* Hover effect: When button is hovered, style the sibling card */
+        /* Note: This is tricky in Streamlit DOM. 
+           Instead, we rely on the card's own hover + the cursor pointer of the button */
+        </style>
+        """, unsafe_allow_html=True)
         
-        # Render Cards via st-clickable-images (Split to avoid overlap)
-        st.markdown("<style>div.stMarkdown { margin-bottom: -10px; }</style>", unsafe_allow_html=True) 
-        
-        # 1. Deep Search Card
-        click_search = clickable_images(
-            paths=[card_search],
-            titles=["Go to Search"],
-            div_style={"justify-content": "center", "margin-bottom": "15px"},
-            img_style={"width": "100%", "cursor": "pointer", "border-radius": "15px", "box-shadow": "0 4px 6px rgba(0,0,0,0.2)"},
-            key="nav_search"
-        )
-        
-        # 2. CineBot Card
-        click_chat = clickable_images(
-            paths=[card_chat],
-            titles=["Go to AI Chat"],
-            div_style={"justify-content": "center"},
-            img_style={"width": "100%", "cursor": "pointer", "border-radius": "15px", "box-shadow": "0 4px 6px rgba(0,0,0,0.2)"},
-            key="nav_chat"
-        )
-        
-        # Navigation Logic
-        if click_search == 0:
+        # Unique key and class for targeting
+        st.markdown('<div class="search-btn">', unsafe_allow_html=True)
+        if st.button("Search", key="nav_btn_search", use_container_width=True):
             go_search()
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+
+        # 2. CINEBOT AI CARD
+        st.markdown("""
+        <div class="holo-card-row" id="card-chat" style="margin-top: 15px;">
+            <div class="holo-icon">🧬</div>
+            <div class="holo-text">
+                <h3>CineBot AI</h3>
+                <p>Interactive chat for complex recommendations.</p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         
-        if click_chat == 0:
+        st.markdown("""
+        <style>
+        div.stButton.chat-btn {
+            margin-top: -100px; 
+            height: 100px;
+            position: relative;
+            z-index: 5;
+        }
+        div.stButton.chat-btn > button {
+            height: 100px;
+            width: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        st.markdown('<div class="chat-btn">', unsafe_allow_html=True)
+        if st.button("Chat", key="nav_btn_chat", use_container_width=True):
             go_chat()
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
     # RIGHT COLUMN: Visual Showcase (Trending)
     with c2:
