@@ -409,78 +409,121 @@ def format_option(m):
 
 # ===== APP MODES =====
 
-# ===== CUSTOM CSS FOR GLASS RADIO BUTTONS =====
+# ===== CUSTOM CSS FOR LANDING PAGE =====
 st.markdown("""
 <style>
-/* Hide the default radio circle and label structure */
-div[role="radiogroup"] > label > div:first-of-type {
-    display: none; 
-}
-div[role="radiogroup"] {
-    display: flex;
-    gap: 15px;
-    justify-content: center;
-    background: transparent;
-}
-div[role="radiogroup"] label {
+/* Glass Card for Landing Page */
+.glass-card {
     background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(16px);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(10px);
-    padding: 15px 30px;
-    border-radius: 15px;
-    cursor: pointer;
-    transition: all 0.3s ease;
+    border-radius: 20px;
+    padding: 40px;
     text-align: center;
-    width: 45%;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    cursor: pointer;
+    height: 300px;
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
 }
 
-/* Hover Effect - Glow */
-div[role="radiogroup"] label:hover {
-    background: rgba(255, 255, 255, 0.15);
-    transform: translateY(-2px);
-    box-shadow: 0 8px 15px rgba(229, 9, 20, 0.3);
+.glass-card:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateY(-10px) scale(1.02);
     border-color: rgba(229, 9, 20, 0.5);
+    box-shadow: 0 20px 40px rgba(229, 9, 20, 0.2);
 }
 
-/* Selected State - Red Border & Bright Text */
-div[role="radiogroup"] label[data-checked="true"] {
-    background: linear-gradient(135deg, rgba(229, 9, 20, 0.2) 0%, rgba(0, 0, 0, 0.8) 100%);
-    border: 1px solid #e50914;
-    box-shadow: 0 0 20px rgba(229, 9, 20, 0.4);
-    transform: scale(1.02);
+.card-icon {
+    font-size: 4rem;
+    margin-bottom: 20px;
 }
 
-div[role="radiogroup"] label p {
-    font-size: 1.2rem !important;
-    font-weight: 700 !important;
-    margin: 0 !important;
+.card-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 10px;
+}
+
+.card-desc {
+    color: #aaa;
+    font-size: 1rem;
+}
+
+/* Hide default button styles for the clickable area hack */
+.stButton button {
+    width: 100%;
 }
 </style>
 """, unsafe_allow_html=True)
 
 
-# ===== APP MODES =====
+# ===== NAVIGATION STATE =====
+if "page" not in st.session_state:
+    st.session_state.page = "home"
 
-# Top-level Mode Selection (Styled as Glass Cards)
-st.markdown("<h1 style='text-align: center; margin-bottom: 20px;'>🎬 Movie Recommendation System</h1>", unsafe_allow_html=True)
 
-# We use the standard radio, but the CSS above creates the visual magic.
-mode = st.radio(
-    "Experience Mode", 
-    ["🔍 Search Engine", "🤖 AI Assistant"], 
-    index=0, 
-    horizontal=True, 
-    label_visibility="collapsed"
-)
+def go_home():
+    st.session_state.page = "home"
 
-st.markdown("---")
+def go_search():
+    st.session_state.page = "search"
 
-# ===== MODE 1: CLASSIC SEARCH =====
-if mode == "🔍 Search Engine":
+def go_chat():
+    st.session_state.page = "chat"
+
+
+# ===== PAGE 1: LANDING SCREEN (MAIN SCENE) =====
+if st.session_state.page == "home":
+    st.markdown("<h1 style='text-align: center; font-size: 3.5rem; margin-top: 5vh; margin-bottom: 10px;'>🎬 MovieGenius</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #888; font-size: 1.2rem; margin-bottom: 50px;'>The Ultimate AI-Powered Recommendation Engine</p>", unsafe_allow_html=True)
+    
+    # Two Columns for the Massive Cards
+    c1, c2, c3 = st.columns([1, 10, 1]) # Centered Layout
+    with c2:
+        col1, col2 = st.columns(2, gap="large")
+        
+        with col1:
+            # We use a container to create the visual card, and a button inside/below to trigger
+            st.markdown("""
+            <div class="glass-card">
+                <div class="card-icon">🔍</div>
+                <div class="card-title">Deep Search</div>
+                <div class="card-desc">Find movies by title, plot, or specific criteria using vector search.</div>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button("Enter Search Engine", key="btn_search", use_container_width=True):
+                go_search()
+                st.rerun()
+
+        with col2:
+            st.markdown("""
+            <div class="glass-card">
+                <div class="card-icon">🤖</div>
+                <div class="card-title">AI Assistant</div>
+                <div class="card-desc">Chat with CineBot (Gemini 1.5) for complex, semantic recommendations.</div>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button("Start AI Chat", key="btn_chat", use_container_width=True):
+                go_chat()
+                st.rerun()
+
+
+# ===== PAGE 2: SEARCH ENGINE =====
+elif st.session_state.page == "search":
+    # Header navigation
+    c1, c2 = st.columns([1, 8])
+    with c1:
+        if st.button("🏠 Home", key="back_search"):
+            go_home()
+            st.rerun()
+            
+    st.title("🔍 Deep Search Engine")
+    
     # Simple Search Interface
     search = st.text_input("Find movies by title, plot, or genre...", placeholder="Type 'Inception' or 'Time Travel'...")
     
@@ -561,8 +604,15 @@ if mode == "🔍 Search Engine":
                     st.session_state.show_dialog = True
 
 
-# ===== MODE 2: AI CHATBOT =====
-elif mode == "🤖 AI Assistant":
+# ===== PAGE 3: AI CHATBOT =====
+elif st.session_state.page == "chat":
+    # Header navigation
+    c1, c2 = st.columns([1, 8])
+    with c1:
+        if st.button("🏠 Home", key="back_chat"):
+            go_home()
+            st.rerun()
+
     st.title("🤖 CineBot Assistant")
     st.caption("Ask complex questions like: *'I want a thriller with a plot twist like Shutter Island'*")
     
@@ -598,7 +648,8 @@ elif mode == "🤖 AI Assistant":
                 except Exception as e:
                     st.error(f"Error: {e}")
 
-# Dialog logic (Shared)
+
+# Dialog logic (Shared for both modes)
 if st.session_state.get("show_dialog") and st.session_state.get("selected_rec"):
     show_movie_dialog(st.session_state.selected_rec)
     st.session_state.show_dialog = False
