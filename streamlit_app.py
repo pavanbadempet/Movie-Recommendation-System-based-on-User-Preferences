@@ -407,128 +407,147 @@ def format_option(m):
     return f"{title} ({year})" if year else title
 
 
-# ===== MAIN APP (UNIFIED INTERFACE) =====
+# ===== APP MODES =====
 
-# Session state initialization
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = [{
-        "role": "assistant", 
-        "content": "👋 Hi! I'm CineBot. I can find movies by title, plot, or even vague descriptions.\n\nTry: *'Mind-bending sci-fi like Inception'* or just *'Batman'*.",
-        "movies": [] # Store structured movie data with the message
-    }]
-if "selected_rec" not in st.session_state:
-    st.session_state.selected_rec = None
-
-st.title("🎬 Movie Recommendation System")
-
-# Display Chat History
-for msg in st.session_state.chat_history:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
-        
-        # If this message has associated movie results, display them!
-        if msg.get("movies"):
-            movies = msg["movies"]
-            st.markdown(f"**Found {len(movies)} matches:**")
-            
-            # Horizontal scrollable gallery or Grid? Grid is better for desktop.
-            cols = st.columns(4)
-            for idx, m in enumerate(movies[:8]): # Limit to 8 to save space
-                with cols[idx % 4]:
-                    poster = fetch_poster(m.get("poster_path"))
-                    title = m.get("title", "Unknown")
-                    rating = m.get("vote_average", 0)
-                    
-                    # Card HTML
-                    st.markdown(f"""
-                    <div style="background: rgba(255,255,255,0.05); border-radius: 8px; overflow: hidden; margin-bottom: 10px;">
-                        <img src="{poster}" style="width: 100%; aspect-ratio: 2/3; object-fit: cover;">
-                        <div style="padding: 6px;">
-                            <div style="font-size: 0.8rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{title}</div>
-                            <div style="font-size: 0.7rem; color: #aaa;">⭐ {rating:.1f}</div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Interaction: Determine key for uniqueness
-                    # We can't put buttons inside the loop easily without rerun issues in history.
-                    # Solution: Just showing them is fine for "History". 
-                    # If they want to click, they usually click the most recent result.
-                    # Or we explicitly add a "Deep Dive" button for the latest search.
-
-# Handle User Input
-if prompt := st.chat_input("Ask CineBot (e.g., 'Movies about time travel', 'Interstellar')..."):
+# Sidebar Mode Selection
+with st.sidebar:
+    st.header("Mode Selection")
+    mode = st.radio("Choose Experience:", ["🔍 Movie Search", "🤖 AI Chatbot"], index=0)
     
-    # 1. Show User Message
-    st.session_state.chat_history.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
+    st.markdown("---")
+    st.caption("Powered by:")
+    st.caption("• FastAPI Backend")
+    st.caption("• FAISS Vector DB")
+    st.caption("• Google Gemini 1.5")
 
-    # 2. Process (Search + AI)
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking & Searching..."):
-            
-            # A. Search Logic (Deep Search)
-            found_movies = search_movies(prompt) # Uses the existing endpoint
-            
-            # B. AI Logic (RAG)
-            # We pass the search results as context implicitly via the backend (or we could pass them explicitly here)
-            # The backend /chat endpoint ALREADY performs a search internally! s
-            # But the backend /chat endpoint might not return the movie list structure, just text.
-            # To have the "Unified" UI, we need the structured movies too.
-            # Let's rely on the Frontend Search for the "Grid" and Backend Chat for the "Text".
-            
-            try:
-                # Prepare context for backend chat (optional optimization, current /chat does its own search)
-                # We'll just call /chat and let it do its thing for the text response.
-                
-                # Context window
-                recent_msgs = st.session_state.chat_history[-6:] # pass last few messages
-                # Filter out 'movies' key to avoid sending huge json to payload if we were sending state
-                clean_msgs = [{"role": m["role"], "content": m["content"]} for m in recent_msgs if m["role"] != "system"]
 
-                r = requests.post(f"{API_URL}/chat", json={"messages": clean_msgs}, timeout=60)
+# ===== MODE 1: CLASSIC SEARCH =====
+if mode == "🔍 Movie Search":
+    st.title("🎬 Movie Search Engine")
+    
+    # Simple Search Interface
+    search = st.text_input("Find movies by title, plot, or genre...", placeholder="Type 'Inception' or 'Time Travel'...")
+    
+    if search and len(search) >= 2:
+        with st.spinner("Searching database..."):
+            movies = search_movies(search)
+        
+        if movies:
+            # Show results in a grid immediately (Deep Search style)
+            # Use 'format_option' logic if we want a dropdown, OR just a grid.
+            # The user liked the "Unified" grid, so let's keep the Grid but in Search Mode.
+            # BUT: Classic Search usually has a dropdown or list. Let's do Dropdown -> Detail for precision.
+            
+            options = {format_option(m): m for m in movies}
+            selected_option = st.selectbox(f"Found {len(movies)} matches:", list(options.keys()))
+            movie = options.get(selected_option)
+            
+            if movie:
+                # Preview
+                poster_url = fetch_poster(movie.get("poster_path"))
+                credits = fetch_credits(movie.get("id"))
                 
-                ai_text = ""
-                if r.ok:
-                    ai_text = r.json()["content"]
-                else:
-                    ai_text = "⚠️ I'm having trouble connecting to the AI brain. But here are the search results."
+                # Highlight Card
+                st.markdown(f"""
+                <div style="display: flex; gap: 20px; background: rgba(255,255,255,0.05); padding: 20px; border-radius: 15px; margin-top: 20px;">
+                    <img src="{poster_url}" width="120" style="border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
+                    <div>
+                        <div style="font-size: 1.5rem; font-weight: 700; margin-bottom: 5px;">{movie.get('title')}</div>
+                        <div style="color: #bbb; margin-bottom: 10px;">{movie.get('release_date', '')[:4]} • ⭐ {movie.get('vote_average', 0):.1f}/10</div>
+                        <div style="font-size: 0.9rem; line-height: 1.5; color: #ddd;">{movie.get('overview', '')}</div>
+                        <div style="margin-top: 10px; font-size: 0.8rem; color: #888;">🎭 {credits.get('cast', 'N/A')}</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                # Action Button
+                if st.button("✨ Get Similar Recommendations", type="primary", use_container_width=True):
+                    st.session_state.selected_rec = None
+                    with st.spinner("Analysing semantics..."):
+                        # Call API
+                        try:
+                            r = requests.get(f"{API_URL}/recommend/id/{movie['id']}/enriched", params={"n": 10}, timeout=30)
+                            if r.ok:
+                                result = r.json()
+                                st.session_state.recs = result["recommendations"]
+                                st.session_state.source_movie = movie
+                            else:
+                                st.error("API Error")
+                        except Exception as e:
+                            st.error(f"Connection Error: {e}")
+        else:
+            st.info("No text matches found. Try describing the plot!")
 
-                # C. Display AI Text
-                st.markdown(ai_text)
+    # Display Recommendations Grid (Shared Logic)
+    if "recs" in st.session_state and st.session_state.recs:
+        # Check if recs match current search context (optional, but keep it simple)
+        recs = st.session_state.recs
+        source = st.session_state.get("source_movie", {})
+        
+        st.markdown("---")
+        st.subheader(f"Because you liked '{source.get('title', '...')}'")
+        
+        # Grid Layout
+        cols = st.columns(5)
+        for idx, rec in enumerate(recs):
+            with cols[idx % 5]:
+                poster = fetch_poster(rec.get("poster_path"))
+                title = rec.get("title")
+                match = int(rec.get("similarity_score", 0) * 100)
                 
-                # D. Display Interactive Movie Cards (For the *Current* turn)
-                if found_movies:
-                    st.markdown("---")
-                    st.caption(f"Found {len(found_movies)} related movies:")
+                st.markdown(f"""
+                <div style="margin-bottom: 10px; position: relative;">
+                    <img src="{poster}" style="width: 100%; border-radius: 12px; aspect-ratio: 2/3; object-fit: cover;">
+                    <div style="position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.8); color: #4ade80; padding: 2px 8px; border-radius: 8px; font-size: 0.7rem; font-weight: bold;">{match}%</div>
+                </div>
+                <div style="font-size: 0.85rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{title}</div>
+                """, unsafe_allow_html=True)
+                
+                if st.button(f"Details", key=f"rec_{idx}", use_container_width=True):
+                    st.session_state.selected_rec = rec
+                    st.session_state.show_dialog = True
+
+
+# ===== MODE 2: AI CHATBOT =====
+elif mode == "🤖 AI Chatbot":
+    st.title("🤖 CineBot Assistant")
+    st.caption("Ask complex questions like: *'I want a thriller with a plot twist like Shutter Island'*")
+    
+    # Initialize Chat
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = [{"role": "assistant", "content": "Hello! I'm your AI movie expert. Ask me anything!"}]
+    
+    # Display History
+    for msg in st.session_state.chat_history:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+            
+    # Input
+    if prompt := st.chat_input("Ask CineBot..."):
+        st.session_state.chat_history.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+            
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                try:
+                    recent_msgs = st.session_state.chat_history[-6:]
+                    clean_msgs = [{"role": m["role"], "content": m["content"]} for m in recent_msgs if m["role"] != "system"]
                     
-                    # Interactive Grid for the active turn
-                    cols = st.columns(4)
-                    for idx, m in enumerate(found_movies[:8]):
-                         with cols[idx % 4]:
-                            poster = fetch_poster(m.get("poster_path"))
-                            title = m.get("title")
-                            
-                            st.markdown(f"""
-                            <div style="margin-bottom: 5px;">
-                                <img src="{poster}" style="width: 100%; border-radius: 8px;">
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                            if st.button(f"🎬 {title}", key=f"cmd_{int(time.time())}_{idx}", use_container_width=True):
-                                st.session_state.selected_rec = m
-                                st.session_state.show_dialog = True
-                                st.rerun()
+                    r = requests.post(f"{API_URL}/chat", json={"messages": clean_msgs}, timeout=60)
+                    
+                    if r.ok:
+                        response_text = r.json()["content"]
+                        st.markdown(response_text)
+                        st.session_state.chat_history.append({"role": "assistant", "content": response_text})
+                    else:
+                         st.error("AI Brain Offline.")
+                except Exception as e:
+                    st.error(f"Error: {e}")
 
-                # E. Save to History
-                st.session_state.chat_history.append({
-                    "role": "assistant", 
-                    "content": ai_text,
-                    "movies": found_movies[:8] # Save top 8 for history display (non-interactive)
-                })
-                
-            except Exception as e:
-                st.error(f"Error: {e}")
-
-# Dialog logic remains (handled at top of loop or via rerun)
+# Dialog logic (Shared)
+if st.session_state.get("show_dialog") and st.session_state.get("selected_rec"):
+    show_movie_dialog(st.session_state.selected_rec)
+    st.session_state.show_dialog = False
