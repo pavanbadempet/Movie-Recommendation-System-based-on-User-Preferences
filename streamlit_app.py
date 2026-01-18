@@ -614,49 +614,6 @@ if st.session_state.page == "home":
             # HERO BILLBOARD LAYOUT
             st.markdown(f"""
             <style>
-            /* INVISIBLE BUTTON OVERLAY HACK V2 */
-            
-            /* 1. Force the Column to be the anchor */
-            [data-testid="column"] {{
-                position: relative !important;
-            }}
-            
-            /* 2. Target the BUTTON WRAPPER div */
-            div:has(> button[kind="primary"]) {{
-                position: absolute !important;
-                inset: 0 !important;
-                width: 100% !important;
-                height: 100% !important;
-                z-index: 10 !important;
-                margin: 0 !important;
-                padding: 0 !important;
-            }}
-            
-            /* 3. Style the BUTTON itself to be invisible but clickable */
-            button[kind="primary"] {{
-                width: 100% !important;
-                height: 100% !important;
-                opacity: 0 !important; /* Invisible */
-                background-color: transparent !important;
-                border: none !important;
-                cursor: pointer !important;
-            }}
-            
-            /* 4. Visual Feedback: When hovering the invisible button, highlight the image below */
-            div:has(> div > button[kind="primary"]:hover) ~ div img {{
-                border: 2px solid #e50914 !important;
-                transform: scale(1.05);
-                box-shadow: 0 10px 20px rgba(229, 9, 20, 0.4);
-            }}
-
-            /* Selected State */
-            img.selected-poster {{
-                border: 2px solid #e50914;
-                box-shadow: 0 0 15px rgba(229, 9, 20, 0.6);
-                transform: scale(1.02);
-                transition: all 0.3s ease;
-            }}
-            
             .billboard-container {{
                 background: linear-gradient(135deg, rgba(26, 26, 46, 0.9), rgba(0, 0, 0, 0.95));
                 border: 1px solid rgba(255, 255, 255, 0.1);
@@ -673,7 +630,6 @@ if st.session_state.page == "home":
                 border-radius: 12px;
                 overflow: hidden;
                 box-shadow: 0 5px 15px rgba(0,0,0,0.5);
-                position: relative;
                 background: #000;
             }}
             .billboard-info {{
@@ -690,9 +646,6 @@ if st.session_state.page == "home":
                 margin-bottom: 8px;
                 color: #fff;
                 text-transform: uppercase;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
             }}
             .bb-meta {{
                 font-family: 'Montserrat', sans-serif;
@@ -700,8 +653,6 @@ if st.session_state.page == "home":
                 color: #ea696f; 
                 font-weight: 700;
                 margin-bottom: 10px;
-                text-transform: uppercase;
-                letter-spacing: 1px;
             }}
             .bb-desc {{
                 font-family: 'Montserrat', sans-serif;
@@ -721,15 +672,35 @@ if st.session_state.page == "home":
                 border-top: 1px solid rgba(255,255,255,0.1);
                 padding-top: 8px;
             }}
-            div.stButton > button:hover {{
-                border-color: #e50914;
-                color: #fff;
-                background: rgba(229, 9, 20, 0.2);
+            /* MOVIE CARD BUTTONS - Styled as labels */
+            .movie-card-btn {{
+                background: transparent !important;
+                border: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                width: 100% !important;
+            }}
+            .movie-card-btn > button {{
+                background: transparent !important;
+                border: 2px solid transparent !important;
+                border-radius: 12px !important;
+                padding: 8px !important;
+                width: 100% !important;
+                transition: all 0.3s ease !important;
+            }}
+            .movie-card-btn > button:hover {{
+                border-color: #e50914 !important;
+                background: rgba(229, 9, 20, 0.1) !important;
+                transform: scale(1.02);
+            }}
+            .movie-card-btn > button:focus {{
+                border-color: #e50914 !important;
+                box-shadow: 0 0 15px rgba(229, 9, 20, 0.4) !important;
             }}
             </style>
             """, unsafe_allow_html=True)
             
-            # Render Billboard (Left Video | Right Details)
+            # Render Billboard
             video_embed = ""
             if trailer_key:
                 video_embed = f'<iframe src="https://www.youtube.com/embed/{trailer_key}?autoplay=1&mute=1&controls=0&disablekb=1&modestbranding=1&loop=1&playlist={trailer_key}" style="width:100%; height:100%; border:none; pointer-events: none;"></iframe>'
@@ -754,22 +725,25 @@ if st.session_state.page == "home":
             </div>
             """, unsafe_allow_html=True)
             
-            # SUB-GRID w/ INVISIBLE BUTTONS
-            st.markdown("<div style='margin-bottom: 8px; color: #666; font-size: 0.75rem; letter-spacing: 2px; text-transform: uppercase; margin-top: 15px;'>Select Movie to Preview</div>", unsafe_allow_html=True)
+            # SUB-GRID - CLICKABLE POSTER CARDS
+            st.markdown("<div style='margin-bottom: 8px; color: #666; font-size: 0.75rem; letter-spacing: 2px; text-transform: uppercase; margin-top: 15px;'>More Trending</div>", unsafe_allow_html=True)
             
             t_cols = st.columns(5)
             for i in range(5):
                 if i < len(trending):
                     m = trending[i]
                     with t_cols[i]:
-                        # 1. Image FIRST (Sets Height)
                         poster = fetch_poster(m.get("poster_path"))
-                        img_class = "selected-poster" if i == st.session_state.hero_index else ""
-                        st.markdown(f'<img src="{poster}" style="width:100%; border-radius:10px;" class="{img_class}">', unsafe_allow_html=True)
-
-                        # 2. Overlay Button SECOND (Absolute Positioned over Previous Element)
-                        # We use type="primary" to target it with our CSS
-                        if st.button("Select", key=f"sel_{i}_{m['id']}", type="primary", use_container_width=True):
+                        
+                        # Show poster image
+                        if i == st.session_state.hero_index:
+                            st.markdown(f'<img src="{poster}" style="width:100%; border-radius:10px; border: 2px solid #e50914; box-shadow: 0 0 15px rgba(229,9,20,0.5);">', unsafe_allow_html=True)
+                        else:
+                            st.markdown(f'<img src="{poster}" style="width:100%; border-radius:10px; border: 2px solid transparent; transition: all 0.3s; cursor: pointer;" onmouseover="this.style.border=\'2px solid #e50914\'" onmouseout="this.style.border=\'2px solid transparent\'">', unsafe_allow_html=True)
+                        
+                        # Small clickable title button
+                        title = m.get('title', 'Movie')[:15] + ('...' if len(m.get('title', '')) > 15 else '')
+                        if st.button(title, key=f"pick_{i}_{m['id']}", use_container_width=True):
                             st.session_state.hero_index = i
                             st.rerun()
         else:
