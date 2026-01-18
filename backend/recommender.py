@@ -104,10 +104,48 @@ class Recommender:
         Returns:
             List of matching movie dictionaries
         """
-        query_lower = query.lower()
-        matches = self._movies[
-            self._movies["title"].str.lower().str.contains(query_lower, na=False)
-        ].head(limit)
+        """
+        Search movies by title, overview, and genres (Deep Search).
+        
+        Args:
+            query: Search query string
+            limit: Maximum results to return
+            
+        Returns:
+            List of matching movie dictionaries sorted by relevance
+        """
+        if not query:
+            return []
+            
+        q_lower = query.lower()
+        
+        # 1. Title Match (Weight: 10)
+        mask_title = self._movies["title"].str.lower().str.contains(q_lower, na=False)
+        
+        # 2. Overview Match (Weight: 3) - Allows searching by plot concepts
+        mask_overview = self._movies["overview"].str.lower().str.contains(q_lower, na=False)
+        
+        # 3. Genre Match (Weight: 5)
+        mask_genre = self._movies["genres"].str.lower().str.contains(q_lower, na=False)
+        
+        # Combine matches
+        matches = self._movies[mask_title | mask_overview | mask_genre].copy()
+        
+        if len(matches) == 0:
+            return []
+            
+        # Calculate Relevance Score
+        # We use simple boolean math (True=1, False=0)
+        matches["relevance"] = (
+            (matches["title"].str.lower().str.contains(q_lower, na=False) * 10) +
+            (matches["genres"].str.lower().str.contains(q_lower, na=False) * 5) +
+            (matches["overview"].str.lower().str.contains(q_lower, na=False) * 3) +
+            # Boost popularity slightly to break ties
+            (np.log1p(matches["popularity"]) * 0.1)
+        )
+        
+        # Sort by relevance
+        matches = matches.sort_values("relevance", ascending=False).head(limit)
         
         return matches.to_dict(orient="records")
     
