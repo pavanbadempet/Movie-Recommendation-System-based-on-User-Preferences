@@ -5,7 +5,7 @@ import streamlit as st
 import requests
 import time
 import os
-from streamlit_clickable_images import clickable_images
+from st_clickable_images import clickable_images
 
 st.set_page_config(
     page_title="Movie Recommendation System",
