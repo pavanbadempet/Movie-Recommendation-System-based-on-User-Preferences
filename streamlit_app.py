@@ -553,100 +553,112 @@ if st.session_state.page == "home":
         st.markdown("<h1>MOVIE RECOMMENDATION<br>SYSTEM</h1>", unsafe_allow_html=True)
         st.markdown("<p style='color: #888; font-size: 1rem; margin-bottom: 30px;'>AI-Powered Curator • Deep Search • Semantic Analysis</p>", unsafe_allow_html=True)
         
-        # ROBUST CSS GRID OVERLAY
-        # We use strict grid stacking to place the button exactly ON TOP of the card
-        st.markdown("""
-        <style>
-        /* The Container holding both the Card and the Button */
-        .card-stack {
-            display: grid;
-            grid-template-areas: "stack";
-            width: 100%;
-            margin-bottom: 15px;
-            position: relative;
-        }
+        import base64
         
-        /* The Visual Card (HTML) */
-        .card-stack > .holo-card-row {
-            grid-area: stack;
-            z-index: 1;
-            /* Ensure it fills the area */
-            width: 100%;
-            height: auto;
-            min-height: 100px;
-        }
-        
-        /* The Streamlit Button Wrapper */
-        .card-stack > .stButton {
-            grid-area: stack;
-            z-index: 2;
-            width: 100%;
-            height: 100%;
-            min-height: 100px;
-        }
-        
-        /* The Actual Button inside the wrapper - Make Invisible & Full Size */
-        .card-stack > .stButton > button {
-            width: 100% !important;
-            height: 100% !important;
-            min-height: 100px !important;
-            background: transparent !important;
-            border: none !important;
-            color: transparent !important;
-            cursor: pointer !important;
-            opacity: 0 !important;
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            margin: 0 !important;
-            padding: 0 !important;
-        }
-        
-        /* Hover Effect: Pass through to card */
-        .card-stack:hover .holo-card-row {
-            border-color: #e50914 !important;
-            background: rgba(229, 9, 20, 0.08) !important;
-            transform: translateY(-3px);
-            box-shadow: 0 10px 30px rgba(229, 9, 20, 0.2) !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
-        # 1. DEEP SEARCH STACK
-        st.markdown('<div class="card-stack">', unsafe_allow_html=True)
-        # Visual
-        st.markdown("""
-        <div class="holo-card-row">
-            <div class="holo-icon">🔍</div>
-            <div class="holo-text">
-                <h3>Deep Search</h3>
-                <p>Find matches by plot, vibe, or detailed queries.</p>
+        # High-Fidelity SVG Card Generator
+        def create_holo_card_svg(icon, title, desc, card_id):
+            """
+            Generates a high-fidelity SVG that looks EXACTLY like the CSS card.
+            Uses foreignObject to render HTML/CSS inside the SVG.
+            """
+            # We use a foreignObject to embed the exact HTML/CSS that the user likes.
+            html_content = f"""
+            <div xmlns="http://www.w3.org/1999/xhtml" style="width:100%; height:100%;">
+                <style>
+                    .holo-card {{
+                        display: flex;
+                        align-items: center;
+                        padding: 15px;
+                        background: rgba(255, 255, 255, 0.05);
+                        border: 1px solid rgba(255, 255, 255, 0.1);
+                        border-radius: 12px;
+                        transition: all 0.3s ease;
+                        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+                        cursor: pointer;
+                        box-sizing: border-box;
+                        height: 100%;
+                    }}
+                    .holo-card:hover {{
+                        border-color: #e50914;
+                        background: rgba(229, 9, 20, 0.1); /* Red tint on hover */
+                        box-shadow: 0 0 15px rgba(229, 9, 20, 0.3);
+                    }}
+                    .icon {{
+                        font-size: 2rem;
+                        margin-right: 15px;
+                        filter: drop-shadow(0 0 5px rgba(255,255,255,0.3));
+                    }}
+                    .text h3 {{
+                        margin: 0;
+                        color: #fff;
+                        font-size: 1.1rem;
+                        text-transform: uppercase;
+                        letter-spacing: 1px;
+                        font-weight: 700;
+                    }}
+                    .text p {{
+                        margin: 5px 0 0 0;
+                        color: #aaa;
+                        font-size: 0.85rem;
+                        line-height: 1.2;
+                    }}
+                </style>
+                <div class="holo-card">
+                    <div class="icon">{icon}</div>
+                    <div class="text">
+                        <h3>{title}</h3>
+                        <p>{desc}</p>
+                    </div>
+                </div>
             </div>
-        </div>
-        """, unsafe_allow_html=True)
-        # Interaction
-        if st.button("Search", key="btn_nav_search", use_container_width=True):
+            """
+            # Encode HTML as base64 for embedding in SVG
+            # Note: We need to be careful with quotes in the SVG string
+            
+            svg = f"""
+            <svg width="400" height="110" viewBox="0 0 400 110" xmlns="http://www.w3.org/2000/svg">
+                <foreignObject width="100%" height="100%">
+                    {html_content}
+                </foreignObject>
+            </svg>
+            """
+            
+            b64 = base64.b64encode(svg.encode('utf-8')).decode('utf-8')
+            return f"data:image/svg+xml;base64,{b64}"
+
+        # Generate the High-Fidelity Cards
+        svg_search = create_holo_card_svg("🔍", "Deep Search", "Find matches by plot, vibe, or detailed queries.", "search")
+        svg_chat = create_holo_card_svg("🧬", "CineBot AI", "Interactive chat for complex recommendations.", "chat")
+
+        # Render via clickable_images (Split calls to ensure vertical stacking)
+        st.markdown("<style>div.stMarkdown { margin-bottom: -15px; }</style>", unsafe_allow_html=True)
+        
+        # 1. Search Card
+        click_search = clickable_images(
+            paths=[svg_search],
+            titles=["Go to Search"],
+            div_style={"justify-content": "center", "margin-bottom": "15px"},
+            img_style={"width": "100%", "height": "auto", "border-radius": "12px"},
+            key="nav_search_svg"
+        )
+        
+        # 2. Chat Card
+        click_chat = clickable_images(
+            paths=[svg_chat],
+            titles=["Go to Chat"],
+            div_style={"justify-content": "center"},
+            img_style={"width": "100%", "height": "auto", "border-radius": "12px"},
+            key="nav_chat_svg"
+        )
+        
+        # Navigation Logic
+        if click_search == 0:
             go_search()
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        # 2. CINEBOT AI STACK
-        st.markdown('<div class="card-stack">', unsafe_allow_html=True)
-        # Visual
-        st.markdown("""
-        <div class="holo-card-row">
-            <div class="holo-icon">🧬</div>
-            <div class="holo-text">
-                <h3>CineBot AI</h3>
-                <p>Interactive chat for complex recommendations.</p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        # Interaction
-        if st.button("Chat", key="btn_nav_chat", use_container_width=True):
+            
+        if click_chat == 0:
             go_chat()
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
 
     # RIGHT COLUMN: Visual Showcase (Trending)
     with c2:
