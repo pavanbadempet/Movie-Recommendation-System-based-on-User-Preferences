@@ -553,110 +553,101 @@ if st.session_state.page == "home":
         st.markdown("<h1>MOVIE RECOMMENDATION<br>SYSTEM</h1>", unsafe_allow_html=True)
         st.markdown("<p style='color: #888; font-size: 1rem; margin-bottom: 30px;'>AI-Powered Curator • Deep Search • Semantic Analysis</p>", unsafe_allow_html=True)
         
-        import base64
+        # "BUTTON AS CARD" - Pure CSS Re-Construction
+        # This transforms the native Streamlit button into the Holo Card visually
+        st.markdown("""
+        <style>
+        /* 1. Reset standard button styles */
+        div.row-widget.stButton > button {
+            width: 100%;
+            height: auto;
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            transition: all 0.3s ease;
+            box-shadow: none;
+            color: transparent; /* Hide default text */
+        }
         
-        # High-Fidelity SVG Card Generator
-        def create_holo_card_svg(icon, title, desc, card_id):
-            """
-            Generates a high-fidelity SVG that looks EXACTLY like the CSS card.
-            Uses foreignObject to render HTML/CSS inside the SVG.
-            """
-            # We use a foreignObject to embed the exact HTML/CSS that the user likes.
-            html_content = f"""
-            <div xmlns="http://www.w3.org/1999/xhtml" style="width:100%; height:100%;">
-                <style>
-                    .holo-card {{
-                        display: flex;
-                        align-items: center;
-                        padding: 15px;
-                        background: rgba(255, 255, 255, 0.05);
-                        border: 1px solid rgba(255, 255, 255, 0.1);
-                        border-radius: 12px;
-                        transition: all 0.3s ease;
-                        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-                        cursor: pointer;
-                        box-sizing: border-box;
-                        height: 100%;
-                    }}
-                    .holo-card:hover {{
-                        border-color: #e50914;
-                        background: rgba(229, 9, 20, 0.1); /* Red tint on hover */
-                        box-shadow: 0 0 15px rgba(229, 9, 20, 0.3);
-                    }}
-                    .icon {{
-                        font-size: 2rem;
-                        margin-right: 15px;
-                        filter: drop-shadow(0 0 5px rgba(255,255,255,0.3));
-                    }}
-                    .text h3 {{
-                        margin: 0;
-                        color: #fff;
-                        font-size: 1.1rem;
-                        text-transform: uppercase;
-                        letter-spacing: 1px;
-                        font-weight: 700;
-                    }}
-                    .text p {{
-                        margin: 5px 0 0 0;
-                        color: #aaa;
-                        font-size: 0.85rem;
-                        line-height: 1.2;
-                    }}
-                </style>
-                <div class="holo-card">
-                    <div class="icon">{icon}</div>
-                    <div class="text">
-                        <h3>{title}</h3>
-                        <p>{desc}</p>
-                    </div>
-                </div>
-            </div>
-            """
-            # Encode HTML as base64 for embedding in SVG
-            # Note: We need to be careful with quotes in the SVG string
-            
-            svg = f"""
-            <svg width="400" height="110" viewBox="0 0 400 110" xmlns="http://www.w3.org/2000/svg">
-                <foreignObject width="100%" height="100%">
-                    {html_content}
-                </foreignObject>
-            </svg>
-            """
-            
-            b64 = base64.b64encode(svg.encode('utf-8')).decode('utf-8')
-            return f"data:image/svg+xml;base64,{b64}"
+        /* 2. Hover Effect (Glow & Red Border) */
+        div.row-widget.stButton > button:hover {
+            border-color: #e50914;
+            background: rgba(229, 9, 20, 0.08);
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(229, 9, 20, 0.2);
+            color: transparent; /* Keep text hidden */
+        }
+        div.row-widget.stButton > button:active {
+            color: transparent;
+            background: rgba(229, 9, 20, 0.15);
+        }
 
-        # Generate the High-Fidelity Cards
-        svg_search = create_holo_card_svg("🔍", "Deep Search", "Find matches by plot, vibe, or detailed queries.", "search")
-        svg_chat = create_holo_card_svg("🧬", "CineBot AI", "Interactive chat for complex recommendations.", "chat")
+        /* 3. Reconstruct Icon */
+        /* Search Button */
+        button[key="btn_nav_search"]::before {
+            content: "🔍";
+            font-size: 2.5rem;
+            margin-right: 20px;
+            filter: drop-shadow(0 0 5px rgba(255,255,255,0.3));
+            color: white; /* Ensure visibility */
+        }
+        /* Chat Button */
+        button[key="btn_nav_chat"]::before {
+            content: "🧬";
+            font-size: 2.5rem;
+            margin-right: 20px;
+            filter: drop-shadow(0 0 5px rgba(255,255,255,0.3));
+            color: white;
+        }
 
-        # Render via clickable_images (Split calls to ensure vertical stacking)
-        st.markdown("<style>div.stMarkdown { margin-bottom: -15px; }</style>", unsafe_allow_html=True)
+        /* 4. Reconstruct Text Content */
+        /* Search Text */
+        button[key="btn_nav_search"]::after {
+            content: "DEEP SEARCH\\a Find matches by plot, vibe, or detailed queries.";
+            white-space: pre-wrap; /* Allow newlines */
+            font-family: 'Helvetica Neue', sans-serif;
+            color: white;
+            font-size: 1.1rem;
+            font-weight: bold;
+            line-height: 1.4;
+            text-transform: uppercase;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+        }
+        /* Chat Text */
+        button[key="btn_nav_chat"]::after {
+            content: "CINEBOT AI\\a Interactive chat for complex recommendations.";
+            white-space: pre-wrap;
+            font-family: 'Helvetica Neue', sans-serif;
+            color: white;
+            font-size: 1.1rem;
+            font-weight: bold;
+            line-height: 1.4;
+            text-transform: uppercase;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+        }
         
-        # 1. Search Card
-        click_search = clickable_images(
-            paths=[svg_search],
-            titles=["Go to Search"],
-            div_style={"justify-content": "center", "margin-bottom": "15px"},
-            img_style={"width": "100%", "height": "auto", "border-radius": "12px"},
-            key="nav_search_svg"
-        )
+        /* Tweak Description part of the ::after content (Not easily targeted separately in pure CSS) 
+           So we rely on the line break and font sizing of the parent. */
+           
+        </style>
+        """, unsafe_allow_html=True)
+
+        st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
         
-        # 2. Chat Card
-        click_chat = clickable_images(
-            paths=[svg_chat],
-            titles=["Go to Chat"],
-            div_style={"justify-content": "center"},
-            img_style={"width": "100%", "height": "auto", "border-radius": "12px"},
-            key="nav_chat_svg"
-        )
-        
-        # Navigation Logic
-        if click_search == 0:
+        # 1. Search Button (Styled as Card)
+        if st.button("x", key="btn_nav_search", use_container_width=True):
             go_search()
             st.rerun()
-            
-        if click_chat == 0:
+
+        st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
+        
+        # 2. Chat Button (Styled as Card)
+        if st.button("x", key="btn_nav_chat", use_container_width=True):
             go_chat()
             st.rerun()
 
