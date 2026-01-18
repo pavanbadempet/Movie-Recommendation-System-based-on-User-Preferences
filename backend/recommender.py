@@ -3,13 +3,13 @@ Recommendation engine for the Movie Recommendation System.
 Loads FAISS index and movie metadata for fast similarity search.
 """
 import logging
+from datetime import datetime
 from pathlib import Path
 from functools import lru_cache
 
 import numpy as np
 import pandas as pd
 import faiss
-import joblib
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 logger = logging.getLogger(__name__)
@@ -66,7 +66,7 @@ class Recommender:
                             'director', 'cast', 'original_language']
             try:
                 self._movies = pd.read_parquet(movies_path, columns=essential_cols)
-            except Exception:
+            except (KeyError, ValueError):
                 # Fallback if some columns don't exist
                 self._movies = pd.read_parquet(movies_path)
             logger.info(f"Loaded {len(self._movies):,} movies")
@@ -104,10 +104,48 @@ class Recommender:
         Returns:
             List of matching movie dictionaries
         """
-        query_lower = query.lower()
-        matches = self._movies[
-            self._movies["title"].str.lower().str.contains(query_lower, na=False)
-        ].head(limit)
+        """
+        Search movies by title, overview, and genres (Deep Search).
+        
+        Args:
+            query: Search query string
+            limit: Maximum results to return
+            
+        Returns:
+            List of matching movie dictionaries sorted by relevance
+        """
+        if not query:
+            return []
+            
+        q_lower = query.lower()
+        
+        # 1. Title Match (Weight: 10)
+        mask_title = self._movies["title"].str.lower().str.contains(q_lower, na=False)
+        
+        # 2. Overview Match (Weight: 3) - Allows searching by plot concepts
+        mask_overview = self._movies["overview"].str.lower().str.contains(q_lower, na=False)
+        
+        # 3. Genre Match (Weight: 5)
+        mask_genre = self._movies["genres"].str.lower().str.contains(q_lower, na=False)
+        
+        # Combine matches
+        matches = self._movies[mask_title | mask_overview | mask_genre].copy()
+        
+        if len(matches) == 0:
+            return []
+            
+        # Calculate Relevance Score
+        # We use simple boolean math (True=1, False=0)
+        matches["relevance"] = (
+            (matches["title"].str.lower().str.contains(q_lower, na=False) * 10) +
+            (matches["genres"].str.lower().str.contains(q_lower, na=False) * 5) +
+            (matches["overview"].str.lower().str.contains(q_lower, na=False) * 3) +
+            # Boost popularity slightly to break ties
+            (np.log1p(matches["popularity"]) * 0.1)
+        )
+        
+        # Sort by relevance
+        matches = matches.sort_values("relevance", ascending=False).head(limit)
         
         return matches.to_dict(orient="records")
     
@@ -201,7 +239,7 @@ class Recommender:
             if is_cand_doc and not is_query_doc:
                 final_score -= 0.15 # Strong penalty to push them down
             
-            # === PEAK QUALITY BOOSTING ===
+            # Quality-based score adjustments
             
             # Quality Boost (Favor well-rated films)
             cand_rating = cand.get("vote_average", 0) or 0
@@ -221,17 +259,17 @@ class Recommender:
                     final_score += 0.03  # Same era boost
                 elif year_gap >= 30:
                     final_score -= 0.05  # Different generation penalty
-            except:
+            except (ValueError, TypeError, IndexError):
                 pass  # Skip if dates are invalid
             
             # Recency Boost (Slight preference for newer films)
             try:
                 c_year = int(str(cand.get("release_date", ""))[:4])
-                current_year = 2026
+                current_year = datetime.now().year
                 years_old = current_year - c_year
                 if years_old <= 5:
                     final_score += 0.02  # Recent film boost
-            except:
+            except (ValueError, TypeError, IndexError):
                 pass
             
             # Same Language Preference
@@ -265,7 +303,7 @@ class Recommender:
                 c_year = int(str(cand.get("release_date", ""))[:4])
                 if abs(q_year - c_year) <= 5:
                     explanation_tags.append(f"Same era ({c_year})")
-            except:
+            except (ValueError, TypeError, IndexError):
                 pass
             
             # High quality
@@ -335,7 +373,10 @@ class Recommender:
                     sel_idx = sel_matches[0]
                     
                     # Cosine similarity between candidate and selected
-                    sim = float(np.dot(self._vectors[cand_idx], self._vectors[sel_idx]))
+                    # Cast to float32 for precision/speed (essential if vectors are float16)
+                    v_cand = self._vectors[cand_idx].astype(np.float32)
+                    v_sel = self._vectors[sel_idx].astype(np.float32)
+                    sim = float(np.dot(v_cand, v_sel))
                     max_sim_to_selected = max(max_sim_to_selected, sim)
                 
                 # MMR score

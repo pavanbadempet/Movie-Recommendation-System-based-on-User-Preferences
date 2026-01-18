@@ -5,6 +5,7 @@ Provides REST API endpoints for movie search and recommendations.
 import asyncio
 import logging
 import os
+from contextlib import asynccontextmanager
 from typing import Optional
 
 import httpx
@@ -18,15 +19,42 @@ from backend.recommender import get_recommender, Recommender
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Sentry (Error Monitoring)
+import sentry_sdk
+SENTRY_DSN = os.getenv("SENTRY_DSN")
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        traces_sample_rate=1.0,
+        profiles_sample_rate=1.0,
+    )
+    logger.info("✅ Sentry Monitoring Enabled")
+else:
+    logger.warning("⚠️ SENTRY_DSN not set. Error monitoring disabled.")
+
 # TMDB API config
 TMDB_KEY = os.getenv("TMDB_API_KEY")
 TMDB_BASE = "https://api.themoviedb.org/3"
+
+# Async HTTP client (initialized via lifespan)
+http_client: httpx.AsyncClient | None = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage async resources for app lifetime."""
+    global http_client
+    http_client = httpx.AsyncClient(timeout=10.0)
+    yield
+    await http_client.aclose()
+
 
 # Create FastAPI app
 app = FastAPI(
     title="Movie Recommendation API",
     description="Content-based movie recommendation engine using FAISS",
     version="2.0.0",
+    lifespan=lifespan,
 )
 
 # CORS configuration for Streamlit frontend
@@ -37,22 +65,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Async HTTP client
-http_client: httpx.AsyncClient | None = None
-
-
-@app.on_event("startup")
-async def startup():
-    global http_client
-    http_client = httpx.AsyncClient(timeout=10.0)
-
-
-@app.on_event("shutdown")
-async def shutdown():
-    global http_client
-    if http_client:
-        await http_client.aclose()
 
 
 # Response models
@@ -275,7 +287,7 @@ async def recommend_by_id_enriched(
     # Get recommendations
     recommendations = rec.recommend_by_id(movie_id, n=n)
     
-    # Enrich ALL movies in PARALLEL (this is the magic!)
+    # Enrich all movies in parallel
     enriched = await asyncio.gather(*[enrich_movie(m) for m in recommendations])
     
     return EnrichedRecommendationResponse(
@@ -306,6 +318,36 @@ async def recommend_by_title(
         query_movie=query_movie,
         recommendations=recommendations,
     )
+
+
+# ===== CHATBOT (RAG) =====
+from backend.chat import generate_chat_response
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage]
+
+class ChatResponse(BaseModel):
+    role: str
+    content: str
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat_endpoint(request: ChatRequest):
+    """
+    RAG Chatbot Endpoint.
+    Consumes user messages, retrieves movie context, and generates AI response.
+    """
+    try:
+        # Convert Pydantic models to dicts for internal function
+        msgs = [m.model_dump() for m in request.messages]
+        response = generate_chat_response(msgs)
+        return ChatResponse(**response)
+    except Exception as e:
+        logger.error(f"Chat endpoint failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
