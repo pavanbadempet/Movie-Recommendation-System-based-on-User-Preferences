@@ -553,63 +553,57 @@ if st.session_state.page == "home":
         st.markdown("<h1>MOVIE RECOMMENDATION<br>SYSTEM</h1>", unsafe_allow_html=True)
         st.markdown("<p style='color: #888; font-size: 1rem; margin-bottom: 30px;'>AI-Powered Curator • Deep Search • Semantic Analysis</p>", unsafe_allow_html=True)
         
-        # Custom CSS to style buttons EXACTLY like the cards
-        st.markdown("""
-        <style>
-        /* Target the specific buttons for navigation */
-        div.row-widget.stButton > button {
-            width: 100%;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            padding: 15px 20px;
-            text-align: left;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            height: auto;
-            justify-content: flex-start;
-            margin-bottom: 10px;
-        }
+        import base64
         
-        div.row-widget.stButton > button:hover {
-            border-color: #e50914;
-            background: rgba(229, 9, 20, 0.1);
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(229, 9, 20, 0.2);
-            color: white !important;
-        }
+        def create_nav_card(icon, title, desc):
+            """Generates an SVG Data URI for a navigation card."""
+            svg = f"""
+            <svg width="400" height="100" viewBox="0 0 400 100" xmlns="http://www.w3.org/2000/svg">
+                <style>
+                    .bg {{ fill: rgba(255,255,255,0.05); stroke: rgba(255,255,255,0.1); stroke-width: 1; transition: all 0.3s; }}
+                    .text-title {{ font-family: sans-serif; font-size: 20px; font-weight: bold; fill: #fff; text-transform: uppercase; }}
+                    .text-desc {{ font-family: sans-serif; font-size: 14px; fill: #aaa; }}
+                    .icon {{ font-size: 40px; }}
+                </style>
+                <rect x="0" y="0" width="400" height="100" rx="15" ry="15" class="bg" />
+                <text x="25" y="65" class="icon">{icon}</text>
+                <text x="80" y="40" class="text-title">{title}</text>
+                <text x="80" y="70" class="text-desc">{desc}</text>
+            </svg>
+            """
+            b64 = base64.b64encode(svg.encode('utf-8')).decode('utf-8')
+            return f"data:image/svg+xml;base64,{b64}"
 
-        /* Add icons via CSS pseudo-elements since we can't put HTML in buttons simply */
-        /* Search Button */
-        div.row-widget.stButton:nth-of-type(1) > button::before {
-            content: "🔍";
-            font-size: 24px;
-            margin-right: 15px;
-        }
+        # Generate Card "Images"
+        card_search = create_nav_card("🔍", "Deep Search", "Find matches by plot, vibe, or detailed queries.")
+        card_chat = create_nav_card("🧬", "CineBot AI", "Interactive chat for complex recommendations.")
         
-        /* Chat Button */
-        div.row-widget.stButton:nth-of-type(2) > button::before {
-            content: "🧬";
-            font-size: 24px;
-            margin-right: 15px;
-        }
-        /* Hide default button text constraints */
-        div.row-widget.stButton > button p {
-            font-size: 1rem;
-            font-weight: 600;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
-        st.markdown("### Explore")
+        # Render Cards via st-clickable-images
+        st.markdown("<style>div.stMarkdown { margin-bottom: -20px; }</style>", unsafe_allow_html=True) # visual tweak
         
-        # We use standard buttons but they look like cards via CSS
-        if st.button("DEEP SEARCH\n\nFind matches by plot, vibe, or detailed queries.", key="nav_search", use_container_width=True):
+        clicked_nav = clickable_images(
+            paths=[card_search, card_chat],
+            titles=["Go to Search", "Go to AI Chat"],
+            div_style={
+                "display": "flex",
+                "flex-direction": "column", # Stack vertically
+                "gap": "15px"
+            },
+            img_style={
+                "width": "100%",
+                "cursor": "pointer",
+                "border-radius": "15px",
+                "transition": "transform 0.3s",
+                "box-shadow": "0 4px 6px rgba(0,0,0,0.2)"
+            },
+            key="nav_selector"
+        )
+        
+        # Navigation Logic
+        if clicked_nav == 0:
             go_search()
             st.rerun()
-            
-        if st.button("CINEBOT AI\n\nInteractive chat for complex recommendations.", key="nav_chat", use_container_width=True):
+        elif clicked_nav == 1:
             go_chat()
             st.rerun()
 
