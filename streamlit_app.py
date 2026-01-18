@@ -588,60 +588,120 @@ if st.session_state.page == "home":
         trending = fetch_trending_movies()
         
         if trending:
-            # HERO SECTION (Top Movie)
-            hero = trending[0]
-            backdrop = fetch_poster(hero.get("backdrop_path")) if hero.get("backdrop_path") else fetch_poster(hero.get("poster_path"))
+            # Initialize Slideshow State
+            if "hero_index" not in st.session_state:
+                st.session_state.hero_index = 0
+                
+            # Circular Buffer Logic
+            def next_slide():
+                st.session_state.hero_index = (st.session_state.hero_index + 1) % 5
+                
+            # Current Hero Movie
+            hero = trending[st.session_state.hero_index]
+            
+            # FETCH FULL DETAILS (Directly)
+            trailer_key = fetch_trailer(hero["id"])
+            credits = fetch_credits(hero["id"])
+            
+            # Buttons Container (Top Right Control)
+            hc1, hc2 = st.columns([8, 2])
+            with hc2:
+                if st.button("Next ⏩", key="next_hero"):
+                    next_slide()
+                    st.rerun()
+
+            # HERO BILLBOARD LAYOUT (Direct Details, No Popup)
+            # We use a 2-column split within the hero area
             
             st.markdown(f"""
             <style>
-            .hero-card {{
-                background: linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.9)), url('{backdrop}');
-                background-size: cover;
-                background-position: center;
+            .billboard-container {{
+                background: linear-gradient(135deg, rgba(26, 26, 46, 0.8), rgba(0, 0, 0, 0.9));
+                border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: 20px;
-                padding: 30px;
-                height: 35vh; /* Fixed height for consistency */
+                padding: 20px;
                 display: flex;
-                flex-direction: column;
-                justify-content: flex-end;
-                box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-                border: 1px solid rgba(255,255,255,0.1);
-                margin-bottom: 20px;
+                gap: 20px;
+                height: 45vh; /* Taller to fit details */
+                box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+                backdrop-filter: blur(10px);
+            }}
+            .billboard-video {{
+                flex: 1.5; /* Takes 60% width */
+                border-radius: 15px;
+                overflow: hidden;
+                box-shadow: 0 5px 15px rgba(0,0,0,0.5);
                 position: relative;
             }}
-            .hero-badge {{
-                position: absolute;
-                top: 20px; right: 20px;
-                background: #e50914;
-                color: white;
-                padding: 5px 15px;
-                font-weight: bold;
-                border-radius: 20px;
-                box-shadow: 0 5px 15px rgba(229,9,20,0.5);
+            .billboard-info {{
+                flex: 1; /* Takes 40% width */
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                overflow-y: auto;
             }}
-            .hero-title {{
-                font-size: 2.5rem;
+            .bb-title {{
                 font-family: 'Bebas Neue', sans-serif;
-                margin-bottom: 5px;
-                text-shadow: 2px 2px 10px black;
-                line-height: 1;
+                font-size: 2.8rem;
+                line-height: 0.9;
+                margin-bottom: 10px;
+                color: #fff;
+                text-transform: uppercase;
             }}
-            .hero-meta {{
-                font-size: 0.9rem;
-                color: #ddd;
-                text-shadow: 1px 1px 5px black;
+            .bb-meta {{
+                font-family: 'Montserrat', sans-serif;
+                font-size: 0.85rem;
+                color: #ea696f; /* Red-ish accent */
+                font-weight: 700;
+                margin-bottom: 15px;
+            }}
+            .bb-desc {{
+                font-family: 'Montserrat', sans-serif;
+                font-size: 0.85rem;
+                color: #ccc;
+                line-height: 1.5;
+                margin-bottom: 20px;
+                max-height: 100px;
+                overflow-y: auto;
+            }}
+            .bb-credits {{
+                font-family: 'Montserrat', sans-serif;
+                font-size: 0.75rem;
+                color: #888;
+                border-top: 1px solid rgba(255,255,255,0.1);
+                padding-top: 10px;
             }}
             </style>
+            """, unsafe_allow_html=True)
             
-            <div class="hero-card">
-                <div class="hero-badge">🔥 #1 TRENDING</div>
-                <div class="hero-title">{hero.get('title')}</div>
-                <div class="hero-meta">⭐ {hero.get('vote_average', 0):.1f}/10 • {hero.get('release_date', '')[:4]}</div>
+            # Python Logic for Content
+            video_embed = ""
+            if trailer_key:
+                video_embed = f'<iframe src="https://www.youtube.com/embed/{trailer_key}?autoplay=1&mute=1&controls=0&disablekb=1&modestbranding=1&loop=1&playlist={trailer_key}" style="width:100%; height:100%; border:none; pointer-events: none;"></iframe>'
+            else:
+                poster_url = fetch_poster(hero.get("backdrop_path"))
+                video_embed = f'<img src="{poster_url}" style="width:100%; height:100%; object-fit:cover;">'
+
+            # Render Billboard
+            st.markdown(f"""
+            <div class="billboard-container">
+                <div class="billboard-video">
+                    {video_embed}
+                </div>
+                <div class="billboard-info">
+                    <div class="bb-title">{hero.get('title')}</div>
+                    <div class="bb-meta">⭐ {hero.get('vote_average', 0):.1f} • {hero.get('release_date', '')[:4]} • #1 TRENDING</div>
+                    <div class="bb-desc">{hero.get('overview')}</div>
+                    <div class="bb-credits">
+                        <strong>Director:</strong> {credits.get('director')}<br>
+                        <strong>Cast:</strong> {credits.get('cast')}
+                    </div>
+                </div>
             </div>
             """, unsafe_allow_html=True)
             
             # SUB-GRID (Next 4 Movies)
-            st.markdown("<div style='margin-bottom: 10px; color: #666; font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase;'>More Top Hits</div>", unsafe_allow_html=True)
+            st.markdown("<div style='margin-bottom: 10px; color: #666; font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase; margin-top: 15px;'>Up Next</div>", unsafe_allow_html=True)
             
             t_cols = st.columns(4)
             for i in range(1, 5): # Show #2 to #5
