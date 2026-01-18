@@ -583,21 +583,78 @@ if st.session_state.page == "home":
             go_chat()
             st.rerun()
 
-    # RIGHT COLUMN: Trending Grid (Hero Visuals)
+    # RIGHT COLUMN: Visual Showcase (Trending)
     with c2:
-        st.markdown("<h4 style='color: #666; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 2px; font-size: 0.8rem;'>Trending This Week</h4>", unsafe_allow_html=True)
         trending = fetch_trending_movies()
         
         if trending:
-            # Single Row of 5 posters (Strict No-Height Growth)
-            # Using 5 columns ensures they stay in one horizontal line
-            t_cols = st.columns(5)
-            for i in range(5):
+            # HERO SECTION (Top Movie)
+            hero = trending[0]
+            backdrop = fetch_poster(hero.get("backdrop_path")) if hero.get("backdrop_path") else fetch_poster(hero.get("poster_path"))
+            
+            st.markdown(f"""
+            <style>
+            .hero-card {{
+                background: linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.9)), url('{backdrop}');
+                background-size: cover;
+                background-position: center;
+                border-radius: 20px;
+                padding: 30px;
+                height: 35vh; /* Fixed height for consistency */
+                display: flex;
+                flex-direction: column;
+                justify-content: flex-end;
+                box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+                border: 1px solid rgba(255,255,255,0.1);
+                margin-bottom: 20px;
+                position: relative;
+            }}
+            .hero-badge {{
+                position: absolute;
+                top: 20px; right: 20px;
+                background: #e50914;
+                color: white;
+                padding: 5px 15px;
+                font-weight: bold;
+                border-radius: 20px;
+                box-shadow: 0 5px 15px rgba(229,9,20,0.5);
+            }}
+            .hero-title {{
+                font-size: 2.5rem;
+                font-family: 'Bebas Neue', sans-serif;
+                margin-bottom: 5px;
+                text-shadow: 2px 2px 10px black;
+                line-height: 1;
+            }}
+            .hero-meta {{
+                font-size: 0.9rem;
+                color: #ddd;
+                text-shadow: 1px 1px 5px black;
+            }}
+            </style>
+            
+            <div class="hero-card">
+                <div class="hero-badge">🔥 #1 TRENDING</div>
+                <div class="hero-title">{hero.get('title')}</div>
+                <div class="hero-meta">⭐ {hero.get('vote_average', 0):.1f}/10 • {hero.get('release_date', '')[:4]}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # SUB-GRID (Next 4 Movies)
+            st.markdown("<div style='margin-bottom: 10px; color: #666; font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase;'>More Top Hits</div>", unsafe_allow_html=True)
+            
+            t_cols = st.columns(4)
+            for i in range(1, 5): # Show #2 to #5
                 if i < len(trending):
-                    with t_cols[i]:
-                        poster = fetch_poster(trending[i].get("poster_path"))
-                        st.image(poster, use_container_width=True)
-                        st.markdown(f"<div style='margin-bottom: 1px;'></div>", unsafe_allow_html=True)
+                    with t_cols[i-1]:
+                        m = trending[i]
+                        poster = fetch_poster(m.get("poster_path"))
+                        st.markdown(f"""
+                        <div style="transition: transform 0.3s;">
+                            <img src="{poster}" style="width: 100%; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.3);">
+                            <div style="font-size: 0.8rem; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #ccc;">{m.get('title')}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
         else:
             st.info("Loading trends...")
 
