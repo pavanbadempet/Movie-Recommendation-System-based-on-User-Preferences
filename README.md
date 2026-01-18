@@ -50,6 +50,13 @@ Run the full test suite:
 python manage.py test
 ```
 
+### 5. Orchestration (Airflow)
+Start the Airflow Data Pipelines (requires Docker):
+```bash
+python manage.py airflow
+```
+*   UI: http://localhost:8080 (u: airflow, p: airflow)
+
 ## How it works
 
 1. **ETL pipeline** pulls movie data from TMDB (via Kaggle), cleans it, and generates embeddings
