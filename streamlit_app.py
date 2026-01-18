@@ -596,80 +596,99 @@ if st.session_state.page == "home":
             def next_slide():
                 st.session_state.hero_index = (st.session_state.hero_index + 1) % 5
                 
+            # AUTO-ROTATION LOGIC
+            # Initialize State
+            if "hero_index" not in st.session_state:
+                st.session_state.hero_index = 0
+            if "last_slide_time" not in st.session_state:
+                st.session_state.last_slide_time = time.time()
+                
+            # Check Time Delta (Every 10 seconds)
+            if time.time() - st.session_state.last_slide_time > 10:
+                st.session_state.hero_index = (st.session_state.hero_index + 1) % 5
+                st.session_state.last_slide_time = time.time()
+                st.rerun()
+                
             # Current Hero Movie
             hero = trending[st.session_state.hero_index]
             
             # FETCH FULL DETAILS (Directly)
             trailer_key = fetch_trailer(hero["id"])
             credits = fetch_credits(hero["id"])
+            details = fetch_tmdb_details(hero["id"]) # New: Get Genres/Runtime
             
-            # Buttons Container (Top Right Control)
-            hc1, hc2 = st.columns([8, 2])
-            with hc2:
-                if st.button("Next ⏩", key="next_hero"):
-                    next_slide()
-                    st.rerun()
-
+            # Extract Metadata
+            genres = ", ".join([g["name"] for g in details.get("genres", [])[:2]])
+            runtime = f"{details.get('runtime', 0)} min" if details.get('runtime') else ""
+            
             # HERO BILLBOARD LAYOUT (Direct Details, No Popup)
-            # We use a 2-column split within the hero area
+            # Reduced height to 40vh to ensure fit
             
             st.markdown(f"""
             <style>
             .billboard-container {{
-                background: linear-gradient(135deg, rgba(26, 26, 46, 0.8), rgba(0, 0, 0, 0.9));
+                background: linear-gradient(135deg, rgba(26, 26, 46, 0.9), rgba(0, 0, 0, 0.95));
                 border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: 20px;
                 padding: 20px;
                 display: flex;
                 gap: 20px;
-                height: 45vh; /* Taller to fit details */
+                height: 40vh; /* Reduced height to fix scrolling */
                 box-shadow: 0 10px 40px rgba(0,0,0,0.5);
                 backdrop-filter: blur(10px);
             }}
             .billboard-video {{
-                flex: 1.5; /* Takes 60% width */
-                border-radius: 15px;
+                flex: 1.4; 
+                border-radius: 12px;
                 overflow: hidden;
                 box-shadow: 0 5px 15px rgba(0,0,0,0.5);
                 position: relative;
+                background: #000;
             }}
             .billboard-info {{
-                flex: 1; /* Takes 40% width */
+                flex: 1; 
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
-                overflow-y: auto;
+                overflow-y: hidden; /* Hide overflow */
             }}
             .bb-title {{
                 font-family: 'Bebas Neue', sans-serif;
-                font-size: 2.8rem;
-                line-height: 0.9;
-                margin-bottom: 10px;
+                font-size: 2.2rem; /* Slightly smaller */
+                line-height: 1;
+                margin-bottom: 8px;
                 color: #fff;
                 text-transform: uppercase;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
             }}
             .bb-meta {{
                 font-family: 'Montserrat', sans-serif;
-                font-size: 0.85rem;
-                color: #ea696f; /* Red-ish accent */
+                font-size: 0.75rem;
+                color: #ea696f; 
                 font-weight: 700;
-                margin-bottom: 15px;
+                margin-bottom: 10px;
+                text-transform: uppercase;
+                letter-spacing: 1px;
             }}
             .bb-desc {{
                 font-family: 'Montserrat', sans-serif;
-                font-size: 0.85rem;
+                font-size: 0.8rem;
                 color: #ccc;
-                line-height: 1.5;
-                margin-bottom: 20px;
-                max-height: 100px;
-                overflow-y: auto;
+                line-height: 1.4;
+                margin-bottom: 15px;
+                display: -webkit-box;
+                -webkit-line-clamp: 4; /* Limit lines */
+                -webkit-box-orient: vertical;
+                overflow: hidden;
             }}
             .bb-credits {{
                 font-family: 'Montserrat', sans-serif;
-                font-size: 0.75rem;
+                font-size: 0.7rem;
                 color: #888;
                 border-top: 1px solid rgba(255,255,255,0.1);
-                padding-top: 10px;
+                padding-top: 8px;
             }}
             </style>
             """, unsafe_allow_html=True)
@@ -690,18 +709,18 @@ if st.session_state.page == "home":
                 </div>
                 <div class="billboard-info">
                     <div class="bb-title">{hero.get('title')}</div>
-                    <div class="bb-meta">⭐ {hero.get('vote_average', 0):.1f} • {hero.get('release_date', '')[:4]} • #1 TRENDING</div>
+                    <div class="bb-meta">⭐ {hero.get('vote_average', 0):.1f} | {genres} | {runtime}</div>
                     <div class="bb-desc">{hero.get('overview')}</div>
                     <div class="bb-credits">
-                        <strong>Director:</strong> {credits.get('director')}<br>
-                        <strong>Cast:</strong> {credits.get('cast')}
+                        Directed by <strong>{credits.get('director')}</strong><br>
+                        Starring: {credits.get('cast')}
                     </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
             
             # SUB-GRID (Next 4 Movies)
-            st.markdown("<div style='margin-bottom: 10px; color: #666; font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase; margin-top: 15px;'>Up Next</div>", unsafe_allow_html=True)
+            st.markdown("<div style='margin-bottom: 8px; color: #666; font-size: 0.75rem; letter-spacing: 2px; text-transform: uppercase; margin-top: 15px;'>You May Also Like</div>", unsafe_allow_html=True)
             
             t_cols = st.columns(4)
             for i in range(1, 5): # Show #2 to #5
