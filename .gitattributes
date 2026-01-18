@@ -1,1 +1,5 @@
-# No LFS - commit files directly to Git
+# Git LFS for binary artifacts
+*.parquet filter=lfs diff=lfs merge=lfs -text
+*.npy filter=lfs diff=lfs merge=lfs -text
+*.index filter=lfs diff=lfs merge=lfs -text
+*.pkl filter=lfs diff=lfs merge=lfs -text

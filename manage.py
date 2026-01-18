@@ -121,6 +121,37 @@ def clean():
         
     log("Clean complete.")
 
+def deploy():
+    """Commit and push changes to trigger deployment."""
+    log("Deploying updates to Git...", Colors.WARNING)
+    
+    # 1. Add specific artifacts
+    log("Adding artifacts...")
+    artifacts = [
+        "data/processed/movies_transformed.parquet", 
+        "models/sbert_embeddings.npy", 
+        "models/faiss.index"
+    ]
+    for art in artifacts:
+        if os.path.exists(art):
+            run_cmd(f"git add {art}")
+            
+    # 2. Add docs/configs if changed
+    run_cmd("git add README.md docs/ manage.py etl/")
+    
+    # 3. Commit
+    current_time = time.strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        run_cmd(f'git commit -m "chore: update models and data ({current_time})"')
+        
+        # 4. Push
+        log("Pushing to remote to trigger Render/Streamlit...", Colors.OKBLUE)
+        run_cmd("git push")
+        log("Deployment triggered! Check Render dashboard.", Colors.OKGREEN)
+        
+    except Exception:
+        log("Nothing to commit or push failed.", Colors.WARNING)
+
 def main():
     parser = argparse.ArgumentParser(description="Project Manager")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -133,7 +164,9 @@ def main():
     subparsers.add_parser("run", help="Run App (Backend + Frontend)")
     subparsers.add_parser("test", help="Run Tests")
     subparsers.add_parser("clean", help="Clean artifacts")
-    subparsers.add_parser("docker", help="Run with Docker")
+    subparsers.add_parser("docker", help="Run with Docker (App + Airflow)")
+    subparsers.add_parser("airflow", help="Start Airflow Orchestration (via Docker)")
+    subparsers.add_parser("deploy", help="Push changes to Git (Triggers Render/Streamlit)")
     
     args = parser.parse_args()
     
@@ -147,8 +180,10 @@ def main():
         run_app()
     elif args.command == "clean":
         clean()
-    elif args.command == "docker":
+    elif args.command in ["docker", "airflow"]:
         docker_run()
+    elif args.command == "deploy":
+        deploy()
 
 if __name__ == "__main__":
     main()

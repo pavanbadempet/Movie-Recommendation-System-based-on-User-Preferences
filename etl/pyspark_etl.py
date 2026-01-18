@@ -192,18 +192,30 @@ def run_spark_etl(input_path: str = "data/raw/TMDB_all_movies.csv", run_date: st
         
         # Initializing arrays
         ids = [r['id'] for r in rows]
-        vectors = np.array([r['vector'] for r in rows]).astype('float32')
+        # COMPRESSION (Precision Engineering): 
+        # Convert to float16 (Half Precision) to save 50% RAM/Disk/Network
+        vectors = np.array([r['vector'] for r in rows]).astype('float16')
         
         # Save for Backend
         np.save("models/sbert_embeddings.npy", vectors)
-        logger.info("Saved models/sbert_embeddings.npy")
+        logger.info(f"Saved models/sbert_embeddings.npy (Size: {vectors.nbytes / 1024 / 1024:.2f} MB)")
         
-        # Build FAISS Index
+        # Build FAISS Index with Quantization
+        # Use SQfp16 (Scalar Quantizer Float16) to match the storage format
+        # This reduces index size by 50% with negligible accuracy loss
         d = vectors.shape[1]
-        index = faiss.IndexFlatIP(d)
-        index.add(vectors)
+        
+        # Note: FAISS training/adding usually expects float32 input, 
+        # but stores internally as defined by factory string.
+        vectors_f32 = vectors.astype('float32') 
+        
+        index = faiss.index_factory(d, "SQfp16", faiss.METRIC_INNER_PRODUCT)
+        index.train(vectors_f32)
+        index.add(vectors_f32)
+        
         faiss.write_index(index, "models/faiss.index")
-        logger.info("Saved models/faiss.index")
+        logger.info("Saved models/faiss.index (Compressed SQfp16)")
+        
     except Exception as e:
         logger.warning(f"Could not build local artifacts (maybe running on pure cluster without shared FS?): {e}")
     

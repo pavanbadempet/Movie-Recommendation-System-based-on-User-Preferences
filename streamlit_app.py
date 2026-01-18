@@ -176,14 +176,50 @@ def fetch_watch_providers(movie_id):
         return []
 
 
+@st.cache_resource
+def wake_up_backend():
+    """
+    Wake up the Render backend if it's sleeping.
+    Retries for up to 60 seconds with visual feedback.
+    """
+    try:
+        # Fast check first
+        r = requests.get(f"{API_URL}/health", timeout=2)
+        if r.ok:
+            return True
+    except requests.RequestException:
+        pass
+
+    # If failed, assume sleeping and start wake-up protocol
+    with st.spinner("🚀 Waking up the recommendation engine... (This can take ~1 minute on Render Free Tier)"):
+        # Max retry 60s
+        for _ in range(30):
+            try:
+                r = requests.get(f"{API_URL}/health", timeout=5)
+                if r.ok:
+                    st.toast("✅ System Online!", icon="⚡")
+                    return True
+            except requests.RequestException:
+                time.sleep(2)
+        
+    return False
+
+# Initialize connection on app load
+if "backend_ready" not in st.session_state:
+    st.session_state.backend_ready = wake_up_backend()
+
 def search_movies(query):
     """Search movies via API."""
+    if not st.session_state.backend_ready:
+        st.error("⚠️ Backend is unreachable. Please refresh or check Render dashboard.")
+        return []
+        
     try:
         r = requests.get(f"{API_URL}/search", params={"q": query, "limit": 100}, timeout=10)
         if r.ok:
             return r.json()
     except requests.RequestException:
-        st.error("⚠️ Backend not running. Start: `uvicorn backend.main:app`")
+        st.error("⚠️ Connection lost. Backend might be restarting.")
     return []
 
 

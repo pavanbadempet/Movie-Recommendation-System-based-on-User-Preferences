@@ -335,7 +335,10 @@ class Recommender:
                     sel_idx = sel_matches[0]
                     
                     # Cosine similarity between candidate and selected
-                    sim = float(np.dot(self._vectors[cand_idx], self._vectors[sel_idx]))
+                    # Cast to float32 for precision/speed (essential if vectors are float16)
+                    v_cand = self._vectors[cand_idx].astype(np.float32)
+                    v_sel = self._vectors[sel_idx].astype(np.float32)
+                    sim = float(np.dot(v_cand, v_sel))
                     max_sim_to_selected = max(max_sim_to_selected, sim)
                 
                 # MMR score
