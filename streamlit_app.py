@@ -553,54 +553,65 @@ if st.session_state.page == "home":
         st.markdown("<h1>MOVIE RECOMMENDATION<br>SYSTEM</h1>", unsafe_allow_html=True)
         st.markdown("<p style='color: #888; font-size: 1rem; margin-bottom: 30px;'>AI-Powered Curator • Deep Search • Semantic Analysis</p>", unsafe_allow_html=True)
         
-        # Handle navigation via query params (from card clicks)
-        if "nav" in st.query_params:
-            nav_target = st.query_params["nav"]
-            st.query_params.clear()
-            if nav_target == "search":
-                go_search()
-                st.rerun()
-            elif nav_target == "chat":
-                go_chat()
-                st.rerun()
-        
-        # Clickable Cards with JavaScript onclick (NO BUTTONS!)
+        # Custom CSS to style buttons EXACTLY like the cards
         st.markdown("""
         <style>
-        /* Clickable card styling */
-        .nav-card-link {
-            cursor: pointer;
-            display: block;
-            margin-bottom: 15px;
+        /* Target the specific buttons for navigation */
+        div.row-widget.stButton > button {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 15px 20px;
+            text-align: left;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            height: auto;
+            justify-content: flex-start;
+            margin-bottom: 10px;
         }
-        .nav-card-link:hover .holo-card-row {
-            border-color: #e50914 !important;
-            background: rgba(229, 9, 20, 0.08) !important;
-            transform: translateY(-3px);
-            box-shadow: 0 10px 30px rgba(229, 9, 20, 0.2) !important;
+        
+        div.row-widget.stButton > button:hover {
+            border-color: #e50914;
+            background: rgba(229, 9, 20, 0.1);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(229, 9, 20, 0.2);
+            color: white !important;
+        }
+
+        /* Add icons via CSS pseudo-elements since we can't put HTML in buttons simply */
+        /* Search Button */
+        div.row-widget.stButton:nth-of-type(1) > button::before {
+            content: "🔍";
+            font-size: 24px;
+            margin-right: 15px;
+        }
+        
+        /* Chat Button */
+        div.row-widget.stButton:nth-of-type(2) > button::before {
+            content: "🧬";
+            font-size: 24px;
+            margin-right: 15px;
+        }
+        /* Hide default button text constraints */
+        div.row-widget.stButton > button p {
+            font-size: 1rem;
+            font-weight: 600;
         }
         </style>
-        
-        <div class="nav-card-link" onclick="window.location.href = window.location.pathname + '?nav=search';">
-            <div class="holo-card-row">
-                <div class="holo-icon">🔍</div>
-                <div class="holo-text">
-                    <h3>Deep Search</h3>
-                    <p>Find matches by plot, vibe, or detailed queries.</p>
-                </div>
-            </div>
-        </div>
-        
-        <div class="nav-card-link" onclick="window.location.href = window.location.pathname + '?nav=chat';">
-            <div class="holo-card-row">
-                <div class="holo-icon">🧬</div>
-                <div class="holo-text">
-                    <h3>CineBot AI</h3>
-                    <p>Interactive chat for complex recommendations.</p>
-                </div>
-            </div>
-        </div>
         """, unsafe_allow_html=True)
+
+        st.markdown("### Explore")
+        
+        # We use standard buttons but they look like cards via CSS
+        if st.button("DEEP SEARCH\n\nFind matches by plot, vibe, or detailed queries.", key="nav_search", use_container_width=True):
+            go_search()
+            st.rerun()
+            
+        if st.button("CINEBOT AI\n\nInteractive chat for complex recommendations.", key="nav_chat", use_container_width=True):
+            go_chat()
+            st.rerun()
 
     # RIGHT COLUMN: Visual Showcase (Trending)
     with c2:
