@@ -589,11 +589,12 @@ if st.session_state.page == "home":
         trending = fetch_trending_movies()
         
         if trending:
-            # 3x2 Grid - Fits perfectly alongside controls
-            t_cols = st.columns(3)
-            for i in range(6):
+            # Single Row of 5 posters (Strict No-Height Growth)
+            # Using 5 columns ensures they stay in one horizontal line
+            t_cols = st.columns(5)
+            for i in range(5):
                 if i < len(trending):
-                    with t_cols[i % 3]:
+                    with t_cols[i]:
                         poster = fetch_poster(trending[i].get("poster_path"))
                         st.image(poster, use_container_width=True)
                         st.markdown(f"<div style='margin-bottom: 1px;'></div>", unsafe_allow_html=True)
