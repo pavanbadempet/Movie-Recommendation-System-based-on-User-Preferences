@@ -553,73 +553,83 @@ if st.session_state.page == "home":
         st.markdown("<h1>MOVIE RECOMMENDATION<br>SYSTEM</h1>", unsafe_allow_html=True)
         st.markdown("<p style='color: #888; font-size: 1rem; margin-bottom: 30px;'>AI-Powered Curator • Deep Search • Semantic Analysis</p>", unsafe_allow_html=True)
         
-        # "BUTTON AS CARD" - Pure CSS Re-Construction
-        # This transforms the native Streamlit button into the Holo Card visually
+        # "BUTTON AS CARD" - Fixed Selectors & Overrides
+        # We target the buttons specifically to override the theme
         st.markdown("""
         <style>
-        /* 1. Reset standard button styles */
-        div.row-widget.stButton > button {
-            width: 100%;
-            height: auto;
-            background: transparent;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 15px;
-            padding: 20px;
-            text-align: left;
-            display: flex;
-            align-items: center;
-            justify-content: flex-start;
-            transition: all 0.3s ease;
-            box-shadow: none;
-            color: transparent; /* Hide default text */
-        }
-        
-        /* 2. Hover Effect (Glow & Red Border) */
-        div.row-widget.stButton > button:hover {
-            border-color: #e50914;
-            background: rgba(229, 9, 20, 0.08);
-            transform: translateY(-3px);
-            box-shadow: 0 10px 30px rgba(229, 9, 20, 0.2);
-            color: transparent; /* Keep text hidden */
-        }
-        div.row-widget.stButton > button:active {
-            color: transparent;
-            background: rgba(229, 9, 20, 0.15);
+        /* Base Button Reset - Strict */
+        div[data-testid="stButton"] button {
+            width: 100% !important;
+            height: auto !important;
+            background: rgba(255, 255, 255, 0.05) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            border-radius: 12px !important;
+            padding: 20px !important;
+            text-align: left !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: flex-start !important;
+            transition: all 0.3s ease !important;
+            box-shadow: none !important;
         }
 
-        /* 3. Reconstruct Icon */
-        /* Search Button */
-        button[key="btn_nav_search"]::before {
+        /* Hide the text content (" ") inside the button */
+        div[data-testid="stButton"] button p {
+            display: none !important;
+        }
+
+        /* Hover Styles */
+        div[data-testid="stButton"] button:hover {
+            border-color: #e50914 !important;
+            background: rgba(229, 9, 20, 0.1) !important;
+            transform: translateY(-2px) !important;
+            box-shadow: 0 10px 30px rgba(229, 9, 20, 0.2) !important;
+        }
+        
+        /* SEARCH CARD CONTENT (1st Button in this col) */
+        /* Note: We need a way to distinguish. We'll use specific container isolation. */
+        </style>
+        """, unsafe_allow_html=True)
+        
+        # SEARCH CARD
+        st.markdown("""
+        <style>
+        /* Isolate this block */
+        div.element-container:has(button#btn_nav_search_hack) button::before {
             content: "🔍";
             font-size: 2.5rem;
             margin-right: 20px;
             filter: drop-shadow(0 0 5px rgba(255,255,255,0.3));
-            color: white; /* Ensure visibility */
         }
-        /* Chat Button */
-        button[key="btn_nav_chat"]::before {
-            content: "🧬";
-            font-size: 2.5rem;
-            margin-right: 20px;
-            filter: drop-shadow(0 0 5px rgba(255,255,255,0.3));
-            color: white;
-        }
-
-        /* 4. Reconstruct Text Content */
-        /* Search Text */
-        button[key="btn_nav_search"]::after {
+        div.element-container:has(button#btn_nav_search_hack) button::after {
             content: "DEEP SEARCH\\a Find matches by plot, vibe, or detailed queries.";
-            white-space: pre-wrap; /* Allow newlines */
+            white-space: pre-wrap;
             font-family: 'Helvetica Neue', sans-serif;
             color: white;
             font-size: 1.1rem;
             font-weight: bold;
             line-height: 1.4;
             text-transform: uppercase;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
         }
-        /* Chat Text */
-        button[key="btn_nav_chat"]::after {
+        </style>
+        """, unsafe_allow_html=True)
+
+        if st.button(" ", key="btn_nav_search_hack", use_container_width=True):
+            go_search()
+            st.rerun()
+
+        st.markdown("<div style='height:15px'></div>", unsafe_allow_html=True)
+
+        # CHAT CARD
+        st.markdown("""
+        <style>
+        div.element-container:has(button#btn_nav_chat_hack) button::before {
+            content: "🧬";
+            font-size: 2.5rem;
+            margin-right: 20px;
+            filter: drop-shadow(0 0 5px rgba(255,255,255,0.3));
+        }
+        div.element-container:has(button#btn_nav_chat_hack) button::after {
             content: "CINEBOT AI\\a Interactive chat for complex recommendations.";
             white-space: pre-wrap;
             font-family: 'Helvetica Neue', sans-serif;
@@ -628,26 +638,11 @@ if st.session_state.page == "home":
             font-weight: bold;
             line-height: 1.4;
             text-transform: uppercase;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
         }
-        
-        /* Tweak Description part of the ::after content (Not easily targeted separately in pure CSS) 
-           So we rely on the line break and font sizing of the parent. */
-           
         </style>
         """, unsafe_allow_html=True)
 
-        st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
-        
-        # 1. Search Button (Styled as Card)
-        if st.button("x", key="btn_nav_search", use_container_width=True):
-            go_search()
-            st.rerun()
-
-        st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
-        
-        # 2. Chat Button (Styled as Card)
-        if st.button("x", key="btn_nav_chat", use_container_width=True):
+        if st.button(" ", key="btn_nav_chat_hack", use_container_width=True):
             go_chat()
             st.rerun()
 
