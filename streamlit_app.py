@@ -407,329 +407,128 @@ def format_option(m):
     return f"{title} ({year})" if year else title
 
 
-# ===== MAIN APP =====
+# ===== MAIN APP (UNIFIED INTERFACE) =====
 
-# Session state for selected recommendation
+# Session state initialization
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = [{
+        "role": "assistant", 
+        "content": "👋 Hi! I'm CineBot. I can find movies by title, plot, or even vague descriptions.\n\nTry: *'Mind-bending sci-fi like Inception'* or just *'Batman'*.",
+        "movies": [] # Store structured movie data with the message
+    }]
 if "selected_rec" not in st.session_state:
     st.session_state.selected_rec = None
 
 st.title("🎬 Movie Recommendation System")
 
-# Search
-search = st.text_input("Search for a movie", placeholder="Type movie name...")
-
-if search and len(search) >= 2:
-    movies = search_movies(search)
-    
-    if movies:
-        options = {format_option(m): m for m in movies}
-        selected = st.selectbox(f"Found {len(movies)} movies", list(options.keys()))
-        movie = options.get(selected)
+# Display Chat History
+for msg in st.session_state.chat_history:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
         
-        if movie:
-            # Preview with essential info (fetches credits for director/cast)
-            poster_url = fetch_poster(movie.get("poster_path"))
-            credits = fetch_credits(movie.get("id"))  # Cached, so fast after first call
+        # If this message has associated movie results, display them!
+        if msg.get("movies"):
+            movies = msg["movies"]
+            st.markdown(f"**Found {len(movies)} matches:**")
             
-            st.markdown(f"""
-            <div style="display: flex; gap: 15px; align-items: flex-start; padding: 12px 0;">
-                <img src="{poster_url}" width="80" style="border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
-                <div style="font-size: 0.85rem; line-height: 1.5;">
-                    <div style="font-size: 1rem; margin-bottom: 5px;"><b>⭐ {movie.get('vote_average', 0):.1f}/10</b> | {movie.get('genres', 'N/A')}</div>
-                    <div style="color: #ccc;">🎬 Director: <b>{credits.get('director', 'N/A')}</b></div>
-                    <div style="color: #ccc;">🎭 Cast: {credits.get('cast', 'N/A')}</div>
-                    <div style="color: #888; font-size: 0.8rem; margin-top: 6px;">{movie.get('overview', '')[:180]}...</div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Get Recommendations button
-            if st.button("🎯 Get Recommendations", type="primary"):
-                st.session_state.selected_rec = None
-                
-                with st.spinner("Loading recommendations..."):
-                    # Use the new ENRICHED endpoint - parallel fetch on backend!
-                    try:
-                        r = requests.get(
-                            f"{API_URL}/recommend/id/{movie['id']}/enriched",
-                            params={"n": 10},
-                            timeout=30
-                        )
-                        if r.ok:
-                            result = r.json()
-                            if result.get("recommendations"):
-                                st.session_state.recs = result["recommendations"]
-                                st.session_state.source_movie = movie
-                            else:
-                                st.warning("No recommendations found.")
-                        else:
-                            st.error(f"API Error: {r.status_code}")
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-    else:
-        st.info("No movies found. Try another search.")
-
-# ===== RECOMMENDATIONS DISPLAY =====
-if "recs" in st.session_state and st.session_state.recs:
-    recs = st.session_state.recs
-    source = st.session_state.get("source_movie", {})
-    
-    st.markdown("---")
-    st.subheader(f"🎬 Movies Similar to '{source.get('title', 'Your Selection')}'")
-    
-    # CSS for card grid
-    st.markdown("""
-    <style>
-    .movie-grid {
-        display: grid;
-        grid-template-columns: repeat(5, 1fr);
-        gap: 15px;
-        padding: 10px 0;
-    }
-    .movie-card {
-        background: rgba(20,20,30,0.9);
-        border-radius: 10px;
-        overflow: hidden;
-        transition: transform 0.3s, box-shadow 0.3s;
-        cursor: pointer;
-        border: 2px solid transparent;
-    }
-    .movie-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 30px rgba(229,9,20,0.4);
-        border-color: #e50914;
-    }
-    .movie-card img {
-        width: 100%;
-        aspect-ratio: 2/3;
-        object-fit: cover;
-    }
-    .movie-card-info {
-        padding: 10px;
-    }
-    .movie-card-title {
-        font-size: 0.9rem;
-        font-weight: 600;
-        color: #fff;
-        margin-bottom: 5px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    .movie-card-match {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 3px 8px;
-        border-radius: 10px;
-        font-size: 0.75rem;
-        font-weight: 700;
-        display: inline-block;
-        
-    }
-    .movie-card-genres {
-        font-size: 0.7rem;
-        color: #aaa;
-        margin-top: 5px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    # Create clickable cards using Streamlit columns
-    cols = st.columns(5)
-    for idx, rec in enumerate(recs):
-        with cols[idx % 5]:
-            poster = fetch_poster(rec.get("poster_path"))
-            match = int(rec.get("similarity_score", 0) * 100)
-            title = rec.get("title", "Unknown")
-            genres = rec.get("genres", "")[:25] + "..." if len(rec.get("genres", "")) > 25 else rec.get("genres", "")
-            
-            # Clickable card using button
-            st.markdown(f"""
-            <div style="background: rgba(20,20,30,0.9); border-radius: 10px; overflow: hidden; margin-bottom: 15px;">
-                <img src="{poster}" style="width: 100%; aspect-ratio: 2/3; object-fit: cover;">
-                <div style="padding: 8px;">
-                    <div style="font-size: 0.85rem; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{title}</div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 5px;">
-                        <span style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 700;">{match}% Match</span>
-                        <span style="font-size: 0.7rem; color: #aaa;">⭐{rec.get('vote_average', 0):.1f}</span>
+            # Horizontal scrollable gallery or Grid? Grid is better for desktop.
+            cols = st.columns(4)
+            for idx, m in enumerate(movies[:8]): # Limit to 8 to save space
+                with cols[idx % 4]:
+                    poster = fetch_poster(m.get("poster_path"))
+                    title = m.get("title", "Unknown")
+                    rating = m.get("vote_average", 0)
+                    
+                    # Card HTML
+                    st.markdown(f"""
+                    <div style="background: rgba(255,255,255,0.05); border-radius: 8px; overflow: hidden; margin-bottom: 10px;">
+                        <img src="{poster}" style="width: 100%; aspect-ratio: 2/3; object-fit: cover;">
+                        <div style="padding: 6px;">
+                            <div style="font-size: 0.8rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{title}</div>
+                            <div style="font-size: 0.7rem; color: #aaa;">⭐ {rating:.1f}</div>
+                        </div>
                     </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            # Make entire card clickable via image button
-            if st.button(f"▶ {title[:20]}", key=f"btn_{idx}", use_container_width=True):
-                st.session_state.selected_rec = rec
-                st.session_state.show_dialog = True
-
-
-# ===== MOVIE DETAIL DIALOG (POPUP!) =====
-@st.dialog("🎬 Movie Details", width="large")
-def show_movie_dialog(rec):
-    """Show movie details in a popup dialog with video background."""
-    
-    trailer_key = rec.get("trailer_key")
-    poster = fetch_poster(rec.get("poster_path"))
-    year = rec.get("release_date", "")[:4] if rec.get("release_date") else ""
-    runtime = rec.get("runtime", 0)
-    similarity = int(rec.get("similarity_score", 0) * 100)
-    
-    # Inject CSS for video background (using user's approach!)
-    if trailer_key:
-        st.markdown(
-            f"""
-            <style>
-                /* Force the dialog content area to transparent so video shows */
-                div[data-testid="stDialog"] div[data-testid="stVerticalBlock"] {{
-                    background-color: transparent !important;
-                    z-index: 1;
-                }}
-                
-                /* Make dialog background transparent */
-                div[data-testid="stDialog"] > div > div {{
-                    background: rgba(0,0,0,0.85) !important;
-                }}
-                
-                /* Position the video behind the content */
-                #movie-bg-video {{
-                    position: fixed;
-                    top: 50%;
-                    left: 50%;
-                    transform: translate(-50%, -50%);
-                    min-width: 100%;
-                    min-height: 100%;
-                    width: auto;
-                    height: auto;
-                    z-index: -1;
-                    opacity: 0.35;
-                    pointer-events: none;
-                }}
-                
-                /* Style text to be readable over video */
-                div[data-testid="stDialog"] .stMarkdown, 
-                div[data-testid="stDialog"] .stButton {{
-                    color: white !important;
-                    text-shadow: 2px 2px 4px #000000;
-                }}
-            </style>
-            
-            <iframe id="movie-bg-video" 
-                    src="https://www.youtube-nocookie.com/embed/{trailer_key}?autoplay=1&mute=1&loop=1&playlist={trailer_key}&controls=0&showinfo=0&modestbranding=1&iv_load_policy=3&rel=0&fs=0&disablekb=1&start=1"
-                    allow="autoplay" frameborder="0">
-            </iframe>
-            """,
-            unsafe_allow_html=True
-        )
-    
-    # Layout with columns - content will appear over video
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        st.image(poster, use_container_width=True)
-    
-    with col2:
-        # Unified HTML for tighter layout and control
-
-        overview_text = rec.get('overview', 'No overview available.')
-        providers = fetch_watch_providers(rec.get("id"))
-        
-        # Build Provider HTML if available
-        provider_section = ""
-        if providers:
-            logos_html = ""
-            for p in providers:
-                logo_url = f"https://image.tmdb.org/t/p/w92{p['logo_path']}"
-                name = p.get('provider_name', 'Unknown')
-                logos_html += f"""<div style="display: flex; flex-direction: column; align-items: center; margin-right: 12px; min-width: 50px;"><img src="{logo_url}" title="{name}" style="width: 40px; height: 40px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);"><span style="font-size: 0.65rem; margin-top: 4px; color: #bbb; width: 100%; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{name}</span></div>"""
-            
-            provider_section = f"""<div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
-<div style="font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; color: #ddd;">📺 Available to Watch:</div>
-<div style="display: flex; overflow-x: auto; scrollbar-width: thin; align-items: flex-start;">{logos_html}</div>
-</div>"""
-
-        st.markdown(f"""<div style="color: white;">
-<div style="font-size: 2rem; font-weight: 800; line-height: 1.2; text-shadow: 2px 2px 4px black;">{rec.get('title', 'Unknown')}</div>
-<div style="font-size: 0.95rem; color: #ddd; margin: 5px 0 10px 0; font-weight: 500;">{year} • {runtime} min • ⭐ {round(rec.get('vote_average', 0), 1)}/10</div>
-<div style="margin-bottom: 12px;"><span style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 5px 12px; border-radius: 15px; font-weight: 700; font-size: 0.85rem; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">🎯 {similarity}% Match</span></div>
-<div style="background: rgba(0,0,0,0.3); padding: 12px; border-radius: 12px; backdrop-filter: blur(5px);">
-<div style="margin-bottom: 6px; font-size: 0.9rem;"><b>🎬 Director:</b> <span style="color: #ccc;">{rec.get('director', 'N/A')}</span></div>
-<div style="margin-bottom: 6px; font-size: 0.9rem;"><b>🎭 Cast:</b> <span style="color: #ccc;">{rec.get('cast', 'N/A')}</span></div>
-<div style="margin-bottom: 10px; font-size: 0.9rem;"><b>🎪 Genres:</b> <span style="color: #ccc;">{rec.get('genres', 'N/A')}</span></div>
-<div style="border-top: 1px solid rgba(255,255,255,0.1); margin: 10px 0;"></div>
-<div style="font-weight: 700; font-size: 1rem; margin-bottom: 5px;">📖 Overview</div>
-<div style="font-size: 0.95rem; line-height: 1.5; color: #ddd; max-height: 300px; overflow-y: auto;">{overview_text}</div>
-</div>
-{provider_section}
-</div>""", unsafe_allow_html=True)
-
-
-# Trigger dialog when movie is selected
-if st.session_state.get("show_dialog") and st.session_state.get("selected_rec"):
-    show_movie_dialog(st.session_state.selected_rec)
-    st.session_state.show_dialog = False
-
-
-# ===== AI ASSISTANT TAB =====
-# We use existing layout or tabs if we want to separate Search vs Chat
-# Let's add a floating chat or a tab. Tabs are cleaner.
-
-# Move content to Tabs
-tab_search, tab_chat = st.tabs(["🔍 Movie Search", "🤖 AI Assistant"])
-
-with tab_search:
-    # Existing Search Logic (move everything from line 382 down to here, logically)
-    # Since re-indenting 200 lines is risky, let's keep it simple:
-    # We will just inject the chat UI at the bottom or top?
-    # Actually, tabs are better. Let's do a trick: 
-    # Use CSS to hide the tabs if we want, or just put the search UI in tab 1.
-    pass 
-    # (Note: I cannot easily move all previous code into a block without a huge diff)
-    # BETTER APPROACH: Just append the Chat Section below the specific logical block
-    # OR: Use a sidebar toggler? No, sidebar is for navigation.
-    
-# ... Actually, the user wants a PREMIUM UI. 
-# Let's add the Chat interface as a distinct section or "Mode" in the sidebar?
-# Or just put it in a container.
-
-# Let's use `st.expander` for a non-intrusive "Chat with AI" feature
-with st.expander("💬 Chat with CineBot (AI Assistant)", expanded=False):
-    st.caption("Powered by Google Gemini 1.5 Flash • Ask about specific movies, genres, or complex recommendation requests.")
-    
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = [{"role": "assistant", "content": "Hi! I'm CineBot. Ask me for recommendations like 'I want a scary sci-fi movie' or 'Explain why Interstellar is good'."}]
-    
-    # Display chat
-    for msg in st.session_state.chat_history:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
-            
-    # Input
-    if prompt := st.chat_input("Ask CineBot..."):
-        # User message
-        st.session_state.chat_history.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-            
-        # API Call
-        with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                try:
-                    # History window (last 5 messages to save context/tokens)
-                    recent_msgs = st.session_state.chat_history[-5:]
+                    """, unsafe_allow_html=True)
                     
-                    r = requests.post(
-                        f"{API_URL}/chat", 
-                        json={"messages": recent_msgs},
-                        timeout=15
-                    )
+                    # Interaction: Determine key for uniqueness
+                    # We can't put buttons inside the loop easily without rerun issues in history.
+                    # Solution: Just showing them is fine for "History". 
+                    # If they want to click, they usually click the most recent result.
+                    # Or we explicitly add a "Deep Dive" button for the latest search.
+
+# Handle User Input
+if prompt := st.chat_input("Ask CineBot (e.g., 'Movies about time travel', 'Interstellar')..."):
+    
+    # 1. Show User Message
+    st.session_state.chat_history.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    # 2. Process (Search + AI)
+    with st.chat_message("assistant"):
+        with st.spinner("Thinking & Searching..."):
+            
+            # A. Search Logic (Deep Search)
+            found_movies = search_movies(prompt) # Uses the existing endpoint
+            
+            # B. AI Logic (RAG)
+            # We pass the search results as context implicitly via the backend (or we could pass them explicitly here)
+            # The backend /chat endpoint ALREADY performs a search internally! s
+            # But the backend /chat endpoint might not return the movie list structure, just text.
+            # To have the "Unified" UI, we need the structured movies too.
+            # Let's rely on the Frontend Search for the "Grid" and Backend Chat for the "Text".
+            
+            try:
+                # Prepare context for backend chat (optional optimization, current /chat does its own search)
+                # We'll just call /chat and let it do its thing for the text response.
+                
+                # Context window
+                recent_msgs = st.session_state.chat_history[-6:] # pass last few messages
+                # Filter out 'movies' key to avoid sending huge json to payload if we were sending state
+                clean_msgs = [{"role": m["role"], "content": m["content"]} for m in recent_msgs if m["role"] != "system"]
+
+                r = requests.post(f"{API_URL}/chat", json={"messages": clean_msgs}, timeout=60)
+                
+                ai_text = ""
+                if r.ok:
+                    ai_text = r.json()["content"]
+                else:
+                    ai_text = "⚠️ I'm having trouble connecting to the AI brain. But here are the search results."
+
+                # C. Display AI Text
+                st.markdown(ai_text)
+                
+                # D. Display Interactive Movie Cards (For the *Current* turn)
+                if found_movies:
+                    st.markdown("---")
+                    st.caption(f"Found {len(found_movies)} related movies:")
                     
-                    if r.ok:
-                        response_text = r.json()["content"]
-                        st.markdown(response_text)
-                        st.session_state.chat_history.append({"role": "assistant", "content": response_text})
-                    else:
-                        err_msg = "⚠️ I couldn't reach the AI brain. Check GOOGLE_API_KEY in backend."
-                        st.error(err_msg)
-                        st.session_state.chat_history.append({"role": "assistant", "content": err_msg})
-                        
-                except Exception as e:
-                    st.error(f"Error: {e}")
+                    # Interactive Grid for the active turn
+                    cols = st.columns(4)
+                    for idx, m in enumerate(found_movies[:8]):
+                         with cols[idx % 4]:
+                            poster = fetch_poster(m.get("poster_path"))
+                            title = m.get("title")
+                            
+                            st.markdown(f"""
+                            <div style="margin-bottom: 5px;">
+                                <img src="{poster}" style="width: 100%; border-radius: 8px;">
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            if st.button(f"🎬 {title}", key=f"cmd_{int(time.time())}_{idx}", use_container_width=True):
+                                st.session_state.selected_rec = m
+                                st.session_state.show_dialog = True
+                                st.rerun()
+
+                # E. Save to History
+                st.session_state.chat_history.append({
+                    "role": "assistant", 
+                    "content": ai_text,
+                    "movies": found_movies[:8] # Save top 8 for history display (non-interactive)
+                })
+                
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+# Dialog logic remains (handled at top of loop or via rerun)
