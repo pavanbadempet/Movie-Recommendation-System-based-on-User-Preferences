@@ -553,20 +553,11 @@ if st.session_state.page == "home":
         st.markdown("<h1>MOVIE RECOMMENDATION<br>SYSTEM</h1>", unsafe_allow_html=True)
         st.markdown("<p style='color: #888; font-size: 1rem; margin-bottom: 30px;'>AI-Powered Curator • Deep Search • Semantic Analysis</p>", unsafe_allow_html=True)
         
-        # === NAVIGATION CARDS (HTML + Invisible Button Overlay) ===
-        # We use pure HTML for the visual (enables CSS hover animations)
-        # Plus an invisible st.button overlay for reliable click handling
-        
+        # === NAVIGATION CARDS WITH CLICKABLE OVERLAY ===
         st.markdown("""
         <style>
-        /* Card Container - holds both visual and button */
-        .nav-card-wrapper {
-            position: relative;
-            margin-bottom: 15px;
-        }
-        
-        /* The Visual Card */
-        .nav-card-visual {
+        /* Card Visual Styling */
+        .nav-card {
             display: flex;
             align-items: center;
             padding: 18px 20px;
@@ -575,23 +566,23 @@ if st.session_state.page == "home":
             border-radius: 12px;
             cursor: pointer;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            margin-bottom: 5px;
         }
         
-        /* Hover Animation - Glow + Lift */
-        .nav-card-visual:hover {
+        .nav-card:hover {
             border-color: #e50914;
             background: rgba(229, 9, 20, 0.08);
             transform: translateY(-4px);
             box-shadow: 0 15px 40px rgba(229, 9, 20, 0.2), 0 0 15px rgba(229, 9, 20, 0.1);
         }
         
-        .nav-card-visual .icon {
+        .nav-card .icon {
             font-size: 2rem;
             margin-right: 18px;
             filter: drop-shadow(0 0 8px rgba(255,255,255,0.3));
         }
         
-        .nav-card-visual .text h4 {
+        .nav-card .text h4 {
             margin: 0;
             color: #fff;
             font-size: 1rem;
@@ -600,69 +591,62 @@ if st.session_state.page == "home":
             font-weight: 700;
         }
         
-        .nav-card-visual .text p {
+        .nav-card .text p {
             margin: 4px 0 0 0;
             color: #888;
             font-size: 0.8rem;
         }
         
-        /* INVISIBLE BUTTON OVERLAY */
-        .nav-card-wrapper + div.stButton {
-            margin-top: -75px !important;
-            position: relative;
-            z-index: 10;
-        }
-        .nav-card-wrapper + div.stButton > button {
-            width: 100% !important;
-            height: 70px !important;
+        /* MAKE ALL BUTTONS IN LEFT COLUMN INVISIBLE */
+        /* Target by data-testid which Streamlit uses */
+        div[data-testid="stButton"] button[kind="secondary"] {
             background: transparent !important;
             border: none !important;
             color: transparent !important;
             box-shadow: none !important;
-            cursor: pointer !important;
+            height: 0px !important;
+            min-height: 0px !important;
+            padding: 0 !important;
+            margin-top: -10px !important;
+            overflow: hidden !important;
         }
-        .nav-card-wrapper + div.stButton > button:hover {
+        div[data-testid="stButton"] button[kind="secondary"]:hover {
             background: transparent !important;
             border: none !important;
-            color: transparent !important;
         }
-        .nav-card-wrapper + div.stButton > button p {
+        div[data-testid="stButton"] button[kind="secondary"] p {
             display: none !important;
         }
         </style>
         """, unsafe_allow_html=True)
         
-        # === SEARCH CARD ===
+        # SEARCH CARD - Visual + Button
         st.markdown("""
-        <div class="nav-card-wrapper">
-            <div class="nav-card-visual">
-                <div class="icon">🔍</div>
-                <div class="text">
-                    <h4>Deep Search</h4>
-                    <p>Find matches by plot, vibe, or detailed queries.</p>
-                </div>
+        <div class="nav-card" onclick="this.nextElementSibling?.querySelector('button')?.click()">
+            <div class="icon">🔍</div>
+            <div class="text">
+                <h4>Deep Search</h4>
+                <p>Find matches by plot, vibe, or detailed queries.</p>
             </div>
         </div>
         """, unsafe_allow_html=True)
-        
-        if st.button(" ", key="nav_overlay_search", use_container_width=True):
+        if st.button("Search", key="nav_search_btn", use_container_width=True):
             go_search()
             st.rerun()
         
-        # === CINEBOT CARD ===
+        st.markdown("<div style='height: 10px'></div>", unsafe_allow_html=True)
+        
+        # CINEBOT CARD - Visual + Button
         st.markdown("""
-        <div class="nav-card-wrapper">
-            <div class="nav-card-visual">
-                <div class="icon">🧬</div>
-                <div class="text">
-                    <h4>CineBot AI</h4>
-                    <p>Interactive chat for complex recommendations.</p>
-                </div>
+        <div class="nav-card" onclick="this.nextElementSibling?.querySelector('button')?.click()">
+            <div class="icon">🧬</div>
+            <div class="text">
+                <h4>CineBot AI</h4>
+                <p>Interactive chat for complex recommendations.</p>
             </div>
         </div>
         """, unsafe_allow_html=True)
-        
-        if st.button(" ", key="nav_overlay_chat", use_container_width=True):
+        if st.button("Chat", key="nav_chat_btn", use_container_width=True):
             go_chat()
             st.rerun()
 
