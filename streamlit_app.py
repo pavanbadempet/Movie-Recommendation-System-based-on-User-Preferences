@@ -605,13 +605,13 @@ if st.session_state.page == "home":
         </style>
         """, unsafe_allow_html=True)
         
-        # Search Card Button
-        if st.button("🔍  DEEP SEARCH", key="nav_search_card", use_container_width=True):
+        # Search Card Button (with description)
+        if st.button("🔍  DEEP SEARCH\n\nFind matches by plot, vibe, or detailed queries", key="nav_search_card", use_container_width=True):
             go_search()
             st.rerun()
         
-        # Chat Card Button  
-        if st.button("🧬  CINEBOT AI", key="nav_chat_card", use_container_width=True):
+        # Chat Card Button (with description)
+        if st.button("🧬  CINEBOT AI\n\nInteractive chat for complex recommendations", key="nav_chat_card", use_container_width=True):
             go_chat()
             st.rerun()
 
