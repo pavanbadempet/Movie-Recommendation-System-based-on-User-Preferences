@@ -553,114 +553,116 @@ if st.session_state.page == "home":
         st.markdown("<h1>MOVIE RECOMMENDATION<br>SYSTEM</h1>", unsafe_allow_html=True)
         st.markdown("<p style='color: #888; font-size: 1rem; margin-bottom: 30px;'>AI-Powered Curator • Deep Search • Semantic Analysis</p>", unsafe_allow_html=True)
         
-        import base64
+        # === NAVIGATION CARDS (HTML + Invisible Button Overlay) ===
+        # We use pure HTML for the visual (enables CSS hover animations)
+        # Plus an invisible st.button overlay for reliable click handling
         
-        # Enhanced SVG Generator with premium design
-        def create_premium_svg(icon, title, desc, card_id):
-            """Creates a high-fidelity SVG card with glassmorphism effect"""
-            svg = f"""
-            <svg width="500" height="100" viewBox="0 0 500 100" xmlns="http://www.w3.org/2000/svg">
-                <defs>
-                    <!-- Glassmorphism gradient -->
-                    <linearGradient id="glass_{card_id}" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" style="stop-color:rgba(255,255,255,0.08)"/>
-                        <stop offset="100%" style="stop-color:rgba(255,255,255,0.02)"/>
-                    </linearGradient>
-                    <!-- Subtle glow filter -->
-                    <filter id="iconGlow_{card_id}" x="-50%" y="-50%" width="200%" height="200%">
-                        <feGaussianBlur stdDeviation="3" result="blur"/>
-                        <feMerge>
-                            <feMergeNode in="blur"/>
-                            <feMergeNode in="SourceGraphic"/>
-                        </feMerge>
-                    </filter>
-                </defs>
-                
-                <!-- Card Background with border -->
-                <rect x="1" y="1" width="498" height="98" rx="12" ry="12" 
-                      fill="url(#glass_{card_id})" 
-                      stroke="rgba(255,255,255,0.15)" 
-                      stroke-width="1"/>
-                
-                <!-- Icon with glow -->
-                <text x="25" y="62" 
-                      font-family="Apple Color Emoji, Segoe UI Emoji, sans-serif" 
-                      font-size="36" 
-                      filter="url(#iconGlow_{card_id})">{icon}</text>
-                
-                <!-- Title -->
-                <text x="85" y="40" 
-                      font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
-                      font-size="18" 
-                      font-weight="700" 
-                      fill="#ffffff" 
-                      letter-spacing="1.5">{title.upper()}</text>
-                
-                <!-- Description -->
-                <text x="85" y="65" 
-                      font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
-                      font-size="13" 
-                      fill="#999999">{desc}</text>
-            </svg>
-            """
-            b64 = base64.b64encode(svg.encode('utf-8')).decode('utf-8')
-            return f"data:image/svg+xml;base64,{b64}"
-
-        # Generate Premium SVGs
-        svg_search = create_premium_svg("🔍", "Deep Search", "Find matches by plot, vibe, or detailed queries.", "search")
-        svg_chat = create_premium_svg("🧬", "CineBot AI", "Interactive chat for complex recommendations.", "chat")
-
-        # CSS for hover animations (applied to the clickable_images container)
         st.markdown("""
         <style>
-        /* Hover animations for nav cards */
-        div[data-testid="stVerticalBlock"] img[src^="data:image/svg"] {
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-            cursor: pointer !important;
-        }
-        div[data-testid="stVerticalBlock"] img[src^="data:image/svg"]:hover {
-            transform: translateY(-4px) scale(1.02) !important;
-            box-shadow: 0 15px 40px rgba(229, 9, 20, 0.25), 0 0 20px rgba(229, 9, 20, 0.15) !important;
-            filter: brightness(1.1) !important;
+        /* Card Container - holds both visual and button */
+        .nav-card-wrapper {
+            position: relative;
+            margin-bottom: 15px;
         }
         
-        /* Container height fix to prevent overlap */
-        div[data-testid="column"]:first-child {
-            max-height: 450px;
-            overflow: visible;
+        /* The Visual Card */
+        .nav-card-visual {
+            display: flex;
+            align-items: center;
+            padding: 18px 20px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        /* Hover Animation - Glow + Lift */
+        .nav-card-visual:hover {
+            border-color: #e50914;
+            background: rgba(229, 9, 20, 0.08);
+            transform: translateY(-4px);
+            box-shadow: 0 15px 40px rgba(229, 9, 20, 0.2), 0 0 15px rgba(229, 9, 20, 0.1);
+        }
+        
+        .nav-card-visual .icon {
+            font-size: 2rem;
+            margin-right: 18px;
+            filter: drop-shadow(0 0 8px rgba(255,255,255,0.3));
+        }
+        
+        .nav-card-visual .text h4 {
+            margin: 0;
+            color: #fff;
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-weight: 700;
+        }
+        
+        .nav-card-visual .text p {
+            margin: 4px 0 0 0;
+            color: #888;
+            font-size: 0.8rem;
+        }
+        
+        /* INVISIBLE BUTTON OVERLAY */
+        .nav-card-wrapper + div.stButton {
+            margin-top: -75px !important;
+            position: relative;
+            z-index: 10;
+        }
+        .nav-card-wrapper + div.stButton > button {
+            width: 100% !important;
+            height: 70px !important;
+            background: transparent !important;
+            border: none !important;
+            color: transparent !important;
+            box-shadow: none !important;
+            cursor: pointer !important;
+        }
+        .nav-card-wrapper + div.stButton > button:hover {
+            background: transparent !important;
+            border: none !important;
+            color: transparent !important;
+        }
+        .nav-card-wrapper + div.stButton > button p {
+            display: none !important;
         }
         </style>
         """, unsafe_allow_html=True)
         
-        # Card container with proper spacing
-        st.markdown("<div style='display:flex; flex-direction:column; gap:12px; max-height:220px;'>", unsafe_allow_html=True)
+        # === SEARCH CARD ===
+        st.markdown("""
+        <div class="nav-card-wrapper">
+            <div class="nav-card-visual">
+                <div class="icon">🔍</div>
+                <div class="text">
+                    <h4>Deep Search</h4>
+                    <p>Find matches by plot, vibe, or detailed queries.</p>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         
-        # 1. Search Card
-        click_search = clickable_images(
-            paths=[svg_search],
-            titles=["Deep Search - Find movies by plot, vibe, or queries"],
-            div_style={"display": "flex", "justify-content": "center"},
-            img_style={"width": "100%", "height": "auto", "border-radius": "12px"},
-            key="nav_svg_search_v2"
-        )
-        
-        # 2. Chat Card  
-        click_chat = clickable_images(
-            paths=[svg_chat],
-            titles=["CineBot AI - Interactive recommendations"],
-            div_style={"display": "flex", "justify-content": "center"},
-            img_style={"width": "100%", "height": "auto", "border-radius": "12px"},
-            key="nav_svg_chat_v2"
-        )
-        
-        st.markdown("</div>", unsafe_allow_html=True)
-        
-        # Navigation Logic
-        if click_search == 0:
+        if st.button(" ", key="nav_overlay_search", use_container_width=True):
             go_search()
             st.rerun()
-            
-        if click_chat == 0:
+        
+        # === CINEBOT CARD ===
+        st.markdown("""
+        <div class="nav-card-wrapper">
+            <div class="nav-card-visual">
+                <div class="icon">🧬</div>
+                <div class="text">
+                    <h4>CineBot AI</h4>
+                    <p>Interactive chat for complex recommendations.</p>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button(" ", key="nav_overlay_chat", use_container_width=True):
             go_chat()
             st.rerun()
 
