@@ -553,91 +553,53 @@ if st.session_state.page == "home":
         st.markdown("<h1>MOVIE RECOMMENDATION<br>SYSTEM</h1>", unsafe_allow_html=True)
         st.markdown("<p style='color: #888; font-size: 1rem; margin-bottom: 30px;'>AI-Powered Curator • Deep Search • Semantic Analysis</p>", unsafe_allow_html=True)
         
-        # === NAVIGATION: TWO-BUTTON CARD APPROACH ===
-        # Each card = Title Button + Description Button (styled as one unit)
+        # === NAVIGATION CARDS ===
         st.markdown("""
         <style>
-        /* Card container styling */
-        .nav-card-container {
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            border-radius: 12px;
-            padding: 16px 20px;
-            margin-bottom: 12px;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            cursor: pointer;
-        }
-        .nav-card-container:hover {
-            border-color: #e50914;
-            background: rgba(229, 9, 20, 0.1);
-            transform: translateY(-4px);
-            box-shadow: 0 15px 40px rgba(229, 9, 20, 0.25), 0 0 20px rgba(229, 9, 20, 0.15);
-        }
-        
-        /* Remove default button styling for nav buttons */
-        .nav-card-container div[data-testid="stButton"] {
-            margin: 0 !important;
-            padding: 0 !important;
-        }
-        .nav-card-container div[data-testid="stButton"] button {
-            background: transparent !important;
-            border: none !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            min-height: 0 !important;
-            height: auto !important;
-            box-shadow: none !important;
-            text-align: left !important;
+        /* Style buttons to look like cards */
+        div[data-testid="stButton"] button[kind="secondary"] {
+            width: 100% !important;
+            min-height: 80px !important;
+            padding: 18px 20px !important;
+            background: rgba(255, 255, 255, 0.04) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            border-radius: 12px !important;
+            display: flex !important;
+            align-items: center !important;
             justify-content: flex-start !important;
-        }
-        .nav-card-container div[data-testid="stButton"] button:hover {
-            background: transparent !important;
-            border: none !important;
+            text-align: left !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            cursor: pointer !important;
+            margin-bottom: 12px !important;
         }
         
-        /* Title button - large, white, uppercase */
-        .nav-card-container .title-btn button p {
-            font-size: 1rem !important;
-            font-weight: 700 !important;
+        div[data-testid="stButton"] button[kind="secondary"]:hover {
+            border-color: #e50914 !important;
+            background: rgba(229, 9, 20, 0.1) !important;
+            transform: translateY(-4px) !important;
+            box-shadow: 0 15px 40px rgba(229, 9, 20, 0.25), 0 0 20px rgba(229, 9, 20, 0.15) !important;
+        }
+        
+        div[data-testid="stButton"] button[kind="secondary"] p {
             color: white !important;
+            font-size: 1rem !important;
+            font-weight: 600 !important;
             text-transform: uppercase !important;
-            letter-spacing: 1.5px !important;
-            margin: 0 0 6px 0 !important;
-        }
-        
-        /* Description button - small, grey */
-        .nav-card-container .desc-btn button p {
-            font-size: 0.8rem !important;
-            font-weight: 400 !important;
-            color: #888 !important;
+            letter-spacing: 1px !important;
             margin: 0 !important;
         }
         </style>
         """, unsafe_allow_html=True)
         
-        # === DEEP SEARCH CARD ===
-        st.markdown('<div class="nav-card-container">', unsafe_allow_html=True)
-        st.markdown('<div class="title-btn">', unsafe_allow_html=True)
-        if st.button("🔍  DEEP SEARCH", key="search_title", use_container_width=True):
+        # Search Card
+        if st.button("🔍  DEEP SEARCH", key="nav_search", use_container_width=True):
             go_search()
             st.rerun()
-        st.markdown('</div><div class="desc-btn">', unsafe_allow_html=True)
-        if st.button("Find matches by plot, vibe, or detailed queries", key="search_desc", use_container_width=True):
-            go_search()
-            st.rerun()
-        st.markdown('</div></div>', unsafe_allow_html=True)
         
-        # === CINEBOT AI CARD ===
-        st.markdown('<div class="nav-card-container">', unsafe_allow_html=True)
-        st.markdown('<div class="title-btn">', unsafe_allow_html=True)
-        if st.button("🧬  CINEBOT AI", key="chat_title", use_container_width=True):
+        # Chat Card
+        if st.button("🧬  CINEBOT AI", key="nav_chat", use_container_width=True):
             go_chat()
             st.rerun()
-        st.markdown('</div><div class="desc-btn">', unsafe_allow_html=True)
-        if st.button("Interactive chat for complex recommendations", key="chat_desc", use_container_width=True):
-            go_chat()
-            st.rerun()
-        st.markdown('</div></div>', unsafe_allow_html=True)
 
     # RIGHT COLUMN: Visual Showcase (Trending)
     with c2:
