@@ -555,74 +555,107 @@ if st.session_state.page == "home":
         
         import base64
         
-        # Pure SVG Generator (No CSS Hacks, No HTML embedding)
-        # This draws the card using standard vector graphics for 100% consistency
-        def create_native_svg(icon, title, desc):
-            bg_color = "rgba(255,255,255,0.05)"
-            border_color = "rgba(255,255,255,0.1)"
-            
+        # Enhanced SVG Generator with premium design
+        def create_premium_svg(icon, title, desc, card_id):
+            """Creates a high-fidelity SVG card with glassmorphism effect"""
             svg = f"""
-            <svg width="600" height="120" viewBox="0 0 600 120" xmlns="http://www.w3.org/2000/svg">
+            <svg width="500" height="100" viewBox="0 0 500 100" xmlns="http://www.w3.org/2000/svg">
                 <defs>
-                    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" style="stop-color:{bg_color};stop-opacity:1" />
-                        <stop offset="100%" style="stop-color:{bg_color};stop-opacity:1" />
+                    <!-- Glassmorphism gradient -->
+                    <linearGradient id="glass_{card_id}" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:rgba(255,255,255,0.08)"/>
+                        <stop offset="100%" style="stop-color:rgba(255,255,255,0.02)"/>
                     </linearGradient>
-                    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-                        <feGaussianBlur stdDeviation="2" result="blur"/>
-                        <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+                    <!-- Subtle glow filter -->
+                    <filter id="iconGlow_{card_id}" x="-50%" y="-50%" width="200%" height="200%">
+                        <feGaussianBlur stdDeviation="3" result="blur"/>
+                        <feMerge>
+                            <feMergeNode in="blur"/>
+                            <feMergeNode in="SourceGraphic"/>
+                        </feMerge>
                     </filter>
                 </defs>
                 
-                <!-- Card Background -->
-                <rect x="2" y="2" width="596" height="116" rx="15" ry="15" 
-                      fill="url(#grad1)" stroke="{border_color}" stroke-width="2"/>
+                <!-- Card Background with border -->
+                <rect x="1" y="1" width="498" height="98" rx="12" ry="12" 
+                      fill="url(#glass_{card_id})" 
+                      stroke="rgba(255,255,255,0.15)" 
+                      stroke-width="1"/>
                 
-                <!-- Icon -->
-                <text x="30" y="75" font-family="Arial, sans-serif" font-size="50" fill="white">{icon}</text>
+                <!-- Icon with glow -->
+                <text x="25" y="62" 
+                      font-family="Apple Color Emoji, Segoe UI Emoji, sans-serif" 
+                      font-size="36" 
+                      filter="url(#iconGlow_{card_id})">{icon}</text>
                 
                 <!-- Title -->
-                <text x="100" y="45" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="white" letter-spacing="1">
-                    {title.upper()}
-                </text>
+                <text x="85" y="40" 
+                      font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                      font-size="18" 
+                      font-weight="700" 
+                      fill="#ffffff" 
+                      letter-spacing="1.5">{title.upper()}</text>
                 
                 <!-- Description -->
-                <text x="100" y="80" font-family="Arial, sans-serif" font-size="16" fill="#aaaaaa">
-                    {desc}
-                </text>
+                <text x="85" y="65" 
+                      font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+                      font-size="13" 
+                      fill="#999999">{desc}</text>
             </svg>
             """
             b64 = base64.b64encode(svg.encode('utf-8')).decode('utf-8')
             return f"data:image/svg+xml;base64,{b64}"
 
-        # Generate Pure SVGs
-        svg_search = create_native_svg("🔍", "Deep Search", "Find matches by plot, vibe, or detailed queries.")
-        svg_chat = create_native_svg("🧬", "CineBot AI", "Interactive chat for complex recommendations.")
+        # Generate Premium SVGs
+        svg_search = create_premium_svg("🔍", "Deep Search", "Find matches by plot, vibe, or detailed queries.", "search")
+        svg_chat = create_premium_svg("🧬", "CineBot AI", "Interactive chat for complex recommendations.", "chat")
 
-        # Render via clickable_images
-        # Note: We split them ensuring no layout collisions
+        # CSS for hover animations (applied to the clickable_images container)
+        st.markdown("""
+        <style>
+        /* Hover animations for nav cards */
+        div[data-testid="stVerticalBlock"] img[src^="data:image/svg"] {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            cursor: pointer !important;
+        }
+        div[data-testid="stVerticalBlock"] img[src^="data:image/svg"]:hover {
+            transform: translateY(-4px) scale(1.02) !important;
+            box-shadow: 0 15px 40px rgba(229, 9, 20, 0.25), 0 0 20px rgba(229, 9, 20, 0.15) !important;
+            filter: brightness(1.1) !important;
+        }
         
-        st.markdown("<style>div.stMarkdown { margin-bottom: -15px; }</style>", unsafe_allow_html=True)
+        /* Container height fix to prevent overlap */
+        div[data-testid="column"]:first-child {
+            max-height: 450px;
+            overflow: visible;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        # Card container with proper spacing
+        st.markdown("<div style='display:flex; flex-direction:column; gap:12px; max-height:220px;'>", unsafe_allow_html=True)
         
         # 1. Search Card
         click_search = clickable_images(
             paths=[svg_search],
-            titles=["Go to Search"],
-            div_style={"justify-content": "center", "margin-bottom": "15px"},
-            img_style={"width": "100%", "height": "auto", "border-radius": "15px", "box-shadow": "0 4px 6px rgba(0,0,0,0.3)"},
-            key="nav_pure_svg_search"
+            titles=["Deep Search - Find movies by plot, vibe, or queries"],
+            div_style={"display": "flex", "justify-content": "center"},
+            img_style={"width": "100%", "height": "auto", "border-radius": "12px"},
+            key="nav_svg_search_v2"
         )
         
-        # 2. Chat Card
+        # 2. Chat Card  
         click_chat = clickable_images(
             paths=[svg_chat],
-            titles=["Go to Chat"],
-            div_style={"justify-content": "center"},
-            img_style={"width": "100%", "height": "auto", "border-radius": "15px", "box-shadow": "0 4px 6px rgba(0,0,0,0.3)"},
-            key="nav_pure_svg_chat"
+            titles=["CineBot AI - Interactive recommendations"],
+            div_style={"display": "flex", "justify-content": "center"},
+            img_style={"width": "100%", "height": "auto", "border-radius": "12px"},
+            key="nav_svg_chat_v2"
         )
         
-        # Navigation
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        # Navigation Logic
         if click_search == 0:
             go_search()
             st.rerun()
