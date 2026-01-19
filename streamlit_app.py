@@ -593,14 +593,21 @@ if st.session_state.page == "home":
             box-shadow: 0 15px 40px rgba(229, 9, 20, 0.25), 0 0 20px rgba(229, 9, 20, 0.15) !important;
         }
         
-        /* Button text styling */
+        /* Button text styling - Title is larger, description is smaller */
         div[data-testid="stButton"] button[kind="secondary"] p {
             color: white !important;
-            font-size: 1rem !important;
-            font-weight: 600 !important;
             margin: 0 !important;
+            text-align: left !important;
+            white-space: pre-line !important;
+            line-height: 1.6 !important;
+        }
+        
+        /* First line (title) styling - larger and bolder */
+        div[data-testid="stButton"] button[kind="secondary"] p::first-line {
+            font-size: 1.1rem !important;
+            font-weight: 700 !important;
             text-transform: uppercase !important;
-            letter-spacing: 1px !important;
+            letter-spacing: 1.5px !important;
         }
         </style>
         """, unsafe_allow_html=True)
