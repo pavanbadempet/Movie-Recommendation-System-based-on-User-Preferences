@@ -553,100 +553,65 @@ if st.session_state.page == "home":
         st.markdown("<h1>MOVIE RECOMMENDATION<br>SYSTEM</h1>", unsafe_allow_html=True)
         st.markdown("<p style='color: #888; font-size: 1rem; margin-bottom: 30px;'>AI-Powered Curator • Deep Search • Semantic Analysis</p>", unsafe_allow_html=True)
         
-        # === NAVIGATION CARDS WITH CLICKABLE OVERLAY ===
+        # === NAVIGATION: BUTTON STYLED AS CARD ===
+        # The button IS the card - we style it to look like one
         st.markdown("""
         <style>
-        /* Card Visual Styling */
-        .nav-card {
-            display: flex;
-            align-items: center;
-            padding: 18px 20px;
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            margin-bottom: 5px;
+        /* Target the specific navigation buttons by their container */
+        div[data-testid="stButton"]:has(button[kind="secondary"]) {
+            margin-bottom: 12px;
         }
         
-        .nav-card:hover {
-            border-color: #e50914;
-            background: rgba(229, 9, 20, 0.08);
-            transform: translateY(-4px);
-            box-shadow: 0 15px 40px rgba(229, 9, 20, 0.2), 0 0 15px rgba(229, 9, 20, 0.1);
-        }
-        
-        .nav-card .icon {
-            font-size: 2rem;
-            margin-right: 18px;
-            filter: drop-shadow(0 0 8px rgba(255,255,255,0.3));
-        }
-        
-        .nav-card .text h4 {
-            margin: 0;
-            color: #fff;
-            font-size: 1rem;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            font-weight: 700;
-        }
-        
-        .nav-card .text p {
-            margin: 4px 0 0 0;
-            color: #888;
-            font-size: 0.8rem;
-        }
-        
-        /* MAKE ALL BUTTONS IN LEFT COLUMN INVISIBLE */
-        /* Target by data-testid which Streamlit uses */
+        /* Style the button to look like a premium card */
         div[data-testid="stButton"] button[kind="secondary"] {
-            background: transparent !important;
-            border: none !important;
-            color: transparent !important;
-            box-shadow: none !important;
-            height: 0px !important;
-            min-height: 0px !important;
-            padding: 0 !important;
-            margin-top: -10px !important;
-            overflow: hidden !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 80px !important;
+            padding: 18px 20px !important;
+            
+            /* Card appearance */
+            background: rgba(255, 255, 255, 0.04) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            border-radius: 12px !important;
+            
+            /* Layout */
+            display: flex !important;
+            align-items: center !important;
+            justify-content: flex-start !important;
+            text-align: left !important;
+            
+            /* Animation */
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            cursor: pointer !important;
         }
+        
+        /* Hover effect - the key animation */
         div[data-testid="stButton"] button[kind="secondary"]:hover {
-            background: transparent !important;
-            border: none !important;
+            border-color: #e50914 !important;
+            background: rgba(229, 9, 20, 0.1) !important;
+            transform: translateY(-4px) !important;
+            box-shadow: 0 15px 40px rgba(229, 9, 20, 0.25), 0 0 20px rgba(229, 9, 20, 0.15) !important;
         }
+        
+        /* Button text styling */
         div[data-testid="stButton"] button[kind="secondary"] p {
-            display: none !important;
+            color: white !important;
+            font-size: 1rem !important;
+            font-weight: 600 !important;
+            margin: 0 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 1px !important;
         }
         </style>
         """, unsafe_allow_html=True)
         
-        # SEARCH CARD - Visual + Button
-        st.markdown("""
-        <div class="nav-card" onclick="this.nextElementSibling?.querySelector('button')?.click()">
-            <div class="icon">🔍</div>
-            <div class="text">
-                <h4>Deep Search</h4>
-                <p>Find matches by plot, vibe, or detailed queries.</p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Search", key="nav_search_btn", use_container_width=True):
+        # Search Card Button
+        if st.button("🔍  DEEP SEARCH", key="nav_search_card", use_container_width=True):
             go_search()
             st.rerun()
         
-        st.markdown("<div style='height: 10px'></div>", unsafe_allow_html=True)
-        
-        # CINEBOT CARD - Visual + Button
-        st.markdown("""
-        <div class="nav-card" onclick="this.nextElementSibling?.querySelector('button')?.click()">
-            <div class="icon">🧬</div>
-            <div class="text">
-                <h4>CineBot AI</h4>
-                <p>Interactive chat for complex recommendations.</p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Chat", key="nav_chat_btn", use_container_width=True):
+        # Chat Card Button  
+        if st.button("🧬  CINEBOT AI", key="nav_chat_card", use_container_width=True):
             go_chat()
             st.rerun()
 
