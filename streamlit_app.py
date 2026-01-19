@@ -593,19 +593,23 @@ if st.session_state.page == "home":
             box-shadow: 0 15px 40px rgba(229, 9, 20, 0.25), 0 0 20px rgba(229, 9, 20, 0.15) !important;
         }
         
-        /* Button text styling - Title is larger, description is smaller */
+        /* Button text styling - Base is small (description), first line is large (title) */
         div[data-testid="stButton"] button[kind="secondary"] p {
-            color: white !important;
             margin: 0 !important;
             text-align: left !important;
             white-space: pre-line !important;
-            line-height: 1.6 !important;
+            line-height: 1.8 !important;
+            /* Base styling for description - smaller and grey */
+            font-size: 0.8rem !important;
+            font-weight: 400 !important;
+            color: #888 !important;
         }
         
-        /* First line (title) styling - larger and bolder */
+        /* First line is the TITLE - larger, bold, white */
         div[data-testid="stButton"] button[kind="secondary"] p::first-line {
             font-size: 1.1rem !important;
             font-weight: 700 !important;
+            color: white !important;
             text-transform: uppercase !important;
             letter-spacing: 1.5px !important;
         }
