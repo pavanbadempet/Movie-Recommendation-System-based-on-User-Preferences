@@ -176,8 +176,14 @@ class Recommender:
         # Search (Fetch 100 candidates for re-ranking)
         # We fetch more than N to allow the business logic to re-order them
         fetch_k = 100
+        
+        # Configure IVF search
         if hasattr(self._index, "nprobe"):
             self._index.nprobe = min(50, getattr(self._index, "nlist", 10))
+            
+        # Configure HNSW search (efSearch > k helps recall)
+        if hasattr(self._index, "hnsw"):
+            self._index.hnsw.efSearch = 200
         
         distances, indices = self._index.search(query_vector, fetch_k)
         

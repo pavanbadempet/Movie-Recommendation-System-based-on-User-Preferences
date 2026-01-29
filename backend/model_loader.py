@@ -17,16 +17,27 @@ logger = logging.getLogger(__name__)
 # 3. Google Drive (with direct link): https://drive.google.com/uc?export=download&id={file_id}
 
 MODEL_FILES = {
-    "sbert_embeddings.npy": os.getenv(
-        "EMBEDDINGS_URL",
-        # Hugging Face Hub - Free unlimited storage for model files
-        "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/sbert_embeddings.npy"
-    ),
-    "faiss.index": os.getenv(
-        "FAISS_INDEX_URL",
-        # Usually smaller, can stay in Git LFS
-        ""
-    ),
+    "sbert_embeddings.npy": {
+        "url": os.getenv(
+            "EMBEDDINGS_URL",
+            "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/sbert_embeddings.npy"
+        ),
+        "dest": "sbert_embeddings.npy"
+    },
+    "faiss.index": {
+        "url": os.getenv(
+            "FAISS_INDEX_URL",
+            "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/faiss.index"
+        ),
+        "dest": "faiss.index"
+    },
+    "movies_transformed.parquet": {
+        "url": os.getenv(
+            "MOVIES_DATA_URL",
+            "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/movies_transformed.parquet"
+        ),
+        "dest": "../data/processed/movies_transformed.parquet"
+    }
 }
 
 
@@ -38,6 +49,7 @@ def download_file(url: str, dest_path: Path, chunk_size: int = 8192) -> bool:
     if not url:
         return False
     
+    # Ensure parent directory exists
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     
     try:
@@ -80,9 +92,18 @@ def ensure_model_files(models_dir: Path) -> dict[str, bool]:
     """
     results = {}
     
-    for filename, url in MODEL_FILES.items():
-        file_path = models_dir / filename
-        
+    for filename, config in MODEL_FILES.items():
+        # Handle flexible destination paths
+        if isinstance(config, dict):
+            url = config.get("url")
+            dest_rel = config.get("dest", filename)
+            # Resolve relative paths against models_dir
+            file_path = (models_dir / dest_rel).resolve()
+        else:
+            # Legacy support (just string URL)
+            url = config
+            file_path = models_dir / filename
+            
         # Skip if file already exists and is valid
         if file_path.exists() and file_path.stat().st_size > 1000:
             logger.info(f"✓ {filename} already exists ({file_path.stat().st_size // (1024*1024)}MB)")
@@ -93,7 +114,7 @@ def ensure_model_files(models_dir: Path) -> dict[str, bool]:
         if url:
             results[filename] = download_file(url, file_path)
         else:
-            # No URL configured, check if file exists in LFS
+            # No URL configured, check if file exists locally
             if file_path.exists():
                 # Might be an LFS pointer file - check size
                 if file_path.stat().st_size < 1000:
