@@ -4,6 +4,7 @@ services:
     plan: free
     region: singapore
     autoDeploy: true
+    # Updated: 2026-01-29 - Model files now hosted on Hugging Face
     healthCheckPath: /health
     buildFilter:
       paths:
