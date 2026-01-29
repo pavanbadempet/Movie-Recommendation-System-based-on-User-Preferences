@@ -1,0 +1,25 @@
+# Keep-alive workflow to prevent Render and Streamlit free tier cold starts
+# Pings the services every 14 minutes to keep them warm
+
+name: Keep Services Alive
+
+on:
+  schedule:
+    # Run every 14 minutes (free tiers typically sleep after 15min of inactivity)
+    - cron: '*/14 * * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  ping-services:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Ping Render backend
+        run: |
+          # Replace with your actual Render URL
+          curl -sf "${{ secrets.RENDER_URL }}/health" || echo "Render ping failed or URL not set"
+      
+      - name: Ping Streamlit app
+        run: |
+          # Replace with your actual Streamlit URL
+          curl -sf "${{ secrets.STREAMLIT_URL }}" || echo "Streamlit ping failed or URL not set"
