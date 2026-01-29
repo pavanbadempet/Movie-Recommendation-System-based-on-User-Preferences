@@ -401,6 +401,44 @@ def display_movie_card(rec, tmdb, credits, similarity):
     """, unsafe_allow_html=True)
 
 
+@st.dialog("Movie Details", width="large")
+def show_movie_dialog(rec):
+    """Show modal dialog with full movie details."""
+    with st.spinner("Fetching details..."):
+        movie_id = rec.get("id")
+        tmdb = fetch_tmdb_details(movie_id)
+        credits = fetch_credits(movie_id)
+        trailer_key = fetch_trailer(movie_id)
+        providers = fetch_watch_providers(movie_id)
+        
+    # Trailer
+    if trailer_key:
+        st.video(f"https://www.youtube.com/watch?v={trailer_key}")
+        
+    # Movie Card
+    similarity = rec.get("similarity_score", 0)
+    display_movie_card(rec, tmdb, credits, similarity)
+    
+    # Watch Providers
+    if providers:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("### 📺 Streaming On")
+        
+        # Display provider icons
+        icon_html = []
+        for p in providers[:6]:
+            logo = f"https://image.tmdb.org/t/p/original{p.get('logo_path')}"
+            name = p.get('provider_name')
+            icon_html.append(f"""
+            <div style="display: inline-block; margin-right: 15px; text-align: center;">
+                <img src="{logo}" style="width: 45px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.5);" title="{name}">
+                <div style="font-size: 0.7rem; margin-top: 4px; color: #aaa;">{name.split()[0]}</div>
+            </div>
+            """)
+            
+        st.markdown("".join(icon_html), unsafe_allow_html=True)
+
+
 def format_option(m):
     """Format movie for dropdown - just title and year."""
     title = m.get("title", "Unknown")
