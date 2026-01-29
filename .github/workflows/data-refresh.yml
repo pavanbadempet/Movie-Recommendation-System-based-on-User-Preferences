@@ -1,5 +1,5 @@
 # Daily data refresh workflow for Movie Recommendation System
-# Fetches latest TMDB data from Kaggle and rebuilds the index
+# Fetches latest TMDB data from Kaggle, rebuilds embeddings, and uploads to Hugging Face
 
 name: Daily Data Refresh
 
@@ -11,6 +11,7 @@ on:
 
 env:
   PYTHON_VERSION: '3.11'
+  HF_REPO: 'pavanbadempet/movie-recs-models'
 
 jobs:
   refresh-data:
@@ -19,8 +20,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -32,7 +31,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-          pip install kaggle
+          pip install kaggle huggingface_hub
 
       - name: Download latest Kaggle dataset
         env:
@@ -48,26 +47,69 @@ jobs:
           PYTHONPATH: "${{ github.workspace }}"
         run: |
           python -m etl.pipeline --data data/raw/TMDB_movie_dataset_v11.csv
+          echo "Generated files:"
+          ls -la models/
+          ls -la data/processed/
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: model-artifacts-${{ github.run_number }}
-          path: |
-            models/
-            data/processed/
-          retention-days: 7
+      - name: Upload embeddings to Hugging Face Hub
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python - <<EOF
+          from huggingface_hub import HfApi
+          import os
+          
+          api = HfApi()
+          
+          # Upload embeddings
+          api.upload_file(
+              path_or_fileobj="models/sbert_embeddings.npy",
+              path_in_repo="sbert_embeddings.npy",
+              repo_id="${{ env.HF_REPO }}",
+              repo_type="model",
+              token=os.environ["HF_TOKEN"]
+          )
+          print("✅ Uploaded sbert_embeddings.npy to Hugging Face")
+          
+          # Optionally upload FAISS index too
+          if os.path.exists("models/faiss.index"):
+              api.upload_file(
+                  path_or_fileobj="models/faiss.index",
+                  path_in_repo="faiss.index",
+                  repo_id="${{ env.HF_REPO }}",
+                  repo_type="model",
+                  token=os.environ["HF_TOKEN"]
+              )
+              print("✅ Uploaded faiss.index to Hugging Face")
+          EOF
 
-      - name: Commit updated artifacts
+      - name: Commit processed data (not embeddings)
         run: |
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
           
-          # Only commit if there are changes
-          git add models/ data/processed/
+          # Only commit processed parquet files (small), not embeddings (large)
+          git add data/processed/
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
             git commit -m "chore: Daily data refresh $(date +%Y-%m-%d)"
             git push
           fi
+
+      - name: Trigger Render redeploy (optional)
+        if: success()
+        run: |
+          # If you have a Render deploy hook, uncomment and add it as a secret:
+          # curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+          echo "✅ Pipeline complete! Render will auto-deploy on next push."
+
+      - name: Upload artifacts for debugging
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: model-artifacts-${{ github.run_number }}
+          path: |
+            models/
+            data/processed/
+          retention-days: 7
