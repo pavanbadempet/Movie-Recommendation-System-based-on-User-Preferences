@@ -12,11 +12,17 @@ import pandas as pd
 import faiss
 from sklearn.feature_extraction.text import TfidfVectorizer
 
+# Import model loader to handle external model downloads
+from backend.model_loader import ensure_model_files
+
 logger = logging.getLogger(__name__)
 
 # Resolve paths relative to this file
 MODELS_DIR = Path(__file__).parent.parent / "models"
 DATA_DIR = Path(__file__).parent.parent / "data" / "processed"
+
+# Ensure models are downloaded before proceeding
+ensure_model_files(MODELS_DIR)
 
 
 class Recommender:
@@ -170,8 +176,14 @@ class Recommender:
         # Search (Fetch 100 candidates for re-ranking)
         # We fetch more than N to allow the business logic to re-order them
         fetch_k = 100
+        
+        # Configure IVF search
         if hasattr(self._index, "nprobe"):
             self._index.nprobe = min(50, getattr(self._index, "nlist", 10))
+            
+        # Configure HNSW search (efSearch > k helps recall)
+        if hasattr(self._index, "hnsw"):
+            self._index.hnsw.efSearch = 200
         
         distances, indices = self._index.search(query_vector, fetch_k)
         
