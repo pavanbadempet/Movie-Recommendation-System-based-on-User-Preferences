@@ -44,6 +44,8 @@ jobs:
           ls -la data/raw/
 
       - name: Run ETL pipeline
+        env:
+          PYTHONPATH: "${{ github.workspace }}"
         run: |
           python -m etl.pipeline --data data/raw/TMDB_movie_dataset_v11.csv
 
