@@ -3,11 +3,18 @@
 # After running, embeddings are uploaded to Hugging Face automatically
 
 # ============================================
-# CONFIGURATION - Edit these values
+# CONFIGURATION - Load from Kaggle Secrets
 # ============================================
 
+from kaggle_secrets import UserSecretsClient
+
+# Load secrets from Kaggle
+user_secrets = UserSecretsClient()
+HF_TOKEN = user_secrets.get_secret("HF_TOKEN")  # Add this in Kaggle Settings → Secrets
+
 HF_REPO = "pavanbadempet/movie-recs-models"  # Your Hugging Face repo
-HF_TOKEN = ""  # Paste your HuggingFace token here (or use Kaggle secrets)
+
+print(f"✅ HF Token loaded: {HF_TOKEN[:10]}..." if HF_TOKEN else "❌ No HF_TOKEN secret found!")
 
 # ============================================
 # SETUP
@@ -238,16 +245,6 @@ print(f"💾 Saved movies: {movies_path} ({movies_path.stat().st_size / 1e6:.1f}
 # ============================================
 # UPLOAD TO HUGGING FACE
 # ============================================
-
-# Get token from Kaggle secrets if not hardcoded
-if not HF_TOKEN:
-    from kaggle_secrets import UserSecretsClient
-    try:
-        user_secrets = UserSecretsClient()
-        HF_TOKEN = user_secrets.get_secret("HF_TOKEN")
-    except:
-        print("⚠️ No HF_TOKEN found. Skipping upload.")
-        HF_TOKEN = None
 
 if HF_TOKEN:
     print(f"☁️ Uploading to Hugging Face: {HF_REPO}")
