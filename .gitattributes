@@ -1,6 +1,6 @@
 # Git LFS for binary artifacts
 *.parquet filter=lfs diff=lfs merge=lfs -text
-*.npy filter=lfs diff=lfs merge=lfs -text
 *.index filter=lfs diff=lfs merge=lfs -text
 *.pkl filter=lfs diff=lfs merge=lfs -text
+# Note: .npy files removed from LFS - hosted on Hugging Face instead
 models/faiss.index filter=lfs diff=lfs merge=lfs -text
