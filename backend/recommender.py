@@ -12,11 +12,17 @@ import pandas as pd
 import faiss
 from sklearn.feature_extraction.text import TfidfVectorizer
 
+# Import model loader to handle external model downloads
+from backend.model_loader import ensure_model_files
+
 logger = logging.getLogger(__name__)
 
 # Resolve paths relative to this file
 MODELS_DIR = Path(__file__).parent.parent / "models"
 DATA_DIR = Path(__file__).parent.parent / "data" / "processed"
+
+# Ensure models are downloaded before proceeding
+ensure_model_files(MODELS_DIR)
 
 
 class Recommender:
