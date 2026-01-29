@@ -63,34 +63,47 @@ df = pd.read_csv(DATASET_PATH, low_memory=False)
 print(f"   Loaded {len(df):,} movies")
 
 # ============================================
-# DATA PREPROCESSING
+# DATA PREPROCESSING - FULL POWER MODE
 # ============================================
 
-# Configuration
-MIN_VOTE_COUNT = 10
-MAX_MOVIES = None  # Set to limit dataset size, e.g., 50000
+# With Kaggle GPU, we can process the FULL dataset!
+# No need to filter aggressively like we did for local development
 
-# Filter movies
-print("🔧 Filtering movies...")
+# Configuration - Much less restrictive than local version
+MIN_VOTE_COUNT = 1        # Include movies with at least 1 vote (was 10)
+MIN_POPULARITY = 0.5      # Minimal popularity filter
+MAX_MOVIES = None         # No limit! Process everything
+
+# Filter movies (minimal filtering for maximum coverage)
+print("🔧 Filtering movies (FULL POWER MODE)...")
 original_count = len(df)
 
-# Remove nulls
+# Only remove movies without essential data
 df = df.dropna(subset=["title", "overview"])
 
-# Filter by vote count
+# Remove completely obscure movies (no votes at all)
 if "vote_count" in df.columns:
     df = df[df["vote_count"] >= MIN_VOTE_COUNT]
+
+# Optional: filter very low popularity (spam/test entries)
+if "popularity" in df.columns:
+    df = df[df["popularity"] >= MIN_POPULARITY]
 
 # Remove adult content
 if "adult" in df.columns:
     df = df[df["adult"] != True]
 
-# Limit size if needed
+# Remove duplicates by ID
+if "id" in df.columns:
+    df = df.drop_duplicates(subset=["id"])
+
+# Limit size only if needed for testing
 if MAX_MOVIES:
     df = df.head(MAX_MOVIES)
 
 df = df.reset_index(drop=True)
-print(f"   Filtered from {original_count:,} to {len(df):,} movies")
+print(f"   ✅ Kept {len(df):,} movies from original {original_count:,}")
+print(f"   📊 That's {len(df)/original_count*100:.1f}% of the dataset!")
 
 # ============================================
 # FEATURE ENGINEERING - Generate Tags
@@ -168,7 +181,7 @@ df = df[df["tags"].str.len() > 10].reset_index(drop=True)
 print(f"   Generated tags for {len(df):,} movies")
 
 # ============================================
-# GENERATE EMBEDDINGS (GPU ACCELERATED)
+# GENERATE EMBEDDINGS (GPU ACCELERATED - FULL POWER)
 # ============================================
 
 print("🚀 Loading SBERT model...")
@@ -177,15 +190,22 @@ model = SentenceTransformer('all-mpnet-base-v2')
 # Move to GPU if available
 if torch.cuda.is_available():
     model = model.to('cuda')
-    print("   ✅ Model loaded on GPU")
+    print(f"   ✅ Model loaded on GPU: {torch.cuda.get_device_name(0)}")
+    print(f"   💾 GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
+else:
+    print("   ⚠️ Running on CPU - this will be slower")
 
 print(f"🔢 Encoding {len(df):,} movies...")
+print(f"   This is {len(df)/original_count*100:.1f}x more than local dev version!")
 start_time = time.time()
+
+# Use larger batch size for GPU - P100 can handle 128-256
+BATCH_SIZE = 128 if torch.cuda.is_available() else 32
 
 embeddings = model.encode(
     df["tags"].tolist(),
     show_progress_bar=True,
-    batch_size=64,  # Can be larger with GPU
+    batch_size=BATCH_SIZE,
     convert_to_numpy=True,
     device='cuda' if torch.cuda.is_available() else 'cpu'
 )
