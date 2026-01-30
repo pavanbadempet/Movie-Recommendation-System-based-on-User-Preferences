@@ -482,7 +482,9 @@ def show_movie_dialog(rec):
         overflow: hidden;
         position: relative;
         width: 100% !important;
-        height: 75vh; /* Responsive height */
+        /* Force 16:9 aspect ratio to match YouTube and eliminate black bars */
+        aspect-ratio: 16 / 9;
+        height: auto; 
         box-shadow: none;
         border: none;
         margin: 0px;
