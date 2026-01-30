@@ -953,7 +953,7 @@ elif st.session_state.page == "search":
                     with st.spinner("Analysing semantics..."):
                         # Call API
                         try:
-                            r = requests.get(f"{API_URL}/recommend/id/{movie['id']}", params={"n": 10}, timeout=10)
+                            r = requests.get(f"{API_URL}/recommend/id/{movie['id']}", params={"n": 10}, timeout=30)
                             if r.ok:
                                 result = r.json()
                                 st.session_state.recs = result["recommendations"]
