@@ -1033,13 +1033,7 @@ elif st.session_state.page == "search":
         </style>
         """, unsafe_allow_html=True)
         
-        st.markdown("""
-        <style>
-        .rec-container {
-             min-height: 400px;
-        }
-        </style>
-        """, unsafe_allow_html=True)
+
 
         # --- FRAGMENT ISOLATION ---
         # We use st.fragment to isolate the grid updates if available.
