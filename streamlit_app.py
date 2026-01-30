@@ -477,14 +477,15 @@ def show_movie_dialog(rec):
     .dialog-billboard {{
         /* Dark background but allow video to shine through */
         background: #000;
-        /* Removed borders/radius per user request */
-        border-radius: 8px; 
+        /* FULL SCREEN IMMERSION: No radius, full width */
+        border-radius: 0px !important; 
         overflow: hidden;
         position: relative;
-        height: 650px; /* Taller to fit everything */
-        box-shadow: 0 10px 40px rgba(0,0,0,0.8);
-        border: none; /* No bezel */
-        margin-bottom: 0px; /* Flush */
+        width: 100% !important;
+        height: 75vh; /* Responsive height */
+        box-shadow: none;
+        border: none;
+        margin: 0px;
     }}
     .db-video-layer {{
         position: absolute;
