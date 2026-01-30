@@ -141,14 +141,29 @@ class Recommender:
             return []
             
         # Calculate Relevance Score
-        # We use simple boolean math (True=1, False=0)
-        matches["relevance"] = (
-            (matches["title"].str.lower().str.contains(q_lower, na=False) * 10) +
-            (matches["genres"].str.lower().str.contains(q_lower, na=False) * 5) +
-            (matches["overview"].str.lower().str.contains(q_lower, na=False) * 3) +
-            # Boost popularity slightly to break ties
-            (np.log1p(matches["popularity"]) * 0.1)
-        )
+        # Matches: Explicit Bonus Logic
+        # - Exact Match: +50
+        # - Starts With: +20
+        # - Contains Title: +10
+        # - Genre: +5
+        # - Overview: +3
+        # - Popularity: Boosted (x2.0) to break ties in favor of blockbusters
+        
+        matches["relevance"] = 0.0
+        
+        # Title Factors
+        m_title = matches["title"].str.lower()
+        matches.loc[m_title == q_lower, "relevance"] += 50.0
+        matches.loc[m_title.str.startswith(q_lower), "relevance"] += 20.0
+        matches.loc[m_title.str.contains(q_lower, regex=False), "relevance"] += 10.0
+        
+        # Other Factors
+        # Note: We use the masks subsetted by the matches index
+        matches.loc[mask_genre[matches.index], "relevance"] += 5.0
+        matches.loc[mask_overview[matches.index], "relevance"] += 3.0
+        
+        # Popularity Boost
+        matches["relevance"] += np.log1p(matches["popularity"]) * 2.0
         
         # Sort by relevance
         matches = matches.sort_values("relevance", ascending=False).head(limit)
