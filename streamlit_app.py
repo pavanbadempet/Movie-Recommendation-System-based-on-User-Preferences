@@ -484,7 +484,11 @@ def show_movie_dialog(rec):
         for p in providers[:4]: # Limit to 4 to save space
             logo = f"https://image.tmdb.org/t/p/original{p.get('logo_path')}"
             name = p.get('provider_name')
-            cards += f'<div style="display:inline-block; margin-right:10px; text-align:center;"><img src="{logo}" style="width:40px; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.5);" title="{name}"></div>'
+            # Create a Google Search link for the movie on this provider
+            query = f"watch {rec.get('title')} on {name}"
+            url = f"https://www.google.com/search?q={query}"
+            
+            cards += f'<a href="{url}" target="_blank" style="text-decoration:none; cursor:pointer;"><div style="display:inline-block; margin-right:10px; text-align:center; transition: transform 0.2s;"><img src="{logo}" style="width:40px; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.5);" title="Watch on {name}"></div></a>'
         
         provider_html = f'<div class="db-providers"><div style="font-size:0.7rem; color:#aaa; margin-bottom:5px; text-transform:uppercase; letter-spacing:1px; font-weight:bold;">Watch Now</div>{cards}</div>'
 
