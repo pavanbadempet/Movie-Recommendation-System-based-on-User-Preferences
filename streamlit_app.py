@@ -401,7 +401,7 @@ def display_movie_card(rec, tmdb, credits, similarity):
     """, unsafe_allow_html=True)
 
 
-@st.dialog("Movie Details", width="large")
+@st.dialog(" ", width="large")
 def show_movie_dialog(rec):
     """Show modal dialog with full movie details."""
     
@@ -415,6 +415,10 @@ def show_movie_dialog(rec):
             /* Remove standard Streamlit block spacing inside dialog */
             div[data-testid="stDialog"] div[data-testid="stVerticalBlock"] {
                 gap: 0 !important;
+            }
+            /* HIDE THE HEADER (Close button stays accessible but floating) */
+            div[data-testid="stDialog"] header {
+                display: none;
             }
         </style>
     """, unsafe_allow_html=True)
