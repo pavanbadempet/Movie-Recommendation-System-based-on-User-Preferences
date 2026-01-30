@@ -414,7 +414,7 @@ def show_movie_dialog(rec):
                 padding: 0 !important;
                 margin: 0 !important;
                 border: none !important;
-                /* Restore black background */
+                /* Restore black background to hide app text behind, but keep 0 padding */
                 background-color: #000 !important;
                 box-shadow: none !important;
             }
@@ -424,39 +424,27 @@ def show_movie_dialog(rec):
                 border: none !important;
                 background-color: #000 !important;
             }
-            /* Remove standard space */
+            /* Remove standard space from the vertical block */
             div[data-testid="stVerticalBlock"] {
                 gap: 0 !important;
                 padding: 0 !important;
                 background-color: #000 !important;
             }
-            /* Force the billboard to touch edges */
+            /* Force the billboard to touch edges if inside a stVerticalBlock */
             div[data-testid="stVerticalBlock"] > div {
                 width: 100% !important;
             }
-            /* AGGRESSIVE HEADER HIDING */
-            div[data-testid="stDialog"] header, div[role="dialog"] header {
-                display: none !important;
-                height: 0px !important;
-                margin: 0px !important;
-                padding: 0px !important;
-                visibility: hidden !important;
+            /* HIDE THE HEADER (Close button stays accessible but floating) */
+            div[data-testid="stDialog"] header {
+                display: none;
             }
-            /* Move content up to cover any persistent gap */
-            div[data-testid="stDialog"] .stMainBlock, div[role="dialog"] .stMainBlock {
-                margin-top: -1rem !important;
-                padding-top: 0 !important;
-            }
-            /* SCALE UP CLOSE BUTTON - REPOSITIONED */
+            /* SCALE UP CLOSE BUTTON */
             div[data-testid="stDialog"] button[aria-label="Close"] {
-                transform: scale(1.4);
-                background-color: rgba(0,0,0,0.6);
+                transform: scale(1.5);
+                background-color: rgba(0,0,0,0.5);
                 border-radius: 50%;
                 color: white;
-                position: absolute;
-                top: 15px;
-                right: 15px;
-                z-index: 99999;
+                z-index: 9999;
             }
             /* Ensure the modal content takes full width */
             section[tabindex="0"], section[tabindex="0"] > div, section[tabindex="0"] > div > div {
@@ -1029,10 +1017,6 @@ elif st.session_state.page == "search":
         rec_posters = [fetch_poster(r.get("poster_path")) for r in recs]
         rec_titles = [f"{r.get('title')} ({int(r.get('similarity_score', 0)*100)}% Match)" for r in recs]
         
-        # Initialize dynamic key for grid reset
-        if "rec_grid_key" not in st.session_state:
-            st.session_state.rec_grid_key = 0
-            
         # Clickable Images Grid (Matches Homepage Style)
         clicked_rec = clickable_images(
             paths=rec_posters,
@@ -1053,16 +1037,14 @@ elif st.session_state.page == "search":
                 "box-shadow": "0 4px 10px rgba(0,0,0,0.5)",
                 "transition": "transform 0.3s ease"
             },
-            key=f"rec_grid_{st.session_state.rec_grid_key}"
+            key="rec_grid"
         )
         
         # Handle selection
         if clicked_rec > -1:
-            # Increment key for NEXT run (to reset selection)
-            st.session_state.rec_grid_key += 1
-            # Call dialog directly - NO RERUN needed here
-            # (Streamlit will re-run automatically when dialog closes)
-            show_movie_dialog(recs[clicked_rec])
+            st.session_state.selected_rec = recs[clicked_rec]
+            st.session_state.show_dialog = True
+            st.rerun()
 
 
 # ===== PAGE 3: AI CHATBOT =====
