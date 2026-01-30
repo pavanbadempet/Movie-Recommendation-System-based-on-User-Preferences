@@ -446,6 +446,25 @@ def show_movie_dialog(rec):
     rating = tmdb.get("vote_average", rec.get("vote_average", 0))
     year = tmdb.get("release_date", "")[:4] or "N/A"
     
+    # Prepare Provider HTML (Pre-computation for embedding)
+    provider_html = ""
+    if providers:
+        cards = ""
+        for p in providers[:4]: # Limit to 4 to save space
+            logo = f"https://image.tmdb.org/t/p/original{p.get('logo_path')}"
+            name = p.get('provider_name')
+            cards += f'''
+            <div style="display:inline-block; margin-right:10px; text-align:center;">
+                <img src="{logo}" style="width:40px; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.5);" title="{name}">
+            </div>
+            '''
+        provider_html = f'''
+        <div class="db-providers">
+            <div style="font-size:0.7rem; color:#aaa; margin-bottom:5px; text-transform:uppercase; letter-spacing:1px; font-weight:bold;">Example Streaming Options</div>
+            {cards}
+        </div>
+        '''
+
     st.markdown(f"""
     <style>
     .dialog-billboard {{
@@ -455,16 +474,16 @@ def show_movie_dialog(rec):
         border-radius: 8px; 
         overflow: hidden;
         position: relative;
-        height: 600px; /* Taller */
+        height: 650px; /* Taller to fit everything */
         box-shadow: 0 10px 40px rgba(0,0,0,0.8);
         border: none; /* No bezel */
-        margin-bottom: 20px;
+        margin-bottom: 0px; /* Flush */
     }}
     .db-video-layer {{
         position: absolute;
         top: 0; left: 0; width: 100%; height: 100%;
         z-index: 1;
-        opacity: 0.6; /* Increased opacity for better visibility */
+        opacity: 0.4; /* Slightly darker to make text pop */
         pointer-events: none;
     }}
     .db-content-layer {{
@@ -473,46 +492,50 @@ def show_movie_dialog(rec):
         padding: 40px;
         z-index: 2;
         /* improved gradient for readability */
-        background: linear-gradient(to top, #000 20%, rgba(0,0,0,0.8) 50%, transparent 100%);
+        background: linear-gradient(to top, #000 15%, rgba(0,0,0,0.95) 50%, transparent 100%);
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
     }}
     .db-title {{
         font-family: 'Bebas Neue', sans-serif;
         font-size: 3.5rem;
-        line-height: 1;
-        margin-bottom: 10px;
+        line-height: 0.9;
+        margin-bottom: 5px;
         color: #fff;
-        text-shadow: 2px 2px 10px rgba(0,0,0,0.9);
+        text-shadow: 2px 2px 10px rgba(0,0,0,1);
     }}
     .db-meta {{
         font-family: 'Montserrat', sans-serif;
-        font-size: 0.9rem;
+        font-size: 0.85rem;
         color: #e50914;
         font-weight: 700;
-        margin-bottom: 15px;
+        margin-bottom: 10px;
         text-transform: uppercase;
         letter-spacing: 1px;
         text-shadow: 1px 1px 2px #000;
     }}
     .db-overview {{
         font-family: 'Montserrat', sans-serif;
-        font-size: 1rem;
-        color: #e0e0e0;
-        line-height: 1.6;
+        font-size: 0.95rem;
+        color: #ccc;
+        line-height: 1.5;
         max-width: 100%;
-        text-shadow: 1px 1px 4px rgba(0,0,0,0.9);
-        margin-bottom: 20px;
-        /* Full text visible */
-        background: rgba(0,0,0,0.4);
-        padding: 20px;
-        border-radius: 12px;
-        backdrop-filter: blur(4px);
+        text-shadow: 1px 1px 2px rgba(0,0,0,1);
+        margin-bottom: 15px;
     }}
     .db-credits {{
         font-size: 0.8rem;
-        color: #ccc;
+        color: #999;
         text-shadow: 1px 1px 2px #000;
+        margin-bottom: 15px;
     }}
-    .db-credits strong {{ color: #fff; }}
+    .db-credits strong {{ color: #eee; }}
+    .db-providers {{
+        margin-top: 5px;
+        padding-top: 15px;
+        border-top: 1px solid rgba(255,255,255,0.1);
+    }}
     </style>
     
     <div class="dialog-billboard">
@@ -520,30 +543,18 @@ def show_movie_dialog(rec):
             {video_embed}
         </div>
         <div class="db-content-layer">
-            <div class="db-title">{rec.get('title')}</div>
-            <div class="db-meta">⭐ {rating:.1f} • {year} • {runtime} • {str(genres).split(',')[0]}</div>
-            <div class="db-overview">{rec.get('overview')}</div>
-            <div class="db-credits">
-                Directed by <strong>{credits.get('director')}</strong> • Cast: <strong>{credits.get('cast')}</strong>
+            <div>
+                <div class="db-title">{rec.get('title')}</div>
+                <div class="db-meta">⭐ {rating:.1f} • {year} • {runtime} • {str(genres).split(',')[0]}</div>
+                <div class="db-overview">{rec.get('overview')}</div>
+                <div class="db-credits">
+                    Directed by <strong>{credits.get('director')}</strong> • Cast: <strong>{credits.get('cast')}</strong>
+                </div>
             </div>
+            {provider_html}
         </div>
     </div>
     """, unsafe_allow_html=True)
-
-    # Watch Providers
-    st.markdown("### 📺 Watch Now")
-    if providers:
-        # Build HTML without indentation to avoid Markdown code block parsing
-        cards_html = ""
-        for p in providers[:6]:
-            logo = f"https://image.tmdb.org/t/p/original{p.get('logo_path')}"
-            name = p.get('provider_name')
-            # Minified HTML string
-            cards_html += f'<div style="display:inline-block;margin-right:15px;text-align:center;"><img src="{logo}" style="width:50px;border-radius:12px;box-shadow:0 4px 10px rgba(0,0,0,0.5);" title="{name}"><div style="font-size:0.65rem;margin-top:6px;color:#aaa;max-width:50px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{name.split()[0]}</div></div>'
-            
-        st.markdown(f'<div style="background:rgba(255,255,255,0.05);padding:15px;border-radius:12px;">{cards_html}</div>', unsafe_allow_html=True)
-    else:
-        st.info("Streaming information not available for this title.")
 
 
 def format_option(m):
