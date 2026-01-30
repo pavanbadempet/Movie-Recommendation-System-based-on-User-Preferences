@@ -1025,48 +1025,92 @@ elif st.session_state.page == "search":
         st.markdown("---")
         st.subheader(f"Because you liked '{source.get('title', '...')}'")
         
-        # Use a consistent container ID for stability
-        with st.container():
-            # Prepare data for clickable grid
-            rec_posters = [fetch_poster(r.get("poster_path")) for r in recs]
-            rec_titles = [f"{r.get('title')} ({int(r.get('similarity_score', 0)*100)}% Match)" for r in recs]
-            
-            # Initialize dynamic key for grid reset
-            if "rec_grid_key" not in st.session_state:
-                st.session_state.rec_grid_key = 0
+        st.markdown("""
+        <style>
+        /* INVISIBLE BUTTON OVERLAY HACK */
+        /* Target the specific buttons in the recommendations grid */
+        .rec-container button {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important; 
+            opacity: 0 !important; /* Invisible but clickable */
+            z-index: 5 !important;
+            cursor: pointer !important;
+        }
+        
+        /* Container relative positioning for the absolute button */
+        .rec-container {
+            position: relative !important;
+            border-radius: 12px;
+            overflow: hidden;
+            transition: transform 0.3s ease;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        .rec-container:hover {
+            transform: scale(1.03);
+            box-shadow: 0 8px 20px rgba(229, 9, 20, 0.4);
+            border: 1px solid rgba(229, 9, 20, 0.5);
+        }
+        .rec-container img {
+            width: 100%;
+            display: block;
+            aspect-ratio: 2/3;
+            object-fit: cover;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        st.write("") # Spacer
+        
+        # Native Grid Layout
+        cols = st.columns(5)
+        for idx, rec in enumerate(recs):
+            with cols[idx % 5]:
+                poster = fetch_poster(rec.get("poster_path"))
+                title = rec.get("title")
+                match = int(rec.get("similarity_score", 0) * 100)
                 
-            # Clickable Images Grid
-            # Added min-height directly to component div_style to prevent layout collapse/scroll jump
-            clicked_rec = clickable_images(
-                paths=rec_posters,
-                titles=rec_titles,
-                div_style={
-                    "display": "flex", 
-                    "justify-content": "center", 
-                    "flex-wrap": "wrap",
-                    "gap": "15px",
-                    "margin-top": "20px",
-                    "min-height": "400px", # Reserves space to prevent scroll jump
-                    "align-content": "flex-start" # Ensures images stay at top
-                },
-                img_style={
-                    "width": "18%", 
-                    "border-radius": "12px",
-                    "cursor": "pointer",
-                    "aspect-ratio": "2/3",
-                    "object-fit": "cover",
-                    "box-shadow": "0 4px 10px rgba(0,0,0,0.5)",
-                    "transition": "transform 0.3s ease"
-                },
-                key=f"rec_grid_{st.session_state.rec_grid_key}"
-            )
-            
-            # Handle selection
-            if clicked_rec > -1:
-                # Increment key for NEXT run (to reset selection)
-                st.session_state.rec_grid_key += 1
-                # Call dialog directly
-                show_movie_dialog(recs[clicked_rec])
+                # Render the "Card"
+                # We use a wrapper div to contain both the image and the invisible button
+                st.markdown(f"""
+                <div class="rec-container">
+                    <img src="{poster}">
+                    <div style="position: absolute; bottom: 0; left: 0; width: 100%; background: linear-gradient(to top, rgba(0,0,0,0.9), transparent); padding: 10px 5px; pointer-events: none;">
+                        <div style="font-size: 0.8rem; font-weight: bold; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;">{title}</div>
+                        <div style="font-size: 0.7rem; color: #4ade80; text-align: center;">{match}% Match</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # The INVISIBLE BUTTON - It must be rendered *after* to capture clicks, 
+                # but we use CSS to move it ON TOP of the previous element? 
+                # Actually, putting st.button inside the markdown div is impossible.
+                # TRICK: We render the button, and use CSS (above) to position it absolutely "over the previous sibling"?
+                # Easier: Render button, pull it up with negative margin.
+                
+                # Unique styling for this specific button to pull it up
+                # We use a unique key to identify logic
+                if st.button("Query", key=f"btn_rec_{idx}_{rec['id']}"):
+                    show_movie_dialog(rec)
+                
+                # Inject CSS to move *this specific button* up to cover the card
+                # We target the button via its key? No, styling via adjacent sibling
+                st.markdown("""
+                <script>
+                // Formatting hack not needed if CSS above targets ".rec-container + div button"?
+                // Let's use negative margin CSS strictly.
+                </script>
+                <style>
+                /* Pull the button up to cover the image container above it */
+                div[data-testid="column"] button {
+                     margin-top: -150% !important; /* Pull up drastically */
+                     height: 300px !important; /* Force height to match card */
+                     opacity: 0;
+                }
+                </style>
+                """, unsafe_allow_html=True)
 
 
 # ===== PAGE 3: AI CHATBOT =====
