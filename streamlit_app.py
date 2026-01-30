@@ -414,7 +414,7 @@ def show_movie_dialog(rec):
                 padding: 0 !important;
                 margin: 0 !important;
                 border: none !important;
-                /* Restore black background to hide app text behind, but keep 0 padding */
+                /* Restore black background */
                 background-color: #000 !important;
                 box-shadow: none !important;
             }
@@ -424,27 +424,39 @@ def show_movie_dialog(rec):
                 border: none !important;
                 background-color: #000 !important;
             }
-            /* Remove standard space from the vertical block */
+            /* Remove standard space */
             div[data-testid="stVerticalBlock"] {
                 gap: 0 !important;
                 padding: 0 !important;
                 background-color: #000 !important;
             }
-            /* Force the billboard to touch edges if inside a stVerticalBlock */
+            /* Force the billboard to touch edges */
             div[data-testid="stVerticalBlock"] > div {
                 width: 100% !important;
             }
-            /* HIDE THE HEADER (Close button stays accessible but floating) */
-            div[data-testid="stDialog"] header {
-                display: none;
+            /* AGGRESSIVE HEADER HIDING */
+            div[data-testid="stDialog"] header, div[role="dialog"] header {
+                display: none !important;
+                height: 0px !important;
+                margin: 0px !important;
+                padding: 0px !important;
+                visibility: hidden !important;
             }
-            /* SCALE UP CLOSE BUTTON */
+            /* Move content up to cover any persistent gap */
+            div[data-testid="stDialog"] .stMainBlock, div[role="dialog"] .stMainBlock {
+                margin-top: -1rem !important;
+                padding-top: 0 !important;
+            }
+            /* SCALE UP CLOSE BUTTON - REPOSITIONED */
             div[data-testid="stDialog"] button[aria-label="Close"] {
-                transform: scale(1.5);
-                background-color: rgba(0,0,0,0.5);
+                transform: scale(1.4);
+                background-color: rgba(0,0,0,0.6);
                 border-radius: 50%;
                 color: white;
-                z-index: 9999;
+                position: absolute;
+                top: 15px;
+                right: 15px;
+                z-index: 99999;
             }
             /* Ensure the modal content takes full width */
             section[tabindex="0"], section[tabindex="0"] > div, section[tabindex="0"] > div > div {
