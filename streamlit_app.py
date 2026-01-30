@@ -1058,11 +1058,11 @@ elif st.session_state.page == "search":
         
         # Handle selection
         if clicked_rec > -1:
-            st.session_state.selected_rec = recs[clicked_rec]
-            st.session_state.show_dialog = True
-            # Force component reset for next run so selection doesn't stick
+            # Increment key for NEXT run (to reset selection)
             st.session_state.rec_grid_key += 1
-            st.rerun()
+            # Call dialog directly - NO RERUN needed here
+            # (Streamlit will re-run automatically when dialog closes)
+            show_movie_dialog(recs[clicked_rec])
 
 
 # ===== PAGE 3: AI CHATBOT =====
