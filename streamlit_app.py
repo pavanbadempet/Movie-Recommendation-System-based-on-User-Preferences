@@ -404,6 +404,21 @@ def display_movie_card(rec, tmdb, credits, similarity):
 @st.dialog("Movie Details", width="large")
 def show_movie_dialog(rec):
     """Show modal dialog with full movie details."""
+    
+    # --- CSS HACK: Remove padding/bezels from Streamlit Dialog ---
+    st.markdown("""
+        <style>
+            /* Remove padding from the dialog container */
+            div[role="dialog"] > div > div {
+                padding: 0 !important;
+            }
+            /* Remove standard Streamlit block spacing inside dialog */
+            div[data-testid="stDialog"] div[data-testid="stVerticalBlock"] {
+                gap: 0 !important;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+
     with st.spinner("Fetching details..."):
         movie_id = rec.get("id")
         tmdb = fetch_tmdb_details(movie_id)
