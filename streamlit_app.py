@@ -1013,25 +1013,38 @@ elif st.session_state.page == "search":
         st.markdown("---")
         st.subheader(f"Because you liked '{source.get('title', '...')}'")
         
-        # Grid Layout
-        cols = st.columns(5)
-        for idx, rec in enumerate(recs):
-            with cols[idx % 5]:
-                poster = fetch_poster(rec.get("poster_path"))
-                title = rec.get("title")
-                match = int(rec.get("similarity_score", 0) * 100)
-                
-                st.markdown(f"""
-                <div style="margin-bottom: 10px; position: relative;">
-                    <img src="{poster}" style="width: 100%; border-radius: 12px; aspect-ratio: 2/3; object-fit: cover;">
-                    <div style="position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.8); color: #4ade80; padding: 2px 8px; border-radius: 8px; font-size: 0.7rem; font-weight: bold;">{match}%</div>
-                </div>
-                <div style="font-size: 0.85rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{title}</div>
-                """, unsafe_allow_html=True)
-                
-                if st.button(f"Details", key=f"rec_{idx}", use_container_width=True):
-                    st.session_state.selected_rec = rec
-                    st.session_state.show_dialog = True
+        # Prepare data for clickable grid
+        rec_posters = [fetch_poster(r.get("poster_path")) for r in recs]
+        rec_titles = [f"{r.get('title')} ({int(r.get('similarity_score', 0)*100)}% Match)" for r in recs]
+        
+        # Clickable Images Grid (Matches Homepage Style)
+        clicked_rec = clickable_images(
+            paths=rec_posters,
+            titles=rec_titles,
+            div_style={
+                "display": "flex", 
+                "justify-content": "center", 
+                "flex-wrap": "wrap",
+                "gap": "15px",
+                "margin-top": "20px"
+            },
+            img_style={
+                "width": "18%", # roughly 5 per row
+                "border-radius": "12px",
+                "cursor": "pointer",
+                "aspect-ratio": "2/3",
+                "object-fit": "cover",
+                "box-shadow": "0 4px 10px rgba(0,0,0,0.5)",
+                "transition": "transform 0.3s ease"
+            },
+            key="rec_grid"
+        )
+        
+        # Handle selection
+        if clicked_rec > -1:
+            st.session_state.selected_rec = recs[clicked_rec]
+            st.session_state.show_dialog = True
+            st.rerun()
 
 
 # ===== PAGE 3: AI CHATBOT =====
