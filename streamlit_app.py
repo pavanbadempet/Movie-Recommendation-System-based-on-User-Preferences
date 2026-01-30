@@ -2,6 +2,7 @@
 # Run: streamlit run app.py
 
 import streamlit as st
+import streamlit.components.v1 as components
 import requests
 import time
 import os
@@ -11,6 +12,29 @@ st.set_page_config(
     page_title="Movie Recommendation System",
     page_icon="🎬",
     layout="wide"
+)
+
+# === SCROLL POSITION RESTORATION ===
+# Injects JavaScript that saves scroll position before any click
+# and restores it after Streamlit reruns the page.
+components.html(
+    """
+    <script>
+        // Restore scroll position from sessionStorage on page load
+        const savedScroll = sessionStorage.getItem('streamlitScrollPos');
+        if (savedScroll) {
+            window.scrollTo(0, parseInt(savedScroll));
+            sessionStorage.removeItem('streamlitScrollPos');
+        }
+        
+        // Save scroll position before any click event
+        document.addEventListener('click', function(e) {
+            sessionStorage.setItem('streamlitScrollPos', window.scrollY.toString());
+        }, true); // Use capture phase to run before Streamlit's handlers
+    </script>
+    """,
+    height=0,
+    scrolling=False
 )
 
 # Premium CSS - Hide branding + full-screen dark theme + WHITE TEXT
