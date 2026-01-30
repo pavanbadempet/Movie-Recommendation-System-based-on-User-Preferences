@@ -1025,20 +1025,8 @@ elif st.session_state.page == "search":
         st.markdown("---")
         st.subheader(f"Because you liked '{source.get('title', '...')}'")
         
-        st.markdown(f"""
-        <style>
-        /* Enforce min-height on the specific container holding the grid to prevent scroll jump */
-        .rec-grid-container {{
-            min-height: 400px;
-            transition: all 0.2s ease;
-        }}
-        </style>
-        """, unsafe_allow_html=True)
-        
-        # Use a container with a specific class/style to hold the grid
+        # Use a consistent container ID for stability
         with st.container():
-            st.markdown('<div class="rec-grid-container">', unsafe_allow_html=True)
-            
             # Prepare data for clickable grid
             rec_posters = [fetch_poster(r.get("poster_path")) for r in recs]
             rec_titles = [f"{r.get('title')} ({int(r.get('similarity_score', 0)*100)}% Match)" for r in recs]
@@ -1048,6 +1036,7 @@ elif st.session_state.page == "search":
                 st.session_state.rec_grid_key = 0
                 
             # Clickable Images Grid
+            # Added min-height directly to component div_style to prevent layout collapse/scroll jump
             clicked_rec = clickable_images(
                 paths=rec_posters,
                 titles=rec_titles,
@@ -1056,7 +1045,9 @@ elif st.session_state.page == "search":
                     "justify-content": "center", 
                     "flex-wrap": "wrap",
                     "gap": "15px",
-                    "margin-top": "20px"
+                    "margin-top": "20px",
+                    "min-height": "400px", # Reserves space to prevent scroll jump
+                    "align-content": "flex-start" # Ensures images stay at top
                 },
                 img_style={
                     "width": "18%", 
@@ -1069,8 +1060,6 @@ elif st.session_state.page == "search":
                 },
                 key=f"rec_grid_{st.session_state.rec_grid_key}"
             )
-            
-            st.markdown('</div>', unsafe_allow_html=True)
             
             # Handle selection
             if clicked_rec > -1:
