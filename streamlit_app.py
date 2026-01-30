@@ -430,11 +430,12 @@ def show_movie_dialog(rec):
     st.markdown(f"""
     <style>
     .dialog-billboard {{
-        background: radial-gradient(circle at 70% 30%, rgba(20,20,30,0.4), rgba(0,0,0,0.95));
+        /* Dark background but allow video to shine through */
+        background: #000;
         border-radius: 15px;
         overflow: hidden;
         position: relative;
-        height: 450px;
+        height: 500px;
         box-shadow: 0 10px 40px rgba(0,0,0,0.6);
         border: 1px solid rgba(255,255,255,0.1);
         margin-bottom: 20px;
@@ -443,23 +444,24 @@ def show_movie_dialog(rec):
         position: absolute;
         top: 0; left: 0; width: 100%; height: 100%;
         z-index: 1;
-        opacity: 0.4;
-        filter: contrast(1.1) saturate(1.1);
+        opacity: 0.6; /* Increased opacity for better visibility */
+        pointer-events: none;
     }}
     .db-content-layer {{
         position: absolute;
         bottom: 0; left: 0; width: 100%;
         padding: 40px;
         z-index: 2;
-        background: linear-gradient(to top, #000 10%, transparent 100%);
+        /* improved gradient for readability */
+        background: linear-gradient(to top, #000 20%, rgba(0,0,0,0.8) 50%, transparent 100%);
     }}
     .db-title {{
         font-family: 'Bebas Neue', sans-serif;
         font-size: 3.5rem;
-        line-height: 0.9;
+        line-height: 1;
         margin-bottom: 10px;
         color: #fff;
-        text-shadow: 2px 2px 10px rgba(0,0,0,0.8);
+        text-shadow: 2px 2px 10px rgba(0,0,0,0.9);
     }}
     .db-meta {{
         font-family: 'Montserrat', sans-serif;
@@ -469,23 +471,29 @@ def show_movie_dialog(rec):
         margin-bottom: 15px;
         text-transform: uppercase;
         letter-spacing: 1px;
+        text-shadow: 1px 1px 2px #000;
     }}
     .db-overview {{
         font-family: 'Montserrat', sans-serif;
         font-size: 1rem;
-        color: #ddd;
+        color: #e0e0e0;
         line-height: 1.6;
-        max-width: 80%;
-        text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        max-width: 90%;
+        text-shadow: 1px 1px 4px rgba(0,0,0,0.9);
         margin-bottom: 20px;
         display: -webkit-box;
         -webkit-line-clamp: 4;
         -webkit-box-orient: vertical;
         overflow: hidden;
+        background: rgba(0,0,0,0.3); /* Slight backdrop for text */
+        padding: 10px;
+        border-radius: 8px;
+        backdrop-filter: blur(2px);
     }}
     .db-credits {{
         font-size: 0.8rem;
-        color: #aaa;
+        color: #ccc;
+        text-shadow: 1px 1px 2px #000;
     }}
     .db-credits strong {{ color: #fff; }}
     </style>
@@ -508,17 +516,15 @@ def show_movie_dialog(rec):
     # Watch Providers
     if providers:
         st.markdown("### 📺 Watch Now")
-        icon_html = []
+        # Build HTML without indentation to avoid Markdown code block parsing
+        cards_html = ""
         for p in providers[:6]:
             logo = f"https://image.tmdb.org/t/p/original{p.get('logo_path')}"
             name = p.get('provider_name')
-            icon_html.append(f"""
-            <div style="display: inline-block; margin-right: 15px; text-align: center;">
-                <img src="{logo}" style="width: 50px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.5);" title="{name}">
-                <div style="font-size: 0.65rem; margin-top: 6px; color: #aaa; max-width: 50px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{name.split()[0]}</div>
-            </div>
-            """)
-        st.markdown(f'<div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px;">{"".join(icon_html)}</div>', unsafe_allow_html=True)
+            # Minified HTML string
+            cards_html += f'<div style="display:inline-block;margin-right:15px;text-align:center;"><img src="{logo}" style="width:50px;border-radius:12px;box-shadow:0 4px 10px rgba(0,0,0,0.5);" title="{name}"><div style="font-size:0.65rem;margin-top:6px;color:#aaa;max-width:50px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{name.split()[0]}</div></div>'
+            
+        st.markdown(f'<div style="background:rgba(255,255,255,0.05);padding:15px;border-radius:12px;">{cards_html}</div>', unsafe_allow_html=True)
 
 
 def format_option(m):
