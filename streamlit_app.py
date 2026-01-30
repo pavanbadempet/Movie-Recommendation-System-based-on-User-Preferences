@@ -430,62 +430,78 @@ def show_movie_dialog(rec):
     """Show modal dialog with full movie details."""
     
     # --- CSS HACK: Remove padding/bezels from Streamlit Dialog ---
-    # --- CSS HACK: Remove padding/bezels from Streamlit Dialog ---
     st.markdown("""
         <style>
-            /* TARGET: The main dialog container */
+            /* === AGGRESSIVE DIALOG CLEANUP === */
+            
+            /* TARGET: The overlay dialog modal itself */
             div[data-testid="stDialog"], div[role="dialog"] {
                 padding: 0 !important;
                 margin: 0 !important;
                 border: none !important;
-                /* Restore black background */
-                background-color: #000 !important;
-                box-shadow: none !important;
+                background-color: #0a0a0f !important;
+                box-shadow: 0 0 50px rgba(0,0,0,0.9) !important;
+                overflow: hidden !important;
             }
-            /* TARGET: The specific content container provided by Streamlit */
-            div[role="dialog"] > div > div {
+            
+            /* TARGET: All nested containers inside the dialog */
+            div[role="dialog"] > div,
+            div[role="dialog"] > div > div,
+            div[role="dialog"] > div > div > div,
+            div[role="dialog"] section,
+            div[role="dialog"] section > div {
                 padding: 0 !important;
+                padding-top: 0 !important;
+                margin: 0 !important;
                 border: none !important;
-                background-color: #000 !important;
+                background-color: #0a0a0f !important;
             }
-            /* Remove standard space */
-            div[data-testid="stVerticalBlock"] {
+            
+            /* TARGET: Vertical block (the main content column) */
+            div[role="dialog"] div[data-testid="stVerticalBlock"] {
                 gap: 0 !important;
                 padding: 0 !important;
-                background-color: #000 !important;
+                margin: 0 !important;
             }
-            /* Force the billboard to touch edges */
-            div[data-testid="stVerticalBlock"] > div {
-                width: 100% !important;
+            
+            /* TARGET: The FIRST child of vertical block (often an empty spacer) */
+            div[role="dialog"] div[data-testid="stVerticalBlock"] > div:first-child {
+                margin: 0 !important;
+                padding: 0 !important;
+                min-height: 0 !important;
+                height: 0 !important;
             }
-            /* AGGRESSIVE HEADER HIDING */
-            div[data-testid="stDialog"] header, div[role="dialog"] header {
+            
+            /* NUKE: Header element completely */
+            div[role="dialog"] header,
+            div[data-testid="stDialog"] header,
+            div[role="dialog"] [data-testid="stModalHeader"],
+            div[role="dialog"] [data-testid="stDialogHeader"] {
                 display: none !important;
-                height: 0px !important;
-                margin: 0px !important;
-                padding: 0px !important;
+                height: 0 !important;
+                max-height: 0 !important;
+                width: 0 !important;
                 visibility: hidden !important;
+                position: absolute !important;
+                left: -9999px !important;
             }
-            /* Move content up to cover any persistent gap */
-            div[data-testid="stDialog"] .stMainBlock, div[role="dialog"] .stMainBlock {
-                margin-top: -1rem !important;
-                padding-top: 0 !important;
-            }
-            /* SCALE UP CLOSE BUTTON - REPOSITIONED */
-            div[data-testid="stDialog"] button[aria-label="Close"] {
+            
+            /* CLOSE BUTTON: Repositioned to top-right */
+            div[role="dialog"] button[aria-label="Close"] {
                 transform: scale(1.4);
-                background-color: rgba(0,0,0,0.6);
+                background-color: rgba(0,0,0,0.6) !important;
                 border-radius: 50%;
-                color: white;
-                position: absolute;
-                top: 15px;
-                right: 15px;
-                z-index: 99999;
+                color: white !important;
+                position: fixed !important;
+                top: 10px !important;
+                right: 15px !important;
+                z-index: 99999 !important;
             }
-            /* Ensure the modal content takes full width */
-            section[tabindex="0"], section[tabindex="0"] > div, section[tabindex="0"] > div > div {
-                 padding: 0 !important;
-                 background-color: #000 !important;
+            
+            /* Pull ALL dialog content up to eliminate the gap */
+            div[role="dialog"] section[tabindex="0"] {
+                margin-top: -2rem !important;
+                padding-top: 0 !important;
             }
         </style>
     """, unsafe_allow_html=True)
