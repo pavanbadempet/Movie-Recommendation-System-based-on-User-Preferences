@@ -1017,6 +1017,10 @@ elif st.session_state.page == "search":
         rec_posters = [fetch_poster(r.get("poster_path")) for r in recs]
         rec_titles = [f"{r.get('title')} ({int(r.get('similarity_score', 0)*100)}% Match)" for r in recs]
         
+        # Initialize dynamic key for grid reset
+        if "rec_grid_key" not in st.session_state:
+            st.session_state.rec_grid_key = 0
+            
         # Clickable Images Grid (Matches Homepage Style)
         clicked_rec = clickable_images(
             paths=rec_posters,
@@ -1037,13 +1041,15 @@ elif st.session_state.page == "search":
                 "box-shadow": "0 4px 10px rgba(0,0,0,0.5)",
                 "transition": "transform 0.3s ease"
             },
-            key="rec_grid"
+            key=f"rec_grid_{st.session_state.rec_grid_key}"
         )
         
         # Handle selection
         if clicked_rec > -1:
             st.session_state.selected_rec = recs[clicked_rec]
             st.session_state.show_dialog = True
+            # Force component reset for next run so selection doesn't stick
+            st.session_state.rec_grid_key += 1
             st.rerun()
 
 
