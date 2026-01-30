@@ -1035,93 +1035,118 @@ elif st.session_state.page == "search":
         
         st.markdown("""
         <style>
-        .rec-container {
-             min-height: 400px;
+        /* FIXED HEIGHT CARD CONTAINER */
+        .rec-card-container {
+            position: relative;
+            height: 280px; 
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            transition: transform 0.3s ease;
+        }
+        .rec-card-container:hover {
+            transform: scale(1.03);
+            border: 1px solid rgba(229, 9, 20, 0.5);
+        }
+        
+        /* IMAGE STYLING */
+        /* Target images inside our custom container */
+        .rec-card-container img {
+            width: 100%;
+            height: 280px !important;
+            object-fit: cover; 
+            display: block;
+        }
+        
+        /* TEXT OVERLAY */
+        .rec-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 80px;
+            background: linear-gradient(to top, rgba(0,0,0,0.95), transparent);
+            pointer-events: none; /* Let clicks pass through to button */
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            padding: 10px 5px;
+            z-index: 2;
+        }
+
+        /* INVISIBLE BUTTON OVERLAY */
+        /* We target the button that sits immediately below the card container in the DOM */
+        /* Since we can't wrap st.button, we use a negative margin hack on the button itself */
+        
+        /* Scope this to the column to avoid affecting other buttons */
+        div[data-testid="column"] .stButton button {
+            width: 100% !important;
+            height: 280px !important;
+            margin-top: -290px !important; /* Pull up to cover the image */
+            position: relative; 
+            z-index: 5; /* Ensure it's on top of image and overlay */
+            opacity: 0; /* Invisible */
+            cursor: pointer;
+            border: none;
+        }
+        
+        div[data-testid="column"] .stButton button:hover {
+            border: none; /* Prevent hover borders */
+        }
+        
+        /* Hide the small whitespace Stremalit adds around buttons */
+        div[data-testid="column"] .stButton {
+            line-height: 0;
         }
         </style>
         """, unsafe_allow_html=True)
 
         # --- FRAGMENT ISOLATION ---
-        # We use st.fragment (available in Streamlit 1.37+) to isolate the grid's rerun.
-        # This prevents the ENTIRE page from reloading and scrolling to top when a user clicks.
+        # Isolates this section to prevent full page reload/scroll-jump
         if hasattr(st, "fragment"):
             @st.fragment
             def show_rec_grid():
-                # Prepare data
-                rec_posters = [fetch_poster(r.get("poster_path")) for r in recs]
-                rec_titles = [f"{r.get('title')} ({int(r.get('similarity_score', 0)*100)}% Match)" for r in recs]
-                
-                # Prop Toggle State (Localized to Fragment if possible, but session state is global)
-                if "grid_toggle" not in st.session_state:
-                    st.session_state.grid_toggle = 0
-                
-                toggle_val = "1.0" if st.session_state.grid_toggle % 2 == 0 else "0.999"
-                
-                clicked_rec = clickable_images(
-                    paths=rec_posters,
-                    titles=rec_titles,
-                    div_style={
-                        "display": "flex", 
-                        "justify-content": "center", 
-                        "flex-wrap": "wrap",
-                        "gap": "15px",
-                        "margin-top": "20px",
-                        "min-height": "400px",
-                        "align-content": "flex-start",
-                        "opacity": toggle_val
-                    },
-                    img_style={
-                        "width": "18%", 
-                        "border-radius": "12px",
-                        "cursor": "pointer",
-                        "aspect-ratio": "2/3",
-                        "object-fit": "cover",
-                        "box-shadow": "0 4px 10px rgba(0,0,0,0.5)",
-                        "transition": "transform 0.3s ease",
-                    },
-                    key="rec_grid_fragment" # Constant key
-                )
-                
-                if clicked_rec > -1:
-                    st.session_state.grid_toggle += 1
-                    # Opening the dialog will still trigger a script rerun on close, 
-                    # but the immediate interaction is handled here.
-                    show_movie_dialog(recs[clicked_rec])
-
+                cols = st.columns(5)
+                for idx, rec in enumerate(recs):
+                    with cols[idx % 5]:
+                        poster = fetch_poster(rec.get("poster_path"))
+                        title = rec.get("title")
+                        match = int(rec.get("similarity_score", 0) * 100)
+                        
+                        # VISUAL LAYER: Image + Text Overlay
+                        # We use a wrapper div to visually group them
+                        st.markdown(f"""
+                        <div class="rec-card-container">
+                            <img src="{poster}">
+                            <div class="rec-overlay">
+                                <div style="font-size: 0.8rem; font-weight: bold; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;">{title}</div>
+                                <div style="font-size: 0.7rem; color: #4ade80; text-align: center;">{match}% Match</div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # INTERACTIVE LAYER: Native Button
+                        # Rendered below, pulled up by CSS
+                        # Using a Space string to ensure height but no text
+                        if st.button(" ", key=f"btn_rec_{idx}_{rec['id']}"):
+                            show_movie_dialog(rec)
+            
             show_rec_grid()
-            
-        else:
-            # Fallback for older Streamlit versions (though we should upgrade)
-            st.warning("Please upgrade Streamlit to >1.37 for smoother scrolling.")
-            
-            # Legacy Logic (Just the grid)
-            rec_posters = [fetch_poster(r.get("poster_path")) for r in recs]
-            rec_titles = [f"{r.get('title')} ({int(r.get('similarity_score', 0)*100)}% Match)" for r in recs]
-            
-            if "grid_toggle" not in st.session_state:
-                st.session_state.grid_toggle = 0
-            toggle_val = "1.0" if st.session_state.grid_toggle % 2 == 0 else "0.999"
 
-            clicked_rec = clickable_images(
-                paths=rec_posters,
-                titles=rec_titles,
-                div_style={
-                    "display": "flex", "justify-content": "center", "flex-wrap": "wrap",
-                    "gap": "15px", "margin-top": "20px", "min-height": "400px",
-                    "align-content": "flex-start", "opacity": toggle_val
-                },
-                img_style={
-                    "width": "18%", "border-radius": "12px", "cursor": "pointer",
-                    "aspect-ratio": "2/3", "object-fit": "cover",
-                    "box-shadow": "0 4px 10px rgba(0,0,0,0.5)",
-                    "transition": "transform 0.3s ease"
-                },
-                key="rec_grid_legacy"
-            )
-            
-            if clicked_rec > -1:
-                st.session_state.grid_toggle += 1
-                show_movie_dialog(recs[clicked_rec])
+        else:
+            # Fallback for older versions (Prop Toggle Logic)
+            st.warning("Please upgrade Streamlit to >1.37 for best experience.")
+            # ... (Existing legacy grid code if needed, or just standard grid)
+            # Reusing the button logic here for consistency if fragment fails
+            cols = st.columns(5)
+            for idx, rec in enumerate(recs):
+                with cols[idx % 5]:
+                    poster = fetch_poster(rec.get("poster_path"))
+                    title = rec.get("title")
+                    match = int(rec.get("similarity_score", 0) * 100)
+                    st.markdown(f"""<div class="rec-card-container"><img src="{poster}"><div class="rec-overlay"><div style="font-size: 0.8rem; font-weight: bold; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;">{title}</div><div style="font-size: 0.7rem; color: #4ade80; text-align: center;">{match}% Match</div></div></div>""", unsafe_allow_html=True)
+                    if st.button(" ", key=f"btn_rec_leg_{idx}_{rec['id']}"):
+                        show_movie_dialog(rec)
 
 
 # ===== PAGE 3: AI CHATBOT =====
