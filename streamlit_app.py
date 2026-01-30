@@ -414,21 +414,21 @@ def show_movie_dialog(rec):
                 padding: 0 !important;
                 margin: 0 !important;
                 border: none !important;
-                /* Make the container transparent so any persisting padding is invisible */
-                background-color: transparent !important;
+                /* Restore black background to hide app text behind, but keep 0 padding */
+                background-color: #000 !important;
                 box-shadow: none !important;
             }
             /* TARGET: The specific content container provided by Streamlit */
             div[role="dialog"] > div > div {
                 padding: 0 !important;
                 border: none !important;
-                background-color: transparent !important;
+                background-color: #000 !important;
             }
             /* Remove standard space from the vertical block */
             div[data-testid="stVerticalBlock"] {
                 gap: 0 !important;
                 padding: 0 !important;
-                background-color: transparent !important; /* Ensure vertical block is clear */
+                background-color: #000 !important;
             }
             /* Force the billboard to touch edges if inside a stVerticalBlock */
             div[data-testid="stVerticalBlock"] > div {
@@ -438,10 +438,18 @@ def show_movie_dialog(rec):
             div[data-testid="stDialog"] header {
                 display: none;
             }
+            /* SCALE UP CLOSE BUTTON */
+            div[data-testid="stDialog"] button[aria-label="Close"] {
+                transform: scale(1.5);
+                background-color: rgba(0,0,0,0.5);
+                border-radius: 50%;
+                color: white;
+                z-index: 9999;
+            }
             /* Ensure the modal content takes full width */
             section[tabindex="0"], section[tabindex="0"] > div, section[tabindex="0"] > div > div {
                  padding: 0 !important;
-                 background-color: transparent !important;
+                 background-color: #000 !important;
             }
         </style>
     """, unsafe_allow_html=True)
@@ -483,14 +491,11 @@ def show_movie_dialog(rec):
     st.markdown(f"""
     <style>
     .dialog-billboard {{
-        /* Dark background but allow video to shine through */
         background: #000;
-        /* FULL SCREEN IMMERSION: No radius, full width */
         border-radius: 0px !important; 
         overflow: hidden;
         position: relative;
         width: 100% !important;
-        /* Force 16:9 aspect ratio to match YouTube and eliminate black bars */
         aspect-ratio: 16 / 9;
         height: auto; 
         box-shadow: none;
@@ -501,7 +506,7 @@ def show_movie_dialog(rec):
         position: absolute;
         top: 0; left: 0; width: 100%; height: 100%;
         z-index: 1;
-        opacity: 0.4; /* Slightly darker to make text pop */
+        opacity: 0.4;
         pointer-events: none;
     }}
     .db-content-layer {{
@@ -509,7 +514,6 @@ def show_movie_dialog(rec):
         bottom: 0; left: 0; width: 100%;
         padding: 40px;
         z-index: 2;
-        /* improved gradient for readability */
         background: linear-gradient(to top, #000 15%, rgba(0,0,0,0.95) 50%, transparent 100%);
         display: flex;
         flex-direction: column;
@@ -555,24 +559,7 @@ def show_movie_dialog(rec):
         border-top: 1px solid rgba(255,255,255,0.1);
     }}
     </style>
-    
-    <div class="dialog-billboard">
-        <div class="db-video-layer">
-            {video_embed}
-        </div>
-        <div class="db-content-layer">
-            <div>
-                <div class="db-title">{rec.get('title')}</div>
-                <div class="db-meta">⭐ {rating:.1f} • {year} • {runtime} • {str(genres).split(',')[0]}</div>
-                <div class="db-overview">{rec.get('overview')}</div>
-                <div class="db-credits">
-                    Directed by <strong>{credits.get('director')}</strong> • Cast: <strong>{credits.get('cast')}</strong>
-                </div>
-            </div>
-            {provider_html}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    <div class="dialog-billboard"><div class="db-video-layer">{video_embed}</div><div class="db-content-layer"><div><div class="db-title">{rec.get('title')}</div><div class="db-meta">⭐ {rating:.1f} • {year} • {runtime} • {str(genres).split(',')[0]}</div><div class="db-overview">{rec.get('overview')}</div><div class="db-credits">Directed by <strong>{credits.get('director')}</strong> • Cast: <strong>{credits.get('cast')}</strong></div></div>{provider_html}</div></div>""", unsafe_allow_html=True)
 
 
 def format_option(m):
