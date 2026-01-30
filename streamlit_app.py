@@ -401,6 +401,171 @@ def display_movie_card(rec, tmdb, credits, similarity):
     """, unsafe_allow_html=True)
 
 
+@st.dialog(" ", width="large")
+def show_movie_dialog(rec):
+    """Show modal dialog with full movie details."""
+    
+    # --- CSS HACK: Remove padding/bezels from Streamlit Dialog ---
+    # --- CSS HACK: Remove padding/bezels from Streamlit Dialog ---
+    st.markdown("""
+        <style>
+            /* TARGET: The main dialog container */
+            div[data-testid="stDialog"], div[role="dialog"] {
+                padding: 0 !important;
+                margin: 0 !important;
+                border: none !important;
+                /* Restore black background to hide app text behind, but keep 0 padding */
+                background-color: #000 !important;
+                box-shadow: none !important;
+            }
+            /* TARGET: The specific content container provided by Streamlit */
+            div[role="dialog"] > div > div {
+                padding: 0 !important;
+                border: none !important;
+                background-color: #000 !important;
+            }
+            /* Remove standard space from the vertical block */
+            div[data-testid="stVerticalBlock"] {
+                gap: 0 !important;
+                padding: 0 !important;
+                background-color: #000 !important;
+            }
+            /* Force the billboard to touch edges if inside a stVerticalBlock */
+            div[data-testid="stVerticalBlock"] > div {
+                width: 100% !important;
+            }
+            /* HIDE THE HEADER (Close button stays accessible but floating) */
+            div[data-testid="stDialog"] header {
+                display: none;
+            }
+            /* SCALE UP CLOSE BUTTON */
+            div[data-testid="stDialog"] button[aria-label="Close"] {
+                transform: scale(1.5);
+                background-color: rgba(0,0,0,0.5);
+                border-radius: 50%;
+                color: white;
+                z-index: 9999;
+            }
+            /* Ensure the modal content takes full width */
+            section[tabindex="0"], section[tabindex="0"] > div, section[tabindex="0"] > div > div {
+                 padding: 0 !important;
+                 background-color: #000 !important;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+
+    with st.spinner("Fetching details..."):
+        movie_id = rec.get("id")
+        tmdb = fetch_tmdb_details(movie_id)
+        credits = fetch_credits(movie_id)
+        trailer_key = fetch_trailer(movie_id)
+        providers = fetch_watch_providers(movie_id)
+        
+    # === CINEMATIC BILLBOARD HEADER ===
+    # Use the same style as the home page hero
+    video_embed = ""
+    if trailer_key:
+        # Autoplay, Mute, Loop, No Controls
+        video_embed = f'<iframe src="https://www.youtube.com/embed/{trailer_key}?autoplay=1&mute=1&controls=0&disablekb=1&modestbranding=1&loop=1&playlist={trailer_key}" style="width:100%; height:100%; border:none; pointer-events: none;"></iframe>'
+    else:
+        poster_url = fetch_poster(tmdb.get("backdrop_path") or rec.get("poster_path"))
+        video_embed = f'<img src="{poster_url}" style="width:100%; height:100%; object-fit:cover; opacity: 0.6;">'
+
+    # Extract Metadata
+    genres = ", ".join([g["name"] for g in tmdb.get("genres", [])[:3]]) if tmdb.get("genres") else rec.get("genres", "")
+    runtime = f"{tmdb.get('runtime', 0)} min" if tmdb.get('runtime') else ""
+    rating = tmdb.get("vote_average", rec.get("vote_average", 0))
+    year = tmdb.get("release_date", "")[:4] or "N/A"
+    
+    # Prepare Provider HTML (Pre-computation for embedding)
+    provider_html = ""
+    if providers:
+        cards = ""
+        for p in providers[:4]: # Limit to 4 to save space
+            logo = f"https://image.tmdb.org/t/p/original{p.get('logo_path')}"
+            name = p.get('provider_name')
+            # Create a Google Search link for the movie on this provider
+            query = f"watch {rec.get('title')} on {name}"
+            url = f"https://www.google.com/search?q={query}"
+            
+            cards += f'<a href="{url}" target="_blank" style="text-decoration:none; cursor:pointer;"><div style="display:inline-block; margin-right:10px; text-align:center; transition: transform 0.2s;"><img src="{logo}" style="width:40px; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.5);" title="Watch on {name}"></div></a>'
+        
+        provider_html = f'<div class="db-providers"><div style="font-size:0.7rem; color:#aaa; margin-bottom:5px; text-transform:uppercase; letter-spacing:1px; font-weight:bold;">Watch Now</div>{cards}</div>'
+
+    st.markdown(f"""
+    <style>
+    .dialog-billboard {{
+        background: #000;
+        border-radius: 0px !important; 
+        overflow: hidden;
+        position: relative;
+        width: 100% !important;
+        aspect-ratio: 16 / 9;
+        height: auto; 
+        box-shadow: none;
+        border: none;
+        margin: 0px;
+    }}
+    .db-video-layer {{
+        position: absolute;
+        top: 0; left: 0; width: 100%; height: 100%;
+        z-index: 1;
+        opacity: 0.4;
+        pointer-events: none;
+    }}
+    .db-content-layer {{
+        position: absolute;
+        bottom: 0; left: 0; width: 100%;
+        padding: 40px;
+        z-index: 2;
+        background: linear-gradient(to top, #000 15%, rgba(0,0,0,0.95) 50%, transparent 100%);
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }}
+    .db-title {{
+        font-family: 'Bebas Neue', sans-serif;
+        font-size: 3.5rem;
+        line-height: 0.9;
+        margin-bottom: 5px;
+        color: #fff;
+        text-shadow: 2px 2px 10px rgba(0,0,0,1);
+    }}
+    .db-meta {{
+        font-family: 'Montserrat', sans-serif;
+        font-size: 0.85rem;
+        color: #e50914;
+        font-weight: 700;
+        margin-bottom: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        text-shadow: 1px 1px 2px #000;
+    }}
+    .db-overview {{
+        font-family: 'Montserrat', sans-serif;
+        font-size: 0.95rem;
+        color: #ccc;
+        line-height: 1.5;
+        max-width: 100%;
+        text-shadow: 1px 1px 2px rgba(0,0,0,1);
+        margin-bottom: 15px;
+    }}
+    .db-credits {{
+        font-size: 0.8rem;
+        color: #999;
+        text-shadow: 1px 1px 2px #000;
+        margin-bottom: 15px;
+    }}
+    .db-credits strong {{ color: #eee; }}
+    .db-providers {{
+        margin-top: 5px;
+        padding-top: 15px;
+        border-top: 1px solid rgba(255,255,255,0.1);
+    }}
+    </style>
+    <div class="dialog-billboard"><div class="db-video-layer">{video_embed}</div><div class="db-content-layer"><div><div class="db-title">{rec.get('title')}</div><div class="db-meta">⭐ {rating:.1f} • {year} • {runtime} • {str(genres).split(',')[0]}</div><div class="db-overview">{rec.get('overview')}</div><div class="db-credits">Directed by <strong>{credits.get('director')}</strong> • Cast: <strong>{credits.get('cast')}</strong></div></div>{provider_html}</div></div>""", unsafe_allow_html=True)
+
+
 def format_option(m):
     """Format movie for dropdown - just title and year."""
     title = m.get("title", "Unknown")
@@ -827,7 +992,7 @@ elif st.session_state.page == "search":
                     with st.spinner("Analysing semantics..."):
                         # Call API
                         try:
-                            r = requests.get(f"{API_URL}/recommend/id/{movie['id']}/enriched", params={"n": 10}, timeout=30)
+                            r = requests.get(f"{API_URL}/recommend/id/{movie['id']}", params={"n": 10}, timeout=30)
                             if r.ok:
                                 result = r.json()
                                 st.session_state.recs = result["recommendations"]
@@ -848,25 +1013,36 @@ elif st.session_state.page == "search":
         st.markdown("---")
         st.subheader(f"Because you liked '{source.get('title', '...')}'")
         
-        # Grid Layout
-        cols = st.columns(5)
-        for idx, rec in enumerate(recs):
-            with cols[idx % 5]:
-                poster = fetch_poster(rec.get("poster_path"))
-                title = rec.get("title")
-                match = int(rec.get("similarity_score", 0) * 100)
-                
-                st.markdown(f"""
-                <div style="margin-bottom: 10px; position: relative;">
-                    <img src="{poster}" style="width: 100%; border-radius: 12px; aspect-ratio: 2/3; object-fit: cover;">
-                    <div style="position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.8); color: #4ade80; padding: 2px 8px; border-radius: 8px; font-size: 0.7rem; font-weight: bold;">{match}%</div>
-                </div>
-                <div style="font-size: 0.85rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{title}</div>
-                """, unsafe_allow_html=True)
-                
-                if st.button(f"Details", key=f"rec_{idx}", use_container_width=True):
-                    st.session_state.selected_rec = rec
-                    st.session_state.show_dialog = True
+        # Prepare data for clickable grid
+        rec_posters = [fetch_poster(r.get("poster_path")) for r in recs]
+        rec_titles = [f"{r.get('title')} ({int(r.get('similarity_score', 0)*100)}% Match)" for r in recs]
+        
+        # Clickable Images Grid (Matches Homepage Style)
+        clicked_rec = clickable_images(
+            paths=rec_posters,
+            titles=rec_titles,
+            div_style={
+                "display": "flex", 
+                "justify-content": "center", 
+                "flex-wrap": "wrap",
+                "gap": "15px",
+                "margin-top": "20px"
+            },
+            img_style={
+                "width": "18%", # roughly 5 per row
+                "border-radius": "12px",
+                "cursor": "pointer",
+                "aspect-ratio": "2/3",
+                "object-fit": "cover",
+                "box-shadow": "0 4px 10px rgba(0,0,0,0.5)",
+                "transition": "transform 0.3s ease"
+            },
+            key="rec_grid"
+        )
+        
+        # Handle selection
+        if clicked_rec > -1:
+            show_movie_dialog(recs[clicked_rec])
 
 
 # ===== PAGE 3: AI CHATBOT =====
@@ -913,8 +1089,3 @@ elif st.session_state.page == "chat":
                 except Exception as e:
                     st.error(f"Error: {e}")
 
-
-# Dialog logic (Shared for both modes)
-if st.session_state.get("show_dialog") and st.session_state.get("selected_rec"):
-    show_movie_dialog(st.session_state.selected_rec)
-    st.session_state.show_dialog = False
