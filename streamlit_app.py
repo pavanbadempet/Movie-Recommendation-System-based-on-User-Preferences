@@ -1033,50 +1033,93 @@ elif st.session_state.page == "search":
         </style>
         """, unsafe_allow_html=True)
         
-        # Use a container to hold the grid
-        with st.container():
-            # Prepare data
+        st.markdown("""
+        <style>
+        .rec-container {
+             min-height: 400px;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
+        # --- FRAGMENT ISOLATION ---
+        # We use st.fragment (available in Streamlit 1.37+) to isolate the grid's rerun.
+        # This prevents the ENTIRE page from reloading and scrolling to top when a user clicks.
+        if hasattr(st, "fragment"):
+            @st.fragment
+            def show_rec_grid():
+                # Prepare data
+                rec_posters = [fetch_poster(r.get("poster_path")) for r in recs]
+                rec_titles = [f"{r.get('title')} ({int(r.get('similarity_score', 0)*100)}% Match)" for r in recs]
+                
+                # Prop Toggle State (Localized to Fragment if possible, but session state is global)
+                if "grid_toggle" not in st.session_state:
+                    st.session_state.grid_toggle = 0
+                
+                toggle_val = "1.0" if st.session_state.grid_toggle % 2 == 0 else "0.999"
+                
+                clicked_rec = clickable_images(
+                    paths=rec_posters,
+                    titles=rec_titles,
+                    div_style={
+                        "display": "flex", 
+                        "justify-content": "center", 
+                        "flex-wrap": "wrap",
+                        "gap": "15px",
+                        "margin-top": "20px",
+                        "min-height": "400px",
+                        "align-content": "flex-start",
+                        "opacity": toggle_val
+                    },
+                    img_style={
+                        "width": "18%", 
+                        "border-radius": "12px",
+                        "cursor": "pointer",
+                        "aspect-ratio": "2/3",
+                        "object-fit": "cover",
+                        "box-shadow": "0 4px 10px rgba(0,0,0,0.5)",
+                        "transition": "transform 0.3s ease",
+                    },
+                    key="rec_grid_fragment" # Constant key
+                )
+                
+                if clicked_rec > -1:
+                    st.session_state.grid_toggle += 1
+                    # Opening the dialog will still trigger a script rerun on close, 
+                    # but the immediate interaction is handled here.
+                    show_movie_dialog(recs[clicked_rec])
+
+            show_rec_grid()
+            
+        else:
+            # Fallback for older Streamlit versions (though we should upgrade)
+            st.warning("Please upgrade Streamlit to >1.37 for smoother scrolling.")
+            
+            # Legacy Logic (Just the grid)
             rec_posters = [fetch_poster(r.get("poster_path")) for r in recs]
             rec_titles = [f"{r.get('title')} ({int(r.get('similarity_score', 0)*100)}% Match)" for r in recs]
             
-            # --- CREATIVE SCROLL FIX ---
-            # We need to reset the component (so you can click again) WITHOUT unmounting it (scroll jump).
-            # We do this by toggling a 'dummy' style property that forces a React prop update.
             if "grid_toggle" not in st.session_state:
                 st.session_state.grid_toggle = 0
-            
-            # Toggle between 0.99 and 1.0 opacity on every run to force prop update
-            toggle_val = "1.0" if st.session_state.grid_toggle % 2 == 0 else "0.99"
-            
-            # Clickable Images Grid
+            toggle_val = "1.0" if st.session_state.grid_toggle % 2 == 0 else "0.999"
+
             clicked_rec = clickable_images(
                 paths=rec_posters,
                 titles=rec_titles,
                 div_style={
-                    "display": "flex", 
-                    "justify-content": "center", 
-                    "flex-wrap": "wrap",
-                    "gap": "15px",
-                    "margin-top": "20px",
-                    "min-height": "400px",
-                    "align-content": "flex-start",
-                    "opacity": toggle_val # DUMMY PROP to force update
+                    "display": "flex", "justify-content": "center", "flex-wrap": "wrap",
+                    "gap": "15px", "margin-top": "20px", "min-height": "400px",
+                    "align-content": "flex-start", "opacity": toggle_val
                 },
                 img_style={
-                    "width": "18%", 
-                    "border-radius": "12px",
-                    "cursor": "pointer",
-                    "aspect-ratio": "2/3",
-                    "object-fit": "cover",
+                    "width": "18%", "border-radius": "12px", "cursor": "pointer",
+                    "aspect-ratio": "2/3", "object-fit": "cover",
                     "box-shadow": "0 4px 10px rgba(0,0,0,0.5)",
                     "transition": "transform 0.3s ease"
                 },
-                key="rec_grid_fixed" # CONSTANT KEY prevents unmount/scroll-jump
+                key="rec_grid_legacy"
             )
             
-            # Handle selection
             if clicked_rec > -1:
-                # Toggle state for NEXT run to ensure prop changes
                 st.session_state.grid_toggle += 1
                 show_movie_dialog(recs[clicked_rec])
 
