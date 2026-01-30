@@ -1027,44 +1027,63 @@ elif st.session_state.page == "search":
         
         st.markdown("""
         <style>
-        /* INVISIBLE BUTTON OVERLAY HACK */
-        /* Target the specific buttons in the recommendations grid */
-        .rec-container button {
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            height: 100% !important; 
-            opacity: 0 !important; /* Invisible but clickable */
-            z-index: 5 !important;
-            cursor: pointer !important;
-        }
-        
-        /* Container relative positioning for the absolute button */
+        /* FIXED HEIGHT GRID for consistency and button alignment */
         .rec-container {
-            position: relative !important;
+            position: relative;
             border-radius: 12px;
             overflow: hidden;
-            transition: transform 0.3s ease;
             box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            height: 280px !important; /* Fixed height is crucial for the overlay hack */
         }
-        .rec-container:hover {
-            transform: scale(1.03);
-            box-shadow: 0 8px 20px rgba(229, 9, 20, 0.4);
-            border: 1px solid rgba(229, 9, 20, 0.5);
-        }
+        
         .rec-container img {
             width: 100%;
-            display: block;
-            aspect-ratio: 2/3;
+            height: 280px !important;
             object-fit: cover;
+            display: block;
+        }
+        
+        /* OVERLAY TEXT - Positioning */
+        .rec-overlay {
+            position: absolute; 
+            bottom: 0; 
+            left: 0; 
+            width: 100%; 
+            background: linear-gradient(to top, rgba(0,0,0,0.9), transparent); 
+            padding: 10px 5px; 
+            pointer-events: none;
+            height: 80px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+        }
+
+        /* INVISIBLE BUTTON HACK */
+        /* Target the buttons inside the columns */
+        div[data-testid="column"] .stButton button {
+            width: 100% !important;
+            height: 280px !important; /* Match image height */
+            margin-top: -290px !important; /* Pull UP to cover the image (280px + gap) */
+            opacity: 0 !important; /* Invisible */
+            border: none;
+            cursor: pointer;
+            z-index: 10;
+        }
+        
+        /* HOVER EFFECT via Sibling Selector is hard in Streamlit */
+        /* We rely on the button's internal hover state which we can't style easily if invisible */
+        /* Instead, we use a simple CSS hover on the image container for visual feedback */
+        div[data-testid="column"]:hover .rec-container {
+             transform: scale(1.03);
+             transition: transform 0.3s ease;
+             border: 1px solid rgba(229, 9, 20, 0.5);
         }
         </style>
         """, unsafe_allow_html=True)
         
         st.write("") # Spacer
         
-        # Native Grid Layout
+        # Native Grid Layout with Fixed Logic
         cols = st.columns(5)
         for idx, rec in enumerate(recs):
             with cols[idx % 5]:
@@ -1072,45 +1091,23 @@ elif st.session_state.page == "search":
                 title = rec.get("title")
                 match = int(rec.get("similarity_score", 0) * 100)
                 
-                # Render the "Card"
-                # We use a wrapper div to contain both the image and the invisible button
+                # Render the Visual Layer (Image + Text)
                 st.markdown(f"""
                 <div class="rec-container">
                     <img src="{poster}">
-                    <div style="position: absolute; bottom: 0; left: 0; width: 100%; background: linear-gradient(to top, rgba(0,0,0,0.9), transparent); padding: 10px 5px; pointer-events: none;">
+                    <div class="rec-overlay">
                         <div style="font-size: 0.8rem; font-weight: bold; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;">{title}</div>
                         <div style="font-size: 0.7rem; color: #4ade80; text-align: center;">{match}% Match</div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # The INVISIBLE BUTTON - It must be rendered *after* to capture clicks, 
-                # but we use CSS to move it ON TOP of the previous element? 
-                # Actually, putting st.button inside the markdown div is impossible.
-                # TRICK: We render the button, and use CSS (above) to position it absolutely "over the previous sibling"?
-                # Easier: Render button, pull it up with negative margin.
-                
-                # Unique styling for this specific button to pull it up
-                # We use a unique key to identify logic
-                if st.button("Query", key=f"btn_rec_{idx}_{rec['id']}"):
+                # The Functional Layer (Invisible Button)
+                # We use an empty label so it has no text
+                # We use a unique key
+                # It renders BELOW the markdown, but CSS pulls it UP
+                if st.button(" ", key=f"btn_rec_{idx}_{rec['id']}"):
                     show_movie_dialog(rec)
-                
-                # Inject CSS to move *this specific button* up to cover the card
-                # We target the button via its key? No, styling via adjacent sibling
-                st.markdown("""
-                <script>
-                // Formatting hack not needed if CSS above targets ".rec-container + div button"?
-                // Let's use negative margin CSS strictly.
-                </script>
-                <style>
-                /* Pull the button up to cover the image container above it */
-                div[data-testid="column"] button {
-                     margin-top: -150% !important; /* Pull up drastically */
-                     height: 300px !important; /* Force height to match card */
-                     opacity: 0;
-                }
-                </style>
-                """, unsafe_allow_html=True)
 
 
 # ===== PAGE 3: AI CHATBOT =====
