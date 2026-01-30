@@ -2,7 +2,6 @@
 # Run: streamlit run app.py
 
 import streamlit as st
-import streamlit.components.v1 as components
 import requests
 import time
 import os
@@ -12,29 +11,6 @@ st.set_page_config(
     page_title="Movie Recommendation System",
     page_icon="🎬",
     layout="wide"
-)
-
-# === SCROLL POSITION RESTORATION ===
-# Injects JavaScript that saves scroll position before any click
-# and restores it after Streamlit reruns the page.
-components.html(
-    """
-    <script>
-        // Restore scroll position from sessionStorage on page load
-        const savedScroll = sessionStorage.getItem('streamlitScrollPos');
-        if (savedScroll) {
-            window.scrollTo(0, parseInt(savedScroll));
-            sessionStorage.removeItem('streamlitScrollPos');
-        }
-        
-        // Save scroll position before any click event
-        document.addEventListener('click', function(e) {
-            sessionStorage.setItem('streamlitScrollPos', window.scrollY.toString());
-        }, true); // Use capture phase to run before Streamlit's handlers
-    </script>
-    """,
-    height=0,
-    scrolling=False
 )
 
 # Premium CSS - Hide branding + full-screen dark theme + WHITE TEXT
@@ -429,27 +405,63 @@ def display_movie_card(rec, tmdb, credits, similarity):
 def show_movie_dialog(rec):
     """Show modal dialog with full movie details."""
     
-    # --- CSS: Clean up dialog styling ---
+    # --- CSS HACK: Remove padding/bezels from Streamlit Dialog ---
+    # --- CSS HACK: Remove padding/bezels from Streamlit Dialog ---
     st.markdown("""
         <style>
-            /* Remove dialog border/padding */
-            div[role="dialog"] {
+            /* TARGET: The main dialog container */
+            div[data-testid="stDialog"], div[role="dialog"] {
+                padding: 0 !important;
+                margin: 0 !important;
                 border: none !important;
-                background-color: #0a0a0f !important;
+                /* Restore black background */
+                background-color: #000 !important;
+                box-shadow: none !important;
             }
-            
-            /* Hide the dialog header/title bar */
-            div[role="dialog"] header {
+            /* TARGET: The specific content container provided by Streamlit */
+            div[role="dialog"] > div > div {
+                padding: 0 !important;
+                border: none !important;
+                background-color: #000 !important;
+            }
+            /* Remove standard space */
+            div[data-testid="stVerticalBlock"] {
+                gap: 0 !important;
+                padding: 0 !important;
+                background-color: #000 !important;
+            }
+            /* Force the billboard to touch edges */
+            div[data-testid="stVerticalBlock"] > div {
+                width: 100% !important;
+            }
+            /* AGGRESSIVE HEADER HIDING */
+            div[data-testid="stDialog"] header, div[role="dialog"] header {
                 display: none !important;
+                height: 0px !important;
+                margin: 0px !important;
+                padding: 0px !important;
+                visibility: hidden !important;
             }
-            
-            /* Large close button */
-            div[role="dialog"] button[aria-label="Close"] {
-                transform: scale(1.3);
-                background-color: rgba(0,0,0,0.7) !important;
+            /* Move content up to cover any persistent gap */
+            div[data-testid="stDialog"] .stMainBlock, div[role="dialog"] .stMainBlock {
+                margin-top: -1rem !important;
+                padding-top: 0 !important;
+            }
+            /* SCALE UP CLOSE BUTTON - REPOSITIONED */
+            div[data-testid="stDialog"] button[aria-label="Close"] {
+                transform: scale(1.4);
+                background-color: rgba(0,0,0,0.6);
                 border-radius: 50%;
-                color: white !important;
+                color: white;
+                position: absolute;
+                top: 15px;
+                right: 15px;
                 z-index: 99999;
+            }
+            /* Ensure the modal content takes full width */
+            section[tabindex="0"], section[tabindex="0"] > div, section[tabindex="0"] > div > div {
+                 padding: 0 !important;
+                 background-color: #000 !important;
             }
         </style>
     """, unsafe_allow_html=True)
@@ -1013,85 +1025,44 @@ elif st.session_state.page == "search":
         st.markdown("---")
         st.subheader(f"Because you liked '{source.get('title', '...')}'")
         
-        st.markdown("""
-        <style>
-        .rec-container {
-             min-height: 400px; /* Safety for the grid container itself */
-        }
-        </style>
-        """, unsafe_allow_html=True)
+        # Prepare data for clickable grid
+        rec_posters = [fetch_poster(r.get("poster_path")) for r in recs]
+        rec_titles = [f"{r.get('title')} ({int(r.get('similarity_score', 0)*100)}% Match)" for r in recs]
         
-
-
-        # --- FRAGMENT ISOLATION ---
-        # We use st.fragment to isolate the grid updates if available.
-        # Even without it, the CONSTANT KEY strategy below fixes the scroll jump.
-        if hasattr(st, "fragment"):
-            @st.fragment
-            def show_rec_grid():
-                # Prepare data
-                rec_posters = [fetch_poster(r.get("poster_path")) for r in recs]
-                rec_titles = [f"{r.get('title')} ({int(r.get('similarity_score', 0)*100)}% Match)" for r in recs]
-                
-                # CONSTANT KEY STRATEGY:
-                # We use a fixed key string. This prevents the component from being destroyed/recreated.
-                # This solves the "Scroll Jump" / "Auto Scroll Up".
-                # Limitation: Clicking the EXACT SAME movie twice in a row might not re-trigger.
-                clicked_rec = clickable_images(
-                    paths=rec_posters,
-                    titles=rec_titles,
-                    div_style={
-                        "display": "flex", 
-                        "justify-content": "center", 
-                        "flex-wrap": "wrap",
-                        "gap": "15px",
-                        "margin-top": "20px",
-                        "min-height": "400px",
-                        "align-content": "flex-start"
-                    },
-                    img_style={
-                        "width": "18%", 
-                        "border-radius": "12px",
-                        "cursor": "pointer",
-                        "aspect-ratio": "2/3",
-                        "object-fit": "cover",
-                        "box-shadow": "0 4px 10px rgba(0,0,0,0.5)",
-                        "transition": "transform 0.3s ease",
-                    },
-                    key="rec_grid_constant" 
-                )
-                
-                # Logic to handle click
-                if clicked_rec > -1:
-                    show_movie_dialog(recs[clicked_rec])
-
-            show_rec_grid()
+        # Initialize dynamic key for grid reset
+        if "rec_grid_key" not in st.session_state:
+            st.session_state.rec_grid_key = 0
             
-        else:
-            # Fallback for older Streamlit versions
-            # Exact same logic but without the @st.fragment decorator
-            rec_posters = [fetch_poster(r.get("poster_path")) for r in recs]
-            rec_titles = [f"{r.get('title')} ({int(r.get('similarity_score', 0)*100)}% Match)" for r in recs]
-
-            clicked_rec = clickable_images(
-                paths=rec_posters,
-                titles=rec_titles,
-                div_style={
-                    "display": "flex", "justify-content": "center", "flex-wrap": "wrap",
-                    "gap": "15px", "margin-top": "20px", "min-height": "400px",
-                    "align-content": "flex-start"
-                },
-                img_style={
-                    "width": "18%", "border-radius": "12px", "cursor": "pointer",
-                    "aspect-ratio": "2/3", "object-fit": "cover",
-                    "box-shadow": "0 4px 10px rgba(0,0,0,0.5)",
-                    "transition": "transform 0.3s ease"
-                },
-                key="rec_grid_constant_fallback"
-            )
-            
-            if clicked_rec > -1:
-                show_movie_dialog(recs[clicked_rec])
+        # Clickable Images Grid (Matches Homepage Style)
+        clicked_rec = clickable_images(
+            paths=rec_posters,
+            titles=rec_titles,
+            div_style={
+                "display": "flex", 
+                "justify-content": "center", 
+                "flex-wrap": "wrap",
+                "gap": "15px",
+                "margin-top": "20px"
+            },
+            img_style={
+                "width": "18%", # roughly 5 per row
+                "border-radius": "12px",
+                "cursor": "pointer",
+                "aspect-ratio": "2/3",
+                "object-fit": "cover",
+                "box-shadow": "0 4px 10px rgba(0,0,0,0.5)",
+                "transition": "transform 0.3s ease"
+            },
+            key=f"rec_grid_{st.session_state.rec_grid_key}"
+        )
+        
+        # Handle selection
+        if clicked_rec > -1:
+            # Increment key for NEXT run (to reset selection)
+            st.session_state.rec_grid_key += 1
+            # Call dialog directly - NO RERUN needed here
+            # (Streamlit will re-run automatically when dialog closes)
+            show_movie_dialog(recs[clicked_rec])
 
 
 # ===== PAGE 3: AI CHATBOT =====
