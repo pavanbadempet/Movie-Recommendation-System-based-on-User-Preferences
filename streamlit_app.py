@@ -1042,9 +1042,7 @@ elif st.session_state.page == "search":
         
         # Handle selection
         if clicked_rec > -1:
-            st.session_state.selected_rec = recs[clicked_rec]
-            st.session_state.show_dialog = True
-            st.rerun()
+            show_movie_dialog(recs[clicked_rec])
 
 
 # ===== PAGE 3: AI CHATBOT =====
@@ -1091,8 +1089,3 @@ elif st.session_state.page == "chat":
                 except Exception as e:
                     st.error(f"Error: {e}")
 
-
-# Dialog logic (Shared for both modes)
-if st.session_state.get("show_dialog") and st.session_state.get("selected_rec"):
-    show_movie_dialog(st.session_state.selected_rec)
-    st.session_state.show_dialog = False
