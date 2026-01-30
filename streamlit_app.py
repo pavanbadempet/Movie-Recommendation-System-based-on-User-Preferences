@@ -408,17 +408,32 @@ def show_movie_dialog(rec):
     # --- CSS HACK: Remove padding/bezels from Streamlit Dialog ---
     st.markdown("""
         <style>
-            /* Remove padding from the dialog container */
+            /* TARGET: The main dialog container */
+            div[data-testid="stDialog"] {
+                padding: 0 !important;
+                margin: 0 !important;
+                border: none !important;
+            }
+            /* TARGET: The specific content container provided by Streamlit */
             div[role="dialog"] > div > div {
                 padding: 0 !important;
             }
-            /* Remove standard Streamlit block spacing inside dialog */
-            div[data-testid="stDialog"] div[data-testid="stVerticalBlock"] {
+            /* Remove standard space from the vertical block */
+            div[data-testid="stVerticalBlock"] {
                 gap: 0 !important;
+                padding: 0 !important;
+            }
+            /* Force the billboard to touch edges if inside a stVerticalBlock */
+            div[data-testid="stVerticalBlock"] > div {
+                width: 100% !important;
             }
             /* HIDE THE HEADER (Close button stays accessible but floating) */
             div[data-testid="stDialog"] header {
                 display: none;
+            }
+            /* Ensure the modal content takes full width */
+            section[tabindex="0"] > div > div > div {
+                 padding: 0 !important;
             }
         </style>
     """, unsafe_allow_html=True)
