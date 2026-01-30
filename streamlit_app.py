@@ -429,79 +429,27 @@ def display_movie_card(rec, tmdb, credits, similarity):
 def show_movie_dialog(rec):
     """Show modal dialog with full movie details."""
     
-    # --- CSS HACK: Remove padding/bezels from Streamlit Dialog ---
+    # --- CSS: Clean up dialog styling ---
     st.markdown("""
         <style>
-            /* === AGGRESSIVE DIALOG CLEANUP === */
-            
-            /* TARGET: The overlay dialog modal itself */
-            div[data-testid="stDialog"], div[role="dialog"] {
-                padding: 0 !important;
-                margin: 0 !important;
-                border: none !important;
-                background-color: #0a0a0f !important;
-                box-shadow: 0 0 50px rgba(0,0,0,0.9) !important;
-                overflow: hidden !important;
-            }
-            
-            /* TARGET: All nested containers inside the dialog */
-            div[role="dialog"] > div,
-            div[role="dialog"] > div > div,
-            div[role="dialog"] > div > div > div,
-            div[role="dialog"] section,
-            div[role="dialog"] section > div {
-                padding: 0 !important;
-                padding-top: 0 !important;
-                margin: 0 !important;
+            /* Remove dialog border/padding */
+            div[role="dialog"] {
                 border: none !important;
                 background-color: #0a0a0f !important;
             }
             
-            /* TARGET: Vertical block (the main content column) */
-            div[role="dialog"] div[data-testid="stVerticalBlock"] {
-                gap: 0 !important;
-                padding: 0 !important;
-                margin: 0 !important;
-            }
-            
-            /* TARGET: The FIRST child of vertical block (often an empty spacer) */
-            div[role="dialog"] div[data-testid="stVerticalBlock"] > div:first-child {
-                margin: 0 !important;
-                padding: 0 !important;
-                min-height: 0 !important;
-                height: 0 !important;
-            }
-            
-            /* NUKE: Header element completely */
-            div[role="dialog"] header,
-            div[data-testid="stDialog"] header,
-            div[role="dialog"] [data-testid="stModalHeader"],
-            div[role="dialog"] [data-testid="stDialogHeader"] {
+            /* Hide the dialog header/title bar */
+            div[role="dialog"] header {
                 display: none !important;
-                height: 0 !important;
-                max-height: 0 !important;
-                width: 0 !important;
-                visibility: hidden !important;
-                position: absolute !important;
-                left: -9999px !important;
             }
             
-            /* CLOSE BUTTON: Repositioned to top-right */
+            /* Large close button */
             div[role="dialog"] button[aria-label="Close"] {
-                transform: scale(1.4);
-                background-color: rgba(0,0,0,0.6) !important;
+                transform: scale(1.3);
+                background-color: rgba(0,0,0,0.7) !important;
                 border-radius: 50%;
                 color: white !important;
-                position: fixed !important;
-                top: 10px !important;
-                right: 15px !important;
-                z-index: 99999 !important;
-            }
-            
-            /* Pull ALL dialog content up to eliminate the gap */
-            div[role="dialog"] section[tabindex="0"] {
-                margin-top: -2rem !important;
-                padding-top: 0 !important;
+                z-index: 99999;
             }
         </style>
     """, unsafe_allow_html=True)
