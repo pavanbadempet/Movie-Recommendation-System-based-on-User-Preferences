@@ -1027,87 +1027,58 @@ elif st.session_state.page == "search":
         
         st.markdown("""
         <style>
-        /* FIXED HEIGHT GRID for consistency and button alignment */
         .rec-container {
-            position: relative;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-            height: 280px !important; /* Fixed height is crucial for the overlay hack */
-        }
-        
-        .rec-container img {
-            width: 100%;
-            height: 280px !important;
-            object-fit: cover;
-            display: block;
-        }
-        
-        /* OVERLAY TEXT - Positioning */
-        .rec-overlay {
-            position: absolute; 
-            bottom: 0; 
-            left: 0; 
-            width: 100%; 
-            background: linear-gradient(to top, rgba(0,0,0,0.9), transparent); 
-            padding: 10px 5px; 
-            pointer-events: none;
-            height: 80px;
-            display: flex;
-            flex-direction: column;
-            justify-content: flex-end;
-        }
-
-        /* INVISIBLE BUTTON HACK */
-        /* Target the buttons inside the columns */
-        div[data-testid="column"] .stButton button {
-            width: 100% !important;
-            height: 280px !important; /* Match image height */
-            margin-top: -290px !important; /* Pull UP to cover the image (280px + gap) */
-            opacity: 0 !important; /* Invisible */
-            border: none;
-            cursor: pointer;
-            z-index: 10;
-        }
-        
-        /* HOVER EFFECT via Sibling Selector is hard in Streamlit */
-        /* We rely on the button's internal hover state which we can't style easily if invisible */
-        /* Instead, we use a simple CSS hover on the image container for visual feedback */
-        div[data-testid="column"]:hover .rec-container {
-             transform: scale(1.03);
-             transition: transform 0.3s ease;
-             border: 1px solid rgba(229, 9, 20, 0.5);
+             min-height: 400px; /* Safety for the grid container itself */
         }
         </style>
         """, unsafe_allow_html=True)
         
-        st.write("") # Spacer
-        
-        # Native Grid Layout with Fixed Logic
-        cols = st.columns(5)
-        for idx, rec in enumerate(recs):
-            with cols[idx % 5]:
-                poster = fetch_poster(rec.get("poster_path"))
-                title = rec.get("title")
-                match = int(rec.get("similarity_score", 0) * 100)
-                
-                # Render the Visual Layer (Image + Text)
-                st.markdown(f"""
-                <div class="rec-container">
-                    <img src="{poster}">
-                    <div class="rec-overlay">
-                        <div style="font-size: 0.8rem; font-weight: bold; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;">{title}</div>
-                        <div style="font-size: 0.7rem; color: #4ade80; text-align: center;">{match}% Match</div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # The Functional Layer (Invisible Button)
-                # We use an empty label so it has no text
-                # We use a unique key
-                # It renders BELOW the markdown, but CSS pulls it UP
-                if st.button(" ", key=f"btn_rec_{idx}_{rec['id']}"):
-                    show_movie_dialog(rec)
+        # Use a container to hold the grid
+        with st.container():
+            # Prepare data
+            rec_posters = [fetch_poster(r.get("poster_path")) for r in recs]
+            rec_titles = [f"{r.get('title')} ({int(r.get('similarity_score', 0)*100)}% Match)" for r in recs]
+            
+            # --- CREATIVE SCROLL FIX ---
+            # We need to reset the component (so you can click again) WITHOUT unmounting it (scroll jump).
+            # We do this by toggling a 'dummy' style property that forces a React prop update.
+            if "grid_toggle" not in st.session_state:
+                st.session_state.grid_toggle = 0
+            
+            # Toggle between 0.99 and 1.0 opacity on every run to force prop update
+            toggle_val = "1.0" if st.session_state.grid_toggle % 2 == 0 else "0.99"
+            
+            # Clickable Images Grid
+            clicked_rec = clickable_images(
+                paths=rec_posters,
+                titles=rec_titles,
+                div_style={
+                    "display": "flex", 
+                    "justify-content": "center", 
+                    "flex-wrap": "wrap",
+                    "gap": "15px",
+                    "margin-top": "20px",
+                    "min-height": "400px",
+                    "align-content": "flex-start",
+                    "opacity": toggle_val # DUMMY PROP to force update
+                },
+                img_style={
+                    "width": "18%", 
+                    "border-radius": "12px",
+                    "cursor": "pointer",
+                    "aspect-ratio": "2/3",
+                    "object-fit": "cover",
+                    "box-shadow": "0 4px 10px rgba(0,0,0,0.5)",
+                    "transition": "transform 0.3s ease"
+                },
+                key="rec_grid_fixed" # CONSTANT KEY prevents unmount/scroll-jump
+            )
+            
+            # Handle selection
+            if clicked_rec > -1:
+                # Toggle state for NEXT run to ensure prop changes
+                st.session_state.grid_toggle += 1
+                show_movie_dialog(recs[clicked_rec])
 
 
 # ===== PAGE 3: AI CHATBOT =====
