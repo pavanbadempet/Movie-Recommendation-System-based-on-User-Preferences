@@ -1025,44 +1025,59 @@ elif st.session_state.page == "search":
         st.markdown("---")
         st.subheader(f"Because you liked '{source.get('title', '...')}'")
         
-        # Prepare data for clickable grid
-        rec_posters = [fetch_poster(r.get("poster_path")) for r in recs]
-        rec_titles = [f"{r.get('title')} ({int(r.get('similarity_score', 0)*100)}% Match)" for r in recs]
+        st.markdown(f"""
+        <style>
+        /* Enforce min-height on the specific container holding the grid to prevent scroll jump */
+        .rec-grid-container {{
+            min-height: 400px;
+            transition: all 0.2s ease;
+        }}
+        </style>
+        """, unsafe_allow_html=True)
         
-        # Initialize dynamic key for grid reset
-        if "rec_grid_key" not in st.session_state:
-            st.session_state.rec_grid_key = 0
+        # Use a container with a specific class/style to hold the grid
+        with st.container():
+            st.markdown('<div class="rec-grid-container">', unsafe_allow_html=True)
             
-        # Clickable Images Grid (Matches Homepage Style)
-        clicked_rec = clickable_images(
-            paths=rec_posters,
-            titles=rec_titles,
-            div_style={
-                "display": "flex", 
-                "justify-content": "center", 
-                "flex-wrap": "wrap",
-                "gap": "15px",
-                "margin-top": "20px"
-            },
-            img_style={
-                "width": "18%", # roughly 5 per row
-                "border-radius": "12px",
-                "cursor": "pointer",
-                "aspect-ratio": "2/3",
-                "object-fit": "cover",
-                "box-shadow": "0 4px 10px rgba(0,0,0,0.5)",
-                "transition": "transform 0.3s ease"
-            },
-            key=f"rec_grid_{st.session_state.rec_grid_key}"
-        )
-        
-        # Handle selection
-        if clicked_rec > -1:
-            # Increment key for NEXT run (to reset selection)
-            st.session_state.rec_grid_key += 1
-            # Call dialog directly - NO RERUN needed here
-            # (Streamlit will re-run automatically when dialog closes)
-            show_movie_dialog(recs[clicked_rec])
+            # Prepare data for clickable grid
+            rec_posters = [fetch_poster(r.get("poster_path")) for r in recs]
+            rec_titles = [f"{r.get('title')} ({int(r.get('similarity_score', 0)*100)}% Match)" for r in recs]
+            
+            # Initialize dynamic key for grid reset
+            if "rec_grid_key" not in st.session_state:
+                st.session_state.rec_grid_key = 0
+                
+            # Clickable Images Grid
+            clicked_rec = clickable_images(
+                paths=rec_posters,
+                titles=rec_titles,
+                div_style={
+                    "display": "flex", 
+                    "justify-content": "center", 
+                    "flex-wrap": "wrap",
+                    "gap": "15px",
+                    "margin-top": "20px"
+                },
+                img_style={
+                    "width": "18%", 
+                    "border-radius": "12px",
+                    "cursor": "pointer",
+                    "aspect-ratio": "2/3",
+                    "object-fit": "cover",
+                    "box-shadow": "0 4px 10px rgba(0,0,0,0.5)",
+                    "transition": "transform 0.3s ease"
+                },
+                key=f"rec_grid_{st.session_state.rec_grid_key}"
+            )
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Handle selection
+            if clicked_rec > -1:
+                # Increment key for NEXT run (to reset selection)
+                st.session_state.rec_grid_key += 1
+                # Call dialog directly
+                show_movie_dialog(recs[clicked_rec])
 
 
 # ===== PAGE 3: AI CHATBOT =====
