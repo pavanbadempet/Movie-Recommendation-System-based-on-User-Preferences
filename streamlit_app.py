@@ -2,6 +2,7 @@
 # Run: streamlit run app.py
 
 import streamlit as st
+import streamlit.components.v1 as components
 import requests
 import time
 import os
@@ -405,8 +406,7 @@ def display_movie_card(rec, tmdb, credits, similarity):
 def show_movie_dialog(rec):
     """Show modal dialog with full movie details."""
     
-    # --- CSS HACK: Remove padding/bezels from Streamlit Dialog ---
-    # --- CSS HACK: Remove padding/bezels from Streamlit Dialog ---
+    # --- CSS: Style Dialog (No Scrollbar, Full Height) ---
     st.markdown("""
         <style>
             /* TARGET: The main dialog container */
@@ -414,27 +414,36 @@ def show_movie_dialog(rec):
                 padding: 0 !important;
                 margin: 0 !important;
                 border: none !important;
-                /* Restore black background to hide app text behind, but keep 0 padding */
                 background-color: #000 !important;
                 box-shadow: none !important;
             }
-            /* TARGET: The specific content container provided by Streamlit */
+            /* Make dialog as tall as viewport */
+            div[role="dialog"] > div {
+                max-height: 95vh !important;
+                height: auto !important;
+            }
+            /* Remove padding from content container */
             div[role="dialog"] > div > div {
                 padding: 0 !important;
                 border: none !important;
                 background-color: #000 !important;
             }
-            /* Remove standard space from the vertical block */
+            /* HIDE SCROLLBAR but allow scrolling if needed */
+            div[role="dialog"] section[tabindex="0"] {
+                scrollbar-width: none !important; /* Firefox */
+                -ms-overflow-style: none !important; /* IE/Edge */
+            }
+            div[role="dialog"] section[tabindex="0"]::-webkit-scrollbar {
+                display: none !important; /* Chrome/Safari */
+                width: 0 !important;
+            }
+            /* Remove gap from vertical block */
             div[data-testid="stVerticalBlock"] {
                 gap: 0 !important;
                 padding: 0 !important;
                 background-color: #000 !important;
             }
-            /* Force the billboard to touch edges if inside a stVerticalBlock */
-            div[data-testid="stVerticalBlock"] > div {
-                width: 100% !important;
-            }
-            /* HIDE THE HEADER (Close button stays accessible but floating) */
+            /* HIDE THE HEADER */
             div[data-testid="stDialog"] header {
                 display: none;
             }
@@ -446,7 +455,7 @@ def show_movie_dialog(rec):
                 color: white;
                 z-index: 9999;
             }
-            /* Ensure the modal content takes full width */
+            /* Full width content */
             section[tabindex="0"], section[tabindex="0"] > div, section[tabindex="0"] > div > div {
                  padding: 0 !important;
                  background-color: #000 !important;
@@ -492,78 +501,263 @@ def show_movie_dialog(rec):
         
         provider_html = f'<div class="db-providers"><div style="font-size:0.7rem; color:#aaa; margin-bottom:5px; text-transform:uppercase; letter-spacing:1px; font-weight:bold;">Watch Now</div>{cards}</div>'
 
-    st.markdown(f"""
-    <style>
-    .dialog-billboard {{
-        background: #000;
-        border-radius: 0px !important; 
-        overflow: hidden;
-        position: relative;
-        width: 100% !important;
-        aspect-ratio: 16 / 9;
-        height: auto; 
-        box-shadow: none;
-        border: none;
-        margin: 0px;
-    }}
-    .db-video-layer {{
-        position: absolute;
-        top: 0; left: 0; width: 100%; height: 100%;
-        z-index: 1;
-        opacity: 0.4;
-        pointer-events: none;
-    }}
-    .db-content-layer {{
-        position: absolute;
-        bottom: 0; left: 0; width: 100%;
-        padding: 40px;
-        z-index: 2;
-        background: linear-gradient(to top, #000 15%, rgba(0,0,0,0.95) 50%, transparent 100%);
-        display: flex;
-        flex-direction: column;
-        gap: 15px;
-    }}
-    .db-title {{
-        font-family: 'Bebas Neue', sans-serif;
-        font-size: 3.5rem;
-        line-height: 0.9;
-        margin-bottom: 5px;
-        color: #fff;
-        text-shadow: 2px 2px 10px rgba(0,0,0,1);
-    }}
-    .db-meta {{
-        font-family: 'Montserrat', sans-serif;
-        font-size: 0.85rem;
-        color: #e50914;
-        font-weight: 700;
-        margin-bottom: 10px;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        text-shadow: 1px 1px 2px #000;
-    }}
-    .db-overview {{
-        font-family: 'Montserrat', sans-serif;
-        font-size: 0.95rem;
-        color: #ccc;
-        line-height: 1.5;
-        max-width: 100%;
-        text-shadow: 1px 1px 2px rgba(0,0,0,1);
-        margin-bottom: 15px;
-    }}
-    .db-credits {{
-        font-size: 0.8rem;
-        color: #999;
-        text-shadow: 1px 1px 2px #000;
-        margin-bottom: 15px;
-    }}
-    .db-credits strong {{ color: #eee; }}
-    .db-providers {{
-        margin-top: 5px;
-        padding-top: 15px;
-        border-top: 1px solid rgba(255,255,255,0.1);
-    }}
-    </style>
-    <div class="dialog-billboard"><div class="db-video-layer">{video_embed}</div><div class="db-content-layer"><div><div class="db-title">{rec.get('title')}</div><div class="db-meta">⭐ {rating:.1f} • {year} • {runtime} • {str(genres).split(',')[0]}</div><div class="db-overview">{rec.get('overview')}</div><div class="db-credits">Directed by <strong>{credits.get('director')}</strong> • Cast: <strong>{credits.get('cast')}</strong></div></div>{provider_html}</div></div>""", unsafe_allow_html=True)
+    # Truncate overview for compact display
+    overview_text = rec.get('overview', '')
+    if len(overview_text) > 200:
+        overview_text = overview_text[:200].rsplit(' ', 1)[0] + '...'
+
+    # Calculate rating percentage for radial progress bar
+    rating_pct = (rating / 10) * 100
+    rating_color = "#21d07a" if rating >= 7 else "#d2d531" if rating >= 5 else "#db2360"
+    
+    # === RENDER BILLBOARD WITH COMPONENTS.HTML FOR JS SUPPORT ===
+    # Using components.html allows JavaScript execution for click-to-mute
+    
+    player_id = f"player_{movie_id}"
+    
+    # Simple iframe with all parameters to hide controls + postMessage for mute
+    if trailer_key:
+        iframe_id = f"ytplayer_{movie_id}"
+        video_html = f'''<div class="db-video-layer">
+            <iframe id="{iframe_id}" 
+                    src="https://www.youtube.com/embed/{trailer_key}?autoplay=1&mute=1&controls=0&disablekb=1&modestbranding=1&loop=1&playlist={trailer_key}&playsinline=1&rel=0&showinfo=0&iv_load_policy=3&fs=0&enablejsapi=1&origin=https://movie-recommendation-system-w0n0.onrender.com"
+                    frameborder="0" 
+                    allow="autoplay; encrypted-media"
+                    allowfullscreen></iframe>
+        </div>'''
+        youtube_js = f'''
+        <script>
+            var muteBtn = document.getElementById('muteBtn');
+            var iframe = document.getElementById('{iframe_id}');
+            var isMuted = true;
+            
+            function toggleMute() {{
+                if (iframe) {{
+                    if (isMuted) {{
+                        iframe.contentWindow.postMessage('{{"event":"command","func":"unMute","args":""}}', '*');
+                        isMuted = false;
+                        muteBtn.innerHTML = '🔊';
+                    }} else {{
+                        iframe.contentWindow.postMessage('{{"event":"command","func":"mute","args":""}}', '*');
+                        isMuted = true;
+                        muteBtn.innerHTML = '🔇';
+                    }}
+                }}
+            }}
+            
+            muteBtn.addEventListener('click', toggleMute);
+        </script>
+        '''
+    else:
+        poster_url = fetch_poster(tmdb.get("backdrop_path") or rec.get("poster_path"))
+        video_html = f'<div class="db-video-layer"><img src="{poster_url}" alt="backdrop"></div>'
+        youtube_js = ""
+    
+    billboard_html = f'''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+        <style>
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+            body {{ background: #000; font-family: 'Montserrat', sans-serif; overflow: hidden; }}
+            
+            @keyframes fadeInUp {{
+                from {{ opacity: 0; transform: translateY(20px); }}
+                to {{ opacity: 1; transform: translateY(0); }}
+            }}
+            @keyframes fadeIn {{
+                from {{ opacity: 0; }}
+                to {{ opacity: 1; }}
+            }}
+            
+            .dialog-billboard {{
+                background: #000;
+                position: relative;
+                width: 100%;
+                height: 100vh;
+                overflow: hidden;
+                cursor: pointer;
+                animation: fadeIn 0.5s ease-out;
+            }}
+            .db-video-layer {{
+                position: absolute;
+                top: -10%; left: 0;
+                width: 100%; height: 120%;
+                z-index: 1;
+                opacity: 0.7;
+            }}
+            .db-video-layer iframe, .db-video-layer img {{
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                pointer-events: none;
+            }}
+            .db-content-layer {{
+                position: absolute;
+                bottom: 0; left: 0;
+                width: 100%;
+                padding: 25px 35px;
+                z-index: 2;
+                background: linear-gradient(to top, #000 30%, rgba(0,0,0,0.85) 60%, transparent 100%);
+                animation: fadeInUp 0.6s ease-out 0.2s both;
+            }}
+            .db-title-row {{
+                display: flex;
+                align-items: center;
+                gap: 15px;
+                margin-bottom: 8px;
+            }}
+            .db-title {{
+                font-family: 'Bebas Neue', sans-serif;
+                font-size: 2.5rem;
+                line-height: 1;
+                color: #fff;
+                text-shadow: 2px 2px 8px rgba(0,0,0,1);
+            }}
+            .rating-circle {{
+                position: relative;
+                width: 48px;
+                height: 48px;
+                flex-shrink: 0;
+            }}
+            .rating-circle svg {{
+                transform: rotate(-90deg);
+            }}
+            .rating-circle .bg {{
+                fill: none;
+                stroke: #204529;
+                stroke-width: 4;
+            }}
+            .rating-circle .progress {{
+                fill: none;
+                stroke: {rating_color};
+                stroke-width: 4;
+                stroke-linecap: round;
+                stroke-dasharray: 126;
+                stroke-dashoffset: {126 - (126 * rating_pct / 100)};
+                transition: stroke-dashoffset 1s ease-out;
+            }}
+            .rating-circle .value {{
+                position: absolute;
+                top: 50%; left: 50%;
+                transform: translate(-50%, -50%);
+                font-size: 0.85rem;
+                font-weight: 700;
+                color: #fff;
+            }}
+            .db-meta {{
+                font-size: 0.85rem;
+                color: #e50914;
+                font-weight: 700;
+                margin-bottom: 10px;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                animation: fadeInUp 0.6s ease-out 0.3s both;
+            }}
+            .db-overview {{
+                font-size: 0.9rem;
+                color: #ddd;
+                line-height: 1.5;
+                margin-bottom: 10px;
+                display: -webkit-box;
+                -webkit-line-clamp: 3;
+                -webkit-box-orient: vertical;
+                overflow: hidden;
+                animation: fadeInUp 0.6s ease-out 0.4s both;
+            }}
+            .db-credits {{
+                font-size: 0.8rem;
+                color: #aaa;
+                margin-bottom: 10px;
+                animation: fadeInUp 0.6s ease-out 0.5s both;
+            }}
+            .db-credits strong {{ 
+                color: #fff;
+                transition: color 0.2s;
+            }}
+            .db-credits strong:hover {{
+                color: #e50914;
+            }}
+            .db-providers {{
+                margin-top: 10px;
+                padding-top: 12px;
+                border-top: 1px solid rgba(255,255,255,0.15);
+                animation: fadeInUp 0.6s ease-out 0.6s both;
+            }}
+            .db-providers .label {{
+                font-size: 0.7rem;
+                color: #aaa;
+                margin-bottom: 5px;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                font-weight: bold;
+            }}
+            .db-providers img {{
+                width: 38px;
+                border-radius: 8px;
+                transition: transform 0.2s, box-shadow 0.2s;
+                margin-right: 8px;
+            }}
+            .db-providers img:hover {{
+                transform: scale(1.15);
+                box-shadow: 0 4px 15px rgba(229,9,20,0.4);
+            }}
+            /* Mute button */
+            #muteBtn {{
+                position: absolute;
+                top: 15px;
+                right: 15px;
+                width: 44px;
+                height: 44px;
+                border-radius: 50%;
+                background: rgba(0,0,0,0.7);
+                border: 2px solid rgba(255,255,255,0.3);
+                color: #fff;
+                font-size: 20px;
+                cursor: pointer;
+                z-index: 100;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: all 0.2s;
+            }}
+            #muteBtn:hover {{
+                background: rgba(229,9,20,0.8);
+                border-color: #e50914;
+                transform: scale(1.1);
+            }}
+
+        </style>
+    </head>
+    <body>
+        <div class="dialog-billboard">
+            <button id="muteBtn">🔇</button>
+            {video_html}
+            <div class="db-content-layer">
+                <div class="db-title-row">
+                    <div class="db-title">{rec.get('title')}</div>
+                    <div class="rating-circle">
+                        <svg width="48" height="48">
+                            <circle class="bg" cx="24" cy="24" r="20"></circle>
+                            <circle class="progress" cx="24" cy="24" r="20"></circle>
+                        </svg>
+                        <div class="value">{rating:.1f}</div>
+                    </div>
+                </div>
+                <div class="db-meta">{year} • {runtime} • {str(genres).split(',')[0]}</div>
+                <div class="db-overview">{overview_text}</div>
+                <div class="db-credits">Directed by <strong>{credits.get('director')}</strong> • Cast: <strong>{credits.get('cast')}</strong></div>
+                {provider_html}
+            </div>
+        </div>
+        {youtube_js}
+    </body>
+    </html>
+    '''
+    
+    # Render using components.html for JS execution
+    components.html(billboard_html, height=500, scrolling=False)
 
 
 def format_option(m):
