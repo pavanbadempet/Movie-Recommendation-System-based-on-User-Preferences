@@ -527,6 +527,7 @@ def show_movie_dialog(rec):
             
             var player;
             var isMuted = true;
+            var hintEl = document.querySelector('.mute-hint');
             
             function onYouTubeIframeAPIReady() {{
                 player = new YT.Player('{player_id}', {{
@@ -541,16 +542,31 @@ def show_movie_dialog(rec):
                         'playlist': '{trailer_key}',
                         'playsinline': 1,
                         'rel': 0,
-                        'showinfo': 0
+                        'showinfo': 0,
+                        'iv_load_policy': 3,
+                        'fs': 0
                     }},
                     events: {{
-                        'onReady': onPlayerReady
+                        'onReady': onPlayerReady,
+                        'onStateChange': onPlayerStateChange
                     }}
                 }});
             }}
             
             function onPlayerReady(event) {{
                 event.target.playVideo();
+                // Disable pointer events on the iframe to prevent pause on click
+                var iframe = document.querySelector('#{player_id} iframe');
+                if (iframe) {{
+                    iframe.style.pointerEvents = 'none';
+                }}
+            }}
+            
+            function onPlayerStateChange(event) {{
+                // If paused, resume playing (prevents click-to-pause behavior)
+                if (event.data === YT.PlayerState.PAUSED) {{
+                    event.target.playVideo();
+                }}
             }}
             
             // Click anywhere on billboard to toggle mute
@@ -559,9 +575,11 @@ def show_movie_dialog(rec):
                     if (isMuted) {{
                         player.unMute();
                         isMuted = false;
+                        if (hintEl) hintEl.textContent = '🔇 Click to mute';
                     }} else {{
                         player.mute();
                         isMuted = true;
+                        if (hintEl) hintEl.textContent = '🔊 Click to unmute';
                     }}
                 }}
             }});
