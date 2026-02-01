@@ -555,10 +555,12 @@ def show_movie_dialog(rec):
             function onPlayerReady(event) {{
                 event.target.playVideo();
                 // Disable pointer events on the iframe to prevent pause on click
-                var iframe = document.querySelector('#{player_id} iframe');
-                if (iframe) {{
-                    iframe.style.pointerEvents = 'none';
-                }}
+                setTimeout(function() {{
+                    var iframe = document.querySelector('#{player_id} iframe');
+                    if (iframe) {{
+                        iframe.style.pointerEvents = 'none';
+                    }}
+                }}, 500);
             }}
             
             function onPlayerStateChange(event) {{
@@ -568,18 +570,33 @@ def show_movie_dialog(rec):
                 }}
             }}
             
-            // Click anywhere on billboard to toggle mute
-            document.querySelector('.dialog-billboard').addEventListener('click', function(e) {{
-                if (player && player.isMuted && player.unMute && player.mute) {{
-                    if (isMuted) {{
+            function toggleMute() {{
+                if (player && typeof player.isMuted === 'function') {{
+                    if (player.isMuted()) {{
                         player.unMute();
-                        isMuted = false;
+                        console.log('Unmuted');
                     }} else {{
                         player.mute();
-                        isMuted = true;
+                        console.log('Muted');
                     }}
                 }}
+            }}
+            
+            // Wait for DOM to be ready before attaching click listener
+            document.addEventListener('DOMContentLoaded', function() {{
+                var billboard = document.querySelector('.dialog-billboard');
+                if (billboard) {{
+                    billboard.addEventListener('click', toggleMute);
+                }}
             }});
+            
+            // Also try attaching directly in case DOMContentLoaded already fired
+            setTimeout(function() {{
+                var billboard = document.querySelector('.dialog-billboard');
+                if (billboard) {{
+                    billboard.onclick = toggleMute;
+                }}
+            }}, 1000);
         </script>
         '''
     else:
