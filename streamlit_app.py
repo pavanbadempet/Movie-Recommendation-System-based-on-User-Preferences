@@ -405,8 +405,7 @@ def display_movie_card(rec, tmdb, credits, similarity):
 def show_movie_dialog(rec):
     """Show modal dialog with full movie details."""
     
-    # --- CSS HACK: Remove padding/bezels from Streamlit Dialog ---
-    # --- CSS HACK: Remove padding/bezels from Streamlit Dialog ---
+    # --- CSS: Style Dialog (No Scrollbar, Full Height) ---
     st.markdown("""
         <style>
             /* TARGET: The main dialog container */
@@ -414,27 +413,36 @@ def show_movie_dialog(rec):
                 padding: 0 !important;
                 margin: 0 !important;
                 border: none !important;
-                /* Restore black background to hide app text behind, but keep 0 padding */
                 background-color: #000 !important;
                 box-shadow: none !important;
             }
-            /* TARGET: The specific content container provided by Streamlit */
+            /* Make dialog as tall as viewport */
+            div[role="dialog"] > div {
+                max-height: 95vh !important;
+                height: auto !important;
+            }
+            /* Remove padding from content container */
             div[role="dialog"] > div > div {
                 padding: 0 !important;
                 border: none !important;
                 background-color: #000 !important;
             }
-            /* Remove standard space from the vertical block */
+            /* HIDE SCROLLBAR but allow scrolling if needed */
+            div[role="dialog"] section[tabindex="0"] {
+                scrollbar-width: none !important; /* Firefox */
+                -ms-overflow-style: none !important; /* IE/Edge */
+            }
+            div[role="dialog"] section[tabindex="0"]::-webkit-scrollbar {
+                display: none !important; /* Chrome/Safari */
+                width: 0 !important;
+            }
+            /* Remove gap from vertical block */
             div[data-testid="stVerticalBlock"] {
                 gap: 0 !important;
                 padding: 0 !important;
                 background-color: #000 !important;
             }
-            /* Force the billboard to touch edges if inside a stVerticalBlock */
-            div[data-testid="stVerticalBlock"] > div {
-                width: 100% !important;
-            }
-            /* HIDE THE HEADER (Close button stays accessible but floating) */
+            /* HIDE THE HEADER */
             div[data-testid="stDialog"] header {
                 display: none;
             }
@@ -446,7 +454,7 @@ def show_movie_dialog(rec):
                 color: white;
                 z-index: 9999;
             }
-            /* Ensure the modal content takes full width */
+            /* Full width content */
             section[tabindex="0"], section[tabindex="0"] > div, section[tabindex="0"] > div > div {
                  padding: 0 !important;
                  background-color: #000 !important;
