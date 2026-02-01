@@ -574,29 +574,20 @@ def show_movie_dialog(rec):
                 if (player && typeof player.isMuted === 'function') {{
                     if (player.isMuted()) {{
                         player.unMute();
-                        console.log('Unmuted');
                     }} else {{
                         player.mute();
-                        console.log('Muted');
                     }}
                 }}
             }}
             
-            // Wait for DOM to be ready before attaching click listener
-            document.addEventListener('DOMContentLoaded', function() {{
-                var billboard = document.querySelector('.dialog-billboard');
-                if (billboard) {{
-                    billboard.addEventListener('click', toggleMute);
+            // Attach click to body - simpler and more reliable
+            document.body.addEventListener('click', function(e) {{
+                // Don't toggle mute if clicking on a link
+                if (e.target.tagName === 'A' || e.target.closest('a')) {{
+                    return;
                 }}
+                toggleMute();
             }});
-            
-            // Also try attaching directly in case DOMContentLoaded already fired
-            setTimeout(function() {{
-                var billboard = document.querySelector('.dialog-billboard');
-                if (billboard) {{
-                    billboard.onclick = toggleMute;
-                }}
-            }}, 1000);
         </script>
         '''
     else:
@@ -652,10 +643,6 @@ def show_movie_dialog(rec):
                 z-index: 2;
                 background: linear-gradient(to top, #000 30%, rgba(0,0,0,0.85) 60%, transparent 100%);
                 animation: fadeInUp 0.6s ease-out 0.2s both;
-                pointer-events: none; /* Let clicks pass through to video layer */
-            }}
-            .db-providers a {{
-                pointer-events: auto; /* But keep Watch Now links clickable */
             }}
             .db-title-row {{
                 display: flex;
