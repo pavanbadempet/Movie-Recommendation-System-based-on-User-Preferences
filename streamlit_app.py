@@ -750,13 +750,13 @@ def show_movie_dialog(rec):
             }}
             /* Credit links */
             .credit-link {{
-                color: #e50914;
+                color: #fff;
                 text-decoration: none;
-                transition: all 0.2s;
+                font-weight: bold;
+                transition: color 0.2s;
             }}
             .credit-link:hover {{
-                color: #fff;
-                text-decoration: underline;
+                color: #e50914;
             }}
             /* Mute button */
             #muteBtn {{
