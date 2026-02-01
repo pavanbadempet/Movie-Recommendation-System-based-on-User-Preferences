@@ -522,9 +522,9 @@ def show_movie_dialog(rec):
     }}
     .db-video-layer {{
         position: absolute;
-        top: 0; left: 0; width: 100%; height: 100%;
+        top: -15%; left: 0; width: 100%; height: 130%;
         z-index: 1;
-        opacity: 0.5;
+        opacity: 0.6;
         pointer-events: none;
     }}
     .db-video-layer iframe, .db-video-layer img {{
@@ -590,9 +590,7 @@ def show_movie_dialog(rec):
             <div class="db-title">{rec.get('title')}</div>
             <div class="db-meta">⭐ {rating:.1f} • {year} • {runtime} • {str(genres).split(',')[0]}</div>
             <div class="db-overview">{overview_text}</div>
-            <div class="db-credits">Directed by <strong>{credits.get('director')}</strong> • Cast: <strong>{credits.get('cast')}</strong></div>
-            {provider_html}
-        </div>
+            <div class="db-credits">Directed by <strong>{credits.get('director')}</strong> • Cast: <strong>{credits.get('cast')}</strong></div>{provider_html}</div>
     </div>""", unsafe_allow_html=True)
 
 
