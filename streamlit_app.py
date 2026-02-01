@@ -515,30 +515,64 @@ def show_movie_dialog(rec):
     
     player_id = f"player_{movie_id}"
     
-    # Simple iframe with all parameters to hide controls + postMessage for mute
+    # YouTube Player API for reliable mute control
     if trailer_key:
-        iframe_id = f"ytplayer_{movie_id}"
-        video_html = f'''<div class="db-video-layer">
-            <iframe id="{iframe_id}" 
-                    src="https://www.youtube.com/embed/{trailer_key}?autoplay=1&mute=1&controls=0&disablekb=1&modestbranding=1&loop=1&playlist={trailer_key}&playsinline=1&rel=0&showinfo=0&iv_load_policy=3&fs=0&enablejsapi=1&origin=https://movie-recommendation-system-w0n0.onrender.com"
-                    frameborder="0" 
-                    allow="autoplay; encrypted-media"
-                    allowfullscreen></iframe>
-        </div>'''
+        player_id = f"ytplayer_{movie_id}"
+        video_html = f'<div id="{player_id}" class="db-video-layer"></div>'
         youtube_js = f'''
         <script>
-            var muteBtn = document.getElementById('muteBtn');
-            var iframe = document.getElementById('{iframe_id}');
+            var tag = document.createElement('script');
+            tag.src = "https://www.youtube.com/iframe_api";
+            var firstScriptTag = document.getElementsByTagName('script')[0];
+            firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+            
+            var player;
             var isMuted = true;
+            var muteBtn = document.getElementById('muteBtn');
+            
+            function onYouTubeIframeAPIReady() {{
+                player = new YT.Player('{player_id}', {{
+                    videoId: '{trailer_key}',
+                    playerVars: {{
+                        'autoplay': 1,
+                        'mute': 1,
+                        'controls': 0,
+                        'disablekb': 1,
+                        'modestbranding': 1,
+                        'loop': 1,
+                        'playlist': '{trailer_key}',
+                        'playsinline': 1,
+                        'rel': 0,
+                        'showinfo': 0,
+                        'iv_load_policy': 3,
+                        'fs': 0
+                    }},
+                    events: {{
+                        'onReady': onPlayerReady
+                    }}
+                }});
+            }}
+            
+            function onPlayerReady(event) {{
+                event.target.playVideo();
+                // Apply pointer-events:none to the generated iframe
+                var playerDiv = document.getElementById('{player_id}');
+                if (playerDiv) {{
+                    var iframe = playerDiv.querySelector('iframe');
+                    if (iframe) {{
+                        iframe.style.pointerEvents = 'none';
+                    }}
+                }}
+            }}
             
             function toggleMute() {{
-                if (iframe) {{
-                    if (isMuted) {{
-                        iframe.contentWindow.postMessage('{{"event":"command","func":"unMute","args":""}}', '*');
+                if (player && typeof player.isMuted === 'function') {{
+                    if (player.isMuted()) {{
+                        player.unMute();
                         isMuted = false;
                         muteBtn.innerHTML = '🔊';
                     }} else {{
-                        iframe.contentWindow.postMessage('{{"event":"command","func":"mute","args":""}}', '*');
+                        player.mute();
                         isMuted = true;
                         muteBtn.innerHTML = '🔇';
                     }}
