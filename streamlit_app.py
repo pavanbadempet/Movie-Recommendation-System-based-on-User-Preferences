@@ -509,55 +509,13 @@ def show_movie_dialog(rec):
     rating_pct = (rating / 10) * 100
     rating_color = "#21d07a" if rating >= 7 else "#d2d531" if rating >= 5 else "#db2360"
     
-    # Build unique player ID for this dialog instance
-    player_id = f"player_{movie_id}"
-    
-    # Video embed with YouTube Player API for click-to-mute
+    # Video embed (simple iframe - no JS needed)
     video_section = ""
     if trailer_key:
-        video_section = f'''
-        <div id="{player_id}" class="db-video-layer" onclick="toggleMute()"></div>
-        <script>
-            var tag = document.createElement('script');
-            tag.src = "https://www.youtube.com/iframe_api";
-            var firstScriptTag = document.getElementsByTagName('script')[0];
-            firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-            
-            var player;
-            var isMuted = true;
-            function onYouTubeIframeAPIReady() {{
-                player = new YT.Player('{player_id}', {{
-                    videoId: '{trailer_key}',
-                    playerVars: {{
-                        'autoplay': 1,
-                        'mute': 1,
-                        'controls': 0,
-                        'disablekb': 1,
-                        'modestbranding': 1,
-                        'loop': 1,
-                        'playlist': '{trailer_key}',
-                        'playsinline': 1
-                    }},
-                    events: {{
-                        'onReady': function(event) {{
-                            event.target.playVideo();
-                        }}
-                    }}
-                }});
-            }}
-            function toggleMute() {{
-                if (player && player.isMuted) {{
-                    if (isMuted) {{
-                        player.unMute();
-                        isMuted = false;
-                    }} else {{
-                        player.mute();
-                        isMuted = true;
-                    }}
-                }}
-            }}
-        </script>
-        '''
+        video_section = f'''<div class="db-video-layer">
+            <iframe src="https://www.youtube.com/embed/{trailer_key}?autoplay=1&mute=1&controls=0&disablekb=1&modestbranding=1&loop=1&playlist={trailer_key}" 
+                    style="width:100%; height:100%; border:none; pointer-events:none;"></iframe>
+        </div>'''
     else:
         poster_url = fetch_poster(tmdb.get("backdrop_path") or rec.get("poster_path"))
         video_section = f'<div class="db-video-layer"><img src="{poster_url}" alt="backdrop"></div>'
