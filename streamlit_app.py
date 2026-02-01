@@ -509,183 +509,257 @@ def show_movie_dialog(rec):
     rating_pct = (rating / 10) * 100
     rating_color = "#21d07a" if rating >= 7 else "#d2d531" if rating >= 5 else "#db2360"
     
-    # Video embed (simple iframe - no JS needed)
-    video_section = ""
+    # === RENDER BILLBOARD WITH COMPONENTS.HTML FOR JS SUPPORT ===
+    # Using components.html allows JavaScript execution for click-to-mute
+    
+    player_id = f"player_{movie_id}"
+    
+    # Build the video HTML based on whether we have a trailer
     if trailer_key:
-        video_section = f'''<div class="db-video-layer">
-            <iframe src="https://www.youtube.com/embed/{trailer_key}?autoplay=1&mute=1&controls=0&disablekb=1&modestbranding=1&loop=1&playlist={trailer_key}" 
-                    style="width:100%; height:100%; border:none; pointer-events:none;"></iframe>
-        </div>'''
+        video_html = f'<div id="{player_id}" class="db-video-layer"></div>'
+        youtube_js = f'''
+        <script>
+            var tag = document.createElement('script');
+            tag.src = "https://www.youtube.com/iframe_api";
+            var firstScriptTag = document.getElementsByTagName('script')[0];
+            firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+            
+            var player;
+            var isMuted = true;
+            
+            function onYouTubeIframeAPIReady() {{
+                player = new YT.Player('{player_id}', {{
+                    videoId: '{trailer_key}',
+                    playerVars: {{
+                        'autoplay': 1,
+                        'mute': 1,
+                        'controls': 0,
+                        'disablekb': 1,
+                        'modestbranding': 1,
+                        'loop': 1,
+                        'playlist': '{trailer_key}',
+                        'playsinline': 1,
+                        'rel': 0,
+                        'showinfo': 0
+                    }},
+                    events: {{
+                        'onReady': onPlayerReady
+                    }}
+                }});
+            }}
+            
+            function onPlayerReady(event) {{
+                event.target.playVideo();
+            }}
+            
+            // Click anywhere on billboard to toggle mute
+            document.querySelector('.dialog-billboard').addEventListener('click', function(e) {{
+                if (player && player.isMuted && player.unMute && player.mute) {{
+                    if (isMuted) {{
+                        player.unMute();
+                        isMuted = false;
+                    }} else {{
+                        player.mute();
+                        isMuted = true;
+                    }}
+                }}
+            }});
+        </script>
+        '''
     else:
         poster_url = fetch_poster(tmdb.get("backdrop_path") or rec.get("poster_path"))
-        video_section = f'<div class="db-video-layer"><img src="{poster_url}" alt="backdrop"></div>'
+        video_html = f'<div class="db-video-layer"><img src="{poster_url}" alt="backdrop"></div>'
+        youtube_js = ""
     
-    st.markdown(f"""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@400;600;700&display=swap');
-    
-    /* === ANIMATIONS === */
-    @keyframes fadeInUp {{
-        from {{ opacity: 0; transform: translateY(20px); }}
-        to {{ opacity: 1; transform: translateY(0); }}
-    }}
-    @keyframes fadeIn {{
-        from {{ opacity: 0; }}
-        to {{ opacity: 1; }}
-    }}
-    
-    .dialog-billboard {{
-        background: #000;
-        border-radius: 0px !important; 
-        overflow: hidden;
-        position: relative;
-        width: 100% !important;
-        height: 80vh;
-        max-height: 650px;
-        box-shadow: none;
-        border: none;
-        margin: 0px;
-        animation: fadeIn 0.5s ease-out;
-    }}
-    .db-video-layer {{
-        position: absolute;
-        top: -15%; left: 0; width: 100%; height: 130%;
-        z-index: 1;
-        opacity: 0.7;
-        cursor: pointer; /* Shows it's clickable */
-    }}
-    .db-video-layer iframe, .db-video-layer img {{
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        pointer-events: none; /* Click goes to parent div */
-    }}
-    .db-content-layer {{
-        position: absolute;
-        bottom: 0; left: 0; width: 100%;
-        padding: 30px 40px;
-        z-index: 2;
-        background: linear-gradient(to top, #000 25%, rgba(0,0,0,0.85) 55%, transparent 100%);
-        animation: fadeInUp 0.6s ease-out 0.2s both;
-    }}
-    
-    /* === TITLE ROW WITH RATING === */
-    .db-title-row {{
-        display: flex;
-        align-items: center;
-        gap: 15px;
-        margin-bottom: 8px;
-    }}
-    .db-title {{
-        font-family: 'Bebas Neue', sans-serif;
-        font-size: 2.8rem;
-        line-height: 1;
-        color: #fff;
-        text-shadow: 2px 2px 8px rgba(0,0,0,1);
-    }}
-    
-    /* === RADIAL RATING === */
-    .rating-circle {{
-        position: relative;
-        width: 50px;
-        height: 50px;
-        flex-shrink: 0;
-    }}
-    .rating-circle svg {{
-        transform: rotate(-90deg);
-    }}
-    .rating-circle .bg {{
-        fill: none;
-        stroke: #204529;
-        stroke-width: 4;
-    }}
-    .rating-circle .progress {{
-        fill: none;
-        stroke: {rating_color};
-        stroke-width: 4;
-        stroke-linecap: round;
-        stroke-dasharray: 126;
-        stroke-dashoffset: {126 - (126 * rating_pct / 100)};
-        transition: stroke-dashoffset 1s ease-out;
-    }}
-    .rating-circle .value {{
-        position: absolute;
-        top: 50%; left: 50%;
-        transform: translate(-50%, -50%);
-        font-family: 'Montserrat', sans-serif;
-        font-size: 0.9rem;
-        font-weight: 700;
-        color: #fff;
-    }}
-    
-    .db-meta {{
-        font-family: 'Montserrat', sans-serif;
-        font-size: 0.9rem;
-        color: #e50914;
-        font-weight: 700;
-        margin-bottom: 12px;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        animation: fadeInUp 0.6s ease-out 0.3s both;
-    }}
-    .db-overview {{
-        font-family: 'Montserrat', sans-serif;
-        font-size: 0.95rem;
-        color: #ddd;
-        line-height: 1.5;
-        margin-bottom: 12px;
-        display: -webkit-box;
-        -webkit-line-clamp: 3;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-        animation: fadeInUp 0.6s ease-out 0.4s both;
-    }}
-    .db-credits {{
-        font-size: 0.85rem;
-        color: #aaa;
-        margin-bottom: 12px;
-        animation: fadeInUp 0.6s ease-out 0.5s both;
-    }}
-    .db-credits strong {{ 
-        color: #fff;
-        transition: color 0.2s;
-    }}
-    .db-credits strong:hover {{
-        color: #e50914;
-    }}
-    .db-providers {{
-        margin-top: 12px;
-        padding-top: 15px;
-        border-top: 1px solid rgba(255,255,255,0.15);
-        animation: fadeInUp 0.6s ease-out 0.6s both;
-    }}
-    .db-providers img {{
-        width: 40px;
-        border-radius: 8px;
-        transition: transform 0.2s, box-shadow 0.2s;
-    }}
-    .db-providers img:hover {{
-        transform: scale(1.15);
-        box-shadow: 0 4px 15px rgba(229,9,20,0.4);
-    }}
-    </style>
-    <div class="dialog-billboard">
-        {video_section}
-        <div class="db-content-layer">
-            <div class="db-title-row">
-                <div class="db-title">{rec.get('title')}</div>
-                <div class="rating-circle">
-                    <svg width="50" height="50">
-                        <circle class="bg" cx="25" cy="25" r="20"></circle>
-                        <circle class="progress" cx="25" cy="25" r="20"></circle>
-                    </svg>
-                    <div class="value">{rating:.1f}</div>
+    billboard_html = f'''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+        <style>
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+            body {{ background: #000; font-family: 'Montserrat', sans-serif; overflow: hidden; }}
+            
+            @keyframes fadeInUp {{
+                from {{ opacity: 0; transform: translateY(20px); }}
+                to {{ opacity: 1; transform: translateY(0); }}
+            }}
+            @keyframes fadeIn {{
+                from {{ opacity: 0; }}
+                to {{ opacity: 1; }}
+            }}
+            
+            .dialog-billboard {{
+                background: #000;
+                position: relative;
+                width: 100%;
+                height: 100vh;
+                overflow: hidden;
+                cursor: pointer;
+                animation: fadeIn 0.5s ease-out;
+            }}
+            .db-video-layer {{
+                position: absolute;
+                top: -10%; left: 0;
+                width: 100%; height: 120%;
+                z-index: 1;
+                opacity: 0.7;
+            }}
+            .db-video-layer iframe, .db-video-layer img {{
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                pointer-events: none;
+            }}
+            .db-content-layer {{
+                position: absolute;
+                bottom: 0; left: 0;
+                width: 100%;
+                padding: 25px 35px;
+                z-index: 2;
+                background: linear-gradient(to top, #000 30%, rgba(0,0,0,0.85) 60%, transparent 100%);
+                animation: fadeInUp 0.6s ease-out 0.2s both;
+            }}
+            .db-title-row {{
+                display: flex;
+                align-items: center;
+                gap: 15px;
+                margin-bottom: 8px;
+            }}
+            .db-title {{
+                font-family: 'Bebas Neue', sans-serif;
+                font-size: 2.5rem;
+                line-height: 1;
+                color: #fff;
+                text-shadow: 2px 2px 8px rgba(0,0,0,1);
+            }}
+            .rating-circle {{
+                position: relative;
+                width: 48px;
+                height: 48px;
+                flex-shrink: 0;
+            }}
+            .rating-circle svg {{
+                transform: rotate(-90deg);
+            }}
+            .rating-circle .bg {{
+                fill: none;
+                stroke: #204529;
+                stroke-width: 4;
+            }}
+            .rating-circle .progress {{
+                fill: none;
+                stroke: {rating_color};
+                stroke-width: 4;
+                stroke-linecap: round;
+                stroke-dasharray: 126;
+                stroke-dashoffset: {126 - (126 * rating_pct / 100)};
+                transition: stroke-dashoffset 1s ease-out;
+            }}
+            .rating-circle .value {{
+                position: absolute;
+                top: 50%; left: 50%;
+                transform: translate(-50%, -50%);
+                font-size: 0.85rem;
+                font-weight: 700;
+                color: #fff;
+            }}
+            .db-meta {{
+                font-size: 0.85rem;
+                color: #e50914;
+                font-weight: 700;
+                margin-bottom: 10px;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                animation: fadeInUp 0.6s ease-out 0.3s both;
+            }}
+            .db-overview {{
+                font-size: 0.9rem;
+                color: #ddd;
+                line-height: 1.5;
+                margin-bottom: 10px;
+                display: -webkit-box;
+                -webkit-line-clamp: 3;
+                -webkit-box-orient: vertical;
+                overflow: hidden;
+                animation: fadeInUp 0.6s ease-out 0.4s both;
+            }}
+            .db-credits {{
+                font-size: 0.8rem;
+                color: #aaa;
+                margin-bottom: 10px;
+                animation: fadeInUp 0.6s ease-out 0.5s both;
+            }}
+            .db-credits strong {{ 
+                color: #fff;
+                transition: color 0.2s;
+            }}
+            .db-credits strong:hover {{
+                color: #e50914;
+            }}
+            .db-providers {{
+                margin-top: 10px;
+                padding-top: 12px;
+                border-top: 1px solid rgba(255,255,255,0.15);
+                animation: fadeInUp 0.6s ease-out 0.6s both;
+            }}
+            .db-providers .label {{
+                font-size: 0.7rem;
+                color: #aaa;
+                margin-bottom: 5px;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                font-weight: bold;
+            }}
+            .db-providers img {{
+                width: 38px;
+                border-radius: 8px;
+                transition: transform 0.2s, box-shadow 0.2s;
+                margin-right: 8px;
+            }}
+            .db-providers img:hover {{
+                transform: scale(1.15);
+                box-shadow: 0 4px 15px rgba(229,9,20,0.4);
+            }}
+            .mute-hint {{
+                position: absolute;
+                top: 15px;
+                right: 15px;
+                font-size: 0.7rem;
+                color: rgba(255,255,255,0.5);
+                z-index: 10;
+                animation: fadeIn 1s ease-out 1.5s both;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="dialog-billboard">
+            <div class="mute-hint">🔊 Click to unmute</div>
+            {video_html}
+            <div class="db-content-layer">
+                <div class="db-title-row">
+                    <div class="db-title">{rec.get('title')}</div>
+                    <div class="rating-circle">
+                        <svg width="48" height="48">
+                            <circle class="bg" cx="24" cy="24" r="20"></circle>
+                            <circle class="progress" cx="24" cy="24" r="20"></circle>
+                        </svg>
+                        <div class="value">{rating:.1f}</div>
+                    </div>
                 </div>
+                <div class="db-meta">{year} • {runtime} • {str(genres).split(',')[0]}</div>
+                <div class="db-overview">{overview_text}</div>
+                <div class="db-credits">Directed by <strong>{credits.get('director')}</strong> • Cast: <strong>{credits.get('cast')}</strong></div>
+                {provider_html}
             </div>
-            <div class="db-meta">{year} • {runtime} • {str(genres).split(',')[0]}</div>
-            <div class="db-overview">{overview_text}</div>
-            <div class="db-credits">Directed by <strong>{credits.get('director')}</strong> • Cast: <strong>{credits.get('cast')}</strong></div>{provider_html}</div>
-    </div>""", unsafe_allow_html=True)
+        </div>
+        {youtube_js}
+    </body>
+    </html>
+    '''
+    
+    # Render using components.html for JS execution
+    components.html(billboard_html, height=500, scrolling=False)
 
 
 def format_option(m):
