@@ -506,6 +506,17 @@ def show_movie_dialog(rec):
     if len(overview_text) > 200:
         overview_text = overview_text[:200].rsplit(' ', 1)[0] + '...'
 
+    # Build clickable Google search links for director and cast
+    import urllib.parse
+    director_name = credits.get('director', 'Unknown')
+    director_link = f'<a href="https://www.google.com/search?q={urllib.parse.quote(director_name)}" target="_blank" class="credit-link">{director_name}</a>'
+    
+    cast_names = credits.get('cast', '').split(', ')
+    cast_links = ', '.join([
+        f'<a href="https://www.google.com/search?q={urllib.parse.quote(name.strip())}" target="_blank" class="credit-link">{name.strip()}</a>'
+        for name in cast_names if name.strip()
+    ])
+
     # Calculate rating percentage for radial progress bar
     rating_pct = (rating / 10) * 100
     rating_color = "#21d07a" if rating >= 7 else "#d2d531" if rating >= 5 else "#db2360"
@@ -737,6 +748,16 @@ def show_movie_dialog(rec):
                 transform: scale(1.15);
                 box-shadow: 0 4px 15px rgba(229,9,20,0.4);
             }}
+            /* Credit links */
+            .credit-link {{
+                color: #e50914;
+                text-decoration: none;
+                transition: all 0.2s;
+            }}
+            .credit-link:hover {{
+                color: #fff;
+                text-decoration: underline;
+            }}
             /* Mute button */
             #muteBtn {{
                 position: absolute;
@@ -781,7 +802,7 @@ def show_movie_dialog(rec):
                 </div>
                 <div class="db-meta">{year} • {runtime} • {str(genres).split(',')[0]}</div>
                 <div class="db-overview">{overview_text}</div>
-                <div class="db-credits">Directed by <strong>{credits.get('director')}</strong> • Cast: <strong>{credits.get('cast')}</strong></div>
+                <div class="db-credits">Directed by {director_link} • Cast: {cast_links}</div>
                 {provider_html}
             </div>
         </div>
