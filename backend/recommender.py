@@ -77,7 +77,7 @@ class Recommender:
                 self._movies = pd.read_parquet(movies_path)
             logger.info(f"Loaded {len(self._movies):,} movies")
         else:
-            raise FileNotFoundError(f"Movie data not found. Run the ETL pipeline first.")
+            raise FileNotFoundError("Movie data not found. Run the ETL pipeline first.")
         
         return self
     

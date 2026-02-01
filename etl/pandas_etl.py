@@ -119,7 +119,7 @@ def filter_movies(df: pd.DataFrame) -> pd.DataFrame:
     
     # Remove adult content
     if "adult" in df.columns:
-        df = df[df["adult"] != True]
+        df = df[~df["adult"]]
     
     # Max limit
     if data_config.max_movies:
@@ -264,7 +264,6 @@ def transform(df: pd.DataFrame | None = None) -> tuple[pd.DataFrame, np.ndarray]
     
     if df is None:
         # If loading from ingest result
-        parquet_path = paths.processed_data / "movies.parquet" # Or directly prompt ingest
         # But in unified pipeline we pass df directly. 
         # If called standalone, try loading:
         if (paths.processed_data / "movies.parquet").exists():
