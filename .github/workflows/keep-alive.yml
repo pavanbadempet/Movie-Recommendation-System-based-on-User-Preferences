@@ -16,10 +16,26 @@ jobs:
     steps:
       - name: Ping Render backend
         run: |
-          # Replace with your actual Render URL
-          curl -sf "${{ secrets.RENDER_URL }}/health" || echo "Render ping failed or URL not set"
+          echo "Pinging Render backend..."
+          for i in 1 2 3; do
+            if curl -sf --max-time 30 "https://movie-recommendation-system-w0n0.onrender.com/health"; then
+              echo "✅ Render backend is alive!"
+              break
+            else
+              echo "Attempt $i failed, retrying..."
+              sleep 5
+            fi
+          done
       
-      - name: Ping Streamlit app
+      - name: Ping Streamlit frontend
         run: |
-          # Replace with your actual Streamlit URL
-          curl -sf "${{ secrets.STREAMLIT_URL }}" || echo "Streamlit ping failed or URL not set"
+          echo "Pinging Streamlit frontend..."
+          for i in 1 2 3; do
+            if curl -sf --max-time 60 "https://movie-recommendation-system-x.streamlit.app/"; then
+              echo "✅ Streamlit frontend is alive!"
+              break
+            else
+              echo "Attempt $i failed, retrying..."
+              sleep 5
+            fi
+          done
