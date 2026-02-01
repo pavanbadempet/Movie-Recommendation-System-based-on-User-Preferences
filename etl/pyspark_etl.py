@@ -190,8 +190,6 @@ def run_spark_etl(input_path: str = "data/raw/TMDB_all_movies.csv", run_date: st
         import numpy as np
         import faiss
         
-        # Initializing arrays
-        ids = [r['id'] for r in rows]
         # COMPRESSION (Precision Engineering): 
         # Convert to float16 (Half Precision) to save 50% RAM/Disk/Network
         vectors = np.array([r['vector'] for r in rows]).astype('float16')
