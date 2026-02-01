@@ -515,74 +515,13 @@ def show_movie_dialog(rec):
     
     player_id = f"player_{movie_id}"
     
-    # Build the video HTML based on whether we have a trailer
+    # Simple iframe video embed - users can unmute via YouTube's speaker button
     if trailer_key:
-        video_html = f'<div id="{player_id}" class="db-video-layer"></div>'
-        youtube_js = f'''
-        <script>
-            var tag = document.createElement('script');
-            tag.src = "https://www.youtube.com/iframe_api";
-            var firstScriptTag = document.getElementsByTagName('script')[0];
-            firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-            
-            var player;
-            var isMuted = true;
-            
-            function onYouTubeIframeAPIReady() {{
-                player = new YT.Player('{player_id}', {{
-                    videoId: '{trailer_key}',
-                    playerVars: {{
-                        'autoplay': 1,
-                        'mute': 1,
-                        'controls': 0,
-                        'disablekb': 1,
-                        'modestbranding': 1,
-                        'loop': 1,
-                        'playlist': '{trailer_key}',
-                        'playsinline': 1,
-                        'rel': 0,
-                        'showinfo': 0,
-                        'iv_load_policy': 3,
-                        'fs': 0
-                    }},
-                    events: {{
-                        'onReady': onPlayerReady,
-                        'onStateChange': onPlayerStateChange
-                    }}
-                }});
-            }}
-            
-            function onPlayerReady(event) {{
-                event.target.playVideo();
-                // Disable pointer events on the iframe to prevent pause on click
-                setTimeout(function() {{
-                    var iframe = document.querySelector('#{player_id} iframe');
-                    if (iframe) {{
-                        iframe.style.pointerEvents = 'none';
-                    }}
-                }}, 500);
-            }}
-            
-            function onPlayerStateChange(event) {{
-                // If paused, resume playing (prevents click-to-pause behavior)
-                if (event.data === YT.PlayerState.PAUSED) {{
-                    event.target.playVideo();
-                }}
-            }}
-            
-            function toggleMute() {{
-                if (player && typeof player.isMuted === 'function') {{
-                    if (player.isMuted()) {{
-                        player.unMute();
-                    }} else {{
-                        player.mute();
-                    }}
-            }}
-            
-            // Attach click to the transparent overlay that sits on top of everything
-            document.getElementById('clickOverlay').addEventListener('click', toggleMute);
-        </script>
-        '''
+        video_html = f'''<div class="db-video-layer">
+            <iframe src="https://www.youtube.com/embed/{trailer_key}?autoplay=1&mute=1&controls=1&modestbranding=1&loop=1&playlist={trailer_key}&rel=0" 
+                    frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+        </div>'''
+        youtube_js = ""
     else:
         poster_url = fetch_poster(tmdb.get("backdrop_path") or rec.get("poster_path"))
         video_html = f'<div class="db-video-layer"><img src="{poster_url}" alt="backdrop"></div>'
@@ -738,21 +677,11 @@ def show_movie_dialog(rec):
                 transform: scale(1.15);
                 box-shadow: 0 4px 15px rgba(229,9,20,0.4);
             }}
-            /* Transparent click overlay - sits on top of YouTube iframe */
-            .click-overlay {{
-                position: absolute;
-                top: 0; left: 0;
-                width: 100%; height: 100%;
-                z-index: 100;
-                cursor: pointer;
-                background: transparent;
-            }}
 
         </style>
     </head>
     <body>
         <div class="dialog-billboard">
-            <div class="click-overlay" id="clickOverlay"></div>
             {video_html}
             <div class="db-content-layer">
                 <div class="db-title-row">
