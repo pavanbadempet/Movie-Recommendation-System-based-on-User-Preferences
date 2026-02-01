@@ -544,7 +544,9 @@ def show_movie_dialog(rec):
                         'rel': 0,
                         'showinfo': 0,
                         'iv_load_policy': 3,
-                        'fs': 0
+                        'fs': 0,
+                        'cc_load_policy': 0,
+                        'autohide': 1
                     }},
                     events: {{
                         'onReady': onPlayerReady
