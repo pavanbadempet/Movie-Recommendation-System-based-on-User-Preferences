@@ -565,7 +565,6 @@ def show_movie_dialog(rec):
                 width: 100%;
                 height: 100%;
                 object-fit: cover;
-                pointer-events: none;
             }}
             .db-content-layer {{
                 position: absolute;
