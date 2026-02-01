@@ -527,7 +527,6 @@ def show_movie_dialog(rec):
             
             var player;
             var isMuted = true;
-            var hintEl = document.querySelector('.mute-hint');
             
             function onYouTubeIframeAPIReady() {{
                 player = new YT.Player('{player_id}', {{
@@ -575,11 +574,9 @@ def show_movie_dialog(rec):
                     if (isMuted) {{
                         player.unMute();
                         isMuted = false;
-                        if (hintEl) hintEl.textContent = '🔇 Click to mute';
                     }} else {{
                         player.mute();
                         isMuted = true;
-                        if (hintEl) hintEl.textContent = '🔊 Click to unmute';
                     }}
                 }}
             }});
@@ -740,20 +737,12 @@ def show_movie_dialog(rec):
                 transform: scale(1.15);
                 box-shadow: 0 4px 15px rgba(229,9,20,0.4);
             }}
-            .mute-hint {{
-                position: absolute;
-                top: 15px;
-                right: 15px;
-                font-size: 0.7rem;
-                color: rgba(255,255,255,0.5);
-                z-index: 10;
-                animation: fadeIn 1s ease-out 1.5s both;
-            }}
+
         </style>
     </head>
     <body>
         <div class="dialog-billboard">
-            <div class="mute-hint">🔊 Click to unmute</div>
+
             {video_html}
             <div class="db-content-layer">
                 <div class="db-title-row">
