@@ -757,7 +757,7 @@ def show_movie_dialog(rec):
     '''
     
     # Render using components.html for JS execution
-    components.html(billboard_html, height=700, scrolling=False)
+    components.html(billboard_html, height=600, scrolling=False)
 
 
 def format_option(m):
