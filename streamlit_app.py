@@ -577,17 +577,10 @@ def show_movie_dialog(rec):
                     }} else {{
                         player.mute();
                     }}
-                }}
             }}
             
-            // Attach click to body - simpler and more reliable
-            document.body.addEventListener('click', function(e) {{
-                // Don't toggle mute if clicking on a link
-                if (e.target.tagName === 'A' || e.target.closest('a')) {{
-                    return;
-                }}
-                toggleMute();
-            }});
+            // Attach click to the transparent overlay that sits on top of everything
+            document.getElementById('clickOverlay').addEventListener('click', toggleMute);
         </script>
         '''
     else:
@@ -745,12 +738,21 @@ def show_movie_dialog(rec):
                 transform: scale(1.15);
                 box-shadow: 0 4px 15px rgba(229,9,20,0.4);
             }}
+            /* Transparent click overlay - sits on top of YouTube iframe */
+            .click-overlay {{
+                position: absolute;
+                top: 0; left: 0;
+                width: 100%; height: 100%;
+                z-index: 100;
+                cursor: pointer;
+                background: transparent;
+            }}
 
         </style>
     </head>
     <body>
         <div class="dialog-billboard">
-
+            <div class="click-overlay" id="clickOverlay"></div>
             {video_html}
             <div class="db-content-layer">
                 <div class="db-title-row">
