@@ -500,6 +500,12 @@ def show_movie_dialog(rec):
         
         provider_html = f'<div class="db-providers"><div style="font-size:0.7rem; color:#aaa; margin-bottom:5px; text-transform:uppercase; letter-spacing:1px; font-weight:bold;">Watch Now</div>{cards}</div>'
 
+    # Truncate overview to 2 sentences max for compact display
+    overview_text = rec.get('overview', '')
+    sentences = overview_text.split('. ')
+    if len(sentences) > 2:
+        overview_text = '. '.join(sentences[:2]) + '...'
+    
     st.markdown(f"""
     <style>
     .dialog-billboard {{
@@ -508,8 +514,8 @@ def show_movie_dialog(rec):
         overflow: hidden;
         position: relative;
         width: 100% !important;
-        aspect-ratio: 16 / 9;
-        height: auto; 
+        height: 70vh; /* Fixed viewport height - fits any screen */
+        max-height: 500px; /* Cap for very large screens */
         box-shadow: none;
         border: none;
         margin: 0px;
@@ -518,60 +524,76 @@ def show_movie_dialog(rec):
         position: absolute;
         top: 0; left: 0; width: 100%; height: 100%;
         z-index: 1;
-        opacity: 0.4;
+        opacity: 0.5;
         pointer-events: none;
+    }}
+    .db-video-layer iframe, .db-video-layer img {{
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
     }}
     .db-content-layer {{
         position: absolute;
         bottom: 0; left: 0; width: 100%;
-        padding: 40px;
+        padding: 20px 30px;
         z-index: 2;
-        background: linear-gradient(to top, #000 15%, rgba(0,0,0,0.95) 50%, transparent 100%);
-        display: flex;
-        flex-direction: column;
-        gap: 15px;
+        background: linear-gradient(to top, #000 20%, rgba(0,0,0,0.9) 60%, transparent 100%);
     }}
     .db-title {{
         font-family: 'Bebas Neue', sans-serif;
-        font-size: 3.5rem;
-        line-height: 0.9;
+        font-size: 2rem;
+        line-height: 1;
         margin-bottom: 5px;
         color: #fff;
-        text-shadow: 2px 2px 10px rgba(0,0,0,1);
+        text-shadow: 2px 2px 8px rgba(0,0,0,1);
     }}
     .db-meta {{
         font-family: 'Montserrat', sans-serif;
-        font-size: 0.85rem;
+        font-size: 0.75rem;
         color: #e50914;
         font-weight: 700;
-        margin-bottom: 10px;
+        margin-bottom: 8px;
         text-transform: uppercase;
         letter-spacing: 1px;
-        text-shadow: 1px 1px 2px #000;
     }}
     .db-overview {{
         font-family: 'Montserrat', sans-serif;
-        font-size: 0.95rem;
+        font-size: 0.8rem;
         color: #ccc;
-        line-height: 1.5;
-        max-width: 100%;
-        text-shadow: 1px 1px 2px rgba(0,0,0,1);
-        margin-bottom: 15px;
+        line-height: 1.4;
+        margin-bottom: 8px;
+        /* Limit to 2 lines max */
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
     }}
     .db-credits {{
-        font-size: 0.8rem;
+        font-size: 0.7rem;
         color: #999;
-        text-shadow: 1px 1px 2px #000;
-        margin-bottom: 15px;
+        margin-bottom: 8px;
     }}
     .db-credits strong {{ color: #eee; }}
     .db-providers {{
-        margin-top: 5px;
-        padding-top: 15px;
-        border-top: 1px solid rgba(255,255,255,0.1);
+        margin-top: 8px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(255,255,255,0.15);
+    }}
+    .db-providers img {{
+        width: 32px;
+        border-radius: 6px;
     }}
     </style>
-    <div class="dialog-billboard"><div class="db-video-layer">{video_embed}</div><div class="db-content-layer"><div><div class="db-title">{rec.get('title')}</div><div class="db-meta">⭐ {rating:.1f} • {year} • {runtime} • {str(genres).split(',')[0]}</div><div class="db-overview">{rec.get('overview')}</div><div class="db-credits">Directed by <strong>{credits.get('director')}</strong> • Cast: <strong>{credits.get('cast')}</strong></div></div>{provider_html}</div></div>""", unsafe_allow_html=True)
+    <div class="dialog-billboard">
+        <div class="db-video-layer">{video_embed}</div>
+        <div class="db-content-layer">
+            <div class="db-title">{rec.get('title')}</div>
+            <div class="db-meta">⭐ {rating:.1f} • {year} • {runtime} • {str(genres).split(',')[0]}</div>
+            <div class="db-overview">{overview_text}</div>
+            <div class="db-credits">Directed by <strong>{credits.get('director')}</strong> • Cast: <strong>{credits.get('cast')}</strong></div>
+            {provider_html}
+        </div>
+    </div>""", unsafe_allow_html=True)
 
 
 def format_option(m):
