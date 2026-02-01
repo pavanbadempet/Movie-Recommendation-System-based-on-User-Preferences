@@ -514,8 +514,8 @@ def show_movie_dialog(rec):
         overflow: hidden;
         position: relative;
         width: 100% !important;
-        height: 70vh; /* Fixed viewport height - fits any screen */
-        max-height: 500px; /* Cap for very large screens */
+        height: 80vh; /* Larger viewport height */
+        max-height: 650px; /* Higher cap */
         box-shadow: none;
         border: none;
         margin: 0px;
@@ -535,53 +535,53 @@ def show_movie_dialog(rec):
     .db-content-layer {{
         position: absolute;
         bottom: 0; left: 0; width: 100%;
-        padding: 20px 30px;
+        padding: 30px 40px;
         z-index: 2;
-        background: linear-gradient(to top, #000 20%, rgba(0,0,0,0.9) 60%, transparent 100%);
+        background: linear-gradient(to top, #000 25%, rgba(0,0,0,0.9) 60%, transparent 100%);
     }}
     .db-title {{
         font-family: 'Bebas Neue', sans-serif;
-        font-size: 2rem;
+        font-size: 2.8rem;
         line-height: 1;
-        margin-bottom: 5px;
+        margin-bottom: 8px;
         color: #fff;
         text-shadow: 2px 2px 8px rgba(0,0,0,1);
     }}
     .db-meta {{
         font-family: 'Montserrat', sans-serif;
-        font-size: 0.75rem;
+        font-size: 0.9rem;
         color: #e50914;
         font-weight: 700;
-        margin-bottom: 8px;
+        margin-bottom: 12px;
         text-transform: uppercase;
         letter-spacing: 1px;
     }}
     .db-overview {{
         font-family: 'Montserrat', sans-serif;
-        font-size: 0.8rem;
-        color: #ccc;
-        line-height: 1.4;
-        margin-bottom: 8px;
-        /* Limit to 2 lines max */
+        font-size: 0.95rem;
+        color: #ddd;
+        line-height: 1.5;
+        margin-bottom: 12px;
+        /* Limit to 3 lines max */
         display: -webkit-box;
-        -webkit-line-clamp: 2;
+        -webkit-line-clamp: 3;
         -webkit-box-orient: vertical;
         overflow: hidden;
     }}
     .db-credits {{
-        font-size: 0.7rem;
-        color: #999;
-        margin-bottom: 8px;
+        font-size: 0.85rem;
+        color: #aaa;
+        margin-bottom: 12px;
     }}
-    .db-credits strong {{ color: #eee; }}
+    .db-credits strong {{ color: #fff; }}
     .db-providers {{
-        margin-top: 8px;
-        padding-top: 10px;
+        margin-top: 12px;
+        padding-top: 15px;
         border-top: 1px solid rgba(255,255,255,0.15);
     }}
     .db-providers img {{
-        width: 32px;
-        border-radius: 6px;
+        width: 40px;
+        border-radius: 8px;
     }}
     </style>
     <div class="dialog-billboard">
