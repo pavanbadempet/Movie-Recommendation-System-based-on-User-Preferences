@@ -884,6 +884,13 @@ if "page" not in st.session_state:
 
 def go_home():
     st.session_state.page = "home"
+    # Clear search results when going home
+    if "recs" in st.session_state:
+        del st.session_state.recs
+    if "source_movie" in st.session_state:
+        del st.session_state.source_movie
+    if "selected_rec" in st.session_state:
+        del st.session_state.selected_rec
 
 def go_search():
     st.session_state.page = "search"
