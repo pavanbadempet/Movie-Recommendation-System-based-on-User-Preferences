@@ -652,6 +652,10 @@ def show_movie_dialog(rec):
                 z-index: 2;
                 background: linear-gradient(to top, #000 30%, rgba(0,0,0,0.85) 60%, transparent 100%);
                 animation: fadeInUp 0.6s ease-out 0.2s both;
+                pointer-events: none; /* Let clicks pass through to video layer */
+            }}
+            .db-providers a {{
+                pointer-events: auto; /* But keep Watch Now links clickable */
             }}
             .db-title-row {{
                 display: flex;
