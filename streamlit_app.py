@@ -500,53 +500,166 @@ def show_movie_dialog(rec):
         
         provider_html = f'<div class="db-providers"><div style="font-size:0.7rem; color:#aaa; margin-bottom:5px; text-transform:uppercase; letter-spacing:1px; font-weight:bold;">Watch Now</div>{cards}</div>'
 
-    # Truncate overview to 2 sentences max for compact display
+    # Truncate overview for compact display
     overview_text = rec.get('overview', '')
-    sentences = overview_text.split('. ')
-    if len(sentences) > 2:
-        overview_text = '. '.join(sentences[:2]) + '...'
+    if len(overview_text) > 200:
+        overview_text = overview_text[:200].rsplit(' ', 1)[0] + '...'
+
+    # Calculate rating percentage for radial progress bar
+    rating_pct = (rating / 10) * 100
+    rating_color = "#21d07a" if rating >= 7 else "#d2d531" if rating >= 5 else "#db2360"
+    
+    # Build unique player ID for this dialog instance
+    player_id = f"player_{movie_id}"
+    
+    # Video embed with YouTube Player API for click-to-mute
+    video_section = ""
+    if trailer_key:
+        video_section = f'''
+        <div id="{player_id}" class="db-video-layer" onclick="toggleMute()"></div>
+        <script>
+            var tag = document.createElement('script');
+            tag.src = "https://www.youtube.com/iframe_api";
+            var firstScriptTag = document.getElementsByTagName('script')[0];
+            firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+            
+            var player;
+            var isMuted = true;
+            function onYouTubeIframeAPIReady() {{
+                player = new YT.Player('{player_id}', {{
+                    videoId: '{trailer_key}',
+                    playerVars: {{
+                        'autoplay': 1,
+                        'mute': 1,
+                        'controls': 0,
+                        'disablekb': 1,
+                        'modestbranding': 1,
+                        'loop': 1,
+                        'playlist': '{trailer_key}',
+                        'playsinline': 1
+                    }},
+                    events: {{
+                        'onReady': function(event) {{
+                            event.target.playVideo();
+                        }}
+                    }}
+                }});
+            }}
+            function toggleMute() {{
+                if (player && player.isMuted) {{
+                    if (isMuted) {{
+                        player.unMute();
+                        isMuted = false;
+                    }} else {{
+                        player.mute();
+                        isMuted = true;
+                    }}
+                }}
+            }}
+        </script>
+        '''
+    else:
+        poster_url = fetch_poster(tmdb.get("backdrop_path") or rec.get("poster_path"))
+        video_section = f'<div class="db-video-layer"><img src="{poster_url}" alt="backdrop"></div>'
     
     st.markdown(f"""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@400;600;700&display=swap');
+    
+    /* === ANIMATIONS === */
+    @keyframes fadeInUp {{
+        from {{ opacity: 0; transform: translateY(20px); }}
+        to {{ opacity: 1; transform: translateY(0); }}
+    }}
+    @keyframes fadeIn {{
+        from {{ opacity: 0; }}
+        to {{ opacity: 1; }}
+    }}
+    
     .dialog-billboard {{
         background: #000;
         border-radius: 0px !important; 
         overflow: hidden;
         position: relative;
         width: 100% !important;
-        height: 80vh; /* Larger viewport height */
-        max-height: 650px; /* Higher cap */
+        height: 80vh;
+        max-height: 650px;
         box-shadow: none;
         border: none;
         margin: 0px;
+        animation: fadeIn 0.5s ease-out;
     }}
     .db-video-layer {{
         position: absolute;
         top: -15%; left: 0; width: 100%; height: 130%;
         z-index: 1;
-        opacity: 0.6;
-        pointer-events: none;
+        opacity: 0.7;
+        cursor: pointer; /* Shows it's clickable */
     }}
     .db-video-layer iframe, .db-video-layer img {{
         width: 100%;
         height: 100%;
         object-fit: cover;
+        pointer-events: none; /* Click goes to parent div */
     }}
     .db-content-layer {{
         position: absolute;
         bottom: 0; left: 0; width: 100%;
         padding: 30px 40px;
         z-index: 2;
-        background: linear-gradient(to top, #000 25%, rgba(0,0,0,0.9) 60%, transparent 100%);
+        background: linear-gradient(to top, #000 25%, rgba(0,0,0,0.85) 55%, transparent 100%);
+        animation: fadeInUp 0.6s ease-out 0.2s both;
+    }}
+    
+    /* === TITLE ROW WITH RATING === */
+    .db-title-row {{
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        margin-bottom: 8px;
     }}
     .db-title {{
         font-family: 'Bebas Neue', sans-serif;
         font-size: 2.8rem;
         line-height: 1;
-        margin-bottom: 8px;
         color: #fff;
         text-shadow: 2px 2px 8px rgba(0,0,0,1);
     }}
+    
+    /* === RADIAL RATING === */
+    .rating-circle {{
+        position: relative;
+        width: 50px;
+        height: 50px;
+        flex-shrink: 0;
+    }}
+    .rating-circle svg {{
+        transform: rotate(-90deg);
+    }}
+    .rating-circle .bg {{
+        fill: none;
+        stroke: #204529;
+        stroke-width: 4;
+    }}
+    .rating-circle .progress {{
+        fill: none;
+        stroke: {rating_color};
+        stroke-width: 4;
+        stroke-linecap: round;
+        stroke-dasharray: 126;
+        stroke-dashoffset: {126 - (126 * rating_pct / 100)};
+        transition: stroke-dashoffset 1s ease-out;
+    }}
+    .rating-circle .value {{
+        position: absolute;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        font-family: 'Montserrat', sans-serif;
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: #fff;
+    }}
+    
     .db-meta {{
         font-family: 'Montserrat', sans-serif;
         font-size: 0.9rem;
@@ -555,6 +668,7 @@ def show_movie_dialog(rec):
         margin-bottom: 12px;
         text-transform: uppercase;
         letter-spacing: 1px;
+        animation: fadeInUp 0.6s ease-out 0.3s both;
     }}
     .db-overview {{
         font-family: 'Montserrat', sans-serif;
@@ -562,33 +676,55 @@ def show_movie_dialog(rec):
         color: #ddd;
         line-height: 1.5;
         margin-bottom: 12px;
-        /* Limit to 3 lines max */
         display: -webkit-box;
         -webkit-line-clamp: 3;
         -webkit-box-orient: vertical;
         overflow: hidden;
+        animation: fadeInUp 0.6s ease-out 0.4s both;
     }}
     .db-credits {{
         font-size: 0.85rem;
         color: #aaa;
         margin-bottom: 12px;
+        animation: fadeInUp 0.6s ease-out 0.5s both;
     }}
-    .db-credits strong {{ color: #fff; }}
+    .db-credits strong {{ 
+        color: #fff;
+        transition: color 0.2s;
+    }}
+    .db-credits strong:hover {{
+        color: #e50914;
+    }}
     .db-providers {{
         margin-top: 12px;
         padding-top: 15px;
         border-top: 1px solid rgba(255,255,255,0.15);
+        animation: fadeInUp 0.6s ease-out 0.6s both;
     }}
     .db-providers img {{
         width: 40px;
         border-radius: 8px;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }}
+    .db-providers img:hover {{
+        transform: scale(1.15);
+        box-shadow: 0 4px 15px rgba(229,9,20,0.4);
     }}
     </style>
     <div class="dialog-billboard">
-        <div class="db-video-layer">{video_embed}</div>
+        {video_section}
         <div class="db-content-layer">
-            <div class="db-title">{rec.get('title')}</div>
-            <div class="db-meta">⭐ {rating:.1f} • {year} • {runtime} • {str(genres).split(',')[0]}</div>
+            <div class="db-title-row">
+                <div class="db-title">{rec.get('title')}</div>
+                <div class="rating-circle">
+                    <svg width="50" height="50">
+                        <circle class="bg" cx="25" cy="25" r="20"></circle>
+                        <circle class="progress" cx="25" cy="25" r="20"></circle>
+                    </svg>
+                    <div class="value">{rating:.1f}</div>
+                </div>
+            </div>
+            <div class="db-meta">{year} • {runtime} • {str(genres).split(',')[0]}</div>
             <div class="db-overview">{overview_text}</div>
             <div class="db-credits">Directed by <strong>{credits.get('director')}</strong> • Cast: <strong>{credits.get('cast')}</strong></div>{provider_html}</div>
     </div>""", unsafe_allow_html=True)
