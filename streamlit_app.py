@@ -515,13 +515,65 @@ def show_movie_dialog(rec):
     
     player_id = f"player_{movie_id}"
     
-    # Simple iframe video embed - users can unmute via YouTube's speaker button
+    # YouTube Player API with custom mute button (no YouTube controls)
     if trailer_key:
-        video_html = f'''<div class="db-video-layer">
-            <iframe src="https://www.youtube.com/embed/{trailer_key}?autoplay=1&mute=1&controls=1&modestbranding=1&loop=1&playlist={trailer_key}&rel=0" 
-                    frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
-        </div>'''
-        youtube_js = ""
+        video_html = f'<div id="{player_id}" class="db-video-layer"></div>'
+        youtube_js = f'''
+        <script>
+            var tag = document.createElement('script');
+            tag.src = "https://www.youtube.com/iframe_api";
+            var firstScriptTag = document.getElementsByTagName('script')[0];
+            firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+            
+            var player;
+            var isMuted = true;
+            var muteBtn = document.getElementById('muteBtn');
+            
+            function onYouTubeIframeAPIReady() {{
+                player = new YT.Player('{player_id}', {{
+                    videoId: '{trailer_key}',
+                    playerVars: {{
+                        'autoplay': 1,
+                        'mute': 1,
+                        'controls': 0,
+                        'disablekb': 1,
+                        'modestbranding': 1,
+                        'loop': 1,
+                        'playlist': '{trailer_key}',
+                        'playsinline': 1,
+                        'rel': 0,
+                        'showinfo': 0,
+                        'iv_load_policy': 3,
+                        'fs': 0
+                    }},
+                    events: {{
+                        'onReady': onPlayerReady
+                    }}
+                }});
+            }}
+            
+            function onPlayerReady(event) {{
+                event.target.playVideo();
+            }}
+            
+            function toggleMute() {{
+                if (player && typeof player.isMuted === 'function') {{
+                    if (player.isMuted()) {{
+                        player.unMute();
+                        isMuted = false;
+                        muteBtn.innerHTML = '🔊';
+                    }} else {{
+                        player.mute();
+                        isMuted = true;
+                        muteBtn.innerHTML = '🔇';
+                    }}
+                }}
+            }}
+            
+            // Attach click to mute button
+            muteBtn.addEventListener('click', toggleMute);
+        </script>
+        '''
     else:
         poster_url = fetch_poster(tmdb.get("backdrop_path") or rec.get("poster_path"))
         video_html = f'<div class="db-video-layer"><img src="{poster_url}" alt="backdrop"></div>'
@@ -565,6 +617,7 @@ def show_movie_dialog(rec):
                 width: 100%;
                 height: 100%;
                 object-fit: cover;
+                pointer-events: none;
             }}
             .db-content-layer {{
                 position: absolute;
@@ -676,11 +729,36 @@ def show_movie_dialog(rec):
                 transform: scale(1.15);
                 box-shadow: 0 4px 15px rgba(229,9,20,0.4);
             }}
+            /* Mute button */
+            #muteBtn {{
+                position: absolute;
+                top: 15px;
+                right: 15px;
+                width: 44px;
+                height: 44px;
+                border-radius: 50%;
+                background: rgba(0,0,0,0.7);
+                border: 2px solid rgba(255,255,255,0.3);
+                color: #fff;
+                font-size: 20px;
+                cursor: pointer;
+                z-index: 100;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: all 0.2s;
+            }}
+            #muteBtn:hover {{
+                background: rgba(229,9,20,0.8);
+                border-color: #e50914;
+                transform: scale(1.1);
+            }}
 
         </style>
     </head>
     <body>
         <div class="dialog-billboard">
+            <button id="muteBtn">🔇</button>
             {video_html}
             <div class="db-content-layer">
                 <div class="db-title-row">
