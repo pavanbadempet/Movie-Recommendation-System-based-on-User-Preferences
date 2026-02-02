@@ -478,7 +478,7 @@ def show_movie_dialog(rec):
         video_embed = f'<iframe src="https://www.youtube.com/embed/{trailer_key}?autoplay=1&mute=1&controls=0&disablekb=1&modestbranding=1&loop=1&playlist={trailer_key}" style="width:100%; height:100%; border:none; pointer-events: none;"></iframe>'
     else:
         poster_url = fetch_poster(tmdb.get("backdrop_path") or rec.get("poster_path"))
-        video_embed = f'<img src="{poster_url}" style="width:100%; height:100%; object-fit:cover; opacity: 0.6;">'
+        # Poster fallback - video_embed is defined in the components.html section below
 
     # Extract Metadata
     genres = ", ".join([g["name"] for g in tmdb.get("genres", [])[:3]]) if tmdb.get("genres") else rec.get("genres", "")
@@ -506,6 +506,17 @@ def show_movie_dialog(rec):
     if len(overview_text) > 200:
         overview_text = overview_text[:200].rsplit(' ', 1)[0] + '...'
 
+    # Build clickable Google search links for director and cast
+    import urllib.parse
+    director_name = credits.get('director', 'Unknown')
+    director_link = f'<a href="https://www.google.com/search?q={urllib.parse.quote(director_name)}" target="_blank" class="credit-link">{director_name}</a>'
+    
+    cast_names = credits.get('cast', '').split(', ')
+    cast_links = ', '.join([
+        f'<a href="https://www.google.com/search?q={urllib.parse.quote(name.strip())}" target="_blank" class="credit-link">{name.strip()}</a>'
+        for name in cast_names if name.strip()
+    ])
+
     # Calculate rating percentage for radial progress bar
     rating_pct = (rating / 10) * 100
     rating_color = "#21d07a" if rating >= 7 else "#d2d531" if rating >= 5 else "#db2360"
@@ -515,30 +526,64 @@ def show_movie_dialog(rec):
     
     player_id = f"player_{movie_id}"
     
-    # Simple iframe with all parameters to hide controls + postMessage for mute
+    # YouTube Player API for reliable mute control
     if trailer_key:
-        iframe_id = f"ytplayer_{movie_id}"
-        video_html = f'''<div class="db-video-layer">
-            <iframe id="{iframe_id}" 
-                    src="https://www.youtube.com/embed/{trailer_key}?autoplay=1&mute=1&controls=0&disablekb=1&modestbranding=1&loop=1&playlist={trailer_key}&playsinline=1&rel=0&showinfo=0&iv_load_policy=3&fs=0&enablejsapi=1&origin=https://movie-recommendation-system-w0n0.onrender.com"
-                    frameborder="0" 
-                    allow="autoplay; encrypted-media"
-                    allowfullscreen></iframe>
-        </div>'''
+        player_id = f"ytplayer_{movie_id}"
+        video_html = f'<div id="{player_id}" class="db-video-layer"></div>'
         youtube_js = f'''
         <script>
-            var muteBtn = document.getElementById('muteBtn');
-            var iframe = document.getElementById('{iframe_id}');
+            var tag = document.createElement('script');
+            tag.src = "https://www.youtube.com/iframe_api";
+            var firstScriptTag = document.getElementsByTagName('script')[0];
+            firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+            
+            var player;
             var isMuted = true;
+            var muteBtn = document.getElementById('muteBtn');
+            
+            function onYouTubeIframeAPIReady() {{
+                player = new YT.Player('{player_id}', {{
+                    videoId: '{trailer_key}',
+                    playerVars: {{
+                        'autoplay': 1,
+                        'mute': 1,
+                        'controls': 0,
+                        'disablekb': 1,
+                        'modestbranding': 1,
+                        'loop': 1,
+                        'playlist': '{trailer_key}',
+                        'playsinline': 1,
+                        'rel': 0,
+                        'showinfo': 0,
+                        'iv_load_policy': 3,
+                        'fs': 0
+                    }},
+                    events: {{
+                        'onReady': onPlayerReady
+                    }}
+                }});
+            }}
+            
+            function onPlayerReady(event) {{
+                event.target.playVideo();
+                // Apply pointer-events:none to the generated iframe
+                var playerDiv = document.getElementById('{player_id}');
+                if (playerDiv) {{
+                    var iframe = playerDiv.querySelector('iframe');
+                    if (iframe) {{
+                        iframe.style.pointerEvents = 'none';
+                    }}
+                }}
+            }}
             
             function toggleMute() {{
-                if (iframe) {{
-                    if (isMuted) {{
-                        iframe.contentWindow.postMessage('{{"event":"command","func":"unMute","args":""}}', '*');
+                if (player && typeof player.isMuted === 'function') {{
+                    if (player.isMuted()) {{
+                        player.unMute();
                         isMuted = false;
                         muteBtn.innerHTML = '🔊';
                     }} else {{
-                        iframe.contentWindow.postMessage('{{"event":"command","func":"mute","args":""}}', '*');
+                        player.mute();
                         isMuted = true;
                         muteBtn.innerHTML = '🔇';
                     }}
@@ -703,6 +748,16 @@ def show_movie_dialog(rec):
                 transform: scale(1.15);
                 box-shadow: 0 4px 15px rgba(229,9,20,0.4);
             }}
+            /* Credit links */
+            .credit-link {{
+                color: #fff;
+                text-decoration: none;
+                font-weight: bold;
+                transition: color 0.2s;
+            }}
+            .credit-link:hover {{
+                color: #e50914;
+            }}
             /* Mute button */
             #muteBtn {{
                 position: absolute;
@@ -747,7 +802,7 @@ def show_movie_dialog(rec):
                 </div>
                 <div class="db-meta">{year} • {runtime} • {str(genres).split(',')[0]}</div>
                 <div class="db-overview">{overview_text}</div>
-                <div class="db-credits">Directed by <strong>{credits.get('director')}</strong> • Cast: <strong>{credits.get('cast')}</strong></div>
+                <div class="db-credits">Directed by {director_link} • Cast: {cast_links}</div>
                 {provider_html}
             </div>
         </div>
@@ -757,7 +812,7 @@ def show_movie_dialog(rec):
     '''
     
     # Render using components.html for JS execution
-    components.html(billboard_html, height=500, scrolling=False)
+    components.html(billboard_html, height=600, scrolling=False)
 
 
 def format_option(m):
@@ -829,6 +884,13 @@ if "page" not in st.session_state:
 
 def go_home():
     st.session_state.page = "home"
+    # Clear search results when going home
+    if "recs" in st.session_state:
+        del st.session_state.recs
+    if "source_movie" in st.session_state:
+        del st.session_state.source_movie
+    if "selected_rec" in st.session_state:
+        del st.session_state.selected_rec
 
 def go_search():
     st.session_state.page = "search"

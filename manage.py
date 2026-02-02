@@ -107,13 +107,7 @@ def docker_run():
 def clean():
     """Clean artifacts."""
     log("Cleaning up...", Colors.WARNING)
-    paths_to_clean = [
-        "data/processed/movies_transformed.parquet",
-        "models/faiss.index",
-        "models/sbert_embeddings.npy",
-        "__pycache__",
-        ".pytest_cache"
-    ]
+    
     if platform.system() == "Windows":
         run_cmd("del /s /q __pycache__")
     else:

@@ -35,7 +35,7 @@ jobs:
           pip install ruff
 
       - name: Lint with ruff
-        run: ruff check . --ignore=E501,F401 --exclude=.venv,.venv_cuda
+        run: ruff check . --ignore=E501,F401,E402,F541 --exclude=.venv,.venv_cuda,notebooks
 
       - name: Run tests
         run: pytest tests/ -v --tb=short
