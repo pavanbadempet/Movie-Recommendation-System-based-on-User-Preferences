@@ -177,6 +177,8 @@ class TestRecommender:
             "id": [1, 2, 3, 4, 5],
             "title": ["Avatar", "Titanic", "Inception", "Interstellar", "Dunkirk"],
             "overview": ["blue aliens", "ship sinks", "dreams within dreams", "space travel", "war movie"],
+            "genres": ["[{'name': 'Action'}]", "[{'name': 'Drama'}]", "[{'name': 'Action'}]", "[{'name': 'Sci-Fi'}]", "[{'name': 'War'}]"],
+            "popularity": [10.0, 20.0, 15.0, 25.0, 5.0],
         })
         movies.to_parquet(tmp_path / "movies_transformed.parquet")
         

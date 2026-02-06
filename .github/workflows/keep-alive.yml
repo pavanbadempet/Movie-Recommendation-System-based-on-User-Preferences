@@ -5,8 +5,8 @@ name: Keep Services Alive
 
 on:
   schedule:
-    # Run every 14 minutes (free tiers typically sleep after 15min of inactivity)
-    - cron: '*/14 * * * *'
+    # Run every 10 minutes (safer buffer for 15min inactivity limit)
+    - cron: '*/10 * * * *'
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
@@ -20,12 +20,14 @@ jobs:
           for i in 1 2 3; do
             if curl -sf --max-time 30 "https://movie-recommendation-system-w0n0.onrender.com/health"; then
               echo "✅ Render backend is alive!"
-              break
+              exit 0
             else
-              echo "Attempt $i failed, retrying..."
+              echo "Attempt $i failed..."
               sleep 5
             fi
           done
+          echo "❌ Render backend failed to respond after 3 attempts."
+          exit 1
       
       - name: Ping Streamlit frontend
         run: |
@@ -33,9 +35,11 @@ jobs:
           for i in 1 2 3; do
             if curl -sf --max-time 60 "https://movie-recommendation-system-x.streamlit.app/"; then
               echo "✅ Streamlit frontend is alive!"
-              break
+              exit 0
             else
-              echo "Attempt $i failed, retrying..."
+              echo "Attempt $i failed..."
               sleep 5
             fi
           done
+          echo "❌ Streamlit frontend failed to respond after 3 attempts."
+          exit 1

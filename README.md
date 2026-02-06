@@ -1,6 +1,8 @@
 # Movie Recommendation System
 
 [![CI](https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/ci.yml/badge.svg)](https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/ci.yml)
+[![Daily Data Refresh](https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/data-refresh.yml/badge.svg)](https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/data-refresh.yml)
+[![Keep Services Alive](https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/keep-alive.yml/badge.svg)](https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/keep-alive.yml)
 [![Demo](https://img.shields.io/badge/Demo-Live-brightgreen)](https://a-movie-recommendation-system.streamlit.app/)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-blue)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
