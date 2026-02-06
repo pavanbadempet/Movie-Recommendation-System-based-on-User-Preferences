@@ -53,8 +53,8 @@ jobs:
         env:
           PYTHONPATH: "${{ github.workspace }}"
         run: |
-          # Find the CSV file dynamically (e.g. TMDB_movie_dataset_v11.csv or v12.csv)
-          CSV_FILE=$(find data/raw -name "TMDB_movie_dataset_*.csv" | head -n 1)
+          # Find ANY CSV file dynamically in data/raw
+          CSV_FILE=$(find data/raw -name "*.csv" | head -n 1)
           if [ -z "$CSV_FILE" ]; then
             echo "❌ No CSV file found in data/raw!"
             exit 1
