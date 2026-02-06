@@ -472,13 +472,7 @@ def show_movie_dialog(rec):
         
     # === CINEMATIC BILLBOARD HEADER ===
     # Use the same style as the home page hero
-    video_embed = ""
-    if trailer_key:
-        # Autoplay, Mute, Loop, No Controls
-        video_embed = f'<iframe src="https://www.youtube.com/embed/{trailer_key}?autoplay=1&mute=1&controls=0&disablekb=1&modestbranding=1&loop=1&playlist={trailer_key}" style="width:100%; height:100%; border:none; pointer-events: none;"></iframe>'
-    else:
-        poster_url = fetch_poster(tmdb.get("backdrop_path") or rec.get("poster_path"))
-        # Poster fallback - video_embed is defined in the components.html section below
+    # Logic moved to components.html section below
 
     # Extract Metadata
     genres = ", ".join([g["name"] for g in tmdb.get("genres", [])[:3]]) if tmdb.get("genres") else rec.get("genres", "")
