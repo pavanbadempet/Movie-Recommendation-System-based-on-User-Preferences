@@ -5,8 +5,8 @@ name: Keep Services Alive
 
 on:
   schedule:
-    # Run every 14 minutes (free tiers typically sleep after 15min of inactivity)
-    - cron: '*/14 * * * *'
+    # Run every 10 minutes (safer buffer for 15min inactivity limit)
+    - cron: '*/10 * * * *'
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
