@@ -45,7 +45,9 @@ jobs:
         run: |
           mkdir -p data/raw
           kaggle datasets download -d alanvourch/tmdb-movies-daily-updates -p data/raw --unzip
-          ls -la data/raw/
+          kaggle datasets download -d alanvourch/tmdb-movies-daily-updates -p data/raw --unzip
+          echo "📂 Listing all files in data/raw (Recursive):"
+          ls -R data/raw/
 
       - name: Run ETL pipeline
         env:
