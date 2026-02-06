@@ -51,7 +51,15 @@ jobs:
         env:
           PYTHONPATH: "${{ github.workspace }}"
         run: |
-          python -m etl.pipeline --data data/raw/TMDB_movie_dataset_v11.csv
+          # Find the CSV file dynamically (e.g. TMDB_movie_dataset_v11.csv or v12.csv)
+          CSV_FILE=$(find data/raw -name "TMDB_movie_dataset_*.csv" | head -n 1)
+          if [ -z "$CSV_FILE" ]; then
+            echo "❌ No CSV file found in data/raw!"
+            exit 1
+          fi
+          echo "Found dataset: $CSV_FILE"
+          
+          python -m etl.pipeline --data "$CSV_FILE"
           echo "Generated files:"
           ls -la models/
           ls -la data/processed/
