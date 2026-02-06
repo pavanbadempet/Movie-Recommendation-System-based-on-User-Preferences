@@ -28,7 +28,7 @@ with DAG(
     'movie_data_refresh',
     default_args=default_args,
     description='Daily refresh of movie recommendation data',
-    schedule_interval='0 3 * * *',  # 3 AM daily
+    schedule='0 3 * * *',  # 3 AM daily
     catchup=False,
 ) as dag:
 
