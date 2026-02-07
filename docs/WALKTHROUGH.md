@@ -33,6 +33,11 @@ graph TD
 - **Compute**: Kaggle (30hrs/week GPU Free)
 - **Hosting**: Render & Streamlit (Free Tier)
 
+### 5. Cinematic UI
+- **Immersive Dialogs**: Frameless, edge-to-edge video backgrounds for movie details.
+- **Dynamic Billboards**: Autoplaying trailers (muted) integrated into the experience.
+- **Glassmorphism**: Premium dark-mode aesthetic with fast interactions.
+
 ## 🛠️ Components
 
 ### ETL Pipeline (`notebooks/kaggle_etl_pipeline.py`)
