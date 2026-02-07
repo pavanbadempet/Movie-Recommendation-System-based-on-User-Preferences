@@ -18,7 +18,7 @@ jobs:
         run: |
           echo "Pinging Render backend..."
           for i in 1 2 3; do
-            if curl -sf --max-time 30 "https://movie-recommendation-system-w0n0.onrender.com/health"; then
+            if curl -sf --max-time 30 "https://movie-recs-api-5qvy.onrender.com/health"; then
               echo "✅ Render backend is alive!"
               exit 0
             else
