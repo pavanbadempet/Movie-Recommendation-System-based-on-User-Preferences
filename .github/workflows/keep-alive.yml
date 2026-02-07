@@ -5,8 +5,8 @@ name: Keep Services Alive
 
 on:
   schedule:
-    # Run every 10 minutes (safer buffer for 15min inactivity limit)
-    - cron: '*/10 * * * *'
+    # Run every 5 minutes (fastest allowed by GitHub Actions) to guarantee no cold starts
+    - cron: '*/5 * * * *'
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
