@@ -45,7 +45,6 @@ jobs:
         run: |
           mkdir -p data/raw
           kaggle datasets download -d alanvourch/tmdb-movies-daily-updates -p data/raw --unzip
-          kaggle datasets download -d alanvourch/tmdb-movies-daily-updates -p data/raw --unzip
           echo "📂 Listing all files in data/raw (Recursive):"
           ls -R data/raw/
 
@@ -53,10 +52,16 @@ jobs:
         env:
           PYTHONPATH: "${{ github.workspace }}"
         run: |
-          # Find ANY CSV file dynamically in data/raw
-          CSV_FILE=$(find data/raw -name "*.csv" | head -n 1)
+          echo "🔍 Checking for files in data/raw..."
+          ls -R data/raw/
+          
+          # Find ANY CSV file dynamically in data/raw (case-insensitive)
+          CSV_FILE=$(find data/raw -type f -iname "*.csv" | head -n 1)
+          
           if [ -z "$CSV_FILE" ]; then
             echo "❌ No CSV file found in data/raw!"
+            echo "Current directory contents:"
+            ls -R
             exit 1
           fi
           echo "Found dataset: $CSV_FILE"
