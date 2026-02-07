@@ -55,7 +55,7 @@ jobs:
           echo "🔍 Checking for files in data/raw..."
           ls -R data/raw/
           
-          # Find ANY CSV file dynamically in data/raw (case-insensitive)
+          # Find ANY CSV file dynamically in data/raw (case-insensitive) - robust fix
           CSV_FILE=$(find data/raw -type f -iname "*.csv" | head -n 1)
           
           if [ -z "$CSV_FILE" ]; then
