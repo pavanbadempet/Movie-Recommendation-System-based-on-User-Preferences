@@ -121,7 +121,7 @@ jobs:
         if: success()
         run: |
           # If you have a Render deploy hook, uncomment and add it as a secret:
-          # curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+          # curl -X POST "RENDER_DEPLOY_HOOK_PLACEHOLDER"
           echo "✅ Pipeline complete! Render will auto-deploy on next push."
 
       - name: Upload artifacts for debugging
