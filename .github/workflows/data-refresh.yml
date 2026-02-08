@@ -91,7 +91,7 @@ jobs:
           )
           print("✅ Uploaded sbert_embeddings.npy to Hugging Face")
           
-          # Optionally upload FAISS index too
+          # Upload FAISS index
           if os.path.exists("models/faiss.index"):
               api.upload_file(
                   path_or_fileobj="models/faiss.index",
@@ -101,6 +101,17 @@ jobs:
                   token=os.environ["HF_TOKEN"]
               )
               print("✅ Uploaded faiss.index to Hugging Face")
+          
+          # Upload parquet file (CRITICAL: must be in sync with embeddings!)
+          if os.path.exists("data/processed/movies_transformed.parquet"):
+              api.upload_file(
+                  path_or_fileobj="data/processed/movies_transformed.parquet",
+                  path_in_repo="movies_transformed.parquet",
+                  repo_id="${{ env.HF_REPO }}",
+                  repo_type="model",
+                  token=os.environ["HF_TOKEN"]
+              )
+              print("✅ Uploaded movies_transformed.parquet to Hugging Face")
           EOF
 
       - name: Commit processed data (not embeddings)
