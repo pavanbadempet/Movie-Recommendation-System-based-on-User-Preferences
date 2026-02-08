@@ -1,0 +1,17 @@
+{
+    "id": "flameemperor/movie-recommendation-system-etl-pipeline",
+    "title": "Movie Recommendation System ETL Pipeline",
+    "code_file": "kaggle_etl_pipeline.py",
+    "language": "python",
+    "kernel_type": "script",
+    "is_private": true,
+    "enable_gpu": true,
+    "enable_tpu": false,
+    "enable_internet": true,
+    "dataset_sources": [
+        "alanvourch/tmdb-movies-daily-updates"
+    ],
+    "competition_sources": [],
+    "kernel_sources": [],
+    "model_sources": []
+}
