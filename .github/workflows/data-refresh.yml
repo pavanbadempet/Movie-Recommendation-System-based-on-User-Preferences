@@ -1,5 +1,5 @@
 # Daily data refresh workflow for Movie Recommendation System
-# Fetches latest TMDB data from Kaggle, rebuilds embeddings, and uploads to Hugging Face
+# Triggers Kaggle notebook (with GPU) via API push, which uploads to HuggingFace
 
 name: Daily Data Refresh
 
@@ -8,128 +8,75 @@ on:
     # Run daily at 6 AM UTC
     - cron: '0 6 * * *'
   workflow_dispatch:  # Allow manual trigger
-    inputs:
-      force_refresh:
-        description: 'Force full data refresh'
-        required: false
-        default: 'false'
-
-env:
-  PYTHON_VERSION: '3.11'
-  HF_REPO: 'pavanbadempet/movie-recs-models'
 
 jobs:
-  refresh-data:
+  trigger-kaggle-notebook:
     runs-on: ubuntu-latest
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-
-      - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install kaggle huggingface_hub
-
-      - name: Download latest Kaggle dataset
+      - name: Setup Kaggle credentials
         env:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
         run: |
-          mkdir -p data/raw
-          kaggle datasets download -d alanvourch/tmdb-movies-daily-updates -p data/raw --unzip
-          echo "📂 Listing all files in data/raw (Recursive):"
-          ls -R data/raw/
+          mkdir -p ~/.kaggle
+          echo '{"username":"'$KAGGLE_USERNAME'","key":"'$KAGGLE_KEY'"}' > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
 
-      - name: Run ETL pipeline
+      - name: Install Kaggle CLI
+        run: pip install kaggle
+
+      - name: Push notebook to Kaggle (triggers GPU execution)
+        run: |
+          echo "🚀 Pushing notebook to Kaggle to trigger execution..."
+          cd notebooks
+          
+          # Push the notebook - this triggers a run on Kaggle
+          kaggle kernels push
+          
+          echo "✅ Notebook pushed! Kaggle will now execute it with GPU."
+          echo ""
+          echo "The notebook will:"
+          echo "  1. Load TMDB dataset from Kaggle"
+          echo "  2. Generate embeddings using sentence-transformers (GPU accelerated)"
+          echo "  3. Build HNSW FAISS index"
+          echo "  4. Upload ALL artifacts to HuggingFace"
+
+      - name: Wait for Kaggle execution to complete
         env:
-          PYTHONPATH: "${{ github.workspace }}"
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
         run: |
-          echo "🔍 Checking for files in data/raw..."
-          ls -R data/raw/
+          echo "⏳ Waiting for Kaggle notebook to complete..."
+          KERNEL_ID="flameemperor/movie-recommendation-system-etl-pipeline"
           
-          # Find ANY CSV file dynamically in data/raw (case-insensitive) - robust fix
-          CSV_FILE=$(find data/raw -type f -iname "*.csv" | head -n 1)
+          # Poll for completion (max 30 minutes)
+          for i in {1..60}; do
+            STATUS=$(kaggle kernels status $KERNEL_ID 2>&1 | tail -1)
+            echo "[$i/60] Status: $STATUS"
+            
+            if echo "$STATUS" | grep -q "complete"; then
+              echo "✅ Kaggle notebook completed successfully!"
+              exit 0
+            elif echo "$STATUS" | grep -q "error\|failed"; then
+              echo "❌ Kaggle notebook failed!"
+              kaggle kernels output $KERNEL_ID -p /tmp/kaggle_output || true
+              cat /tmp/kaggle_output/*.log 2>/dev/null || true
+              exit 1
+            fi
+            
+            sleep 30  # Check every 30 seconds
+          done
           
-          if [ -z "$CSV_FILE" ]; then
-            echo "❌ No CSV file found in data/raw!"
-            echo "Current directory contents:"
-            ls -R
-            exit 1
-          fi
-          echo "Found dataset: $CSV_FILE"
-          
-          python -m etl.pipeline --data "$CSV_FILE"
-          echo "Generated files:"
-          ls -la models/
-          ls -la data/processed/
+          echo "⚠️ Timeout waiting for Kaggle. Check manually at:"
+          echo "https://www.kaggle.com/code/$KERNEL_ID"
 
-      - name: Upload embeddings to Hugging Face Hub
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: |
-          python - <<EOF
-          from huggingface_hub import HfApi
-          import os
-          
-          api = HfApi()
-          
-          # Upload embeddings
-          api.upload_file(
-              path_or_fileobj="models/sbert_embeddings.npy",
-              path_in_repo="sbert_embeddings.npy",
-              repo_id="${{ env.HF_REPO }}",
-              repo_type="model",
-              token=os.environ["HF_TOKEN"]
-          )
-          print("✅ Uploaded sbert_embeddings.npy to Hugging Face")
-          
-          # Optionally upload FAISS index too
-          if os.path.exists("models/faiss.index"):
-              api.upload_file(
-                  path_or_fileobj="models/faiss.index",
-                  path_in_repo="faiss.index",
-                  repo_id="${{ env.HF_REPO }}",
-                  repo_type="model",
-                  token=os.environ["HF_TOKEN"]
-              )
-              print("✅ Uploaded faiss.index to Hugging Face")
-          EOF
-
-      - name: Commit processed data (not embeddings)
-        run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "actions@github.com"
-          
-          # Only commit processed parquet files (small), not embeddings (large)
-          git add data/processed/
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "chore: Daily data refresh $(date +%Y-%m-%d)"
-            git push
-          fi
-
-      - name: Trigger Render redeploy (optional)
+      - name: Trigger Render backend restart
         if: success()
         run: |
-          # If you have a Render deploy hook, uncomment and add it as a secret:
-          # curl -X POST "RENDER_DEPLOY_HOOK_PLACEHOLDER"
-          echo "✅ Pipeline complete! Render will auto-deploy on next push."
-
-      - name: Upload artifacts for debugging
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: model-artifacts-${{ github.run_number }}
-          path: |
-            models/
-            data/processed/
-          retention-days: 7
+          echo "🔄 Pinging Render to pick up new HuggingFace artifacts..."
+          curl -sf --max-time 60 "https://movie-recs-api-5qvy.onrender.com/health" || echo "Backend pinged"
+          echo "✅ Done! Backend will download new files on next cold start."
