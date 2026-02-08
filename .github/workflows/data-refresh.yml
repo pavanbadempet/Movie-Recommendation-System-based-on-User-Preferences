@@ -1,5 +1,5 @@
 # Daily data refresh workflow for Movie Recommendation System
-# Triggers Kaggle notebook to regenerate embeddings and upload to Hugging Face
+# Downloads Kaggle dataset, runs ETL, and uploads ALL artifacts to Hugging Face
 
 name: Daily Data Refresh
 
@@ -10,14 +10,29 @@ on:
   workflow_dispatch:  # Allow manual trigger
 
 env:
-  KAGGLE_NOTEBOOK: flameemperor/movie-recommendation-system-etl-pipeline
+  PYTHON_VERSION: '3.11'
+  HF_REPO: 'pavanbadempet/movie-recs-models'
 
 jobs:
-  trigger-kaggle:
+  refresh-data:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Setup Kaggle credentials
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pandas numpy pyarrow faiss-cpu sentence-transformers huggingface_hub kaggle
+
+      - name: Download latest Kaggle dataset
         env:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
@@ -25,52 +40,179 @@ jobs:
           mkdir -p ~/.kaggle
           echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
           chmod 600 ~/.kaggle/kaggle.json
+          
+          mkdir -p data/raw
+          kaggle datasets download -d alanvourch/tmdb-movies-daily-updates -p data/raw --unzip
+          echo "📂 Downloaded files:"
+          ls -la data/raw/
 
-      - name: Install Kaggle CLI
-        run: pip install kaggle
+      - name: Run ETL Pipeline (Generate embeddings + FAISS index)
+        run: |
+          python - <<'EOF'
+          import os
+          import ast
+          import re
+          import time
+          from pathlib import Path
 
-      - name: Trigger Kaggle notebook execution
+          import numpy as np
+          import pandas as pd
+          import faiss
+          from sentence_transformers import SentenceTransformer
+
+          print("=" * 60)
+          print("MOVIE RECOMMENDATION ETL PIPELINE")
+          print("=" * 60)
+
+          # Find CSV file
+          data_dir = Path("data/raw")
+          csv_files = list(data_dir.glob("*.csv"))
+          if not csv_files:
+              raise FileNotFoundError("No CSV found in data/raw!")
+          
+          DATA_PATH = csv_files[0]
+          print(f"📂 Using: {DATA_PATH}")
+
+          # Load data
+          df = pd.read_csv(DATA_PATH, low_memory=False)
+          print(f"📊 Loaded {len(df):,} movies")
+
+          # Filter
+          df = df.dropna(subset=["title", "overview"])
+          if "vote_count" in df.columns:
+              df = df[df["vote_count"] >= 1]
+          if "popularity" in df.columns:
+              df = df[df["popularity"] >= 0.5]
+          if "adult" in df.columns:
+              df = df[df["adult"] != True]
+          if "id" in df.columns:
+              df = df.drop_duplicates(subset=["id"])
+          df = df.reset_index(drop=True)
+          print(f"✅ Filtered to {len(df):,} movies")
+
+          # Tag generation
+          def parse_json(val):
+              if pd.isna(val) or val == "":
+                  return []
+              try:
+                  parsed = ast.literal_eval(val)
+                  return [x.get("name", str(x)) for x in parsed if isinstance(x, dict)] if isinstance(parsed, list) else [str(parsed)]
+              except:
+                  return [s.strip() for s in str(val).split(",") if s.strip()]
+
+          def clean(text):
+              if pd.isna(text):
+                  return ""
+              text = re.sub(r"[^\w\s.,;:!?-]", " ", str(text))
+              return re.sub(r"\s+", " ", text).strip()
+
+          for col in ["genres", "keywords", "production_companies"]:
+              key = "_companies" if col == "production_companies" else f"_{col}"
+              df[key] = df[col].apply(parse_json).str.join(", ") if col in df.columns else ""
+
+          df["_overview"] = df["overview"].fillna("").astype(str).apply(clean)
+
+          title = df['title'].fillna("").astype(str)
+          tags = "Title: " + title + ". "
+
+          def add(prefix, col, suffix="."):
+              if col not in df.columns:
+                  return ""
+              s = df[col].fillna("").astype(str).str.strip()
+              mask = (s != "") & (s.str.lower() != "nan")
+              return np.where(mask, prefix + s + suffix + " ", "")
+
+          tags = tags + add("Genres: ", "_genres")
+          tags = tags + add("Plot: ", "_overview", "")
+          tags = tags + add("Directed by ", "director")
+
+          if "cast" in df.columns:
+              cast = df['cast'].fillna("").str.split(",").str[:10].str.join(", ")
+              tags = tags + np.where(cast != "", "Cast: " + cast + ". ", "")
+
+          tags = tags + add("Studio: ", "_companies")
+
+          df["tags"] = pd.Series(tags).apply(clean)
+          df = df.drop(columns=[c for c in df.columns if c.startswith("_")], errors="ignore")
+          df = df[df["tags"].str.len() > 10].reset_index(drop=True)
+          print(f"✅ Generated tags for {len(df):,} movies")
+
+          # Embeddings - using all-mpnet-base-v2 (good balance of quality/speed on CPU)
+          print("⏳ Loading sentence transformer...")
+          model = SentenceTransformer('all-mpnet-base-v2')
+          
+          print("⏳ Generating embeddings (this takes ~10 min on CPU)...")
+          start = time.time()
+          embeddings = model.encode(df["tags"].tolist(), show_progress_bar=True, batch_size=32, convert_to_numpy=True)
+          embeddings = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
+          print(f"✅ Encoded {len(df):,} movies in {time.time()-start:.1f}s")
+
+          # FAISS HNSW index
+          n, d = embeddings.shape
+          emb32 = np.ascontiguousarray(embeddings.astype(np.float32))
+
+          index = faiss.IndexHNSWFlat(d, 32, faiss.METRIC_INNER_PRODUCT)
+          index.hnsw.efConstruction = 200
+          index.hnsw.efSearch = 128
+          index.add(emb32)
+          print(f"✅ Built HNSW index: {index.ntotal:,} vectors")
+
+          # Save
+          Path("models").mkdir(exist_ok=True)
+          Path("data/processed").mkdir(parents=True, exist_ok=True)
+
+          emb_path = Path("models/sbert_embeddings.npy")
+          idx_path = Path("models/faiss.index")
+          movies_path = Path("data/processed/movies_transformed.parquet")
+
+          np.save(emb_path, embeddings)
+          faiss.write_index(index, str(idx_path))
+
+          cols = ['id', 'title', 'overview', 'genres', 'vote_average', 'vote_count', 
+                  'popularity', 'release_date', 'poster_path', 'director', 'cast', 'original_language', 'tags']
+          df[[c for c in cols if c in df.columns]].to_parquet(movies_path, index=False)
+
+          print(f"💾 Saved: embeddings ({emb_path.stat().st_size/1e6:.0f}MB), index ({idx_path.stat().st_size/1e6:.0f}MB), movies ({movies_path.stat().st_size/1e6:.0f}MB)")
+          print("=" * 60)
+          print("ETL COMPLETE!")
+          print("=" * 60)
+          EOF
+
+      - name: Upload ALL artifacts to Hugging Face Hub
         env:
-          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
-          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          echo "🚀 Triggering Kaggle notebook: ${{ env.KAGGLE_NOTEBOOK }}"
+          python - <<EOF
+          from huggingface_hub import HfApi
+          import os
           
-          # Push a new version to trigger execution
-          # The notebook has "Run on Schedule" or we force-run it
-          kaggle kernels push -p . || echo "Push not applicable for existing kernel"
+          api = HfApi()
+          repo = "${{ env.HF_REPO }}"
+          token = os.environ["HF_TOKEN"]
           
-          # Alternative: Use Kaggle API to check status
-          echo "Checking notebook status..."
-          kaggle kernels status ${{ env.KAGGLE_NOTEBOOK }} || echo "Status check done"
+          files = [
+              ("models/sbert_embeddings.npy", "sbert_embeddings.npy"),
+              ("models/faiss.index", "faiss.index"),
+              ("data/processed/movies_transformed.parquet", "movies_transformed.parquet"),
+          ]
           
-          echo "✅ Kaggle notebook triggered!"
-          echo "The notebook will:"
-          echo "  1. Load latest TMDB data from Kaggle dataset"
-          echo "  2. Generate BGE-M3 embeddings (1024d) on GPU"
-          echo "  3. Build HNSW FAISS index"
-          echo "  4. Upload all artifacts to HuggingFace"
+          for local, remote in files:
+              if os.path.exists(local):
+                  print(f"⬆️ Uploading {local}...")
+                  api.upload_file(
+                      path_or_fileobj=local,
+                      path_in_repo=remote,
+                      repo_id=repo,
+                      repo_type="model",
+                      token=token
+                  )
+                  print(f"✅ Uploaded {remote}")
           
-      - name: Wait for Kaggle execution (optional monitoring)
-        run: |
-          echo "⏳ Kaggle notebook runs asynchronously."
-          echo "Monitor progress at: https://www.kaggle.com/code/${{ env.KAGGLE_NOTEBOOK }}"
-          echo "HuggingFace artifacts will be updated after notebook completes (~10-15 min)."
+          print("🎉 All artifacts uploaded to HuggingFace!")
+          EOF
 
-  # Trigger Render redeploy after Kaggle completes (delayed)
-  trigger-redeploy:
-    runs-on: ubuntu-latest
-    needs: trigger-kaggle
-    
-    steps:
-      - name: Wait for Kaggle to complete
+      - name: Trigger Render backend restart
         run: |
-          echo "⏳ Waiting 15 minutes for Kaggle notebook to complete..."
-          sleep 900  # 15 minutes
-          
-      - name: Ping Render to trigger redeploy
-        run: |
-          echo "🔄 Pinging Render backend to pick up new HuggingFace artifacts..."
-          # The backend's model_loader.py will download fresh files on next cold start
-          curl -sf "https://movie-recs-api-5qvy.onrender.com/health" || echo "Backend pinged"
-          echo "✅ Done! Backend will use new artifacts on next restart."
+          echo "🔄 Pinging Render to pick up new artifacts..."
+          curl -sf --max-time 60 "https://movie-recs-api-5qvy.onrender.com/health" || echo "Backend pinged"
+          echo "✅ Done! Backend will download new files on next cold start."
