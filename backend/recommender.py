@@ -462,6 +462,62 @@ class Recommender:
         movie_idx = matches[0]
         return self.recommend_by_index(movie_idx, n)
 
+    def semantic_search(self, query: str, n: int = 10) -> list[dict]:
+        """
+        Search movies by semantic meaning using the SBERT model + FAISS index.
+        
+        Unlike search_movies() which does text matching on titles,
+        this encodes the query with the same model used for embeddings
+        and searches the FAISS index directly.
+        
+        Args:
+            query: Natural language query (e.g. "movies about space exploration")
+            n: Number of results to return
+            
+        Returns:
+            List of movie dictionaries with similarity scores
+        """
+        if not query or self._index is None or self._vectors is None:
+            return []
+        
+        try:
+            from sentence_transformers import SentenceTransformer
+            
+            # Use the same model that generated the embeddings
+            model = _get_sbert_model()
+            query_embedding = model.encode([query], convert_to_numpy=True)
+            query_embedding = query_embedding / np.linalg.norm(query_embedding, axis=1, keepdims=True)
+            query_embedding = query_embedding.astype(np.float32)
+            
+            distances, indices = self._index.search(query_embedding, n)
+            
+            results = []
+            for i, idx in enumerate(indices[0]):
+                if idx < 0 or idx >= len(self._movies):
+                    continue
+                movie = self._movies.iloc[idx].to_dict()
+                movie["similarity_score"] = float(distances[0][i])
+                results.append(movie)
+            
+            return results
+        except Exception as e:
+            logger.error(f"Semantic search failed: {e}")
+            # Fallback to text search
+            return self.search_movies(query, limit=n)
+
+
+# Lazy-loaded SBERT model for semantic search queries
+_sbert_model = None
+
+def _get_sbert_model():
+    """Get or load the SBERT model (lazy singleton)."""
+    global _sbert_model
+    if _sbert_model is None:
+        from sentence_transformers import SentenceTransformer
+        _sbert_model = SentenceTransformer('all-mpnet-base-v2')
+        logger.info("Loaded SBERT model for semantic search")
+    return _sbert_model
+
 
 # Global singleton instance (lazy loaded)
 _recommender: Recommender | None = None
@@ -473,3 +529,4 @@ def get_recommender() -> Recommender:
     if _recommender is None:
         _recommender = Recommender().load()
     return _recommender
+

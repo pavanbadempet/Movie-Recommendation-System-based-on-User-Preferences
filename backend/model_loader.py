@@ -106,9 +106,28 @@ def ensure_model_files(models_dir: Path) -> dict[str, bool]:
             
         # Skip if file already exists and is valid
         if file_path.exists() and file_path.stat().st_size > 1000:
-            logger.info(f"✓ {filename} already exists ({file_path.stat().st_size // (1024*1024)}MB)")
-            results[filename] = True
-            continue
+            # Check if remote file has changed (size-based cache invalidation)
+            if url:
+                try:
+                    req = urllib.request.Request(url, method='HEAD')
+                    with urllib.request.urlopen(req, timeout=10) as resp:
+                        remote_size = int(resp.headers.get('content-length', 0))
+                        local_size = file_path.stat().st_size
+                        if remote_size > 0 and abs(remote_size - local_size) > 1024:
+                            logger.info(f"⟳ {filename} changed remotely ({local_size//1024}KB → {remote_size//1024}KB), re-downloading...")
+                        else:
+                            logger.info(f"✓ {filename} is up-to-date ({local_size // (1024*1024)}MB)")
+                            results[filename] = True
+                            continue
+                except Exception:
+                    # If HEAD request fails, use cached file
+                    logger.info(f"✓ {filename} already exists ({file_path.stat().st_size // (1024*1024)}MB)")
+                    results[filename] = True
+                    continue
+            else:
+                logger.info(f"✓ {filename} already exists ({file_path.stat().st_size // (1024*1024)}MB)")
+                results[filename] = True
+                continue
         
         # Try to download if URL is configured
         if url:

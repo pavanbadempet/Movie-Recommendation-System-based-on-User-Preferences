@@ -287,19 +287,16 @@ def transform(df: pd.DataFrame | None = None) -> tuple[pd.DataFrame, np.ndarray]
 # ==========================================
 
 def build_faiss_index(vectors: np.ndarray) -> faiss.Index:
-    """Build FAISS IVF index."""
+    """Build FAISS HNSW index (matches Kaggle pipeline)."""
     n_samples, n_features = vectors.shape
-    logger.info(f"Building FAISS index for {n_samples:,} vectors...")
+    logger.info(f"Building FAISS HNSW index for {n_samples:,} vectors...")
     
     vectors = np.ascontiguousarray(vectors.astype(np.float32))
     
-    if n_samples < 10000:
-        index = faiss.IndexFlatIP(n_features)
-    else:
-        nlist = min(data_config.faiss_nlist, n_samples // 39)
-        quantizer = faiss.IndexFlatIP(n_features)
-        index = faiss.IndexIVFFlat(quantizer, n_features, nlist, faiss.METRIC_INNER_PRODUCT)
-        index.train(vectors)
+    # HNSW: best for <1M vectors, no training needed, ~0.95+ recall
+    index = faiss.IndexHNSWFlat(n_features, 32, faiss.METRIC_INNER_PRODUCT)
+    index.hnsw.efConstruction = 200  # higher = better quality, slower build
+    index.hnsw.efSearch = 128  # higher = better recall at search time
     
     index.add(vectors)
     return index
