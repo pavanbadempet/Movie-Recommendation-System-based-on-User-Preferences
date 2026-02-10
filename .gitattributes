@@ -1,7 +1,2 @@
-# Git LFS for binary artifacts
-# Note: Model files are now hosted on HuggingFace Hub, but LFS rules
-# are kept because large files exist in git history
-*.parquet filter=lfs diff=lfs merge=lfs -text
-*.index filter=lfs diff=lfs merge=lfs -text
-*.pkl filter=lfs diff=lfs merge=lfs -text
-models/faiss.index filter=lfs diff=lfs merge=lfs -text
+# No LFS rules needed - model files are hosted on HuggingFace, not GitHub
+# GitHub repo contains code only

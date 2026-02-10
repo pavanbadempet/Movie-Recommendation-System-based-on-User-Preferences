@@ -25,8 +25,8 @@ data/raw/*.csv
 data/raw/*.zip
 data/processed/*.parquet
 
-# Model artifacts (hosted on HuggingFace, not in repo)
-models/sbert_embeddings.npy
+# Model artifacts (hosted on HuggingFace, NOT in GitHub)
+# Kaggle generates → HuggingFace stores → Render downloads at runtime
 models/*.index
 models/*.npy
 models/*.joblib
