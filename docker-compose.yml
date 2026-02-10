@@ -8,7 +8,7 @@ x-airflow-common: &airflow-common
   environment:
     - AIRFLOW__CORE__EXECUTOR=LocalExecutor
     - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
-    - AIRFLOW__CORE__FERNET_KEY=46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLbfzqDDho=
+    - AIRFLOW__CORE__FERNET_KEY=${FERNET_KEY}
     - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=false
     - AIRFLOW__CORE__LOAD_EXAMPLES=false
     - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=true
@@ -90,7 +90,7 @@ services:
       - ./data:/app/data
       - ./models:/app/models
     environment:
-      - TMDB_API_KEY=${TMDB_API_KEY:-44726ef95f4d79cb7001a4947fca7f53}
+      - TMDB_API_KEY=${TMDB_API_KEY}
     command: uvicorn backend.main:app --host 0.0.0.0 --port 8000
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
@@ -112,7 +112,7 @@ services:
       - ./models:/app/models
     environment:
       - API_BASE_URL=http://backend:8000
-    command: streamlit run app.py --server.port 8501 --server.address 0.0.0.0
+    command: streamlit run streamlit_app.py --server.port 8501 --server.address 0.0.0.0
     depends_on:
       - backend
     restart: unless-stopped

@@ -1,5 +1,6 @@
 # Daily data refresh workflow for Movie Recommendation System
-# Triggers Kaggle notebook (with GPU) via API push, which uploads to HuggingFace
+# Triggers Kaggle notebook (with GPU) via API push
+# The notebook generates embeddings, FAISS index, and uploads ALL to HuggingFace
 
 name: Daily Data Refresh
 
@@ -9,74 +10,82 @@ on:
     - cron: '0 6 * * *'
   workflow_dispatch:  # Allow manual trigger
 
+env:
+  PYTHON_VERSION: '3.11'
+
 jobs:
   trigger-kaggle-notebook:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Kaggle credentials
-        env:
-          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
-          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
-        run: |
-          mkdir -p ~/.kaggle
-          echo '{"username":"'$KAGGLE_USERNAME'","key":"'$KAGGLE_KEY'"}' > ~/.kaggle/kaggle.json
-          chmod 600 ~/.kaggle/kaggle.json
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install Kaggle CLI
-        run: pip install kaggle
+      - name: Install dependencies
+        run: pip install kaggle jupytext
+
+      - name: Convert .py to .ipynb for Kaggle
+        run: |
+          cd notebooks
+          jupytext --to notebook kaggle_etl_pipeline.py -o kaggle_etl_pipeline.ipynb
+          echo "Converted .py to .ipynb"
 
       - name: Push notebook to Kaggle (triggers GPU execution)
+        env:
+          KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_KEY }}
         run: |
-          echo "🚀 Pushing notebook to Kaggle to trigger execution..."
+          echo "Pushing notebook to Kaggle..."
           cd notebooks
-          
-          # Push the notebook - this triggers a run on Kaggle
           kaggle kernels push
-          
-          echo "✅ Notebook pushed! Kaggle will now execute it with GPU."
-          echo ""
-          echo "The notebook will:"
-          echo "  1. Load TMDB dataset from Kaggle"
-          echo "  2. Generate embeddings using sentence-transformers (GPU accelerated)"
-          echo "  3. Build HNSW FAISS index"
-          echo "  4. Upload ALL artifacts to HuggingFace"
+          echo "Notebook pushed! Kaggle will now execute it with GPU."
 
       - name: Wait for Kaggle execution to complete
         env:
-          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
-          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_KEY }}
         run: |
-          echo "⏳ Waiting for Kaggle notebook to complete..."
+          echo "Waiting for Kaggle notebook to complete..."
           KERNEL_ID="flameemperor/movie-recommendation-system-etl-pipeline"
           
-          # Poll for completion (max 30 minutes)
-          for i in {1..60}; do
-            STATUS=$(kaggle kernels status $KERNEL_ID 2>&1 | tail -1)
-            echo "[$i/60] Status: $STATUS"
+          # Wait 2 minutes before first check (notebook needs time to start)
+          sleep 120
+          
+          # Poll for completion (max 30 minutes, check every 30s)
+          for i in $(seq 1 56); do
+            STATUS=$(kaggle kernels status "$KERNEL_ID" 2>&1 | tail -1)
+            echo "[$i/56] Status: $STATUS"
             
-            if echo "$STATUS" | grep -q "complete"; then
-              echo "✅ Kaggle notebook completed successfully!"
+            if echo "$STATUS" | grep -qi "complete"; then
+              echo "Kaggle notebook completed successfully!"
+              kaggle kernels output "$KERNEL_ID" -p /tmp/kaggle_output || true
+              echo "--- Notebook Output ---"
+              cat /tmp/kaggle_output/*.log 2>/dev/null || echo "(no log file)"
+              echo "--- End Output ---"
               exit 0
-            elif echo "$STATUS" | grep -q "error\|failed"; then
-              echo "❌ Kaggle notebook failed!"
-              kaggle kernels output $KERNEL_ID -p /tmp/kaggle_output || true
-              cat /tmp/kaggle_output/*.log 2>/dev/null || true
+            fi
+            
+            if echo "$STATUS" | grep -qi "error\|cancel"; then
+              echo "Kaggle notebook failed!"
+              kaggle kernels output "$KERNEL_ID" -p /tmp/kaggle_output || true
+              cat /tmp/kaggle_output/*.log 2>/dev/null || echo "(no log file)"
               exit 1
             fi
             
-            sleep 30  # Check every 30 seconds
+            sleep 30
           done
           
-          echo "⚠️ Timeout waiting for Kaggle. Check manually at:"
+          echo "Timeout after 30 minutes. Check Kaggle manually:"
           echo "https://www.kaggle.com/code/$KERNEL_ID"
+          exit 1
 
       - name: Trigger Render backend restart
         if: success()
         run: |
-          echo "🔄 Pinging Render to pick up new HuggingFace artifacts..."
-          curl -sf --max-time 60 "https://movie-recs-api-5qvy.onrender.com/health" || echo "Backend pinged"
-          echo "✅ Done! Backend will download new files on next cold start."
+          echo "Pinging Render to pick up new HuggingFace artifacts..."
+          curl -sf --max-time 60 "https://movie-recs-api-5qvy.onrender.com/health" || echo "Backend pinged (may be sleeping)"
+          echo "Done! Backend will download new files on next cold start."

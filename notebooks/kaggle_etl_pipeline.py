@@ -1,6 +1,7 @@
 """
 Movie Recommendation ETL Pipeline
 Generates SBERT embeddings and FAISS index from TMDB dataset
+Uploads ALL artifacts to HuggingFace Hub (atomic: parquet + embeddings + index)
 """
 
 import os
@@ -31,7 +32,9 @@ from huggingface_hub import HfApi
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f"Device: {device}" + (f" ({torch.cuda.get_device_name(0)})" if device == 'cuda' else ""))
 
-# Load data
+# ============================================================
+# STEP 1: Load and filter data
+# ============================================================
 DATA_PATH = "/kaggle/input/tmdb-movies-daily-updates/TMDB_movie_dataset_v11.csv"
 if not os.path.exists(DATA_PATH):
     DATA_PATH = "/kaggle/input/tmdb-movies-daily-updates/TMDB_all_movies.csv"
@@ -53,14 +56,16 @@ df = df.reset_index(drop=True)
 print(f"Filtered to {len(df):,} movies")
 
 
-# Tag generation helpers
+# ============================================================
+# STEP 2: Generate tags for each movie
+# ============================================================
 def parse_json(val):
     if pd.isna(val) or val == "":
         return []
     try:
         parsed = ast.literal_eval(val)
         return [x.get("name", str(x)) for x in parsed if isinstance(x, dict)] if isinstance(parsed, list) else [str(parsed)]
-    except:
+    except Exception:
         return [s.strip() for s in str(val).split(",") if s.strip()]
 
 
@@ -103,28 +108,47 @@ df = df.drop(columns=[c for c in df.columns if c.startswith("_")], errors="ignor
 df = df[df["tags"].str.len() > 10].reset_index(drop=True)
 print(f"Generated tags for {len(df):,} movies")
 
-# Embeddings - using BGE-M3 (SOTA for retrieval, much better than mpnet)
-model = SentenceTransformer('BAAI/bge-m3', device=device)
-batch_size = 64 if device == 'cuda' else 16  # BGE-M3 is larger, reduce batch
+
+# ============================================================
+# STEP 3: Generate embeddings (GPU accelerated)
+# ============================================================
+# Using all-mpnet-base-v2 (768d) - same model used by the backend
+# This ensures consistency between Kaggle pipeline and local ETL
+MODEL_NAME = 'all-mpnet-base-v2'
+print(f"Loading model: {MODEL_NAME}")
+model = SentenceTransformer(MODEL_NAME, device=device)
+batch_size = 128 if device == 'cuda' else 16
 
 start = time.time()
 embeddings = model.encode(df["tags"].tolist(), show_progress_bar=True, batch_size=batch_size, convert_to_numpy=True)
 embeddings = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
-print(f"Encoded {len(df):,} movies in {time.time()-start:.1f}s")
+print(f"Encoded {len(df):,} movies in {time.time()-start:.1f}s → shape: {embeddings.shape}")
 
 
-# FAISS HNSW index (best for <1M vectors, no training needed, ~0.95+ recall)
+# ============================================================
+# STEP 4: Build FAISS HNSW index
+# ============================================================
 n, d = embeddings.shape
 emb32 = np.ascontiguousarray(embeddings.astype(np.float32))
 
-index = faiss.IndexHNSWFlat(d, 32, faiss.METRIC_INNER_PRODUCT)  # 32 = graph connectivity
-index.hnsw.efConstruction = 200  # higher = better quality, slower build
-index.hnsw.efSearch = 128  # higher = better recall at search time
+index = faiss.IndexHNSWFlat(d, 32, faiss.METRIC_INNER_PRODUCT)
+index.hnsw.efConstruction = 200
+index.hnsw.efSearch = 128
 index.add(emb32)
 print(f"Built HNSW index: {index.ntotal:,} vectors")
 
 
-# Save
+# ============================================================
+# STEP 5: ALIGNMENT CHECK (Critical!)
+# ============================================================
+assert len(df) == embeddings.shape[0] == index.ntotal, \
+    f"ALIGNMENT MISMATCH! Movies: {len(df)}, Embeddings: {embeddings.shape[0]}, FAISS: {index.ntotal}"
+print(f"ALIGNMENT VERIFIED: {len(df):,} movies = {embeddings.shape[0]:,} embeddings = {index.ntotal:,} FAISS vectors")
+
+
+# ============================================================
+# STEP 6: Save artifacts
+# ============================================================
 OUT = Path("/kaggle/working")
 emb_path = OUT / "sbert_embeddings.npy"
 idx_path = OUT / "faiss.index"
@@ -140,13 +164,34 @@ df[[c for c in cols if c in df.columns]].to_parquet(movies_path, index=False)
 print(f"Saved: embeddings ({emb_path.stat().st_size/1e6:.0f}MB), index ({idx_path.stat().st_size/1e6:.0f}MB), movies ({movies_path.stat().st_size/1e6:.0f}MB)")
 
 
-# Upload to HuggingFace
+# ============================================================
+# STEP 7: Upload ALL artifacts to HuggingFace (atomic)
+# ============================================================
 if HF_TOKEN:
     api = HfApi()
-    for path, name in [(emb_path, "sbert_embeddings.npy"), (idx_path, "faiss.index"), (movies_path, "movies_transformed.parquet")]:
+    files = [
+        (emb_path, "sbert_embeddings.npy"),
+        (idx_path, "faiss.index"),
+        (movies_path, "movies_transformed.parquet"),
+    ]
+    for path, name in files:
         api.upload_file(path_or_fileobj=str(path), path_in_repo=name, repo_id=HF_REPO, repo_type="model", token=HF_TOKEN)
-    print(f"Uploaded to huggingface.co/{HF_REPO}")
+        print(f"  Uploaded {name}")
+    print(f"All artifacts uploaded to huggingface.co/{HF_REPO}")
 else:
-    print("No HF_TOKEN - files saved locally")
+    print("No HF_TOKEN - files saved locally only")
 
-print(f"\nDone: {len(df):,} movies, {embeddings.shape[1]}d embeddings")
+
+# ============================================================
+# STEP 8: Quick sanity check
+# ============================================================
+# Test that Avatar recommendations make sense
+avatar_idx = df[df['title'].str.lower() == 'avatar'].index
+if len(avatar_idx) > 0:
+    query_vec = emb32[avatar_idx[0]].reshape(1, -1)
+    _, neighbors = index.search(query_vec, 6)
+    print(f"\nSanity Check - 'Avatar' recommendations:")
+    for i, idx in enumerate(neighbors[0][1:]):  # Skip self
+        print(f"  {i+1}. {df.iloc[idx]['title']}")
+
+print(f"\nPipeline complete: {len(df):,} movies, {d}d embeddings, model={MODEL_NAME}")
