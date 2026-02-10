@@ -27,29 +27,29 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Setup Kaggle credentials
-        env:
-          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
-          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
-        run: |
-          mkdir -p ~/.kaggle
-          echo '{"username":"'"$KAGGLE_USERNAME"'","key":"'"$KAGGLE_KEY"'"}' > ~/.kaggle/kaggle.json
-          chmod 600 ~/.kaggle/kaggle.json
-          echo "✅ Kaggle credentials configured"
+      - name: Install dependencies
+        run: pip install kaggle jupytext
 
-      - name: Install Kaggle CLI
-        run: pip install kaggle
+      - name: Convert .py to .ipynb for Kaggle
+        run: |
+          cd notebooks
+          jupytext --to notebook kaggle_etl_pipeline.py -o kaggle_etl_pipeline.ipynb
+          echo "Converted .py to .ipynb"
 
       - name: Push notebook to Kaggle (triggers GPU execution)
+        env:
+          KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_KEY }}
         run: |
-          echo "🚀 Pushing notebook to Kaggle..."
+          echo "Pushing notebook to Kaggle..."
           cd notebooks
           kaggle kernels push
-          echo "✅ Notebook pushed! Kaggle will now execute it with GPU."
+          echo "Notebook pushed! Kaggle will now execute it with GPU."
 
       - name: Wait for Kaggle execution to complete
+        env:
+          KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_KEY }}
         run: |
-          echo "⏳ Waiting for Kaggle notebook to complete..."
+          echo "Waiting for Kaggle notebook to complete..."
           KERNEL_ID="flameemperor/movie-recommendation-system-etl-pipeline"
           
           # Wait 2 minutes before first check (notebook needs time to start)
@@ -61,9 +61,7 @@ jobs:
             echo "[$i/56] Status: $STATUS"
             
             if echo "$STATUS" | grep -qi "complete"; then
-              echo "✅ Kaggle notebook completed successfully!"
-              
-              # Download output to check for errors
+              echo "Kaggle notebook completed successfully!"
               kaggle kernels output "$KERNEL_ID" -p /tmp/kaggle_output || true
               echo "--- Notebook Output ---"
               cat /tmp/kaggle_output/*.log 2>/dev/null || echo "(no log file)"
@@ -72,7 +70,7 @@ jobs:
             fi
             
             if echo "$STATUS" | grep -qi "error\|cancel"; then
-              echo "❌ Kaggle notebook failed!"
+              echo "Kaggle notebook failed!"
               kaggle kernels output "$KERNEL_ID" -p /tmp/kaggle_output || true
               cat /tmp/kaggle_output/*.log 2>/dev/null || echo "(no log file)"
               exit 1
@@ -81,13 +79,13 @@ jobs:
             sleep 30
           done
           
-          echo "⚠️ Timeout after 30 minutes. Check Kaggle manually:"
+          echo "Timeout after 30 minutes. Check Kaggle manually:"
           echo "https://www.kaggle.com/code/$KERNEL_ID"
           exit 1
 
       - name: Trigger Render backend restart
         if: success()
         run: |
-          echo "🔄 Pinging Render to pick up new HuggingFace artifacts..."
+          echo "Pinging Render to pick up new HuggingFace artifacts..."
           curl -sf --max-time 60 "https://movie-recs-api-5qvy.onrender.com/health" || echo "Backend pinged (may be sleeping)"
-          echo "✅ Done! Backend will download new files on next cold start."
+          echo "Done! Backend will download new files on next cold start."

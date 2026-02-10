@@ -143,7 +143,7 @@ print(f"Built HNSW index: {index.ntotal:,} vectors")
 # ============================================================
 assert len(df) == embeddings.shape[0] == index.ntotal, \
     f"ALIGNMENT MISMATCH! Movies: {len(df)}, Embeddings: {embeddings.shape[0]}, FAISS: {index.ntotal}"
-print(f"✅ ALIGNMENT VERIFIED: {len(df):,} movies = {embeddings.shape[0]:,} embeddings = {index.ntotal:,} FAISS vectors")
+print(f"ALIGNMENT VERIFIED: {len(df):,} movies = {embeddings.shape[0]:,} embeddings = {index.ntotal:,} FAISS vectors")
 
 
 # ============================================================
@@ -176,10 +176,10 @@ if HF_TOKEN:
     ]
     for path, name in files:
         api.upload_file(path_or_fileobj=str(path), path_in_repo=name, repo_id=HF_REPO, repo_type="model", token=HF_TOKEN)
-        print(f"  ✅ Uploaded {name}")
-    print(f"🎉 All artifacts uploaded to huggingface.co/{HF_REPO}")
+        print(f"  Uploaded {name}")
+    print(f"All artifacts uploaded to huggingface.co/{HF_REPO}")
 else:
-    print("⚠️ No HF_TOKEN - files saved locally only")
+    print("No HF_TOKEN - files saved locally only")
 
 
 # ============================================================
@@ -190,8 +190,8 @@ avatar_idx = df[df['title'].str.lower() == 'avatar'].index
 if len(avatar_idx) > 0:
     query_vec = emb32[avatar_idx[0]].reshape(1, -1)
     _, neighbors = index.search(query_vec, 6)
-    print(f"\n🎬 Sanity Check - 'Avatar' recommendations:")
+    print(f"\nSanity Check - 'Avatar' recommendations:")
     for i, idx in enumerate(neighbors[0][1:]):  # Skip self
         print(f"  {i+1}. {df.iloc[idx]['title']}")
 
-print(f"\n✅ Pipeline complete: {len(df):,} movies, {d}d embeddings, model={MODEL_NAME}")
+print(f"\nPipeline complete: {len(df):,} movies, {d}d embeddings, model={MODEL_NAME}")
