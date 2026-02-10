@@ -16,29 +16,24 @@ def generate_chat_response(messages: list[dict]) -> dict:
     """
     RAG Chatbot:
     1. Extract keywords from user message.
-    2. Search vector DB for relevant movies.
+    2. Search vector DB for relevant movies (semantic search).
     3. Feed movies + user query to LLM to generate response.
     """
     if not GEMINI_KEY:
-        return {"role": "assistant", "content": "⚠️ I need a Google API Key to think! Please set GOOGLE_API_KEY in .env."}
+        return {"role": "assistant", "content": "I need a Google API Key to think! Please set GOOGLE_API_KEY in .env."}
 
     user_msg = messages[-1]["content"]
     
     # 1. RETRIEVAL (The "R" in RAG)
-    # We use the user's last message to search our movie database
+    # Use semantic search (FAISS + SBERT) for meaning-based retrieval
     recommender = get_recommender()
     
-    # Simple keyword extraction (just use the whole queries for semantic search)
-    # Get top 5 matches
     try:
-        results = recommender.search_movies(user_msg, limit=5)
+        # Semantic search encodes query with SBERT model and searches FAISS index
+        results = recommender.semantic_search(user_msg, n=5)
         if not results:
-             # Fallback to recommendations if search fails (maybe it's a mood query?)
-             # Note: A better RAG would generate an embedding for the query directly.
-             # but search_movies uses text matching. 
-             # Let's try to map query -> embedding search via recommend_by_title if we had a query_embedding method.
-             # For now, we trust the text search or typical list.
-             pass
+            # Fallback to text-based search
+            results = recommender.search_movies(user_msg, limit=5)
     except Exception as e:
         logger.error(f"Retrieval failed: {e}")
         results = []
@@ -57,7 +52,7 @@ def generate_chat_response(messages: list[dict]) -> dict:
     Your goal is to help users find great movies based on the provided context matches.
     
     Rules:
-    1. ALWAYS usage the provided movie context to answer if relevant.
+    1. ALWAYS use the provided movie context to answer if relevant.
     2. If the context matches the user's vaguely described mood, recommend them.
     3. Be enthusiastic, concise, and professional.
     4. If the user asks general questions, answer generally but try to tie it back to movies.

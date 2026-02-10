@@ -65,7 +65,7 @@ def parse_json(val):
     try:
         parsed = ast.literal_eval(val)
         return [x.get("name", str(x)) for x in parsed if isinstance(x, dict)] if isinstance(parsed, list) else [str(parsed)]
-    except:
+    except Exception:
         return [s.strip() for s in str(val).split(",") if s.strip()]
 
 
