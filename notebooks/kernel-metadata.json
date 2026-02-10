@@ -1,9 +1,9 @@
 {
     "id": "flameemperor/movie-recommendation-system-etl-pipeline",
     "title": "Movie Recommendation System ETL Pipeline",
-    "code_file": "kaggle_etl_pipeline.py",
+    "code_file": "kaggle_etl_pipeline.ipynb",
     "language": "python",
-    "kernel_type": "script",
+    "kernel_type": "notebook",
     "is_private": true,
     "enable_gpu": true,
     "enable_tpu": false,
