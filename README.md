@@ -1,108 +1,72 @@
-# Movie Recommendation System
+---
+title: Movie Recs API
+emoji: 🍿
+colorFrom: red
+colorTo: blue
+sdk: docker
+pinned: false
+app_port: 7860
+---
 
-[![CI](https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/ci.yml/badge.svg)](https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/ci.yml)
-[![Daily Data Refresh](https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/data-refresh.yml/badge.svg)](https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/data-refresh.yml)
-[![Keep Services Alive](https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/keep-alive.yml/badge.svg)](https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/keep-alive.yml)
-[![Demo](https://img.shields.io/badge/Demo-Live-brightgreen)](https://a-movie-recommendation-system.streamlit.app/)
-[![Python 3.11+](https://img.shields.io/badge/Python-3.11+-blue)](https://python.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+# Movie Recommendation Engine 🎬
 
-Content-based movie recommendation engine. Uses SBERT embeddings for semantic similarity, FAISS for fast vector search, and a custom re-ranking layer for better results.
+> *Stop doom-scrolling and start watching.*
 
-**[Try the demo](https://a-movie-recommendation-system.streamlit.app/)** | **[Architecture docs](docs/ARCHITECTURE.md)**
+I built this because I was tired of Netflix recommending me the same 5 movies just because I watched *The Office* once. I wanted a recommendation engine that actually understands **context**—directors, eras, writing styles—not just "you liked X, here is X part 2".
 
-## What it does
+This isn't just a wrapper around an API. It's a full-stack engine using **SBERT** (Sentence BERT) to understand semantic similarity in plot summaries, tailored with a custom re-ranking layer that I tweaked to feel like a movie buff's intuition.
 
-- Finds similar movies based on plot, cast, director, and genre
-- Searches 33,000+ movies in under 100ms
-- Re-ranks results using franchise detection, director matching, and quality signals
-- Uses MMR to avoid showing 5 sequels of the same movie
+## Top Features (The Good Stuff)
 
-## 🚀 Quick Start (The Easy Way)
+* **It actually understands plot:** Searching for "documentaries about minimalists" works, even if the word "minimalist" isn't in the title.
+* **Smart Re-ranking:** It knows that if you like *Avatar*, you probably want to see *Avatar: The Way of Water*. But if you search for a generic sci-fi, it won't just dump all the sequels on you (thanks to MMR diversity).
+* **Fast:** Searches 30k+ movies in <100ms. I use FAISS for this because standard cosine similarity was getting too slow.
 
-We have a unified management script to handle everything.
+## How to Run It
 
-### 1. Setup
-Install all dependencies with one command:
+I wrote a single script to handle the messy stuff. You don't need to manually start the backend and frontend separately unless you want to.
+
+### 1. The "One-Click" Setup
+
 ```bash
+# This sets up the venv and installs dependencies
 python manage.py setup
 ```
 
-### 2. Run App
-Starts both the **Backend API** and **Frontend UI** automatically:
+### 2. Start the App
+
 ```bash
+# Fires up both the FastAPI backend and Streamlit frontend
 python manage.py run
 ```
-*   Frontend: http://localhost:8501
-*   Backend: http://localhost:8000/docs
 
-### 3. Run Data Pipeline
-Run the ETL properly (Pandas or Spark):
+Then head to `http://localhost:8501`.
+
+### 3. Data Updates (The ETL)
+
+The movie data comes from TMDB. I have a pipeline that pulls fresh data daily. If you want to run it manually (e.g., to get today's releases):
+
 ```bash
-# Standard (Local)
 python manage.py etl
-
-# Enterprise (Spark)
-python manage.py etl --spark
 ```
 
-### 4. Test
-Run the full test suite:
-```bash
-python manage.py test
-```
+*Note: The first run takes a while because it has to generate embeddings for thousands of movies. Grab a coffee.*
 
-### 5. Orchestration (Airflow)
-Start the Airflow Data Pipelines (requires Docker):
-```bash
-python manage.py airflow
-```
-*   UI: http://localhost:8080 (u: airflow, p: airflow)
+## Tech Stack & Why I Chose It
 
-## How it works
+* **Backend:** FastAPI. Because it's fast and type-safe.
+* **Search:** FAISS + SBERT. I tried TF-IDF first, but it failed at understanding context (e.g., "scary movie in space" didn't return *Alien*). SBERT fixed that.
+* **Frontend:** Streamlit. I'm a backend engineer; I wanted a UI that looks good without writing 500 lines of React.
+* **Deployment:** Render + Streamlit Cloud. Free tier heroes.
 
-1. **ETL pipeline** pulls movie data from TMDB (via Kaggle), cleans it, and generates embeddings
-2. **SBERT (MPNet)** encodes movie metadata into 768-dim vectors
-3. **FAISS index** enables fast approximate nearest neighbor search
-4. **Re-ranking layer** boosts franchises, same-director films, and penalizes genre mismatches
-5. **MMR diversity** prevents redundant results
+## Current Quirks / TODOs
 
-## Project structure
+* The "Wake Up" time on Render can be slow (free tier limits). I added a loading spinner so you know it hasn't crashed.
+* I want to add user accounts eventually so you can save a "Watchlist".
 
-```
-backend/
-  main.py          # FastAPI endpoints
-  recommender.py   # FAISS search + re-ranking logic
-etl/
-  pipeline.py      # Orchestrates ingest → transform → index
-  transform.py     # Feature engineering, SBERT encoding
-  index.py         # FAISS index creation
-models/            # faiss.index, embeddings
-data/processed/    # Cleaned parquet files
-streamlit_app.py   # Frontend
-```
+## Contributing
 
-## Re-ranking factors
+Found a bug? Have an idea? Feel free to open an issue. I'm pretty active here. Check out `CONTRIBUTING.md` if you want to jump into the code.
 
-| Factor | Weight | Why |
-|--------|--------|-----|
-| Franchise match | +0.25 | Avatar → Avatar 2 |
-| Same director | +0.10 | Nolan fans want more Nolan |
-| Same era (±5 yrs) | +0.03 | Similar style/themes |
-| Genre mismatch | -0.15 | Avoid semantic drift |
-| Documentary filter | -0.15 | Hide "Making Of" unless relevant |
-
-## Deployment
-
-- **Backend**: Render.com (see `render.yaml`)
-- **Frontend**: Streamlit Cloud
-
-## Testing
-
-```bash
-pytest tests/ -v
-```
-
-## License
-
-MIT
+---
+*Built with 🍿 and Python.*
