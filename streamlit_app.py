@@ -93,7 +93,7 @@ st.markdown("""
 # Add your HF Space URL first, keep Render as fallback
 BACKEND_URLS = [
     os.getenv("API_URL", ""),  # From Hugging Face Secrets or local env
-    "https://pavan-movie-api.hf.space", # Primary (Hugging Face)
+    "https://pavanbadempet-movie-rec-api.hf.space", # Primary (Hugging Face)
     "https://movie-recs-api-5qvy.onrender.com" # Fallback (Render)
 ]
 # Clean up empty strings
