@@ -31,16 +31,19 @@ jobs:
           exit 1
       
       - name: Setup Python for Playwright
+        if: always()
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           
       - name: Install Playwright
+        if: always()
         run: |
           pip install playwright
           playwright install --with-deps chromium
           
       - name: Ping and Wake Streamlit App
+        if: always()
         run: |
           echo "Checking Streamlit app status using Playwright..."
           python -c '
