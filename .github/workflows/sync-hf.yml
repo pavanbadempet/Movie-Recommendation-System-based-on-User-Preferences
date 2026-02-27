@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch: # Allow manual triggering
+  workflow_dispatch:
 
 jobs:
   sync-to-hub:
@@ -13,24 +13,31 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0
-          lfs: false
-          
-      - name: Track Large Files with LFS
-        run: |
-          git lfs install
-          # Remove existing .gitattributes restriction if any
-          git rm --cached .gitattributes || true
-          # Track parquet files with LFS
-          git lfs track "*.parquet"
-          # Convert existing large files to LFS pointer files
-          git add .gitattributes
-          git add data/processed/*.parquet
-          git commit -m "chore: Track large parquet files with Git LFS for Hugging Face" || echo "No changes to commit"
-          
-      - name: Push to Hugging Face
+          fetch-depth: 1
+          lfs: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install huggingface_hub
+
+      - name: Deploy to Hugging Face Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          git config lfs.allowincompletepush true
-          git push --force https://pavanbadempet:$HF_TOKEN@huggingface.co/spaces/pavanbadempet/movie-rec-api main
+          python -c "
+          import os
+          from huggingface_hub import HfApi
+          api = HfApi(token=os.environ['HF_TOKEN'])
+          print('Uploading repository to Hugging Face Spaces...')
+          api.upload_folder(
+              folder_path='.',
+              repo_id='pavanbadempet/movie-rec-api',
+              repo_type='space',
+              ignore_patterns=['.git/*', '.github/*']
+          )
+          print('Upload complete!')
+          "
