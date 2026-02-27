@@ -1257,7 +1257,8 @@ elif st.session_state.page == "search":
                     with st.spinner("Analysing semantics..."):
                         # Call API
                         try:
-                            r = requests.get(f"{API_URL}/recommend/id/{movie['id']}", params={"n": 10}, timeout=30)
+                            api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
+                            r = requests.get(f"{api_url}/recommend/id/{movie['id']}", params={"n": 10}, timeout=30)
                             if r.ok:
                                 result = r.json()
                                 st.session_state.recs = result["recommendations"]
@@ -1343,7 +1344,8 @@ elif st.session_state.page == "chat":
                     recent_msgs = st.session_state.chat_history[-6:]
                     clean_msgs = [{"role": m["role"], "content": m["content"]} for m in recent_msgs if m["role"] != "system"]
                     
-                    r = requests.post(f"{API_URL}/chat", json={"messages": clean_msgs}, timeout=60)
+                    api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
+                    r = requests.post(f"{api_url}/chat", json={"messages": clean_msgs}, timeout=60)
                     
                     if r.ok:
                         response_text = r.json()["content"]
