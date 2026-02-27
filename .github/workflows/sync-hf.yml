@@ -16,9 +16,20 @@ jobs:
           fetch-depth: 0
           lfs: false
           
+      - name: Track Large Files with LFS
+        run: |
+          git lfs install
+          # Remove existing .gitattributes restriction if any
+          git rm --cached .gitattributes || true
+          # Track parquet files with LFS
+          git lfs track "*.parquet"
+          # Convert existing large files to LFS pointer files
+          git add .gitattributes
+          git add data/processed/*.parquet
+          git commit -m "chore: Track large parquet files with Git LFS for Hugging Face" || echo "No changes to commit"
+          
       - name: Push to Hugging Face
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          git config lfs.allowincompletepush true
           git push --force https://pavanbadempet:$HF_TOKEN@huggingface.co/spaces/pavanbadempet/movie-rec-api main
