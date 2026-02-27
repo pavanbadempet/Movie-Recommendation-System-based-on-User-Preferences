@@ -89,7 +89,16 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Config
-API_URL = os.getenv("API_URL", "http://localhost:8000")
+# Support multiple backends for high availability (failover)
+# Add your HF Space URL first, keep Render as fallback
+BACKEND_URLS = [
+    os.getenv("API_URL", ""),  # From Hugging Face Secrets or local env
+    "https://pavan-movie-api.hf.space", # Primary (Hugging Face)
+    "https://movie-recs-api-5qvy.onrender.com" # Fallback (Render)
+]
+# Clean up empty strings
+BACKEND_URLS = [url.strip("/") for url in BACKEND_URLS if url]
+
 TMDB_KEY = os.getenv("TMDB_API_KEY")
 
 # Validate TMDB Key
@@ -181,54 +190,60 @@ def fetch_watch_providers(movie_id):
 
 def wake_up_backend():
     """
-    Wake up the Render backend if it's sleeping.
-    Retries for up to 60 seconds with visual feedback.
+    Wake up backend and find an active server from the failover list.
     """
-    try:
-        # Fast check first
-        r = requests.get(f"{API_URL}/health", timeout=2)
-        if r.ok:
-            return True
-    except requests.RequestException:
-        pass
+    # 1. Fast check existing known-good URL
+    if "API_URL" in st.session_state:
+        try:
+            r = requests.get(f"{st.session_state.API_URL}/health", timeout=2)
+            if r.ok:
+                return True
+        except requests.RequestException:
+            pass # Move to full scan
 
-    # If failed, assume sleeping and start wake-up protocol
-    with st.spinner("🚀 Waking up the recommendation engine... (This can take ~1 minute on Render Free Tier)"):
-        # Max retry 60s
+    # 2. Sequential ping of all configured backends
+    with st.spinner("🚀 Booting up the recommendation engine... (This can take ~45s if waking from sleep)"):
+        # We try all backends. Max 30 loops = ~60-90 seconds total wait.
         for _ in range(30):
-            try:
-                r = requests.get(f"{API_URL}/health", timeout=5)
-                if r.ok:
-                    st.toast("✅ System Online!", icon="⚡")
-                    return True
-            except requests.RequestException:
-                time.sleep(2)
+            for url in BACKEND_URLS:
+                try:
+                    r = requests.get(f"{url}/health", timeout=3)
+                    if r.ok:
+                        st.session_state.API_URL = url
+                        domain = url.split("//")[-1].split(".")[0]
+                        st.toast(f"✅ Connected to {domain}!", icon="⚡")
+                        return True
+                except requests.RequestException:
+                    pass
+            time.sleep(2)
         
     return False
 
 # Initialize connection on app load
-if "backend_ready" not in st.session_state:
+if "backend_ready" not in st.session_state or "API_URL" not in st.session_state:
     st.session_state.backend_ready = wake_up_backend()
 
 def search_movies(query):
     """Search movies via API."""
     if not st.session_state.backend_ready:
-        st.error("⚠️ Backend is unreachable. Please refresh or check Render dashboard.")
+        st.error("⚠️ The engine is still waking up. Give it a moment to stretch its legs.")
         return []
         
     try:
-        r = requests.get(f"{API_URL}/search", params={"q": query, "limit": 100}, timeout=10)
+        api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
+        r = requests.get(f"{api_url}/search", params={"q": query, "limit": 100}, timeout=10)
         if r.ok:
             return r.json()
     except requests.RequestException:
-        st.error("⚠️ Connection lost. Backend might be restarting.")
+        st.error("⚠️ Lost connection to the brain. It might be restarting.")
     return []
 
 
 def get_recommendations(movie_id, n=10):
     """Get recommendations via API."""
     try:
-        r = requests.get(f"{API_URL}/recommend/id/{movie_id}", params={"n": n}, timeout=30)
+        api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
+        r = requests.get(f"{api_url}/recommend/id/{movie_id}", params={"n": n}, timeout=30)
         if r.ok:
             return r.json()
     except Exception as e:
