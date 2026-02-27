@@ -30,17 +30,53 @@ jobs:
           echo "❌ Render backend failed to respond after 15 attempts."
           exit 1
       
-      - name: Ping Streamlit frontend
+      - name: Setup Python for Playwright
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install Playwright
         run: |
-          echo "Pinging Streamlit frontend..."
-          for i in {1..5}; do
-            if curl -sf --max-time 60 "https://movie-recommendation-system-x.streamlit.app/"; then
-              echo "✅ Streamlit frontend is alive!"
-              exit 0
-            else
-              echo "Attempt $i failed..."
-              sleep 10
-            fi
-          done
-          echo "❌ Streamlit frontend failed to respond after 5 attempts."
-          exit 1
+          pip install playwright
+          playwright install --with-deps chromium
+          
+      - name: Ping and Wake Streamlit App
+        run: |
+          echo "Checking Streamlit app status using Playwright..."
+          python -c '
+          from playwright.sync_api import sync_playwright
+          import time
+          
+          def keep_awake():
+              with sync_playwright() as p:
+                  print("Launching headless browser...")
+                  browser = p.chromium.launch(headless=True)
+                  page = browser.new_page()
+                  
+                  # The correct URL based on the README
+                  url = "https://a-movie-recommendation-system.streamlit.app/"
+                  print(f"Navigating to {url}...")
+                  page.goto(url)
+                  
+                  # Wait a few seconds to let the exact state render
+                  page.wait_for_timeout(5000)
+                  
+                  # Check if the "Yes, get this app back up!" button exists
+                  button = page.locator("button:has-text(\"Yes, get this app back up!\")")
+                  if button.is_visible():
+                      print("App is sleeping! Clicking the wake-up button...")
+                      button.click()
+                      # Wait to allow the boot process to register
+                      page.wait_for_timeout(15000)
+                      print("Wake-up signal sent successfully.")
+                  else:
+                      print("No sleep screen detected. App is awake and websocket connected!")
+                      
+                  browser.close()
+          
+          try:
+              keep_awake()
+          except Exception as e:
+              print(f"Playwright ping failed: {e}")
+              exit(1)
+          '
