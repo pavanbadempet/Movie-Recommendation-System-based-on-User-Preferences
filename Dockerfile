@@ -49,8 +49,10 @@ COPY --from=builder /app /app
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
-# Expose ports
-EXPOSE 8000 8501
+# Expose ports (7860 is required for Hugging Face Spaces, 8000 for Render, 8501 for Streamlit)
+EXPOSE 7860 8000 8501
 
-# Default command: run backend API
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Default command: run backend API.
+# Hugging Face sets $PORT=7860 by default. Render dynamically sets $PORT.
+# We use bash to evaluate the PORT environment variable, defaulting to 8000 if not set.
+CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
