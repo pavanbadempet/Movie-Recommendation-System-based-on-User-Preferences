@@ -835,6 +835,7 @@ def show_movie_dialog(rec):
                 </div>
                 <div class="db-meta">{year} • {runtime} • {str(genres).split(',')[0]}</div>
                 <div class="db-overview">{overview_text}</div>
+                {explanation_html}
                 <div class="db-credits">Directed by {director_link} • Cast: {cast_links}</div>
                 {provider_html}
             </div>
