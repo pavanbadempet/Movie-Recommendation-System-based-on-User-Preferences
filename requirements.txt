@@ -22,7 +22,7 @@ google-generativeai>=0.3.0  # Gemini API for RAG
 slowapi>=0.1.8  # Rate limiting
 
 # Frontend
-streamlit>=1.37.0
+streamlit>=1.54.0
 st-clickable-images>=0.0.3  # Clickable image grid
 requests>=2.31.0
 
