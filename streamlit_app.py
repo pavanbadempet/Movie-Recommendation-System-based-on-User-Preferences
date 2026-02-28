@@ -14,8 +14,8 @@ st.set_page_config(
     layout="wide"
 )
 
-# New Streamlit 1.54.0 Feature: Native Material Logo
-st.logo("Nova", icon=":material/movie:")
+# New Streamlit 1.54.0 Feature: Native Logo Support
+st.logo("https://upload.wikimedia.org/wikipedia/commons/e/e4/Movie-icon.svg", icon=":material/movie:")
 
 # Premium CSS - Hide branding + full-screen dark theme + WHITE TEXT
 st.markdown("""
