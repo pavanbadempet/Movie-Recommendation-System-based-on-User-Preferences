@@ -1248,14 +1248,13 @@ elif st.session_state.page == "search":
     
     if all_titles:
         # 1. Instant Dropdown Search (The primary UX)
-        st.subheader("Fast Title Search")
         title_options = {t["title"]: t for t in all_titles}
         
         selected_title = st.selectbox(
-            "Start typing a movie title...", 
+            "Search by title", 
             options=list(title_options.keys()),
             index=None,
-            placeholder="Type 'Inception' or 'Avatar'...",
+            placeholder="e.g. Inception, Avatar, The Dark Knight...",
         )
         
         if selected_title:
@@ -1271,12 +1270,12 @@ elif st.session_state.page == "search":
             except requests.RequestException:
                 st.error("Failed to load movie details.")
     else:
-        st.warning("⚠️ Could not load the movie catalog for autocomplete. Is the backend asleep?")
+        st.warning("⚠️ Could not load the movie catalog. The recommendation engine may still be starting up.")
     
-    # 2. Deep Plot/Genre Search (The fallback/advanced UX)
-    with st.expander("✨ Advanced: Search by Plot or Vibe instead"):
-        st.caption("Don't know the exact title? Type something like *'time travel heist'* or *'action aliens'*")
-        search_query = st.text_input("Deep search query...")
+    # 2. Semantic Search (The fallback/advanced UX)
+    with st.expander("🔎 Search by plot, genre, or description"):
+        st.caption("Can't find the title? Describe the movie — e.g. *'time travel heist'* or *'romantic comedy set in Paris'*")
+        search_query = st.text_input("Describe a movie...")
         
         if search_query and len(search_query) >= 2:
             with st.spinner("Analyzing semantic meaning..."):
