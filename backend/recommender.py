@@ -278,17 +278,13 @@ class Recommender:
                 
             # Franchise Detection (ONLY for exact franchise matches)
             # Example: "Avatar" → "Avatar: The Way of Water" 
-            # This handles sequels/prequels that SBERT might not catch
-            query_first_word = query_movie["title"].lower().split()[0]
-            cand_first_word = cand["title"].lower().split()[0]
+            # We use strict substring matching instead of first-word matching to avoid
+            # grouping unrelated movies like "Shelter" and "Shelter Island".
+            q_title_lower = query_movie.get("title", "").lower()
+            c_title_lower = cand.get("title", "").lower()
             
-            # Only boost if:
-            # 1. Same first word (franchise indicator)
-            # 2. First word is substantial (4+ chars, not "The", "A", etc.)
-            if (query_first_word == cand_first_word and 
-                len(query_first_word) >= 4 and
-                query_first_word not in {"the", "a", "an", "part"}):
-                final_score += 0.25  # Strong franchise boost
+            if len(q_title_lower) >= 5 and (q_title_lower in c_title_lower or c_title_lower in q_title_lower):
+                final_score += 0.05  # Moderate franchise boost, let SBERT do the heavy lifting
             
             # Popularity Nudge (Log Scale)
             votes = cand.get("vote_count", 0)
@@ -360,10 +356,10 @@ class Recommender:
             explanation_tags = []
             
             # Franchise match
-            if (query_first_word == cand_first_word and 
-                len(query_first_word) >= 4 and
-                query_first_word not in {"the", "a", "an", "part"}):
-                explanation_tags.append(f"Same franchise ({query_first_word.title()})")
+            if len(q_title_lower) >= 5 and (q_title_lower in c_title_lower or c_title_lower in q_title_lower):
+                # Extract the common base for the explanation
+                common_base = q_title_lower.title() if len(q_title_lower) <= len(c_title_lower) else c_title_lower.title()
+                explanation_tags.append(f"Same franchise ({common_base})")
             
             # Director match
             if q_director and cand.get("director") == q_director:
