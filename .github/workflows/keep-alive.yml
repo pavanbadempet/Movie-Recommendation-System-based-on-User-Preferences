@@ -14,8 +14,15 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Ping Render backend
+      - name: Ping Backends (Hugging Face & Render)
         run: |
+          echo "Pinging Hugging Face Space..."
+          if curl -sf --max-time 30 "https://pavanbadempet-movie-rec-api.hf.space/"; then
+            echo "✅ Hugging Face Space is alive!"
+          else
+            echo "❌ Hugging Face Space ping failed."
+          fi
+
           echo "Pinging Render backend..."
           # Render free tier can take up to 2 minutes to spin up
           for i in {1..15}; do
@@ -27,8 +34,8 @@ jobs:
               sleep 10
             fi
           done
-          echo "❌ Render backend failed to respond after 15 attempts."
-          exit 1
+          echo "❌ Render backend failed to respond after 15 attempts. (Render might be suspended)"
+          exit 0
       
       - name: Setup Python for Playwright
         if: always()
