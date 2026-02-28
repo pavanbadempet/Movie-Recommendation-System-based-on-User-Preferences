@@ -60,6 +60,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+@app.get("/")
+async def root():
+    return {
+        "status": "online",
+        "message": "Welcome to the Movie Recommendation API. Head over to /docs to explore the endpoints!",
+        "version": "2.0.0"
+    }
+
 # Rate limiting (30 requests/minute per IP)
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
@@ -96,6 +104,14 @@ class Movie(BaseModel):
     release_date: Optional[str] = None
     poster_path: Optional[str] = None
     similarity_score: Optional[float] = None
+    explanation_text: Optional[str] = None
+    explanation: Optional[list[str]] = None
+
+
+class MovieTitle(BaseModel):
+    """Lightweight movie title response for autocomplete."""
+    id: int
+    title: str
 
 
 class EnrichedMovie(BaseModel):
@@ -110,6 +126,8 @@ class EnrichedMovie(BaseModel):
     release_date: Optional[str] = None
     poster_path: Optional[str] = None
     similarity_score: Optional[float] = None
+    explanation_text: Optional[str] = None
+    explanation: Optional[list[str]] = None
     # Enriched fields
     trailer_key: Optional[str] = None
     runtime: Optional[int] = None
@@ -242,6 +260,16 @@ async def list_movies(
     rec = get_rec()
     movies = rec.movies.iloc[offset:offset + limit]
     return movies.to_dict(orient="records")
+
+
+@app.get("/movies/titles", response_model=list[MovieTitle])
+async def get_all_titles():
+    """
+    Get a lightweight list of all movie titles and IDs.
+    Perfect for populating the Streamlit autocomplete dropdown.
+    """
+    rec = get_rec()
+    return rec.get_all_titles()
 
 
 @app.get("/search", response_model=list[Movie])

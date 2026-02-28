@@ -14,6 +14,9 @@ st.set_page_config(
     layout="wide"
 )
 
+# New Streamlit 1.54.0 Feature: Native Logo Support
+st.logo("https://upload.wikimedia.org/wikipedia/commons/e/e4/Movie-icon.svg", icon_image=":material/movie:")
+
 # Premium CSS - Hide branding + full-screen dark theme + WHITE TEXT
 st.markdown("""
 <style>
@@ -236,6 +239,27 @@ def search_movies(query):
             return r.json()
     except requests.RequestException:
         st.error("⚠️ Lost connection to the brain. It might be restarting.")
+    return []
+
+
+@st.cache_data(ttl=3600)
+def fetch_all_movie_titles(version=3):
+    """Fetch all movie titles for the autocomplete dropdown."""
+    if not st.session_state.backend_ready:
+        return []
+        
+    try:
+        api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
+        r = requests.get(f"{api_url}/movies/titles", timeout=20)
+        if r.ok:
+            data = r.json()
+            if data:
+                return data  # Returns list of {"id": X, "title": "Y"}
+    except Exception:
+        pass
+        
+    # If we get here, it failed to load. Clear the cache so it retries later instead of serving [] for an hour.
+    fetch_all_movie_titles.clear()
     return []
 
 
@@ -607,6 +631,10 @@ def show_movie_dialog(rec):
         video_html = f'<div class="db-video-layer"><img src="{poster_url}" alt="backdrop"></div>'
         youtube_js = ""
     
+    explanation_html = ""
+    if rec.get("explanation_text"):
+        explanation_html = f'<div style="font-size: 0.85rem; color: #fff; background: rgba(229,9,20,0.2); border-left: 3px solid #e50914; padding: 8px 12px; margin: 10px 0; border-radius: 4px; animation: fadeInUp 0.6s ease-out 0.45s both;"><strong>🤖 CineBot Vibe Check:</strong> {rec.get("explanation_text")}</div>'
+
     billboard_html = f'''
     <!DOCTYPE html>
     <html>
@@ -811,6 +839,7 @@ def show_movie_dialog(rec):
                 </div>
                 <div class="db-meta">{year} • {runtime} • {str(genres).split(',')[0]}</div>
                 <div class="db-overview">{overview_text}</div>
+                {explanation_html}
                 <div class="db-credits">Directed by {director_link} • Cast: {cast_links}</div>
                 {provider_html}
             </div>
@@ -1217,57 +1246,97 @@ elif st.session_state.page == "search":
             go_home()
             st.rerun()
             
-    st.title("🔍 Deep Search Engine")
+    st.title("🔍 Search & Discover")
     
-    # Simple Search Interface
-    search = st.text_input("Find movies by title, plot, or genre...", placeholder="Type 'Inception' or 'Time Travel'...")
+    # Pre-fetch all titles for instant autocomplete
+    with st.spinner("Loading movie catalog..."):
+        all_titles = fetch_all_movie_titles()
     
-    if search and len(search) >= 2:
-        with st.spinner("Searching database..."):
-            movies = search_movies(search)
+    movie_to_fetch = None
+    
+    if all_titles:
+        # 1. Instant Dropdown Search (The primary UX)
+        title_options = {t["title"]: t for t in all_titles}
         
-        if movies:
-            options = {format_option(m): m for m in movies}
-            selected_option = st.selectbox(f"Found {len(movies)} matches:", list(options.keys()))
-            movie = options.get(selected_option)
+        selected_title = st.selectbox(
+            "Search by title", 
+            options=list(title_options.keys()),
+            index=None,
+            placeholder="e.g. Inception, Avatar, The Dark Knight...",
+        )
+        
+        if selected_title:
+            # We instantly have the exact ID here
+            selected_id = title_options[selected_title]["id"]
             
-            if movie:
-                # Preview
-                poster_url = fetch_poster(movie.get("poster_path"))
-                credits = fetch_credits(movie.get("id"))
-                
-                # Highlight Card
-                st.markdown(f"""
-                <div style="display: flex; gap: 20px; background: rgba(255,255,255,0.05); padding: 20px; border-radius: 15px; margin-top: 20px;">
-                    <img src="{poster_url}" width="120" style="border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
-                    <div>
-                        <div style="font-size: 1.5rem; font-weight: 700; margin-bottom: 5px;">{movie.get('title')}</div>
-                        <div style="color: #bbb; margin-bottom: 10px;">{movie.get('release_date', '')[:4]} • ⭐ {movie.get('vote_average', 0):.1f}/10</div>
-                        <div style="font-size: 0.9rem; line-height: 1.5; color: #ddd;">{movie.get('overview', '')}</div>
-                        <div style="margin-top: 10px; font-size: 0.8rem; color: #888;">🎭 {credits.get('cast', 'N/A')}</div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-                
-                # Action Button
-                if st.button("✨ Get Similar Recommendations", type="primary", use_container_width=True):
-                    st.session_state.selected_rec = None
-                    with st.spinner("Analysing semantics..."):
-                        # Call API
-                        try:
-                            r = requests.get(f"{API_URL}/recommend/id/{movie['id']}", params={"n": 10}, timeout=30)
-                            if r.ok:
-                                result = r.json()
-                                st.session_state.recs = result["recommendations"]
-                                st.session_state.source_movie = movie
-                            else:
-                                st.error("API Error")
-                        except Exception as e:
-                            st.error(f"Connection Error: {e}")
-        else:
-            st.info("No text matches found. Try describing the plot!")
+            # Fetch the full movie object using the ID endpoint
+            try:
+                api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
+                r = requests.get(f"{api_url}/movie/{selected_id}", timeout=10)
+                if r.ok:
+                    movie_to_fetch = r.json()
+            except requests.RequestException:
+                st.error("Failed to load movie details.")
+    else:
+        st.warning("⚠️ Could not load the movie catalog. The recommendation engine may still be starting up.")
+    
+    # 2. Semantic Search (The fallback/advanced UX)
+    with st.expander("🔎 Search by plot, genre, or description"):
+        st.caption("Can't find the title? Describe the movie — e.g. *'time travel heist'* or *'romantic comedy set in Paris'*")
+        search_query = st.text_input("Describe a movie...")
+        
+        if search_query and len(search_query) >= 2:
+            with st.spinner("Analyzing semantic meaning..."):
+                movies = search_movies(search_query)
+            
+            if movies:
+                options = {format_option(m): m for m in movies}
+                selected_option = st.selectbox(f"Found {len(movies)} matches:", list(options.keys()), key="deep_search_select")
+                if options.get(selected_option):
+                    movie_to_fetch = options.get(selected_option)
+            else:
+                st.info("No text matches found. Try describing the plot differently!")
+    
+    
+    # 3. Universal Display Logic (Triggered by either search method)
+    if movie_to_fetch:
+        movie = movie_to_fetch
+        
+        # Preview
+        poster_url = fetch_poster(movie.get("poster_path"))
+        credits = fetch_credits(movie.get("id"))
+        
+        # Highlight Card
+        st.markdown(f"""
+        <div style="display: flex; gap: 20px; background: rgba(255,255,255,0.05); padding: 20px; border-radius: 15px; margin-top: 20px;">
+            <img src="{poster_url}" width="120" style="border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
+            <div>
+                <div style="font-size: 1.5rem; font-weight: 700; margin-bottom: 5px;">{movie.get('title')}</div>
+                <div style="color: #bbb; margin-bottom: 10px;">{movie.get('release_date', '')[:4]} • ⭐ {movie.get('vote_average', 0):.1f}/10</div>
+                <div style="font-size: 0.9rem; line-height: 1.5; color: #ddd;">{movie.get('overview', '')}</div>
+                <div style="margin-top: 10px; font-size: 0.8rem; color: #888;">🎭 {credits.get('cast', 'N/A')}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Action Button
+        if st.button("✨ Get Similar Recommendations", type="primary", use_container_width=True):
+            st.session_state.selected_rec = None
+            with st.spinner("Analysing semantics..."):
+                # Call API
+                try:
+                    api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
+                    r = requests.get(f"{api_url}/recommend/id/{movie['id']}", params={"n": 10}, timeout=30)
+                    if r.ok:
+                        result = r.json()
+                        st.session_state.recs = result["recommendations"]
+                        st.session_state.source_movie = movie
+                    else:
+                        st.error("API Error")
+                except Exception as e:
+                    st.error(f"Connection Error: {e}")
 
     # Display Recommendations Grid (Shared Logic)
     if "recs" in st.session_state and st.session_state.recs:
@@ -1343,7 +1412,8 @@ elif st.session_state.page == "chat":
                     recent_msgs = st.session_state.chat_history[-6:]
                     clean_msgs = [{"role": m["role"], "content": m["content"]} for m in recent_msgs if m["role"] != "system"]
                     
-                    r = requests.post(f"{API_URL}/chat", json={"messages": clean_msgs}, timeout=60)
+                    api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
+                    r = requests.post(f"{api_url}/chat", json={"messages": clean_msgs}, timeout=60)
                     
                     if r.ok:
                         response_text = r.json()["content"]

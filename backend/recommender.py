@@ -1,6 +1,7 @@
 """
-Recommendation engine for the Movie Recommendation System.
-Loads FAISS index and movie metadata for fast similarity search.
+Recommendation engine.
+This isn't just a database wrapper; it loads the FAISS index and handles the "fuzzy" logic 
+of making recommendations feel personalized.
 """
 import logging
 from datetime import datetime
@@ -10,6 +11,9 @@ from functools import lru_cache
 import numpy as np
 import pandas as pd
 import faiss
+import os
+import json
+from huggingface_hub import InferenceClient
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 # Import model loader to handle external model downloads
@@ -26,7 +30,10 @@ ensure_model_files(MODELS_DIR)
 
 
 class Recommender:
-    """Movie recommendation engine using FAISS similarity search."""
+    """
+    The brain of the operation.
+    It manages the FAISS index (for speed) and the metadata (for context).
+    """
     
     def __init__(self):
         self._index: faiss.Index | None = None
@@ -35,7 +42,10 @@ class Recommender:
         self._vectors: np.ndarray | None = None
     
     def load(self) -> "Recommender":
-        """Load all required artifacts with minimal memory footprint."""
+        """
+        Loads the heavy artifacts.
+        We use memory-mapping for the vectors so we don't blow up the RAM on the free tier.
+        """
         logger.info("Loading recommendation engine...")
         
         # Load FAISS index
@@ -98,17 +108,64 @@ class Recommender:
     def get_movie_by_index(self, idx: int) -> dict:
         """Get movie details by DataFrame index."""
         return self._movies.iloc[idx].to_dict()
+        
+    def get_all_titles(self, limit: int = 5000) -> list[dict]:
+        """
+        Return a lightweight list of movie IDs and Titles for autocomplete.
+        """
+        if self._movies is None:
+            return []
+        
+        # Extract necessary columns
+        cols = ["id", "title"]
+        if "release_date" in self._movies.columns:
+            cols.append("release_date")
+        if "popularity" in self._movies.columns:
+            cols.append("popularity")
+        if "genres" in self._movies.columns:
+            cols.append("genres")
+            
+        titles_df = self._movies[cols].copy()
+        
+        # Append release year to the title for disambiguation
+        if "release_date" in titles_df.columns:
+            years = pd.to_datetime(titles_df["release_date"], errors="coerce").dt.year
+            mask = years.notna() & (years > 0)
+            titles_df.loc[mask, "title"] = titles_df.loc[mask, "title"] + " (" + years[mask].astype(int).astype(str) + ")"
+            
+        # Append genres to the title for extra context
+        if "genres" in titles_df.columns:
+            # Handle NaN/None in genres
+            mask = titles_df["genres"].notna() & (titles_df["genres"] != "")
+            # Take only the first 2 genres to keep it clean, if it's a comma-separated string
+            def get_top_genres(g_str):
+                try:
+                    parts = str(g_str).split(",")
+                    return ", ".join(p.strip() for p in parts[:2])
+                except Exception:
+                    return str(g_str)
+            
+            top_genres = titles_df.loc[mask, "genres"].apply(get_top_genres)
+            titles_df.loc[mask, "title"] = titles_df.loc[mask, "title"] + " - " + top_genres
+        
+        # Sort by popularity so famous movies appear at the top instead of garbage punctuation
+        if "popularity" in titles_df.columns:
+            titles_df = titles_df.sort_values("popularity", ascending=False)
+        else:
+            titles_df = titles_df.sort_values("title")
+            
+        # Limit to the top N most popular movies to save bandwidth and browser memory
+        if limit and limit > 0:
+            titles_df = titles_df.head(limit)
+        
+        # Return only id and title
+
+        return titles_df[["id", "title"]].to_dict(orient="records")
     
     def search_movies(self, query: str, limit: int = 20) -> list[dict]:
         """
-        Search movies by title.
-        
-        Args:
-            query: Search query string
-            limit: Maximum results to return
-            
-        Returns:
-            List of matching movie dictionaries
+        Standard text search, but with a few tweaks to make it feel smarter.
+        We prioritize Titles, but also peek at Genres and Overviews so you can search for "action aliens".
         """
         """
         Search movies by title, overview, and genres (Deep Search).
@@ -140,14 +197,11 @@ class Recommender:
         if len(matches) == 0:
             return []
             
-        # Calculate Relevance Score
-        # Matches: Explicit Bonus Logic
-        # - Exact Match: +50
-        # - Starts With: +20
-        # - Contains Title: +10
-        # - Genre: +5
-        # - Overview: +3
-        # - Popularity: Boosted (x2.0) to break ties in favor of blockbusters
+        # Heuristic Scoring (The "Secret Sauce")
+        # I tweaked these weights based on trial and error.
+        # - Exact Match (+50): If you type "Avatar", you want "Avatar".
+        # - Starts With (+20): "Ava..." should still show "Avatar".
+        # - Popularity (*2.0): Hits usually beat indie films in search intent.
         
         matches["relevance"] = 0.0
         
@@ -225,19 +279,10 @@ class Recommender:
             if q_director and cand.get("director") == q_director:
                 final_score += 0.10
                 
-            # Franchise Detection (ONLY for exact franchise matches)
-            # Example: "Avatar" → "Avatar: The Way of Water" 
-            # This handles sequels/prequels that SBERT might not catch
-            query_first_word = query_movie["title"].lower().split()[0]
-            cand_first_word = cand["title"].lower().split()[0]
-            
-            # Only boost if:
-            # 1. Same first word (franchise indicator)
-            # 2. First word is substantial (4+ chars, not "The", "A", etc.)
-            if (query_first_word == cand_first_word and 
-                len(query_first_word) >= 4 and
-                query_first_word not in {"the", "a", "an", "part"}):
-                final_score += 0.25  # Strong franchise boost
+            # We are removing franchise string-matching heuristics because they overly heavily bias
+            # the FAISS pool. The Hugging Face Llama-3 Reranker is now smart enough to detect true franchises
+            # based on plot semantics and metadata without brute forcing scores.
+            pass
             
             # Popularity Nudge (Log Scale)
             votes = cand.get("vote_count", 0)
@@ -308,11 +353,7 @@ class Recommender:
             # === EXPLAINABILITY (Why was this recommended?) ===
             explanation_tags = []
             
-            # Franchise match
-            if (query_first_word == cand_first_word and 
-                len(query_first_word) >= 4 and
-                query_first_word not in {"the", "a", "an", "part"}):
-                explanation_tags.append(f"Same franchise ({query_first_word.title()})")
+
             
             # Director match
             if q_director and cand.get("director") == q_director:
@@ -352,6 +393,18 @@ class Recommender:
         
         # Sort by boosted score
         results.sort(key=lambda x: x["similarity_score"], reverse=True)
+        top_candidates = results[:20]
+        
+        # === NEW 2026 SOTA: LLM-as-a-Judge Reranking ===
+        # Pass the top 20 mathematically similar movies to the LLM to understand true aesthetic vibe
+        try:
+            llm_results = self._rerank_with_llm(query_movie, top_candidates, n)
+            if llm_results and len(llm_results) > 0:
+                return llm_results
+        except Exception as e:
+            logger.error(f"LLM Reranking failed, falling back to FAISS/MMR. Error: {e}")
+            if results:
+                results[0]["explanation_text"] = f"LLM Error: {str(e)[:200]}"
         
         # === MMR DIVERSITY (Maximal Marginal Relevance) ===
         # Prevents returning 5 nearly identical movies
@@ -360,6 +413,78 @@ class Recommender:
             return diverse_results
         
         return results[:n]
+    
+    def _rerank_with_llm(self, query_movie: dict, candidates: list[dict], n: int = 10) -> list[dict]:
+        """
+        Uses Hugging Face Serverless Inference API (Llama-3) to semantically rerank candidates.
+        """
+        hf_token = os.getenv("HF_TOKEN")
+        if not hf_token:
+            logger.warning("HF_TOKEN missing. Skipping LLM reranking and falling back to FAISS/MMR.")
+            raise ValueError("HF_TOKEN environment variable is not set or accessible.")
+            
+        client = InferenceClient(token=hf_token)
+        
+        # Prepare candidates for prompt
+        cand_text = ""
+        for i, c in enumerate(candidates):
+            cand_text += f"[{i}] Title: {c.get('title')}, Genres: {c.get('genres')}, Plot: {c.get('overview', 'N/A')}\n"
+            
+        prompt = f"""You are an expert film critic. I will give you a QUERY MOVIE and a list of CANDIDATE MOVIES.
+Your job is to select the {n} absolute best recommendations based on deep aesthetic similarity, themes, tropes, target audience, and vibe.
+Ignore generic keyword matches. Focus on the actual experience of watching the movie.
+
+QUERY MOVIE:
+Title: {query_movie.get('title')}
+Genres: {query_movie.get('genres')}
+Plot: {query_movie.get('overview')}
+
+CANDIDATE MOVIES:
+{cand_text}
+
+Output strictly in valid JSON format like this:
+{{
+  "recommendations": [
+    {{"index": <candidate_index_from_above>, "explanation": "<a one-sentence explanation of why this matches the query aesthetic>"}}
+  ]
+}}
+Do not write any other text except the JSON object.
+"""
+        # We use Qwen2.5-7B-Instruct because it is exceptionally strong at reasoning 
+        # and strictly outputting JSON format, but more importantly, it is completely ungated
+        # and fits inside Hugging Face's Free Serverless Inference Tier constraints (unlike 72B).
+        # Note: Qwen models on the free inference API use the conversational task.
+        response = client.chat_completion(
+            messages=[{"role": "user", "content": prompt}],
+            model="Qwen/Qwen2.5-7B-Instruct", 
+            max_tokens=1000, 
+            temperature=0.1
+        )
+        
+        # Parse the text string into JSON
+        cleaned_response = response.choices[0].message.content.strip()
+        if cleaned_response.startswith("```json"):
+            cleaned_response = cleaned_response[7:]
+        if cleaned_response.startswith("```"):
+            cleaned_response = cleaned_response[3:]
+        if cleaned_response.endswith("```"):
+            cleaned_response = cleaned_response[:-3]
+            
+        data = json.loads(cleaned_response)
+        
+        reranked_results = []
+        for item in data.get("recommendations", []):
+            idx = item.get("index")
+            if isinstance(idx, int) and 0 <= idx < len(candidates):
+                movie = candidates[idx]
+                movie["explanation_text"] = "LLM Reranked: " + str(item.get("explanation", "Highly similar aesthetic vibe."))
+                # Keep original similarity score but sort by the LLM's chosen order
+                reranked_results.append(movie)
+                
+        if not reranked_results:
+            raise ValueError(f"LLM returned no valid recommendations. Raw text: {cleaned_response[:100]}")
+            
+        return reranked_results[:n]
     
     def _apply_mmr(self, candidates: list[dict], query_idx: int, n: int, lambda_param: float = 0.7) -> list[dict]:
         """

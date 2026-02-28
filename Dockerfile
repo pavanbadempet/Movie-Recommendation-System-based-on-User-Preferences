@@ -52,7 +52,9 @@ USER appuser
 # Expose ports (7860 is required for Hugging Face Spaces, 8000 for Render, 8501 for Streamlit)
 EXPOSE 7860 8000 8501
 
+# Set default port to 7860 for Hugging Face Spaces
+# Render will override this environment variable at runtime
+ENV PORT=7860
+
 # Default command: run backend API.
-# Hugging Face sets $PORT=7860 by default. Render dynamically sets $PORT.
-# We use bash to evaluate the PORT environment variable, defaulting to 8000 if not set.
-CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port $PORT"]
