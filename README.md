@@ -1,5 +1,5 @@
 ---
-title: Nova: Semantic Search Engine
+title: "Nova: Semantic Search Engine"
 emoji: 🚀
 colorFrom: indigo
 colorTo: purple
