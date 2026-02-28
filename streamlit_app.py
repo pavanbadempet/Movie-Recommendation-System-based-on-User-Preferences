@@ -15,7 +15,7 @@ st.set_page_config(
 )
 
 # New Streamlit 1.54.0 Feature: Native Logo Support
-st.logo("https://upload.wikimedia.org/wikipedia/commons/e/e4/Movie-icon.svg", icon=":material/movie:")
+st.logo("https://upload.wikimedia.org/wikipedia/commons/e/e4/Movie-icon.svg", icon_image=":material/movie:")
 
 # Premium CSS - Hide branding + full-screen dark theme + WHITE TEXT
 st.markdown("""
