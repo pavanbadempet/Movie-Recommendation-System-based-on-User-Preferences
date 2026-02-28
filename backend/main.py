@@ -106,6 +106,12 @@ class Movie(BaseModel):
     similarity_score: Optional[float] = None
 
 
+class MovieTitle(BaseModel):
+    """Lightweight movie title response for autocomplete."""
+    id: int
+    title: str
+
+
 class EnrichedMovie(BaseModel):
     """Movie with TMDB enrichment data."""
     id: int
@@ -250,6 +256,16 @@ async def list_movies(
     rec = get_rec()
     movies = rec.movies.iloc[offset:offset + limit]
     return movies.to_dict(orient="records")
+
+
+@app.get("/movies/titles", response_model=list[MovieTitle])
+async def get_all_titles():
+    """
+    Get a lightweight list of all movie titles and IDs.
+    Perfect for populating the Streamlit autocomplete dropdown.
+    """
+    rec = get_rec()
+    return rec.get_all_titles()
 
 
 @app.get("/search", response_model=list[Movie])

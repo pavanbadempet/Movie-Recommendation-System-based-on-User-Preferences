@@ -1,6 +1,7 @@
 """
-Recommendation engine for the Movie Recommendation System.
-Loads FAISS index and movie metadata for fast similarity search.
+Recommendation engine.
+This isn't just a database wrapper; it loads the FAISS index and handles the "fuzzy" logic 
+of making recommendations feel personalized.
 """
 import logging
 from datetime import datetime
@@ -26,7 +27,10 @@ ensure_model_files(MODELS_DIR)
 
 
 class Recommender:
-    """Movie recommendation engine using FAISS similarity search."""
+    """
+    The brain of the operation.
+    It manages the FAISS index (for speed) and the metadata (for context).
+    """
     
     def __init__(self):
         self._index: faiss.Index | None = None
@@ -35,7 +39,10 @@ class Recommender:
         self._vectors: np.ndarray | None = None
     
     def load(self) -> "Recommender":
-        """Load all required artifacts with minimal memory footprint."""
+        """
+        Loads the heavy artifacts.
+        We use memory-mapping for the vectors so we don't blow up the RAM on the free tier.
+        """
         logger.info("Loading recommendation engine...")
         
         # Load FAISS index
@@ -98,17 +105,26 @@ class Recommender:
     def get_movie_by_index(self, idx: int) -> dict:
         """Get movie details by DataFrame index."""
         return self._movies.iloc[idx].to_dict()
+        
+    def get_all_titles(self) -> list[dict]:
+        """
+        Return a lightweight list of all movie IDs and Titles for autocomplete.
+        """
+        if self._movies is None:
+            return []
+        
+        # We only need id and title for the dropdown
+        titles_df = self._movies[["id", "title"]].copy()
+        
+        # Sort alphabetically to make the dropdown nice
+        titles_df = titles_df.sort_values("title")
+        
+        return titles_df.to_dict(orient="records")
     
     def search_movies(self, query: str, limit: int = 20) -> list[dict]:
         """
-        Search movies by title.
-        
-        Args:
-            query: Search query string
-            limit: Maximum results to return
-            
-        Returns:
-            List of matching movie dictionaries
+        Standard text search, but with a few tweaks to make it feel smarter.
+        We prioritize Titles, but also peek at Genres and Overviews so you can search for "action aliens".
         """
         """
         Search movies by title, overview, and genres (Deep Search).
@@ -140,14 +156,11 @@ class Recommender:
         if len(matches) == 0:
             return []
             
-        # Calculate Relevance Score
-        # Matches: Explicit Bonus Logic
-        # - Exact Match: +50
-        # - Starts With: +20
-        # - Contains Title: +10
-        # - Genre: +5
-        # - Overview: +3
-        # - Popularity: Boosted (x2.0) to break ties in favor of blockbusters
+        # Heuristic Scoring (The "Secret Sauce")
+        # I tweaked these weights based on trial and error.
+        # - Exact Match (+50): If you type "Avatar", you want "Avatar".
+        # - Starts With (+20): "Ava..." should still show "Avatar".
+        # - Popularity (*2.0): Hits usually beat indie films in search intent.
         
         matches["relevance"] = 0.0
         

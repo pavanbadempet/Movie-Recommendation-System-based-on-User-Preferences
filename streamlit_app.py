@@ -239,6 +239,22 @@ def search_movies(query):
     return []
 
 
+@st.cache_data(ttl=3600)
+def fetch_all_movie_titles():
+    """Fetch all movie titles for the autocomplete dropdown."""
+    if not st.session_state.backend_ready:
+        return []
+        
+    try:
+        api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
+        r = requests.get(f"{api_url}/movies/titles", timeout=10)
+        if r.ok:
+            return r.json()  # Returns list of {"id": X, "title": "Y"}
+    except requests.RequestException:
+        pass
+    return []
+
+
 def get_recommendations(movie_id, n=10):
     """Get recommendations via API."""
     try:
@@ -1217,58 +1233,98 @@ elif st.session_state.page == "search":
             go_home()
             st.rerun()
             
-    st.title("🔍 Deep Search Engine")
+    st.title("🔍 Search & Discover")
     
-    # Simple Search Interface
-    search = st.text_input("Find movies by title, plot, or genre...", placeholder="Type 'Inception' or 'Time Travel'...")
+    # Pre-fetch all titles for instant autocomplete
+    with st.spinner("Loading movie catalog..."):
+        all_titles = fetch_all_movie_titles()
     
-    if search and len(search) >= 2:
-        with st.spinner("Searching database..."):
-            movies = search_movies(search)
+    movie_to_fetch = None
+    
+    if all_titles:
+        # 1. Instant Dropdown Search (The primary UX)
+        st.subheader("Fast Title Search")
+        title_options = {t["title"]: t for t in all_titles}
         
-        if movies:
-            options = {format_option(m): m for m in movies}
-            selected_option = st.selectbox(f"Found {len(movies)} matches:", list(options.keys()))
-            movie = options.get(selected_option)
+        selected_title = st.selectbox(
+            "Start typing a movie title...", 
+            options=[""] + list(title_options.keys()),
+            index=0,
+            placeholder="Type 'Inception' or 'Avatar'...",
+        )
+        
+        if selected_title:
+            # We instantly have the exact ID here
+            selected_id = title_options[selected_title]["id"]
             
-            if movie:
-                # Preview
-                poster_url = fetch_poster(movie.get("poster_path"))
-                credits = fetch_credits(movie.get("id"))
-                
-                # Highlight Card
-                st.markdown(f"""
-                <div style="display: flex; gap: 20px; background: rgba(255,255,255,0.05); padding: 20px; border-radius: 15px; margin-top: 20px;">
-                    <img src="{poster_url}" width="120" style="border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
-                    <div>
-                        <div style="font-size: 1.5rem; font-weight: 700; margin-bottom: 5px;">{movie.get('title')}</div>
-                        <div style="color: #bbb; margin-bottom: 10px;">{movie.get('release_date', '')[:4]} • ⭐ {movie.get('vote_average', 0):.1f}/10</div>
-                        <div style="font-size: 0.9rem; line-height: 1.5; color: #ddd;">{movie.get('overview', '')}</div>
-                        <div style="margin-top: 10px; font-size: 0.8rem; color: #888;">🎭 {credits.get('cast', 'N/A')}</div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-                
-                # Action Button
-                if st.button("✨ Get Similar Recommendations", type="primary", use_container_width=True):
-                    st.session_state.selected_rec = None
-                    with st.spinner("Analysing semantics..."):
-                        # Call API
-                        try:
-                            api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
-                            r = requests.get(f"{api_url}/recommend/id/{movie['id']}", params={"n": 10}, timeout=30)
-                            if r.ok:
-                                result = r.json()
-                                st.session_state.recs = result["recommendations"]
-                                st.session_state.source_movie = movie
-                            else:
-                                st.error("API Error")
-                        except Exception as e:
-                            st.error(f"Connection Error: {e}")
-        else:
-            st.info("No text matches found. Try describing the plot!")
+            # Fetch the full movie object using the ID endpoint
+            try:
+                api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
+                r = requests.get(f"{api_url}/movie/{selected_id}", timeout=10)
+                if r.ok:
+                    movie_to_fetch = r.json()
+            except requests.RequestException:
+                st.error("Failed to load movie details.")
+    else:
+        st.warning("⚠️ Could not load the movie catalog for autocomplete. Is the backend asleep?")
+    
+    # 2. Deep Plot/Genre Search (The fallback/advanced UX)
+    with st.expander("✨ Advanced: Search by Plot or Vibe instead"):
+        st.caption("Don't know the exact title? Type something like *'time travel heist'* or *'action aliens'*")
+        search_query = st.text_input("Deep search query...")
+        
+        if search_query and len(search_query) >= 2:
+            with st.spinner("Analyzing semantic meaning..."):
+                movies = search_movies(search_query)
+            
+            if movies:
+                options = {format_option(m): m for m in movies}
+                selected_option = st.selectbox(f"Found {len(movies)} matches:", list(options.keys()), key="deep_search_select")
+                if options.get(selected_option):
+                    movie_to_fetch = options.get(selected_option)
+            else:
+                st.info("No text matches found. Try describing the plot differently!")
+    
+    
+    # 3. Universal Display Logic (Triggered by either search method)
+    if movie_to_fetch:
+        movie = movie_to_fetch
+        
+        # Preview
+        poster_url = fetch_poster(movie.get("poster_path"))
+        credits = fetch_credits(movie.get("id"))
+        
+        # Highlight Card
+        st.markdown(f"""
+        <div style="display: flex; gap: 20px; background: rgba(255,255,255,0.05); padding: 20px; border-radius: 15px; margin-top: 20px;">
+            <img src="{poster_url}" width="120" style="border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
+            <div>
+                <div style="font-size: 1.5rem; font-weight: 700; margin-bottom: 5px;">{movie.get('title')}</div>
+                <div style="color: #bbb; margin-bottom: 10px;">{movie.get('release_date', '')[:4]} • ⭐ {movie.get('vote_average', 0):.1f}/10</div>
+                <div style="font-size: 0.9rem; line-height: 1.5; color: #ddd;">{movie.get('overview', '')}</div>
+                <div style="margin-top: 10px; font-size: 0.8rem; color: #888;">🎭 {credits.get('cast', 'N/A')}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Action Button
+        if st.button("✨ Get Similar Recommendations", type="primary", use_container_width=True):
+            st.session_state.selected_rec = None
+            with st.spinner("Analysing semantics..."):
+                # Call API
+                try:
+                    api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
+                    r = requests.get(f"{api_url}/recommend/id/{movie['id']}", params={"n": 10}, timeout=30)
+                    if r.ok:
+                        result = r.json()
+                        st.session_state.recs = result["recommendations"]
+                        st.session_state.source_movie = movie
+                    else:
+                        st.error("API Error")
+                except Exception as e:
+                    st.error(f"Connection Error: {e}")
 
     # Display Recommendations Grid (Shared Logic)
     if "recs" in st.session_state and st.session_state.recs:
