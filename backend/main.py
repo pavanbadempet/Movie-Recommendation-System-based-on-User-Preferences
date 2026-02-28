@@ -104,6 +104,8 @@ class Movie(BaseModel):
     release_date: Optional[str] = None
     poster_path: Optional[str] = None
     similarity_score: Optional[float] = None
+    explanation_text: Optional[str] = None
+    explanation: Optional[list[str]] = None
 
 
 class MovieTitle(BaseModel):
@@ -124,6 +126,8 @@ class EnrichedMovie(BaseModel):
     release_date: Optional[str] = None
     poster_path: Optional[str] = None
     similarity_score: Optional[float] = None
+    explanation_text: Optional[str] = None
+    explanation: Optional[list[str]] = None
     # Enriched fields
     trailer_key: Optional[str] = None
     runtime: Optional[int] = None
