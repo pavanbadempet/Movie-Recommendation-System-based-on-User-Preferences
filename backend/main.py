@@ -60,6 +60,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+@app.get("/")
+async def root():
+    return {
+        "status": "online",
+        "message": "Welcome to the Movie Recommendation API. Head over to /docs to explore the endpoints!",
+        "version": "2.0.0"
+    })
+
 # Rate limiting (30 requests/minute per IP)
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
