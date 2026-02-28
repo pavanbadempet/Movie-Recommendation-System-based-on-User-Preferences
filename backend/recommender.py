@@ -403,6 +403,8 @@ class Recommender:
                 return llm_results
         except Exception as e:
             logger.error(f"LLM Reranking failed, falling back to FAISS/MMR. Error: {e}")
+            if results:
+                results[0]["explanation_text"] = f"LLM Error: {str(e)[:200]}"
         
         # === MMR DIVERSITY (Maximal Marginal Relevance) ===
         # Prevents returning 5 nearly identical movies
