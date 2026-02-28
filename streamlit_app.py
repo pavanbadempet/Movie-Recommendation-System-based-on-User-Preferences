@@ -247,11 +247,16 @@ def fetch_all_movie_titles():
         
     try:
         api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
-        r = requests.get(f"{api_url}/movies/titles", timeout=10)
+        r = requests.get(f"{api_url}/movies/titles", timeout=20)
         if r.ok:
-            return r.json()  # Returns list of {"id": X, "title": "Y"}
-    except requests.RequestException:
+            data = r.json()
+            if data:
+                return data  # Returns list of {"id": X, "title": "Y"}
+    except Exception as e:
         pass
+        
+    # If we get here, it failed to load. Clear the cache so it retries later instead of serving [] for an hour.
+    fetch_all_movie_titles.clear()
     return []
 
 
