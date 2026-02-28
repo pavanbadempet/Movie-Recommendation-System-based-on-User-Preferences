@@ -240,7 +240,7 @@ def search_movies(query):
 
 
 @st.cache_data(ttl=3600)
-def fetch_all_movie_titles(version=2):
+def fetch_all_movie_titles(version=3):
     """Fetch all movie titles for the autocomplete dropdown."""
     if not st.session_state.backend_ready:
         return []

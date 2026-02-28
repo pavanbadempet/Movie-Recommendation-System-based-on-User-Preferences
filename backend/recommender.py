@@ -119,6 +119,8 @@ class Recommender:
             cols.append("release_date")
         if "popularity" in self._movies.columns:
             cols.append("popularity")
+        if "genres" in self._movies.columns:
+            cols.append("genres")
             
         titles_df = self._movies[cols].copy()
         
@@ -127,6 +129,21 @@ class Recommender:
             years = pd.to_datetime(titles_df["release_date"], errors="coerce").dt.year
             mask = years.notna() & (years > 0)
             titles_df.loc[mask, "title"] = titles_df.loc[mask, "title"] + " (" + years[mask].astype(int).astype(str) + ")"
+            
+        # Append genres to the title for extra context
+        if "genres" in titles_df.columns:
+            # Handle NaN/None in genres
+            mask = titles_df["genres"].notna() & (titles_df["genres"] != "")
+            # Take only the first 2 genres to keep it clean, if it's a comma-separated string
+            def get_top_genres(g_str):
+                try:
+                    parts = str(g_str).split(",")
+                    return ", ".join(p.strip() for p in parts[:2])
+                except Exception:
+                    return str(g_str)
+            
+            top_genres = titles_df.loc[mask, "genres"].apply(get_top_genres)
+            titles_df.loc[mask, "title"] = titles_df.loc[mask, "title"] + " - " + top_genres
         
         # Sort by popularity so famous movies appear at the top instead of garbage punctuation
         if "popularity" in titles_df.columns:
@@ -139,6 +156,7 @@ class Recommender:
             titles_df = titles_df.head(limit)
         
         # Return only id and title
+
         return titles_df[["id", "title"]].to_dict(orient="records")
     
     def search_movies(self, query: str, limit: int = 20) -> list[dict]:
