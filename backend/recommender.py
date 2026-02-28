@@ -450,13 +450,13 @@ Output strictly in valid JSON format like this:
 }}
 Do not write any other text except the JSON object.
 """
-        # We use Qwen2.5-72B-Instruct because it is exceptionally strong at reasoning 
-        # and strictly outputting JSON format, but more importantly, it is completely ungated.
-        # The official Meta-Llama models throw 403 errors unless the user manually signs a license.
-        # Note: Qwen2.5-72B-Instruct on the free inference API uses the conversational task.
+        # We use Qwen2.5-7B-Instruct because it is exceptionally strong at reasoning 
+        # and strictly outputting JSON format, but more importantly, it is completely ungated
+        # and fits inside Hugging Face's Free Serverless Inference Tier constraints (unlike 72B).
+        # Note: Qwen models on the free inference API use the conversational task.
         response = client.chat_completion(
             messages=[{"role": "user", "content": prompt}],
-            model="Qwen/Qwen2.5-72B-Instruct", 
+            model="Qwen/Qwen2.5-7B-Instruct", 
             max_tokens=1000, 
             temperature=0.1
         )
