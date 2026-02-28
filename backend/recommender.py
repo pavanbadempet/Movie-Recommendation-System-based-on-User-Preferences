@@ -113,13 +113,29 @@ class Recommender:
         if self._movies is None:
             return []
         
-        # We only need id and title for the dropdown
-        titles_df = self._movies[["id", "title"]].copy()
+        # Extract necessary columns
+        cols = ["id", "title"]
+        if "release_date" in self._movies.columns:
+            cols.append("release_date")
+        if "popularity" in self._movies.columns:
+            cols.append("popularity")
+            
+        titles_df = self._movies[cols].copy()
         
-        # Sort alphabetically to make the dropdown nice
-        titles_df = titles_df.sort_values("title")
+        # Append release year to the title for disambiguation
+        if "release_date" in titles_df.columns:
+            years = pd.to_datetime(titles_df["release_date"], errors="coerce").dt.year
+            mask = years.notna() & (years > 0)
+            titles_df.loc[mask, "title"] = titles_df.loc[mask, "title"] + " (" + years[mask].astype(int).astype(str) + ")"
         
-        return titles_df.to_dict(orient="records")
+        # Sort by popularity so famous movies appear at the top instead of garbage punctuation
+        if "popularity" in titles_df.columns:
+            titles_df = titles_df.sort_values("popularity", ascending=False)
+        else:
+            titles_df = titles_df.sort_values("title")
+        
+        # Return only id and title
+        return titles_df[["id", "title"]].to_dict(orient="records")
     
     def search_movies(self, query: str, limit: int = 20) -> list[dict]:
         """
