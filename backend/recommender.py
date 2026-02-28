@@ -279,15 +279,10 @@ class Recommender:
             if q_director and cand.get("director") == q_director:
                 final_score += 0.10
                 
-            # Franchise Detection (ONLY for exact franchise matches)
-            # Example: "Avatar" → "Avatar: The Way of Water" 
-            # We use strict substring matching instead of first-word matching to avoid
-            # grouping unrelated movies like "Shelter" and "Shelter Island".
-            q_title_lower = query_movie.get("title", "").lower()
-            c_title_lower = cand.get("title", "").lower()
-            
-            if len(q_title_lower) >= 5 and (q_title_lower in c_title_lower or c_title_lower in q_title_lower):
-                final_score += 0.05  # Moderate franchise boost, let SBERT do the heavy lifting
+            # We are removing franchise string-matching heuristics because they overly heavily bias
+            # the FAISS pool. The Hugging Face Llama-3 Reranker is now smart enough to detect true franchises
+            # based on plot semantics and metadata without brute forcing scores.
+            pass
             
             # Popularity Nudge (Log Scale)
             votes = cand.get("vote_count", 0)
