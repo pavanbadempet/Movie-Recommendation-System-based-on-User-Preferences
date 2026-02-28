@@ -353,11 +353,7 @@ class Recommender:
             # === EXPLAINABILITY (Why was this recommended?) ===
             explanation_tags = []
             
-            # Franchise match
-            if len(q_title_lower) >= 5 and (q_title_lower in c_title_lower or c_title_lower in q_title_lower):
-                # Extract the common base for the explanation
-                common_base = q_title_lower.title() if len(q_title_lower) <= len(c_title_lower) else c_title_lower.title()
-                explanation_tags.append(f"Same franchise ({common_base})")
+
             
             # Director match
             if q_director and cand.get("director") == q_director:
