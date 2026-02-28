@@ -1253,8 +1253,8 @@ elif st.session_state.page == "search":
         
         selected_title = st.selectbox(
             "Start typing a movie title...", 
-            options=[""] + list(title_options.keys()),
-            index=0,
+            options=list(title_options.keys()),
+            index=None,
             placeholder="Type 'Inception' or 'Avatar'...",
         )
         
