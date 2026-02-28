@@ -451,15 +451,16 @@ Do not write any other text except the JSON object.
         # We use Qwen2.5-72B-Instruct because it is exceptionally strong at reasoning 
         # and strictly outputting JSON format, but more importantly, it is completely ungated.
         # The official Meta-Llama models throw 403 errors unless the user manually signs a license.
-        response = client.text_generation(
-            prompt, 
+        # Note: Qwen2.5-72B-Instruct on the free inference API uses the conversational task.
+        response = client.chat_completion(
+            messages=[{"role": "user", "content": prompt}],
             model="Qwen/Qwen2.5-72B-Instruct", 
-            max_new_tokens=1000, 
+            max_tokens=1000, 
             temperature=0.1
         )
         
         # Parse the text string into JSON
-        cleaned_response = response.strip()
+        cleaned_response = response.choices[0].message.content.strip()
         if cleaned_response.startswith("```json"):
             cleaned_response = cleaned_response[7:]
         if cleaned_response.startswith("```"):
