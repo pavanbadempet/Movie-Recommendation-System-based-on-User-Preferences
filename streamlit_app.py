@@ -252,7 +252,7 @@ def fetch_all_movie_titles(version=2):
             data = r.json()
             if data:
                 return data  # Returns list of {"id": X, "title": "Y"}
-    except Exception as e:
+    except Exception:
         pass
         
     # If we get here, it failed to load. Clear the cache so it retries later instead of serving [] for an hour.
