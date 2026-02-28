@@ -421,7 +421,7 @@ class Recommender:
         hf_token = os.getenv("HF_TOKEN")
         if not hf_token:
             logger.warning("HF_TOKEN missing. Skipping LLM reranking and falling back to FAISS/MMR.")
-            return []
+            raise ValueError("HF_TOKEN environment variable is not set or accessible.")
             
         client = InferenceClient(token=hf_token)
         
@@ -481,6 +481,9 @@ Do not write any other text except the JSON object.
                 # Keep original similarity score but sort by the LLM's chosen order
                 reranked_results.append(movie)
                 
+        if not reranked_results:
+            raise ValueError(f"LLM returned no valid recommendations. Raw text: {cleaned_response[:100]}")
+            
         return reranked_results[:n]
     
     def _apply_mmr(self, candidates: list[dict], query_idx: int, n: int, lambda_param: float = 0.7) -> list[dict]:
