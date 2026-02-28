@@ -448,11 +448,12 @@ Output strictly in valid JSON format like this:
 }}
 Do not write any other text except the JSON object.
 """
-        # We use Qwen or Llama-3, here we use Qwen2.5-72B-Instruct as it is incredibly strong at JSON adherence 
-        # but fallback to Llama-3-8B-Instruct if we want to be safe. We'll use Llama-3-8B-Instruct to ensure it fits free tier.
+        # We use NousResearch/Hermes-3-Llama-3.1-8B because it is exceptionally strong at reasoning 
+        # and strictly outputting JSON format, but more importantly, it is completely ungated.
+        # The official Meta-Llama-3-8B-Instruct model throws 403 errors unless the user signs a license.
         response = client.text_generation(
             prompt, 
-            model="meta-llama/Meta-Llama-3-8B-Instruct", 
+            model="NousResearch/Hermes-3-Llama-3.1-8B", 
             max_new_tokens=1000, 
             temperature=0.1
         )
