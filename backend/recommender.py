@@ -11,6 +11,9 @@ from functools import lru_cache
 import numpy as np
 import pandas as pd
 import faiss
+import os
+import json
+from huggingface_hub import InferenceClient
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 # Import model loader to handle external model downloads
@@ -399,6 +402,16 @@ class Recommender:
         
         # Sort by boosted score
         results.sort(key=lambda x: x["similarity_score"], reverse=True)
+        top_candidates = results[:20]
+        
+        # === NEW 2026 SOTA: LLM-as-a-Judge Reranking ===
+        # Pass the top 20 mathematically similar movies to the LLM to understand true aesthetic vibe
+        try:
+            llm_results = self._rerank_with_llm(query_movie, top_candidates, n)
+            if llm_results and len(llm_results) > 0:
+                return llm_results
+        except Exception as e:
+            logger.error(f"LLM Reranking failed, falling back to FAISS/MMR. Error: {e}")
         
         # === MMR DIVERSITY (Maximal Marginal Relevance) ===
         # Prevents returning 5 nearly identical movies
@@ -407,6 +420,73 @@ class Recommender:
             return diverse_results
         
         return results[:n]
+    
+    def _rerank_with_llm(self, query_movie: dict, candidates: list[dict], n: int = 10) -> list[dict]:
+        """
+        Uses Hugging Face Serverless Inference API (Llama-3) to semantically rerank candidates.
+        """
+        hf_token = os.getenv("HF_TOKEN")
+        if not hf_token:
+            logger.warning("HF_TOKEN missing. Skipping LLM reranking and falling back to FAISS/MMR.")
+            return []
+            
+        client = InferenceClient(token=hf_token)
+        
+        # Prepare candidates for prompt
+        cand_text = ""
+        for i, c in enumerate(candidates):
+            cand_text += f"[{i}] Title: {c.get('title')}, Genres: {c.get('genres')}, Plot: {c.get('overview', 'N/A')}\n"
+            
+        prompt = f"""You are an expert film critic. I will give you a QUERY MOVIE and a list of CANDIDATE MOVIES.
+Your job is to select the {n} absolute best recommendations based on deep aesthetic similarity, themes, tropes, target audience, and vibe.
+Ignore generic keyword matches. Focus on the actual experience of watching the movie.
+
+QUERY MOVIE:
+Title: {query_movie.get('title')}
+Genres: {query_movie.get('genres')}
+Plot: {query_movie.get('overview')}
+
+CANDIDATE MOVIES:
+{cand_text}
+
+Output strictly in valid JSON format like this:
+{{
+  "recommendations": [
+    {{"index": <candidate_index_from_above>, "explanation": "<a one-sentence explanation of why this matches the query aesthetic>"}}
+  ]
+}}
+Do not write any other text except the JSON object.
+"""
+        # We use Qwen or Llama-3, here we use Qwen2.5-72B-Instruct as it is incredibly strong at JSON adherence 
+        # but fallback to Llama-3-8B-Instruct if we want to be safe. We'll use Llama-3-8B-Instruct to ensure it fits free tier.
+        response = client.text_generation(
+            prompt, 
+            model="meta-llama/Meta-Llama-3-8B-Instruct", 
+            max_new_tokens=1000, 
+            temperature=0.1
+        )
+        
+        # Parse the text string into JSON
+        cleaned_response = response.strip()
+        if cleaned_response.startswith("```json"):
+            cleaned_response = cleaned_response[7:]
+        if cleaned_response.startswith("```"):
+            cleaned_response = cleaned_response[3:]
+        if cleaned_response.endswith("```"):
+            cleaned_response = cleaned_response[:-3]
+            
+        data = json.loads(cleaned_response)
+        
+        reranked_results = []
+        for item in data.get("recommendations", []):
+            idx = item.get("index")
+            if isinstance(idx, int) and 0 <= idx < len(candidates):
+                movie = candidates[idx]
+                movie["explanation_text"] = "LLM Reranked: " + str(item.get("explanation", "Highly similar aesthetic vibe."))
+                # Keep original similarity score but sort by the LLM's chosen order
+                reranked_results.append(movie)
+                
+        return reranked_results[:n]
     
     def _apply_mmr(self, candidates: list[dict], query_idx: int, n: int, lambda_param: float = 0.7) -> list[dict]:
         """
