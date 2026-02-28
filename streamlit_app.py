@@ -631,6 +631,10 @@ def show_movie_dialog(rec):
         video_html = f'<div class="db-video-layer"><img src="{poster_url}" alt="backdrop"></div>'
         youtube_js = ""
     
+    explanation_html = ""
+    if rec.get("explanation_text"):
+        explanation_html = f'<div style="font-size: 0.85rem; color: #fff; background: rgba(229,9,20,0.2); border-left: 3px solid #e50914; padding: 8px 12px; margin: 10px 0; border-radius: 4px; animation: fadeInUp 0.6s ease-out 0.45s both;"><strong>🤖 CineBot Vibe Check:</strong> {rec.get("explanation_text")}</div>'
+
     billboard_html = f'''
     <!DOCTYPE html>
     <html>
