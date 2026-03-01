@@ -416,14 +416,13 @@ class Recommender:
     
     def _rerank_with_llm(self, query_movie: dict, candidates: list[dict], n: int = 10) -> list[dict]:
         """
-        Uses Hugging Face Serverless Inference API (Llama-3) to semantically rerank candidates.
+        Uses OpenRouter API to semantically rerank candidates.
         """
-        hf_token = os.getenv("HF_TOKEN")
-        if not hf_token:
-            logger.warning("HF_TOKEN missing. Skipping LLM reranking and falling back to FAISS/MMR.")
-            raise ValueError("HF_TOKEN environment variable is not set or accessible.")
-            
-        client = InferenceClient(token=hf_token)
+        import requests
+        openrouter_key = os.getenv("OPENROUTER_API_KEY")
+        if not openrouter_key:
+            logger.warning("OPENROUTER_API_KEY missing. Skipping LLM reranking and falling back to FAISS/MMR.")
+            raise ValueError("OPENROUTER_API_KEY environment variable is not set or accessible.")
         
         # Prepare candidates for prompt
         cand_text = ""
@@ -450,19 +449,45 @@ Output strictly in valid JSON format like this:
 }}
 Do not write any other text except the JSON object.
 """
-        # We use Qwen2.5-7B-Instruct because it is exceptionally strong at reasoning 
-        # and strictly outputting JSON format, but more importantly, it is completely ungated
-        # and fits inside Hugging Face's Free Serverless Inference Tier constraints (unlike 72B).
-        # Note: Qwen models on the free inference API use the conversational task.
-        response = client.chat_completion(
-            messages=[{"role": "user", "content": prompt}],
-            model="Qwen/Qwen2.5-7B-Instruct", 
-            max_tokens=1000, 
-            temperature=0.1
-        )
+        headers = {
+            "Authorization": f"Bearer {openrouter_key}",
+            "HTTP-Referer": "https://github.com/pavanbadempet/Movie-Recommendation-System",
+            "X-Title": "Movie-Recommendation-System",
+        }
         
-        # Parse the text string into JSON
-        cleaned_response = response.choices[0].message.content.strip()
+        models = [
+            "meta-llama/llama-3.3-70b-instruct:free",
+            "google/gemini-2.0-pro-exp-02-05:free",
+            "google/gemini-2.0-flash-lite-preview-02-05:free"
+        ]
+        
+        last_error = None
+        cleaned_response = None
+        
+        for model in models:
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.1
+            }
+            
+            try:
+                response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload, timeout=15)
+                response.raise_for_status()
+                response_json = response.json()
+                cleaned_response = response_json["choices"][0]["message"]["content"].strip()
+                break  # Successful response, exit fallback loop
+            except Exception as e:
+                error_msg = str(e)
+                if 'response' in locals() and hasattr(response, 'text'):
+                    error_msg += f" Response: {response.text[:200]}"
+                last_error = error_msg
+                logger.warning(f"Model {model} failed: {error_msg}. Trying next fallback model...")
+                
+        if not cleaned_response:
+            raise ValueError(f"OpenRouter API Error (All fallbacks failed). Last error: {last_error}")
         if cleaned_response.startswith("```json"):
             cleaned_response = cleaned_response[7:]
         if cleaned_response.startswith("```"):
