@@ -416,17 +416,13 @@ class Recommender:
     
     def _rerank_with_llm(self, query_movie: dict, candidates: list[dict], n: int = 10) -> list[dict]:
         """
-        Uses Hugging Face Serverless Inference API (Llama-3) to semantically rerank candidates.
+        Uses OpenRouter API to semantically rerank candidates.
         """
-        # We use Google Gemini since the user's HF space lacks a Pro Subscription for serverless inference.
-        # Gemini is extremely fast, free, and already configured for the chat feature.
-        import google.generativeai as genai
-        gemini_key = os.getenv("GOOGLE_API_KEY")
-        if not gemini_key:
-            logger.warning("GOOGLE_API_KEY missing. Skipping LLM reranking and falling back to FAISS/MMR.")
-            raise ValueError("GOOGLE_API_KEY environment variable is not set or accessible.")
-            
-        genai.configure(api_key=gemini_key)
+        import requests
+        openrouter_key = os.getenv("OPENROUTER_API_KEY")
+        if not openrouter_key:
+            logger.warning("OPENROUTER_API_KEY missing. Skipping LLM reranking and falling back to FAISS/MMR.")
+            raise ValueError("OPENROUTER_API_KEY environment variable is not set or accessible.")
         
         # Prepare candidates for prompt
         cand_text = ""
@@ -453,18 +449,30 @@ Output strictly in valid JSON format like this:
 }}
 Do not write any other text except the JSON object.
 """
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        headers = {
+            "Authorization": f"Bearer {openrouter_key}",
+            "HTTP-Referer": "https://github.com/pavanbadempet/Movie-Recommendation-System",
+            "X-Title": "Movie-Recommendation-System",
+        }
+        
+        payload = {
+            "model": "meta-llama/llama-3.3-70b-instruct:free",
+            "messages": [
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.1
+        }
         
         try:
-            response = model.generate_content(
-                prompt,
-                generation_config=genai.types.GenerationConfig(
-                    temperature=0.1,
-                ),
-            )
-            cleaned_response = response.text.strip()
+            response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
+            response.raise_for_status()
+            response_json = response.json()
+            cleaned_response = response_json["choices"][0]["message"]["content"].strip()
         except Exception as e:
-            raise ValueError(f"Gemini API Error: {str(e)}")
+            error_msg = str(e)
+            if 'response' in locals() and hasattr(response, 'text'):
+                error_msg += f" Response: {response.text[:200]}"
+            raise ValueError(f"OpenRouter API Error: {error_msg}")
         if cleaned_response.startswith("```json"):
             cleaned_response = cleaned_response[7:]
         if cleaned_response.startswith("```"):
