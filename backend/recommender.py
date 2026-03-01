@@ -418,12 +418,15 @@ class Recommender:
         """
         Uses Hugging Face Serverless Inference API (Llama-3) to semantically rerank candidates.
         """
-        hf_token = os.getenv("HF_TOKEN")
-        if not hf_token:
-            logger.warning("HF_TOKEN missing. Skipping LLM reranking and falling back to FAISS/MMR.")
-            raise ValueError("HF_TOKEN environment variable is not set or accessible.")
+        # We use Google Gemini since the user's HF space lacks a Pro Subscription for serverless inference.
+        # Gemini is extremely fast, free, and already configured for the chat feature.
+        import google.generativeai as genai
+        gemini_key = os.getenv("GOOGLE_API_KEY")
+        if not gemini_key:
+            logger.warning("GOOGLE_API_KEY missing. Skipping LLM reranking and falling back to FAISS/MMR.")
+            raise ValueError("GOOGLE_API_KEY environment variable is not set or accessible.")
             
-        client = InferenceClient(token=hf_token)
+        genai.configure(api_key=gemini_key)
         
         # Prepare candidates for prompt
         cand_text = ""
@@ -450,18 +453,18 @@ Output strictly in valid JSON format like this:
 }}
 Do not write any other text except the JSON object.
 """
-        # We use HuggingFaceH4/zephyr-7b-beta because it's actively hosted on the free tier 
-        # by Hugging Face directly, avoiding third-party Provider inference errors (like Novita/Together).
-        # It is highly capable at instruction following and JSON output.
-        response = client.chat_completion(
-            messages=[{"role": "user", "content": prompt}],
-            model="HuggingFaceH4/zephyr-7b-beta", 
-            max_tokens=1000, 
-            temperature=0.1
-        )
+        model = genai.GenerativeModel("gemini-1.5-flash")
         
-        # Parse the text string into JSON
-        cleaned_response = response.choices[0].message.content.strip()
+        try:
+            response = model.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.1,
+                ),
+            )
+            cleaned_response = response.text.strip()
+        except Exception as e:
+            raise ValueError(f"Gemini API Error: {str(e)}")
         if cleaned_response.startswith("```json"):
             cleaned_response = cleaned_response[7:]
         if cleaned_response.startswith("```"):
