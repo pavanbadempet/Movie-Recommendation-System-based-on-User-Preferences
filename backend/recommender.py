@@ -450,13 +450,12 @@ Output strictly in valid JSON format like this:
 }}
 Do not write any other text except the JSON object.
 """
-        # We use Qwen2.5-7B-Instruct because it is exceptionally strong at reasoning 
-        # and strictly outputting JSON format, but more importantly, it is completely ungated
-        # and fits inside Hugging Face's Free Serverless Inference Tier constraints (unlike 72B).
-        # Note: Qwen models on the free inference API use the conversational task.
+        # We use HuggingFaceH4/zephyr-7b-beta because it's actively hosted on the free tier 
+        # by Hugging Face directly, avoiding third-party Provider inference errors (like Novita/Together).
+        # It is highly capable at instruction following and JSON output.
         response = client.chat_completion(
             messages=[{"role": "user", "content": prompt}],
-            model="Qwen/Qwen2.5-7B-Instruct", 
+            model="HuggingFaceH4/zephyr-7b-beta", 
             max_tokens=1000, 
             temperature=0.1
         )
