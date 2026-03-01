@@ -455,24 +455,39 @@ Do not write any other text except the JSON object.
             "X-Title": "Movie-Recommendation-System",
         }
         
-        payload = {
-            "model": "meta-llama/llama-3.3-70b-instruct:free",
-            "messages": [
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.1
-        }
+        models = [
+            "meta-llama/llama-3.3-70b-instruct:free",
+            "google/gemini-2.0-pro-exp-02-05:free",
+            "google/gemini-2.0-flash-lite-preview-02-05:free"
+        ]
         
-        try:
-            response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
-            response.raise_for_status()
-            response_json = response.json()
-            cleaned_response = response_json["choices"][0]["message"]["content"].strip()
-        except Exception as e:
-            error_msg = str(e)
-            if 'response' in locals() and hasattr(response, 'text'):
-                error_msg += f" Response: {response.text[:200]}"
-            raise ValueError(f"OpenRouter API Error: {error_msg}")
+        last_error = None
+        cleaned_response = None
+        
+        for model in models:
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.1
+            }
+            
+            try:
+                response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload, timeout=15)
+                response.raise_for_status()
+                response_json = response.json()
+                cleaned_response = response_json["choices"][0]["message"]["content"].strip()
+                break  # Successful response, exit fallback loop
+            except Exception as e:
+                error_msg = str(e)
+                if 'response' in locals() and hasattr(response, 'text'):
+                    error_msg += f" Response: {response.text[:200]}"
+                last_error = error_msg
+                logger.warning(f"Model {model} failed: {error_msg}. Trying next fallback model...")
+                
+        if not cleaned_response:
+            raise ValueError(f"OpenRouter API Error (All fallbacks failed). Last error: {last_error}")
         if cleaned_response.startswith("```json"):
             cleaned_response = cleaned_response[7:]
         if cleaned_response.startswith("```"):
