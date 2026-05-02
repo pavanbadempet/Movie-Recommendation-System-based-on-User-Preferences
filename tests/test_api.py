@@ -126,6 +126,15 @@ class TestPlatformEndpoint:
 
 
 class TestSearchEndpoint:
+    def test_movie_titles_limit_for_readiness_probe(self, mock_artifacts):
+        from backend.main import app
+        client = TestClient(app)
+
+        resp = client.get("/movies/titles", params={"limit": 1})
+
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+
     def test_search_finds_movie(self, mock_artifacts):
         from backend.main import app
         client = TestClient(app)
