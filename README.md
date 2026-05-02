@@ -1,6 +1,6 @@
 ---
 title: "Nova: Recommendation Intelligence Platform"
-emoji: "N"
+emoji: "🎬"
 colorFrom: indigo
 colorTo: blue
 sdk: docker
