@@ -4,9 +4,10 @@ This isn't just a database wrapper; it loads the FAISS index and handles the "fu
 of making recommendations feel personalized.
 """
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from functools import lru_cache
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -15,19 +16,18 @@ import os
 import json
 from huggingface_hub import InferenceClient
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 # Import model loader to handle external model downloads
 from backend.model_loader import ensure_model_files
+from backend.query_understanding import intent_score, parse_query_intent
+from backend.ranker import load_ranker
 
 logger = logging.getLogger(__name__)
 
 # Resolve paths relative to this file
 MODELS_DIR = Path(__file__).parent.parent / "models"
 DATA_DIR = Path(__file__).parent.parent / "data" / "processed"
-
-# Ensure models are downloaded before proceeding
-ensure_model_files(MODELS_DIR)
-
 
 class Recommender:
     """
@@ -40,6 +40,13 @@ class Recommender:
         self._vectorizer: TfidfVectorizer | None = None
         self._movies: pd.DataFrame | None = None
         self._vectors: np.ndarray | None = None
+        self._content_text: pd.Series | None = None
+        self._tfidf_matrix = None
+        self._query_encoder = None
+        self._cross_encoder = None
+        self._learned_ranker = None
+        self._behavior_features: dict[str, Any] = {}
+        self._behavior_features_refreshed_at: datetime | None = None
     
     def load(self) -> "Recommender":
         """
@@ -47,6 +54,7 @@ class Recommender:
         We use memory-mapping for the vectors so we don't blow up the RAM on the free tier.
         """
         logger.info("Loading recommendation engine...")
+        ensure_model_files(MODELS_DIR)
         
         # Load FAISS index
         index_path = MODELS_DIR / "faiss.index"
@@ -79,7 +87,10 @@ class Recommender:
             # Only load columns we actually need for recommendations
             essential_cols = ['id', 'title', 'overview', 'genres', 'vote_average', 
                             'vote_count', 'popularity', 'release_date', 'poster_path',
-                            'director', 'cast', 'original_language']
+                            'director', 'cast', 'original_language',
+                            'metadata_completeness', 'content_quality_score',
+                            'quality_bucket', 'searchable', 'recommendable',
+                            'public_demo_eligible']
             try:
                 self._movies = pd.read_parquet(movies_path, columns=essential_cols)
             except (KeyError, ValueError):
@@ -88,6 +99,11 @@ class Recommender:
             logger.info(f"Loaded {len(self._movies):,} movies")
         else:
             raise FileNotFoundError("Movie data not found. Run the ETL pipeline first.")
+
+        self._build_sparse_retrieval_index()
+        self._learned_ranker = load_ranker(models_dir=MODELS_DIR)
+
+        self.refresh_behavior_features(force=True)
         
         return self
     
@@ -97,6 +113,339 @@ class Recommender:
         if self._movies is None:
             raise RuntimeError("Recommender not loaded. Call load() first.")
         return self._movies
+
+    def refresh_behavior_features(self, force: bool = False) -> dict[str, Any]:
+        """Refresh aggregated behavior features used as a light ranking signal."""
+        ttl_seconds = int(os.getenv("BEHAVIOR_FEATURE_TTL_SECONDS", "60"))
+        now = datetime.now(UTC)
+
+        if (
+            not force
+            and self._behavior_features_refreshed_at is not None
+            and (now - self._behavior_features_refreshed_at).total_seconds() < ttl_seconds
+        ):
+            return self._behavior_features
+
+        try:
+            from backend.events import aggregate_behavior_features
+
+            self._behavior_features = aggregate_behavior_features(limit=100)
+            self._behavior_features_refreshed_at = now
+        except Exception as exc:
+            logger.warning("Behavior feature refresh skipped: %s", exc)
+            self._behavior_features = {}
+            self._behavior_features_refreshed_at = now
+
+        return self._behavior_features
+
+    def _build_sparse_retrieval_index(self) -> None:
+        """Build a TF-IDF recall index for hybrid search and cold-start resilience."""
+        text_parts = []
+        for column in ("title", "overview", "genres", "director", "cast", "original_language"):
+            if column in self._movies.columns:
+                text_parts.append(self._movies[column].fillna("").astype(str))
+
+        if not text_parts:
+            self._content_text = pd.Series([""] * len(self._movies), index=self._movies.index)
+        else:
+            content_text = text_parts[0]
+            for part in text_parts[1:]:
+                content_text = content_text + ". " + part
+            self._content_text = content_text
+
+        max_features = int(os.getenv("NOVA_TFIDF_MAX_FEATURES", "50000"))
+        self._vectorizer = TfidfVectorizer(
+            max_features=max_features,
+            ngram_range=(1, 2),
+            stop_words="english",
+            min_df=1,
+        )
+        self._tfidf_matrix = self._vectorizer.fit_transform(self._content_text)
+        logger.info("Built sparse TF-IDF retrieval index with %s features", len(self._vectorizer.vocabulary_))
+
+    def _dense_query_enabled(self) -> bool:
+        """Return whether online dense query encoding should be attempted."""
+        value = os.getenv("NOVA_ENABLE_DENSE_QUERY", "false").strip().lower()
+        return value in {"1", "true", "yes", "on"}
+
+    def _cross_encoder_enabled(self) -> bool:
+        """Return whether optional cross-encoder reranking should be attempted."""
+        value = os.getenv("NOVA_ENABLE_CROSS_ENCODER", "false").strip().lower()
+        return value in {"1", "true", "yes", "on"}
+
+    def _get_query_encoder(self):
+        """Load the query bi-encoder lazily when the deployment opts in."""
+        if self._query_encoder is None:
+            from sentence_transformers import SentenceTransformer
+
+            model_name = os.getenv("NOVA_QUERY_ENCODER_MODEL", "all-mpnet-base-v2")
+            self._query_encoder = SentenceTransformer(model_name)
+            logger.info("Loaded query encoder: %s", model_name)
+        return self._query_encoder
+
+    def _get_cross_encoder(self):
+        """Load an optional lightweight cross-encoder reranker lazily."""
+        if self._cross_encoder is None:
+            from sentence_transformers import CrossEncoder
+
+            model_name = os.getenv("NOVA_CROSS_ENCODER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
+            self._cross_encoder = CrossEncoder(model_name)
+            logger.info("Loaded cross-encoder reranker: %s", model_name)
+        return self._cross_encoder
+
+    def _popularity_quality_score(self, movie: dict[str, Any]) -> float:
+        """Small bounded business score from popularity and quality."""
+        if movie.get("content_quality_score") is not None:
+            try:
+                score = float(movie.get("content_quality_score"))
+                if not np.isnan(score):
+                    return max(0.0, min(1.0, score))
+            except (TypeError, ValueError):
+                pass
+        completeness = float(movie.get("metadata_completeness") or 0.0)
+        popularity = float(movie.get("popularity") or 0)
+        rating = float(movie.get("vote_average") or 0)
+        votes = float(movie.get("vote_count") or 0)
+        popularity_score = min(1.0, np.log1p(max(popularity, 0)) / 8.0)
+        confidence = min(1.0, np.log1p(max(votes, 0)) / 8.0)
+        quality_score = (rating / 10.0) * confidence if rating > 0 else 0.0
+        return float(0.35 * popularity_score + 0.35 * quality_score + 0.30 * completeness)
+
+    @staticmethod
+    def _normalize_score_map(scores: dict[int, float]) -> dict[int, float]:
+        """Min-max normalize a sparse score map into [0, 1]."""
+        if not scores:
+            return {}
+        values = np.array(list(scores.values()), dtype=np.float32)
+        min_value = float(values.min())
+        max_value = float(values.max())
+        if max_value <= min_value:
+            return {key: 1.0 for key in scores}
+        return {
+            key: float((value - min_value) / (max_value - min_value))
+            for key, value in scores.items()
+        }
+
+    def _genre_set(self, movie: dict[str, Any]) -> set[str]:
+        return {part.strip().lower() for part in str(movie.get("genres") or "").split(",") if part.strip()}
+
+    def _apply_query_mmr(
+        self,
+        candidates: list[dict],
+        n: int,
+        lambda_param: float = 0.72,
+    ) -> list[dict]:
+        """Diversify query search results using candidate vectors where available."""
+        if len(candidates) <= n or self._vectors is None:
+            return candidates[:n]
+
+        selected: list[dict] = []
+        remaining = candidates.copy()
+        selected.append(remaining.pop(0))
+
+        while remaining and len(selected) < n:
+            best_idx = 0
+            best_score = -float("inf")
+            for idx, candidate in enumerate(remaining):
+                candidate_indices = self._movies[self._movies["id"] == candidate.get("id")].index
+                if len(candidate_indices) == 0:
+                    continue
+                candidate_idx = int(candidate_indices[0])
+                relevance = float(candidate.get("similarity_score") or 0)
+
+                max_similarity = 0.0
+                for chosen in selected:
+                    chosen_indices = self._movies[self._movies["id"] == chosen.get("id")].index
+                    if len(chosen_indices) == 0:
+                        continue
+                    chosen_idx = int(chosen_indices[0])
+                    candidate_vector = np.asarray(self._vectors[candidate_idx], dtype=np.float32)
+                    chosen_vector = np.asarray(self._vectors[chosen_idx], dtype=np.float32)
+                    max_similarity = max(max_similarity, float(np.dot(candidate_vector, chosen_vector)))
+
+                mmr_score = lambda_param * relevance - (1 - lambda_param) * max_similarity
+                if mmr_score > best_score:
+                    best_score = mmr_score
+                    best_idx = idx
+
+            selected.append(remaining.pop(best_idx))
+        return selected[:n]
+
+    def _apply_learned_ranker(self, candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Apply the trained ranker artifact when available."""
+        if self._learned_ranker is None or not candidates:
+            return candidates
+        try:
+            return self._learned_ranker.rerank(candidates)
+        except Exception as exc:
+            logger.warning("Learned ranker skipped: %s", exc)
+            return candidates
+
+    def _behavior_boost(self, movie_id: Any) -> tuple[float, list[str]]:
+        """Return a bounded score nudge from recent product behavior."""
+        if movie_id is None:
+            return 0.0, []
+
+        try:
+            movie_key = str(int(movie_id))
+        except (TypeError, ValueError):
+            return 0.0, []
+
+        trending_movies = self._behavior_features.get("trending_movies", {})
+        if not isinstance(trending_movies, dict):
+            return 0.0, []
+
+        stats = trending_movies.get(movie_key)
+        if not isinstance(stats, dict):
+            return 0.0, []
+
+        event_count = int(stats.get("event_count") or 0)
+        views = int(stats.get("views") or 0)
+        clicks = int(stats.get("clicks") or 0)
+        ratings = int(stats.get("ratings") or 0)
+        avg_rating = stats.get("avg_rating")
+
+        boost = min(0.08, event_count * 0.005 + views * 0.003 + clicks * 0.01)
+        if avg_rating is not None and ratings > 0 and float(avg_rating) >= 4.0:
+            boost += min(0.02, ratings * 0.005)
+        boost = min(0.10, boost)
+
+        reasons = []
+        if event_count:
+            reasons.append(f"Trending with viewers ({event_count} recent events)")
+        if avg_rating is not None and ratings > 0:
+            reasons.append(f"Audience signal ({float(avg_rating):.1f}/5)")
+
+        return boost, reasons[:2]
+
+    @staticmethod
+    def _event_recency_decay(event_ts: Any, half_life_days: float = 14.0) -> float:
+        """Return a bounded recency weight for personalization events."""
+        if not event_ts:
+            return 0.65
+        try:
+            parsed = datetime.fromisoformat(str(event_ts).replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+            age_days = max(0.0, (datetime.now(UTC) - parsed).total_seconds() / 86400.0)
+            return float(0.5 ** (age_days / half_life_days))
+        except Exception:
+            return 0.65
+
+    def _genre_affinity_from_profile(self, profile: dict[str, Any]) -> dict[str, float]:
+        """Build genre affinity weights from positive user events."""
+        affinity: dict[str, float] = {}
+        for event in profile.get("recent_events") or []:
+            if event.get("negative"):
+                continue
+            movie = self.get_movie_by_id(int(event.get("movie_id"))) if event.get("movie_id") is not None else None
+            if not movie:
+                continue
+            weight = float(event.get("weight") or 1.0) * self._event_recency_decay(event.get("event_ts"))
+            for genre in self._genre_set(movie):
+                affinity[genre] = affinity.get(genre, 0.0) + weight
+
+        if not affinity:
+            return {}
+        max_weight = max(affinity.values())
+        if max_weight <= 0:
+            return {}
+        return {genre: round(weight / max_weight, 4) for genre, weight in affinity.items()}
+
+    def recommend_for_user_profile(self, profile: dict[str, Any], n: int = 10) -> list[dict[str, Any]]:
+        """Blend seed-item, search-intent, genre-affinity, and trending signals for a user."""
+        result_limit = max(1, min(int(n), 50))
+        negative_ids = {int(movie_id) for movie_id in profile.get("negative_movie_ids") or []}
+        seed_events = [
+            event for event in (profile.get("recent_events") or [])
+            if event.get("movie_id") is not None and not event.get("negative")
+        ]
+        genre_affinity = self._genre_affinity_from_profile(profile)
+
+        scored: dict[int, dict[str, Any]] = {}
+
+        def add_candidate(candidate: dict[str, Any], score: float, reason: str, stage: str) -> None:
+            candidate_id = candidate.get("id")
+            if candidate_id is None:
+                return
+            try:
+                candidate_id = int(candidate_id)
+            except (TypeError, ValueError):
+                return
+            if candidate_id in negative_ids:
+                return
+
+            item = dict(candidate)
+            genre_boost = 0.0
+            for genre in self._genre_set(item):
+                genre_boost += genre_affinity.get(genre, 0.0)
+            genre_boost = min(0.15, genre_boost * 0.045)
+            final_score = float(score) + genre_boost
+            current = scored.get(candidate_id)
+            if current is None or final_score > float(current.get("similarity_score") or 0):
+                explanations = list(item.get("explanation") or [])
+                explanations.insert(0, reason)
+                if genre_boost > 0:
+                    explanations.insert(1, "matches your genre affinity")
+                item["similarity_score"] = final_score
+                item["retrieval_stage"] = stage
+                item["retrieval_signals"] = {
+                    **(item.get("retrieval_signals") or {}),
+                    "personalization": round(final_score, 4),
+                    "genre_affinity": round(genre_boost, 4),
+                }
+                item["explanation"] = explanations[:5]
+                item["explanation_text"] = " | ".join(item["explanation"])
+                scored[candidate_id] = item
+
+        seen_seed_ids = set()
+        for event_rank, event in enumerate(seed_events[:8]):
+            seed_movie_id = int(event["movie_id"])
+            seen_seed_ids.add(seed_movie_id)
+            event_weight = float(event.get("weight") or 1.0)
+            recency = self._event_recency_decay(event.get("event_ts"))
+            seed_weight = event_weight * recency / (event_rank + 1)
+            for candidate in self.recommend_by_id(seed_movie_id, n=min(30, max(result_limit * 4, 12))):
+                if candidate.get("id") in seen_seed_ids:
+                    continue
+                base_score = float(candidate.get("similarity_score") or 0.0)
+                add_candidate(
+                    candidate,
+                    score=base_score * seed_weight,
+                    reason=f"personalized from recent {event.get('event_type', 'interaction')}",
+                    stage="personalized_v2_seed_blend",
+                )
+
+        for search in (profile.get("top_searches") or [])[:3]:
+            query_text = str(search.get("query_text") or "").strip()
+            if not query_text:
+                continue
+            count_weight = min(1.0, float(search.get("count") or 1) / 3.0)
+            for candidate in self.ai_search(query_text, n=min(12, max(result_limit * 2, 8))):
+                add_candidate(
+                    candidate,
+                    score=float(candidate.get("similarity_score") or 0.0) * 0.42 * count_weight,
+                    reason=f"matches your search intent: {query_text}",
+                    stage="personalized_v2_search_blend",
+                )
+
+        if not scored:
+            behavior = self.refresh_behavior_features()
+            for item in (behavior.get("trending_movies") or {}).values():
+                movie_id = item.get("movie_id")
+                if movie_id is None:
+                    continue
+                movie = self.get_movie_by_id(int(movie_id)) if isinstance(movie_id, int) else None
+                if movie:
+                    add_candidate(
+                        movie,
+                        score=min(1.0, float(item.get("event_count") or 0) / 20.0),
+                        reason=f"trending with viewers ({item.get('event_count')} recent events)",
+                        stage="personalized_v2_trending_fallback",
+                    )
+
+        results = sorted(scored.values(), key=lambda item: float(item.get("similarity_score") or 0), reverse=True)
+        return results[:result_limit]
     
     def get_movie_by_id(self, movie_id: int) -> dict | None:
         """Get movie details by TMDB ID."""
@@ -237,6 +586,8 @@ class Recommender:
         """
         if self._vectors is None:
             raise RuntimeError("Vectors not loaded")
+
+        self.refresh_behavior_features()
         
         # Get query vector
         query_vector = self._vectors[movie_idx].reshape(1, -1).astype(np.float32)
@@ -244,7 +595,7 @@ class Recommender:
         
         # Search (Fetch 100 candidates for re-ranking)
         # We fetch more than N to allow the business logic to re-order them
-        fetch_k = 100
+        fetch_k = min(100, getattr(self._index, "ntotal", len(self._movies)))
         
         # Configure IVF search
         if hasattr(self._index, "nprobe"):
@@ -266,7 +617,7 @@ class Recommender:
         # Build results
         results = []
         for dist, idx in zip(distances[0], indices[0]):
-            if idx == movie_idx or idx < 0:
+            if idx == movie_idx or idx < 0 or idx >= len(self._movies):
                 continue
             
             cand = self.get_movie_by_index(idx)
@@ -349,6 +700,9 @@ class Recommender:
             c_lang = str(cand.get("original_language", "en")).lower()
             if q_lang == c_lang:
                 final_score += 0.02  # Same language slight boost
+
+            behavior_boost, behavior_reasons = self._behavior_boost(cand.get("id"))
+            final_score += behavior_boost
             
             # === EXPLAINABILITY (Why was this recommended?) ===
             explanation_tags = []
@@ -381,6 +735,8 @@ class Recommender:
             # Same language (if not English - more notable)
             if q_lang == c_lang and q_lang != "en":
                 explanation_tags.append(f"Same language ({c_lang.upper()})")
+
+            explanation_tags.extend(behavior_reasons)
             
             # Default if no specific reasons found
             if not explanation_tags:
@@ -388,11 +744,12 @@ class Recommender:
                 
             cand["similarity_score"] = final_score
             cand["explanation"] = explanation_tags  # NEW: Add explanation
-            cand["explanation_text"] = " • ".join(explanation_tags)  # Human-readable
+            cand["explanation_text"] = " | ".join(explanation_tags)  # Human-readable
             results.append(cand)
         
         # Sort by boosted score
         results.sort(key=lambda x: x["similarity_score"], reverse=True)
+        results = self._apply_learned_ranker(results)
         top_candidates = results[:20]
         
         # === NEW 2026 SOTA: LLM-as-a-Judge Reranking ===
@@ -612,6 +969,132 @@ Do not write any other text except the JSON object.
         movie_idx = matches[0]
         return self.recommend_by_index(movie_idx, n)
 
+    def ai_search(self, query: str, n: int = 10, fetch_k: int = 80) -> list[dict]:
+        """
+        Multi-stage AI search for the product API.
+
+        Stages:
+        1. Sparse TF-IDF recall for exact names, entities, and cold-start text.
+        2. Dense vector recall when online query encoding is enabled.
+        3. Metadata, popularity, quality, and behavior scoring.
+        4. Optional cross-encoder reranking for high-precision top-window ranking.
+        5. MMR diversification so the list is not repetitive.
+        """
+        if not query or self._movies is None:
+            return []
+
+        self.refresh_behavior_features()
+        query_intent = parse_query_intent(query)
+        fetch_k = max(n, min(fetch_k, len(self._movies)))
+        dense_scores: dict[int, float] = {}
+        sparse_scores: dict[int, float] = {}
+        dense_error = None
+
+        if self._tfidf_matrix is not None and self._vectorizer is not None:
+            query_sparse = self._vectorizer.transform([query])
+            sparse_similarities = cosine_similarity(query_sparse, self._tfidf_matrix).ravel()
+            sparse_indices = np.argsort(sparse_similarities)[::-1][:fetch_k]
+            sparse_scores = {
+                int(idx): float(sparse_similarities[int(idx)])
+                for idx in sparse_indices
+                if sparse_similarities[int(idx)] > 0
+            }
+
+        if self._dense_query_enabled() and self._index is not None and self._vectors is not None:
+            try:
+                encoder = self._get_query_encoder()
+                query_embedding = encoder.encode([query], convert_to_numpy=True)
+                query_embedding = query_embedding / np.linalg.norm(query_embedding, axis=1, keepdims=True)
+                query_embedding = query_embedding.astype(np.float32)
+                distances, indices = self._index.search(query_embedding, fetch_k)
+                dense_scores = {
+                    int(idx): float(distances[0][rank])
+                    for rank, idx in enumerate(indices[0])
+                    if idx >= 0 and idx < len(self._movies)
+                }
+            except Exception as exc:
+                dense_error = str(exc)
+                logger.warning("Dense query retrieval skipped: %s", exc)
+
+        normalized_sparse = self._normalize_score_map(sparse_scores)
+        normalized_dense = self._normalize_score_map(dense_scores)
+        candidate_indices = set(normalized_sparse) | set(normalized_dense)
+        if not candidate_indices:
+            return self.search_movies(query, limit=n)
+
+        alpha = 0.62 if normalized_dense else 0.0
+        ranked_candidates = []
+        for idx in candidate_indices:
+            movie = self._movies.iloc[idx].to_dict()
+            sparse_score = normalized_sparse.get(idx, 0.0)
+            dense_score = normalized_dense.get(idx, 0.0)
+            metadata_score = self._popularity_quality_score(movie)
+            behavior_boost, behavior_reasons = self._behavior_boost(movie.get("id"))
+            intent_boost, intent_reasons = intent_score(movie, query_intent)
+            hybrid_score = (
+                alpha * dense_score
+                + (1 - alpha) * sparse_score
+                + 0.10 * metadata_score
+                + behavior_boost
+                + intent_boost
+            )
+
+            explanation = []
+            if dense_score > 0:
+                explanation.append("semantic meaning match")
+            if sparse_score > 0:
+                explanation.append("keyword/entity match")
+            if metadata_score > 0.5:
+                explanation.append("strong catalog quality signal")
+            explanation.extend(intent_reasons)
+            explanation.extend(behavior_reasons)
+            if dense_error and not normalized_dense:
+                explanation.append("dense query model unavailable; sparse fallback used")
+            if not explanation:
+                explanation.append("best available catalog match")
+
+            movie["similarity_score"] = float(hybrid_score)
+            movie["retrieval_stage"] = "hybrid" if normalized_dense else "sparse_metadata"
+            movie["retrieval_signals"] = {
+                "dense": round(dense_score, 4),
+                "sparse": round(sparse_score, 4),
+                "metadata": round(metadata_score, 4),
+                "behavior": round(behavior_boost, 4),
+                "intent": round(intent_boost, 4),
+                "intent_features": query_intent,
+            }
+            movie["explanation"] = explanation[:4]
+            movie["explanation_text"] = " | ".join(movie["explanation"])
+            ranked_candidates.append(movie)
+
+        ranked_candidates.sort(key=lambda item: item["similarity_score"], reverse=True)
+
+        if self._cross_encoder_enabled() and len(ranked_candidates) > 1:
+            try:
+                reranker = self._get_cross_encoder()
+                rerank_window = ranked_candidates[: min(len(ranked_candidates), int(os.getenv("NOVA_RERANK_WINDOW", "30")))]
+                pairs = [
+                    [
+                        query,
+                        f"{item.get('title', '')}. {item.get('genres', '')}. {item.get('overview', '')}",
+                    ]
+                    for item in rerank_window
+                ]
+                rerank_scores = reranker.predict(pairs)
+                for item, rerank_score in zip(rerank_window, rerank_scores):
+                    item["retrieval_signals"]["cross_encoder"] = round(float(rerank_score), 4)
+                    item["similarity_score"] = 0.75 * float(item["similarity_score"]) + 0.25 * float(rerank_score)
+                    item["retrieval_stage"] = f"{item['retrieval_stage']}_cross_encoder"
+                    item["explanation"] = ["neural reranker selected this match"] + item["explanation"][:3]
+                    item["explanation_text"] = " | ".join(item["explanation"])
+                ranked_candidates = rerank_window + ranked_candidates[len(rerank_window):]
+                ranked_candidates.sort(key=lambda item: item["similarity_score"], reverse=True)
+            except Exception as exc:
+                logger.warning("Cross-encoder reranking skipped: %s", exc)
+
+        ranked_candidates = self._apply_learned_ranker(ranked_candidates)
+        return self._apply_query_mmr(ranked_candidates, n=n)
+
     def semantic_search(self, query: str, n: int = 10) -> list[dict]:
         """
         Search movies by semantic meaning using the SBERT model + FAISS index.
@@ -627,33 +1110,7 @@ Do not write any other text except the JSON object.
         Returns:
             List of movie dictionaries with similarity scores
         """
-        if not query or self._index is None or self._vectors is None:
-            return []
-        
-        try:
-            from sentence_transformers import SentenceTransformer
-            
-            # Use the same model that generated the embeddings
-            model = _get_sbert_model()
-            query_embedding = model.encode([query], convert_to_numpy=True)
-            query_embedding = query_embedding / np.linalg.norm(query_embedding, axis=1, keepdims=True)
-            query_embedding = query_embedding.astype(np.float32)
-            
-            distances, indices = self._index.search(query_embedding, n)
-            
-            results = []
-            for i, idx in enumerate(indices[0]):
-                if idx < 0 or idx >= len(self._movies):
-                    continue
-                movie = self._movies.iloc[idx].to_dict()
-                movie["similarity_score"] = float(distances[0][i])
-                results.append(movie)
-            
-            return results
-        except Exception as e:
-            logger.error(f"Semantic search failed: {e}")
-            # Fallback to text search
-            return self.search_movies(query, limit=n)
+        return self.ai_search(query, n=n)
 
 
 # Lazy-loaded SBERT model for semantic search queries

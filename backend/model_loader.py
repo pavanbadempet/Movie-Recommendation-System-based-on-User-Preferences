@@ -37,11 +37,27 @@ MODEL_FILES = {
             "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/movies_transformed.parquet"
         ),
         "dest": "../data/processed/movies_transformed.parquet"
+    },
+    "nova_ranker.joblib": {
+        "url": os.getenv(
+            "NOVA_RANKER_URL",
+            "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/nova_ranker.joblib"
+        ),
+        "dest": "nova_ranker.joblib",
+        "required": False,
+    },
+    "nova_ranker.joblib.metadata.json": {
+        "url": os.getenv(
+            "NOVA_RANKER_METADATA_URL",
+            "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/nova_ranker.joblib.metadata.json"
+        ),
+        "dest": "nova_ranker.joblib.metadata.json",
+        "required": False,
     }
 }
 
 
-def download_file(url: str, dest_path: Path, chunk_size: int = 8192) -> bool:
+def download_file(url: str, dest_path: Path, chunk_size: int = 8192, required: bool = True) -> bool:
     """
     Download a file from URL to destination path.
     Shows progress for large files.
@@ -51,6 +67,7 @@ def download_file(url: str, dest_path: Path, chunk_size: int = 8192) -> bool:
     
     # Ensure parent directory exists
     dest_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = dest_path.with_name(f"{dest_path.name}.tmp")
     
     try:
         logger.info(f"Downloading {dest_path.name} from {url[:50]}...")
@@ -59,7 +76,7 @@ def download_file(url: str, dest_path: Path, chunk_size: int = 8192) -> bool:
         with urllib.request.urlopen(url, timeout=300) as response:
             total_size = int(response.headers.get('content-length', 0))
             
-            with open(dest_path, 'wb') as f:
+            with open(temp_path, 'wb') as f:
                 downloaded = 0
                 while True:
                     chunk = response.read(chunk_size)
@@ -73,13 +90,15 @@ def download_file(url: str, dest_path: Path, chunk_size: int = 8192) -> bool:
                         pct = (downloaded / total_size) * 100
                         logger.info(f"  Progress: {pct:.1f}% ({downloaded // (1024*1024)}MB / {total_size // (1024*1024)}MB)")
         
-        logger.info(f"✓ Downloaded {dest_path.name} ({dest_path.stat().st_size // (1024*1024)}MB)")
+        shutil.move(str(temp_path), str(dest_path))
+        logger.info(f"Downloaded {dest_path.name} ({dest_path.stat().st_size // (1024*1024)}MB)")
         return True
         
     except Exception as e:
-        logger.error(f"Failed to download {url}: {e}")
-        if dest_path.exists():
-            dest_path.unlink()  # Clean up partial download
+        log_fn = logger.error if required else logger.info
+        log_fn(f"Failed to download {'required' if required else 'optional'} artifact {url}: {e}")
+        if temp_path.exists():
+            temp_path.unlink()
         return False
 
 
@@ -91,21 +110,29 @@ def ensure_model_files(models_dir: Path) -> dict[str, bool]:
         Dict mapping filename to success status
     """
     results = {}
+    force_refresh = os.getenv("FORCE_MODEL_REFRESH", "").lower() in {"1", "true", "yes"}
     
     for filename, config in MODEL_FILES.items():
         # Handle flexible destination paths
         if isinstance(config, dict):
             url = config.get("url")
             dest_rel = config.get("dest", filename)
+            required = bool(config.get("required", True))
             # Resolve relative paths against models_dir
             file_path = (models_dir / dest_rel).resolve()
         else:
             # Legacy support (just string URL)
             url = config
+            required = True
             file_path = models_dir / filename
             
         # Skip if file already exists and is valid
-        if file_path.exists() and file_path.stat().st_size > 1000:
+        if file_path.exists() and file_path.stat().st_size > 1000 and not force_refresh:
+            logger.info(f"{filename} already exists ({file_path.stat().st_size // (1024*1024)}MB)")
+            results[filename] = True
+            continue
+
+        if file_path.exists() and file_path.stat().st_size > 1000 and force_refresh:
             # Check if remote file has changed (size-based cache invalidation)
             if url:
                 try:
@@ -131,7 +158,7 @@ def ensure_model_files(models_dir: Path) -> dict[str, bool]:
         
         # Try to download if URL is configured
         if url:
-            results[filename] = download_file(url, file_path)
+            results[filename] = download_file(url, file_path, required=required)
         else:
             # No URL configured, check if file exists locally
             if file_path.exists():

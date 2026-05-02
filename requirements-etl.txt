@@ -1,0 +1,10 @@
+# Heavy ETL/runtime dependencies for Kaggle, Airflow, or Spark cluster jobs.
+# Keep these out of Render's serving requirements so API cold starts stay small.
+
+-r requirements.txt
+
+pyspark>=3.5.0
+delta-spark>=3.2.0
+kafka-python>=2.0.2
+kaggle>=1.6.0
+jupytext>=1.16.0
