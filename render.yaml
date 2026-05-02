@@ -25,6 +25,18 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: NOVA_SERVING_PROFILE
+        value: lite
+      - key: NOVA_HEALTH_LOAD_RECOMMENDER
+        value: false
+      - key: NOVA_TFIDF_MAX_FEATURES
+        value: 12000
+      - key: NOVA_ENABLE_LLM_RERANK
+        value: false
+      - key: NOVA_RECOMMENDER_SERVICE_URL
+        value: https://pavanbadempet-movie-rec-api.hf.space
+      - key: NOVA_RECOMMENDER_SERVICE_TIMEOUT_SECONDS
+        value: 20
       - key: TMDB_API_KEY
         sync: false
 
