@@ -287,3 +287,22 @@ class TestRecommender:
         recs = r.recommend_by_id(1, n=2)  # Avatar
         assert len(recs) == 2
         assert all("similarity_score" in m for m in recs)
+
+    def test_llm_rerank_is_disabled_by_default(self, mock_recommender, monkeypatch):
+        """OpenRouter reranking must not run unless explicitly enabled."""
+        import backend.recommender as rec
+
+        monkeypatch.setattr(rec, "MODELS_DIR", mock_recommender)
+        monkeypatch.setattr(rec, "DATA_DIR", mock_recommender)
+        monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+        monkeypatch.delenv("NOVA_ENABLE_LLM_RERANK", raising=False)
+
+        def fail_if_called(*args, **kwargs):
+            raise AssertionError("LLM reranking should be opt-in")
+
+        monkeypatch.setattr(rec.Recommender, "_rerank_with_llm", fail_if_called)
+
+        r = rec.Recommender().load()
+        recs = r.recommend_by_id(1, n=2)
+
+        assert len(recs) == 2

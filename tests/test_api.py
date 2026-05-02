@@ -147,6 +147,42 @@ class TestSearchEndpoint:
         assert "retrieval_signals" in results[0]
         assert results[0]["explanation"]
 
+    def test_v1_ai_search_can_proxy_to_remote_recommender(self, mock_artifacts, monkeypatch):
+        import backend.main as main
+        from backend.main import app
+        from backend.remote_recommender import RemoteResponse
+
+        async def fake_remote_get_json(path, params=None, context=None):
+            assert path == "/v1/search/ai"
+            assert params["q"] == "space"
+            assert params["top_k"] == 1
+            return RemoteResponse(
+                status_code=200,
+                payload=[
+                    {
+                        "id": 300,
+                        "title": "Remote Space Movie",
+                        "overview": "Returned by the model service",
+                        "retrieval_stage": "remote_hybrid",
+                        "retrieval_signals": {"remote": True},
+                    }
+                ],
+            )
+
+        def fail_local_load():
+            raise AssertionError("Render gateway should not load the local recommender")
+
+        monkeypatch.setattr(main, "remote_get_json", fake_remote_get_json)
+        monkeypatch.setattr(main, "get_rec", fail_local_load)
+
+        client = TestClient(app)
+        resp = client.get("/v1/search/ai", params={"q": "space", "top_k": 1})
+
+        assert resp.status_code == 200
+        results = resp.json()
+        assert results[0]["title"] == "Remote Space Movie"
+        assert results[0]["retrieval_stage"] == "remote_hybrid"
+
 
 class TestMoviesEndpoint:
     def test_movies_returns_list(self, mock_artifacts):
