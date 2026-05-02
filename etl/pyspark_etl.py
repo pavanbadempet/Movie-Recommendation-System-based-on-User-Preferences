@@ -3,6 +3,8 @@ PySpark ETL - processes TMDB movie data using Spark.
 
 Canonical batch/lakehouse pipeline for the project.
 """
+import hashlib
+import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -929,17 +931,24 @@ def run_spark_etl(
             if run_date:
                 gold_path += f"/run_date={run_date}"
             gold_df = spark.read.format(sink_format).load(gold_path)
-        rows = gold_df.select("id", "vector").collect()
+        rows = gold_df.select("id", "vector").orderBy("id").collect()
 
         import numpy as np
         import faiss
 
         # COMPRESSION (Precision Engineering):
         # Convert to float16 (Half Precision) to save 50% RAM/Disk/Network
+        movie_ids = np.array([int(r['id']) for r in rows]).astype('int64')
         vectors = np.array([r['vector'] for r in rows]).astype('float16')
+        if len(movie_ids) != vectors.shape[0]:
+            raise ValueError(
+                f"movie id map rows ({len(movie_ids)}) != vector rows ({vectors.shape[0]})"
+            )
+        movie_id_hash = hashlib.sha256(movie_ids.astype("<i8", copy=False).tobytes()).hexdigest()
 
         # Save for Backend
         np.save(str(paths.models / "sbert_embeddings.npy"), vectors)
+        np.save(str(paths.models / "movie_ids.npy"), movie_ids)
         logger.info(f"Saved {paths.models / 'sbert_embeddings.npy'} (Size: {vectors.nbytes / 1024 / 1024:.2f} MB)")
 
         # Build FAISS Index with Quantization
@@ -954,8 +963,34 @@ def run_spark_etl(
         index = faiss.index_factory(d, "SQfp16", faiss.METRIC_INNER_PRODUCT)
         index.train(vectors_f32)
         index.add(vectors_f32)
+        if index.ntotal != len(movie_ids):
+            raise ValueError(f"FAISS index rows ({index.ntotal}) != movie id rows ({len(movie_ids)})")
 
         faiss.write_index(index, str(paths.models / "faiss.index"))
+        manifest = {
+            "run_date": run_date,
+            "pipeline": "nova-pyspark-etl",
+            "model_name": EMBEDDING_MODEL_NAME,
+            "serving_contract": {
+                "version": 1,
+                "movie_rows": int(len(movie_ids)),
+                "embedding_rows": int(vectors.shape[0]),
+                "embedding_dimensions": int(vectors.shape[1]) if len(vectors.shape) > 1 else 0,
+                "faiss_index_size": int(index.ntotal),
+                "movie_id_map_rows": int(len(movie_ids)),
+                "movie_id_sha256": movie_id_hash,
+            },
+            "artifacts": {
+                "movies": "movies_transformed.parquet",
+                "embeddings": "sbert_embeddings.npy",
+                "faiss_index": "faiss.index",
+                "movie_ids": "movie_ids.npy",
+            },
+        }
+        (paths.models / "pipeline_manifest.json").write_text(
+            json.dumps(manifest, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
         logger.info(f"Saved {paths.models / 'faiss.index'} (Compressed SQfp16)")
 
     except Exception as e:
