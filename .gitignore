@@ -31,6 +31,7 @@ models/*.index
 models/*.npy
 models/*.joblib
 models/*.joblib.metadata.json
+models/pipeline_manifest.json
 
 # Keep directory structure
 !data/raw/.gitkeep

@@ -87,6 +87,14 @@ jobs:
           echo "https://www.kaggle.com/code/$KERNEL_ID"
           exit 1
 
+      - name: Validate Hugging Face serving artifact contract
+        if: success()
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          pip install numpy pandas pyarrow huggingface_hub
+          python scripts/validate_serving_artifacts.py --repo pavanbadempet/movie-recs-models
+
       - name: Train and upload Nova ranker
         if: success()
         env:

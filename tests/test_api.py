@@ -2,6 +2,7 @@
 API integration tests for FastAPI backend
 """
 import pytest
+import json
 from fastapi.testclient import TestClient
 import pandas as pd
 import numpy as np
@@ -38,11 +39,28 @@ def mock_artifacts(tmp_path, monkeypatch):
     vecs = vecs / norms
     
     np.save(tmp_path / "sbert_embeddings.npy", vecs)
+    np.save(tmp_path / "movie_ids.npy", movies["id"].astype("int64").to_numpy())
     
     # FAISS index
     idx = faiss.IndexFlatIP(vecs.shape[1])
     idx.add(vecs)
     faiss.write_index(idx, str(tmp_path / "faiss.index"))
+    (tmp_path / "pipeline_manifest.json").write_text(
+        json.dumps(
+            {
+                "run_id": "test-run",
+                "serving_contract": {
+                    "version": 1,
+                    "movie_rows": 3,
+                    "embedding_rows": 3,
+                    "embedding_dimensions": 768,
+                    "faiss_index_size": 3,
+                    "movie_id_map_rows": 3,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     
     # Patch paths
     import backend.recommender as rec
