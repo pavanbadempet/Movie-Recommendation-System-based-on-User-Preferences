@@ -17,11 +17,21 @@ def test_paths_dataclass():
         p = Paths(
             raw_data=Path(tmp) / "raw",
             processed_data=Path(tmp) / "processed",
+            bronze_data=Path(tmp) / "bronze",
+            silver_data=Path(tmp) / "silver",
+            gold_data=Path(tmp) / "gold",
             models=Path(tmp) / "models",
             logs=Path(tmp) / "logs",
+            quality_reports=Path(tmp) / "quality",
+            manifests=Path(tmp) / "manifests",
         )
         assert p.raw_data.exists()
         assert p.processed_data.exists()
+        assert p.bronze_data.exists()
+        assert p.silver_data.exists()
+        assert p.gold_data.exists()
+        assert p.quality_reports.exists()
+        assert p.manifests.exists()
 
 def test_data_config_defaults():
     """DataConfig has sensible defaults."""
@@ -49,24 +59,43 @@ class TestIngest:
             "poster_path": ["/a.jpg", "/b.jpg", "/c.jpg"],
         })
 
-    def test_filter_movies_removes_low_votes(self, sample_df):
-        """filter_movies removes movies below vote threshold."""
+    def test_filter_movies_keeps_low_vote_long_tail(self, sample_df):
+        """filter_movies keeps low-vote movies and scores them as long-tail content."""
         from etl.pandas_etl import filter_movies
         result = filter_movies(sample_df)
-        assert len(result) == 2  # id 2 has only 20 votes
-        assert 2 not in result["id"].values
+        assert len(result) == 3
+        assert 2 in result["id"].values
+        assert "content_quality_score" in result.columns
+        assert "quality_bucket" in result.columns
 
-    def test_filter_movies_removes_nulls(self):
-        """filter_movies removes rows with null title/overview."""
+    def test_filter_movies_removes_null_title_but_keeps_missing_overview(self):
+        """filter_movies removes rows without identity but keeps weak metadata."""
         from etl.pandas_etl import filter_movies
         df = pd.DataFrame({
-            "id": [1, 2],
-            "title": ["Movie", None],
-            "overview": ["Story", "Another"],
-            "vote_count": [100, 100],
+            "id": [1, 2, 3],
+            "title": ["Movie", None, "No Overview"],
+            "overview": ["Story", "Another", None],
+            "vote_count": [100, 100, 0],
         })
         result = filter_movies(df)
-        assert len(result) == 1
+        assert len(result) == 2
+        assert 3 in result["id"].values
+
+    def test_filter_movies_deduplicates_by_highest_signal(self):
+        """filter_movies keeps one deterministic row per movie id."""
+        from etl.pandas_etl import filter_movies
+        df = pd.DataFrame({
+            "id": [1, 1, 2],
+            "title": ["Movie A Low", "Movie A High", "Movie B"],
+            "overview": ["Story", "Better story", "Another"],
+            "vote_count": [100, 500, 100],
+            "popularity": [10.0, 40.0, 20.0],
+        })
+
+        result = filter_movies(df)
+
+        assert len(result) == 2
+        assert result[result["id"] == 1].iloc[0]["title"] == "Movie A High"
 
     def test_quality_checks_returns_metrics(self, sample_df):
         """run_quality_checks returns dict with expected keys."""
@@ -75,6 +104,8 @@ class TestIngest:
         assert "total_rows" in metrics
         assert "null_titles" in metrics
         assert metrics["total_rows"] == 3
+        assert metrics["duplicate_ids"] == 0
+        assert metrics["title_completeness"] == 1.0
 
 
 # ----- Transform Tests -----
@@ -157,6 +188,30 @@ class TestIndex:
         vecs = np.random.rand(50, 128).astype(np.float32)
         idx = build_faiss_index(vecs)
         assert idx.ntotal == 50
+
+    def test_atomic_parquet_write_replaces_existing_file(self, tmp_path):
+        """atomic_write_parquet replaces only after a complete write."""
+        from etl.pandas_etl import atomic_write_parquet
+
+        output_path = tmp_path / "movies.parquet"
+        atomic_write_parquet(pd.DataFrame({"id": [1], "title": ["Old"]}), output_path)
+        atomic_write_parquet(pd.DataFrame({"id": [2], "title": ["New"]}), output_path)
+
+        result = pd.read_parquet(output_path)
+        assert result.to_dict(orient="records") == [{"id": 2, "title": "New"}]
+
+    def test_batch_invariants_reject_duplicate_ids(self):
+        """assert_batch_invariants fails before bad serving artifacts are published."""
+        from etl.pandas_etl import assert_batch_invariants
+
+        df = pd.DataFrame({
+            "id": [1, 1],
+            "title": ["A", "A duplicate"],
+            "overview": ["Story", "Story again"],
+        })
+
+        with pytest.raises(ValueError, match="duplicate movie ids"):
+            assert_batch_invariants(df, stage="silver")
 
     # Removed faiss_search test as search logic is inside faiss index mostly,
     # and we removed index.search wrapper function (it was just idx.search).

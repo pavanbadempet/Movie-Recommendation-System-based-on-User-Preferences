@@ -5,6 +5,14 @@ from airflow.operators.python import PythonOperator
 import sys
 import os
 
+# Import Kafka and Spark related operators if needed
+try:
+    from airflow.providers.apache.kafka.operators.produce import ProduceToTopicOperator
+    from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
+except ImportError:
+    # These will be available after the providers are installed
+    pass
+
 # Function to check for Kaggle credentials
 def check_kaggle_creds():
     kaggle_key = os.environ.get("KAGGLE_KEY")
@@ -47,19 +55,25 @@ with DAG(
     kaggle datasets download -d alanvourch/tmdb-movies-daily-updates -p data/raw --unzip --force
     mv data/raw/TMDB_movie_dataset_*.csv data/raw/TMDB_all_movies.csv || true
     """
-    
+
     t1_download = BashOperator(
         task_id='download_from_kaggle',
         bash_command=download_cmd,
     )
 
-    # Task 3: Run Spark ETL
+    # Task 3: Run Spark ETL with Delta Lake format (Medallion Architecture)
     # IDEMPOTENCY: Pass logical date {{ ds }} for partitioning
     t2_spark_etl = BashOperator(
         task_id='run_spark_etl',
-        bash_command='cd movie-rec && python etl/pyspark_etl.py --date {{ ds }}',
+        bash_command=(
+            'cd movie-rec && python etl/pyspark_etl.py '
+            '--date {{ ds }} --run-id "{{ run_id }}" --sink delta '
+            '--tenant-id "${NOVA_TENANT_ID:-demo-media-co}" '
+            '--catalog-id "${NOVA_CATALOG_ID:-tmdb-movies}" '
+            '--source-system tmdb_kaggle'
+        ),
     )
-    
+
     # Task 4: Rebuild Index
     # Uses our consolidated pandas_etl.py just for indexing
     t3_index = BashOperator(

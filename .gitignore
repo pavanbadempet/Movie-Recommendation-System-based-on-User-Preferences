@@ -30,6 +30,7 @@ data/processed/*.parquet
 models/*.index
 models/*.npy
 models/*.joblib
+models/*.joblib.metadata.json
 
 # Keep directory structure
 !data/raw/.gitkeep
