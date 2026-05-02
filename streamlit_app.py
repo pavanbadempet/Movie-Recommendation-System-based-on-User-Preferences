@@ -95,15 +95,21 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Config
-# Support multiple backends for high availability (failover)
-# Add your HF Space URL first, keep Render as fallback
+# Try both free hosts. Either one can sleep or time out, so product API calls
+# use request-level failover instead of trusting a single active backend.
+RENDER_GATEWAY_URL = "https://movie-recs-api-5qvy.onrender.com"
+HF_SPACE_URL = "https://pavanbadempet-movie-rec-api.hf.space"
+ENABLE_DIRECT_HF_FALLBACK = os.getenv("NOVA_ENABLE_DIRECT_HF_FALLBACK", "true").strip().lower() in {"1", "true", "yes", "on"}
+
 BACKEND_URLS = [
-    os.getenv("API_URL", ""),  # From Hugging Face Secrets or local env
-    "https://movie-recs-api-5qvy.onrender.com", # Primary gateway (Render)
-    "https://pavanbadempet-movie-rec-api.hf.space", # Direct model service fallback (Hugging Face)
+    os.getenv("API_URL", ""),  # Local/dev override or Streamlit secret
+    os.getenv("NOVA_BACKEND_URL", ""),
+    RENDER_GATEWAY_URL,
 ]
-# Clean up empty strings
-BACKEND_URLS = [url.strip("/") for url in BACKEND_URLS if url]
+if ENABLE_DIRECT_HF_FALLBACK:
+    BACKEND_URLS.append(HF_SPACE_URL)
+
+BACKEND_URLS = list(dict.fromkeys(url.strip("/") for url in BACKEND_URLS if url))
 
 TMDB_KEY = os.getenv("TMDB_API_KEY")
 NOVA_API_KEY = os.getenv("NOVA_API_KEY", "")
@@ -126,42 +132,77 @@ def api_headers(extra_headers=None):
     return headers
 
 
-def api_get(path, params=None, timeout=15):
-    """Call the active backend with the current tenant/API-key context."""
+def is_direct_hf_url(url):
+    """Return true for the vector-heavy HF Space when direct fallback is disabled."""
+    return "pavanbadempet-movie-rec-api.hf.space" in str(url)
+
+
+def candidate_backend_urls():
+    """Return active backend first, then configured fallbacks without duplicates."""
+    urls = []
+    active = st.session_state.get("API_URL")
+    if active:
+        urls.append(active)
+    urls.extend(BACKEND_URLS)
+
+    seen = set()
+    ordered = []
+    for url in urls:
+        if not url or url in seen:
+            continue
+        if is_direct_hf_url(url) and not ENABLE_DIRECT_HF_FALLBACK:
+            continue
+        ordered.append(url)
+        seen.add(url)
+    return ordered
+
+
+def set_active_backend(url):
+    st.session_state.API_URL = url
+    st.session_state.backend_ready = True
+
+
+def request_json_failover(method, path, params=None, payload=None, timeout=15, return_error=False):
+    """Call product API backends in order; one timed-out host should not break the UI."""
     if not st.session_state.get("backend_ready"):
         return None
-    api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
-    try:
-        response = requests.get(
-            f"{api_url}{path}",
-            params=params,
-            headers=api_headers(),
-            timeout=timeout,
-        )
-        if response.ok:
-            return response.json()
-    except requests.RequestException:
-        return None
+
+    last_error = None
+    for api_url in candidate_backend_urls():
+        try:
+            response = requests.request(
+                method,
+                f"{api_url}{path}",
+                params=params,
+                json=payload,
+                headers=api_headers(),
+                timeout=timeout,
+            )
+            if response.ok:
+                set_active_backend(api_url)
+                return response.json()
+
+            last_error = f"{response.status_code}: {response.text[:200]}"
+            if response.status_code < 500:
+                break
+        except requests.RequestException as exc:
+            last_error = str(exc)
+            continue
+
+    st.session_state.last_backend_error = last_error
+    if return_error and last_error:
+        return {"error": last_error}
     return None
+
+
+def api_get(path, params=None, timeout=15):
+    """Call the active backend with the current tenant/API-key context."""
+    return request_json_failover("GET", path, params=params, timeout=timeout)
 
 
 def api_post(path, payload, timeout=15):
     """Post to the active backend with the current tenant/API-key context."""
-    if not st.session_state.get("backend_ready"):
-        return None
-    api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
-    try:
-        response = requests.post(
-            f"{api_url}{path}",
-            json=payload,
-            headers=api_headers(),
-            timeout=timeout,
-        )
-        if response.ok:
-            return response.json()
-        return {"error": response.text, "status_code": response.status_code}
-    except requests.RequestException as exc:
-        return {"error": str(exc)}
+    return request_json_failover("POST", path, payload=payload, timeout=timeout, return_error=True)
 
 
 @st.cache_data(ttl=600)
@@ -263,7 +304,7 @@ def wake_up_backend():
                 timeout=timeout,
             )
             if probe.ok and probe.json():
-                st.session_state.API_URL = url
+                set_active_backend(url)
                 return True
         except (requests.RequestException, ValueError):
             return False
@@ -271,14 +312,20 @@ def wake_up_backend():
 
     # 1. Fast check existing known-good URL, but only if the catalog is ready.
     if "API_URL" in st.session_state:
-        if catalog_ready(st.session_state.API_URL, timeout=5):
+        active_url = st.session_state.API_URL
+        if is_direct_hf_url(active_url) and not ENABLE_DIRECT_HF_FALLBACK:
+            st.session_state.pop("API_URL", None)
+        elif catalog_ready(active_url, timeout=5):
             return True
-        st.session_state.pop("API_URL", None)
+        else:
+            st.session_state.pop("API_URL", None)
 
     # 2. Sequential ping of all configured backends.
     with st.spinner("Booting up the recommendation engine... this can take a minute on free hosting"):
         for attempt in range(18):
             for url in BACKEND_URLS:
+                if is_direct_hf_url(url) and not ENABLE_DIRECT_HF_FALLBACK:
+                    continue
                 timeout = 6 if attempt < 3 else 12
                 if catalog_ready(url, timeout=timeout):
                     domain = url.split("//")[-1].split(".")[0]
@@ -289,32 +336,11 @@ def wake_up_backend():
     return False
 
 
-def candidate_backend_urls():
-    """Return active backend first, then fallbacks without duplicates."""
-    urls = []
-    active = st.session_state.get("API_URL")
-    if active:
-        urls.append(active)
-    urls.extend(BACKEND_URLS)
-    seen = set()
-    ordered = []
-    for url in urls:
-        if url and url not in seen:
-            ordered.append(url)
-            seen.add(url)
-    return ordered
-
-
-def set_active_backend(url):
-    st.session_state.API_URL = url
-    st.session_state.backend_ready = True
-
-
 # Initialize connection on app load
 if "backend_ready" not in st.session_state or "API_URL" not in st.session_state:
     st.session_state.backend_ready = wake_up_backend()
 
-def search_movies(query):
+def legacy_search_movies(query):
     """Search movies via API."""
     if not st.session_state.backend_ready:
         st.error("⚠️ The engine is still waking up. Give it a moment to stretch its legs.")
@@ -335,7 +361,7 @@ def search_movies(query):
     return []
 
 
-def ai_search_movies(query):
+def legacy_ai_search_movies(query):
     """Hybrid AI search via sparse+dense/rerank endpoint."""
     if not st.session_state.backend_ready:
         st.error("⚠️ The engine is still waking up. Give it a moment.")
@@ -379,7 +405,7 @@ def fetch_all_movie_titles(backend_urls, version=4):
     return {"api_url": None, "titles": []}
 
 
-def get_recommendations(movie_id, n=10):
+def legacy_get_recommendations(movie_id, n=10):
     """Get recommendations via API."""
     try:
         api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
@@ -392,7 +418,47 @@ def get_recommendations(movie_id, n=10):
         if r.ok:
             return r.json()
     except Exception as e:
-        st.error(f"Error: {e}")
+            st.error(f"Error: {e}")
+    return {}
+
+
+def search_movies(query):
+    """Search movies via the API with backend failover."""
+    if not st.session_state.backend_ready:
+        st.error("The engine is still waking up. Give it a moment.")
+        return []
+
+    results = api_get("/v1/search", params={"q": query, "limit": 100}, timeout=15)
+    if results is not None:
+        return results
+
+    st.error("Search is unavailable right now. The backend may still be redeploying.")
+    return []
+
+
+def ai_search_movies(query):
+    """Hybrid AI search via the API with backend failover."""
+    if not st.session_state.backend_ready:
+        st.error("The engine is still waking up. Give it a moment.")
+        return []
+
+    results = api_get("/v1/search/ai", params={"q": query, "limit": 100}, timeout=45)
+    if results is not None:
+        return results
+
+    st.error("AI search is unavailable right now.")
+    return []
+
+
+def get_recommendations(movie_id, n=10):
+    """Get recommendations via the API with backend failover."""
+    result = api_get(f"/v1/recommendations/id/{movie_id}", params={"n": n}, timeout=45)
+    if result is not None:
+        return result
+
+    last_error = st.session_state.get("last_backend_error")
+    if last_error:
+        st.error(f"Recommendation service is still warming or redeploying: {last_error}")
     return {}
 
 
@@ -1749,12 +1815,8 @@ elif st.session_state.page == "search":
             selected_id = title_options[selected_title]["id"]
             
             # Fetch the full movie object using the ID endpoint
-            try:
-                api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
-                r = requests.get(f"{api_url}/movie/{selected_id}", timeout=10)
-                if r.ok:
-                    movie_to_fetch = r.json()
-            except requests.RequestException:
+            movie_to_fetch = api_get(f"/movie/{selected_id}", timeout=15)
+            if not movie_to_fetch:
                 st.error("Failed to load movie details.")
     else:
         st.warning("⚠️ Could not load the movie catalog. The recommendation engine may still be starting up.")
@@ -1809,23 +1871,12 @@ elif st.session_state.page == "search":
         if st.button("✨ Get Similar Recommendations", type="primary", use_container_width=True):
             st.session_state.selected_rec = None
             with st.spinner("Analysing semantics..."):
-                # Call API
-                try:
-                    api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
-                    r = requests.get(
-                        f"{api_url}/v1/recommendations/id/{movie['id']}",
-                        params={"n": 10},
-                        headers=api_headers(),
-                        timeout=30,
-                    )
-                    if r.ok:
-                        result = r.json()
-                        st.session_state.recs = result["recommendations"]
-                        st.session_state.source_movie = movie
-                    else:
-                        st.error("API Error")
-                except Exception as e:
-                    st.error(f"Connection Error: {e}")
+                result = get_recommendations(movie["id"], n=10)
+                if result and result.get("recommendations"):
+                    st.session_state.recs = result["recommendations"]
+                    st.session_state.source_movie = movie
+                else:
+                    st.error("Recommendations are unavailable right now. Please retry in a moment.")
 
     # Display Recommendations Grid (Shared Logic)
     if "recs" in st.session_state and st.session_state.recs:
@@ -1901,11 +1952,9 @@ elif st.session_state.page == "chat":
                     recent_msgs = st.session_state.chat_history[-6:]
                     clean_msgs = [{"role": m["role"], "content": m["content"]} for m in recent_msgs if m["role"] != "system"]
 
-                    api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
-                    r = requests.post(f"{api_url}/chat", json={"messages": clean_msgs}, timeout=60)
-
-                    if r.ok:
-                        response_text = r.json()["content"]
+                    result = api_post("/chat", {"messages": clean_msgs}, timeout=60)
+                    if result and not result.get("error"):
+                        response_text = result["content"]
                         st.markdown(response_text)
                         st.session_state.chat_history.append({"role": "assistant", "content": response_text})
                     else:
