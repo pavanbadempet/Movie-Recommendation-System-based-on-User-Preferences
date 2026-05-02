@@ -1,12 +1,12 @@
 import os
 import logging
-import requests
 from .recommender import get_recommender
+from .openrouter_client import chat_completion, configured_models, openrouter_api_key
 
 logger = logging.getLogger(__name__)
 
 # Configure OpenRouter
-OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_KEY = openrouter_api_key()
 if not OPENROUTER_KEY:
     logger.warning("OPENROUTER_API_KEY not set. GenAI features will be disabled.")
 
@@ -58,41 +58,17 @@ def generate_chat_response(messages: list[dict]) -> dict:
     """
     
     try:
-        headers = {
-            "Authorization": f"Bearer {OPENROUTER_KEY}",
-            "HTTP-Referer": "https://github.com/pavanbadempet/Movie-Recommendation-System",
-            "X-Title": "Movie-Recommendation-System",
-        }
-        
-        models = [
-            "meta-llama/llama-3.3-70b-instruct:free",
-            "google/gemini-2.0-pro-exp-02-05:free",
-            "google/gemini-2.0-flash-lite-preview-02-05:free"
-        ]
-        
-        last_error = None
-        for model in models:
-            payload = {
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"CONTEXT:\n{context_text}\n\nUSER QUESTION: {user_msg}"}
-                ],
-                "temperature": 0.7
-            }
-            
-            try:
-                response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload, timeout=15)
-                response.raise_for_status()
-                return {"role": "assistant", "content": response.json()["choices"][0]["message"]["content"]}
-            except Exception as e:
-                last_error = str(e)
-                if 'response' in locals() and hasattr(response, 'text'):
-                    last_error += f" Response: {response.text[:200]}"
-                logger.warning(f"Model {model} failed: {last_error}. Trying next fallback model...")
-                
-        logger.error(f"GenAI generation failed (All fallbacks exhausted): {last_error}")
-        return {"role": "assistant", "content": "I'm having trouble connecting to my brain (OpenRouter API is currently overloaded). Please try again in exactly 15 seconds."}
+        content = chat_completion(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"CONTEXT:\n{context_text}\n\nUSER QUESTION: {user_msg}"},
+            ],
+            models=configured_models("OPENROUTER_CHAT_MODELS"),
+            temperature=0.7,
+            timeout_seconds=float(os.getenv("OPENROUTER_CHAT_TIMEOUT_SECONDS", "10")),
+            api_key=OPENROUTER_KEY,
+        )
+        return {"role": "assistant", "content": content}
     except Exception as e:
         logger.error(f"GenAI generation failed: {e}")
         return {"role": "assistant", "content": "I'm having trouble generating a response right now. Please try again shortly."}

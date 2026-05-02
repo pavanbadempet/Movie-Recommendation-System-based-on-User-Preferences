@@ -102,7 +102,7 @@ def download_file(url: str, dest_path: Path, chunk_size: int = 8192, required: b
         return False
 
 
-def ensure_model_files(models_dir: Path) -> dict[str, bool]:
+def ensure_model_files(models_dir: Path, selected_files: set[str] | list[str] | tuple[str, ...] | None = None) -> dict[str, bool]:
     """
     Ensure all required model files exist, downloading if necessary.
     
@@ -111,8 +111,14 @@ def ensure_model_files(models_dir: Path) -> dict[str, bool]:
     """
     results = {}
     force_refresh = os.getenv("FORCE_MODEL_REFRESH", "").lower() in {"1", "true", "yes"}
+    selected = set(selected_files) if selected_files is not None else None
     
     for filename, config in MODEL_FILES.items():
+        if selected is not None and filename not in selected:
+            logger.info("Skipping %s; not required for this serving profile", filename)
+            results[filename] = True
+            continue
+
         # Handle flexible destination paths
         if isinstance(config, dict):
             url = config.get("url")
@@ -175,7 +181,28 @@ def ensure_model_files(models_dir: Path) -> dict[str, bool]:
     return results
 
 
-# Run on module import if in production
-if os.getenv("RENDER") or os.getenv("STREAMLIT_RUNTIME"):
+def default_artifacts_for_serving_profile() -> set[str]:
+    """Return artifact names needed before the app starts in the current environment."""
+    profile = os.getenv("NOVA_SERVING_PROFILE", "auto").strip().lower()
+    low_memory = os.getenv("NOVA_LOW_MEMORY", "").strip().lower() in {"1", "true", "yes", "on"}
+    render_like = any(
+        os.getenv(name)
+        for name in (
+            "RENDER",
+            "RENDER_SERVICE_ID",
+            "RENDER_SERVICE_NAME",
+            "RENDER_EXTERNAL_URL",
+            "RENDER_EXTERNAL_HOSTNAME",
+        )
+    )
+
+    if profile in {"lite", "light", "low-memory", "metadata"} or low_memory or (profile == "auto" and render_like):
+        return {"movies_transformed.parquet", "nova_ranker.joblib", "nova_ranker.joblib.metadata.json"}
+
+    return set(MODEL_FILES)
+
+
+# Run on module import only for hosts that explicitly request eager artifact checks.
+if os.getenv("NOVA_EAGER_MODEL_DOWNLOAD", "").strip().lower() in {"1", "true", "yes", "on"}:
     MODELS_DIR = Path(__file__).parent.parent / "models"
-    ensure_model_files(MODELS_DIR)
+    ensure_model_files(MODELS_DIR, selected_files=default_artifacts_for_serving_profile())

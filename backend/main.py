@@ -7,6 +7,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from typing import Literal, Optional
+from urllib.parse import quote
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
@@ -22,6 +23,7 @@ from backend.experiments import assign_experiment, attach_experiment, summarize_
 from backend.auth import TenantContext, enforce_payload_context, resolve_tenant_context
 from backend.catalogs import profile_catalog_csv, persist_catalog_upload
 from backend.recommender import get_recommender, Recommender
+from backend.remote_recommender import remote_get_json
 from backend.usage import record_usage, summarize_usage
 
 # Configure logging
@@ -250,6 +252,23 @@ def get_rec() -> Recommender:
     return _recommender
 
 
+async def remote_payload_or_raise(
+    path: str,
+    params: dict | None = None,
+    context: TenantContext | None = None,
+) -> object | None:
+    """Return remote recommender payload when configured, otherwise None."""
+    remote_response = await remote_get_json(path, params=params, context=context)
+    if remote_response is None:
+        return None
+    if remote_response.status_code >= 400:
+        detail = remote_response.payload
+        if isinstance(remote_response.payload, dict) and "detail" in remote_response.payload:
+            detail = remote_response.payload["detail"]
+        raise HTTPException(status_code=remote_response.status_code, detail=detail)
+    return remote_response.payload
+
+
 # ===== ASYNC TMDB FETCH FUNCTIONS =====
 
 async def fetch_trailer(movie_id: int) -> str | None:
@@ -327,6 +346,10 @@ async def enrich_movie(movie: dict) -> dict:
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint."""
+    load_recommender = os.getenv("NOVA_HEALTH_LOAD_RECOMMENDER", "true").strip().lower()
+    if load_recommender in {"0", "false", "no", "off"}:
+        return HealthResponse(status="healthy", movie_count=0)
+
     try:
         rec = get_rec()
         return HealthResponse(status="healthy", movie_count=len(rec.movies))
@@ -558,6 +581,13 @@ async def list_movies(
     offset: int = Query(default=0, ge=0, description="Offset for pagination"),
 ):
     """List movies with pagination."""
+    remote_payload = await remote_payload_or_raise(
+        "/movies",
+        params={"limit": limit, "offset": offset},
+    )
+    if remote_payload is not None:
+        return remote_payload
+
     rec = get_rec()
     movies = rec.movies.iloc[offset:offset + limit]
     return movies.to_dict(orient="records")
@@ -569,6 +599,10 @@ async def get_all_titles():
     Get a lightweight list of all movie titles and IDs.
     Perfect for populating the Streamlit autocomplete dropdown.
     """
+    remote_payload = await remote_payload_or_raise("/movies/titles")
+    if remote_payload is not None:
+        return remote_payload
+
     rec = get_rec()
     return rec.get_all_titles()
 
@@ -583,6 +617,21 @@ async def search_movies(
     context: TenantContext = Depends(resolve_tenant_context),
 ):
     """Search movies by title."""
+    remote_payload = await remote_payload_or_raise(
+        "/v1/search",
+        params={"q": q, "limit": limit},
+        context=context,
+    )
+    if remote_payload is not None:
+        record_usage(
+            "search.remote",
+            context.tenant_id,
+            context.catalog_id,
+            plan=context.plan,
+            authenticated=context.authenticated,
+        )
+        return remote_payload
+
     rec = get_rec()
     results = rec.search_movies(q, limit=limit)
     record_usage(
@@ -603,8 +652,23 @@ async def ai_search_movies(
     context: TenantContext = Depends(resolve_tenant_context),
 ):
     """Hybrid AI search using sparse recall, optional dense recall, reranking, and diversity."""
-    rec = get_rec()
     result_limit = top_k or limit
+    remote_payload = await remote_payload_or_raise(
+        "/v1/search/ai",
+        params={"q": q, "limit": limit, "top_k": result_limit},
+        context=context,
+    )
+    if remote_payload is not None:
+        record_usage(
+            "search.ai.remote",
+            context.tenant_id,
+            context.catalog_id,
+            plan=context.plan,
+            authenticated=context.authenticated,
+        )
+        return remote_payload
+
+    rec = get_rec()
     results = rec.ai_search(q, n=result_limit)
     record_usage(
         "search.ai",
@@ -619,6 +683,10 @@ async def ai_search_movies(
 @app.get("/movie/{movie_id}", response_model=Movie)
 async def get_movie(movie_id: int):
     """Get a movie by TMDB ID."""
+    remote_payload = await remote_payload_or_raise(f"/movie/{movie_id}")
+    if remote_payload is not None:
+        return remote_payload
+
     rec = get_rec()
     movie = rec.get_movie_by_id(movie_id)
     if movie is None:
@@ -702,6 +770,21 @@ async def recommend_by_id(
     context: TenantContext = Depends(resolve_tenant_context),
 ):
     """Get recommendations for a movie by TMDB ID."""
+    remote_payload = await remote_payload_or_raise(
+        f"/v1/recommendations/id/{movie_id}",
+        params={"n": n},
+        context=context,
+    )
+    if remote_payload is not None:
+        record_usage(
+            "recommendations.id.remote",
+            context.tenant_id,
+            context.catalog_id,
+            plan=context.plan,
+            authenticated=context.authenticated,
+        )
+        return remote_payload
+
     rec = get_rec()
     
     # Get query movie
@@ -733,6 +816,21 @@ async def recommend_by_id_enriched(
     context: TenantContext = Depends(resolve_tenant_context),
 ):
     """Get recommendations with FULL TMDB data (trailers, cast, etc) - PARALLEL FETCH."""
+    remote_payload = await remote_payload_or_raise(
+        f"/v1/recommendations/id/{movie_id}/enriched",
+        params={"n": n},
+        context=context,
+    )
+    if remote_payload is not None:
+        record_usage(
+            "recommendations.id.enriched.remote",
+            context.tenant_id,
+            context.catalog_id,
+            plan=context.plan,
+            authenticated=context.authenticated,
+        )
+        return remote_payload
+
     rec = get_rec()
     
     # Get query movie
@@ -767,6 +865,21 @@ async def recommend_by_title(
     context: TenantContext = Depends(resolve_tenant_context),
 ):
     """Get recommendations for a movie by title."""
+    remote_payload = await remote_payload_or_raise(
+        f"/v1/recommendations/title/{quote(title, safe='')}",
+        params={"n": n},
+        context=context,
+    )
+    if remote_payload is not None:
+        record_usage(
+            "recommendations.title.remote",
+            context.tenant_id,
+            context.catalog_id,
+            plan=context.plan,
+            authenticated=context.authenticated,
+        )
+        return remote_payload
+
     rec = get_rec()
     
     # Search for the movie
