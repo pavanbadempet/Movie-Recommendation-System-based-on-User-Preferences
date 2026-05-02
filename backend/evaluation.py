@@ -59,8 +59,15 @@ def evaluate_recommendation_quality(recommender: Any, sample_size: int = 25, k: 
 
     if vectors is None or index is None:
         metrics["status"] = "partial"
-        metrics["vectors"]["available"] = False
-        metrics["recommendations"]["available"] = False
+        metrics["vectors"] = {
+            "available": False,
+            "artifact_status": getattr(recommender, "_artifact_status", {}),
+        }
+        metrics["recommendations"] = {
+            "available": True,
+            "mode": "content_sparse_fallback",
+            "note": "Vector artifacts are unavailable or failed alignment checks; sparse content fallback is serving recommendations.",
+        }
         return metrics
 
     vector_count = int(getattr(index, "ntotal", 0))

@@ -40,7 +40,21 @@ jobs:
               folder_path='.',
               repo_id='pavanbadempet/movie-rec-api',
               repo_type='space',
-              ignore_patterns=['.git/*', '.github/*']
+              ignore_patterns=[
+                  '.git/*',
+                  '.github/*',
+                  'models/*.npy',
+                  'models/*.index',
+                  'models/*.joblib',
+                  'models/*.joblib.metadata.json',
+                  'models/pipeline_manifest.json',
+                  'data/processed/*.parquet',
+                  'data/bronze/*',
+                  'data/silver/*',
+                  'data/gold/*',
+                  'data/manifests/*',
+                  'data/quality/*',
+              ]
           )
           print('Upload complete!')
           "

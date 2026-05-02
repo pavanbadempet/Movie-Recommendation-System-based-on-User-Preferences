@@ -4,10 +4,12 @@ This isn't just a database wrapper; it loads the FAISS index and handles the "fu
 of making recommendations feel personalized.
 """
 import logging
+import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
 from functools import lru_cache
 from typing import Any
+import gc
 
 import numpy as np
 import pandas as pd
@@ -77,16 +79,21 @@ class Recommender:
     def __init__(self):
         self._index: Any | None = None
         self._vectorizer: Any | None = None
+        self._item_vectorizer: Any | None = None
         self._movies: pd.DataFrame | None = None
         self._vectors: np.ndarray | None = None
+        self._artifact_movie_ids: np.ndarray | None = None
+        self._artifact_manifest: dict[str, Any] | None = None
         self._content_text: pd.Series | None = None
         self._tfidf_matrix = None
+        self._item_tfidf_matrix = None
         self._query_encoder = None
         self._cross_encoder = None
         self._learned_ranker = None
         self._behavior_features: dict[str, Any] = {}
         self._behavior_features_refreshed_at: datetime | None = None
         self._low_memory = _low_memory_serving_enabled()
+        self._artifact_status: dict[str, Any] = {"vector_artifacts_ready": False}
     
     def load(self) -> "Recommender":
         """
@@ -96,11 +103,12 @@ class Recommender:
         logger.info("Loading recommendation engine...")
         selected_artifacts = {
             "movies_transformed.parquet",
+            "pipeline_manifest.json",
             "nova_ranker.joblib",
             "nova_ranker.joblib.metadata.json",
         }
         if not self._low_memory or _env_truthy("NOVA_FORCE_VECTOR_ARTIFACTS"):
-            selected_artifacts.update({"sbert_embeddings.npy", "faiss.index"})
+            selected_artifacts.update({"sbert_embeddings.npy", "faiss.index", "movie_ids.npy"})
         ensure_model_files(MODELS_DIR, selected_files=selected_artifacts)
         if self._low_memory:
             logger.info("Using low-memory serving profile; FAISS/SBERT artifacts are optional.")
@@ -133,6 +141,24 @@ class Recommender:
                 logger.warning("SBERT embeddings not found, using TF-IDF vectors.")
             else:
                 logger.warning("No vectors found.")
+
+        movie_ids_path = MODELS_DIR / "movie_ids.npy"
+        if movie_ids_path.exists():
+            self._artifact_movie_ids = np.load(movie_ids_path, mmap_mode="r")
+            logger.info("Loaded vector movie id map with %s ids", len(self._artifact_movie_ids))
+
+        manifest_path = MODELS_DIR / "pipeline_manifest.json"
+        if manifest_path.exists():
+            try:
+                self._artifact_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                self._artifact_status.update(
+                    {
+                        "manifest_run_id": self._artifact_manifest.get("run_id"),
+                        "manifest_run_date": self._artifact_manifest.get("run_date"),
+                    }
+                )
+            except Exception as exc:
+                logger.warning("Could not read pipeline manifest %s: %s", manifest_path, exc)
         
         # Load movie metadata - only essential columns to save memory
         movies_path = DATA_DIR / "movies_transformed.parquet"
@@ -143,7 +169,7 @@ class Recommender:
             # Only load columns we actually need for recommendations
             essential_cols = ['id', 'title', 'overview', 'genres', 'vote_average',
                             'vote_count', 'popularity', 'release_date', 'poster_path',
-                            'director', 'original_language',
+                            'director', 'original_language', 'tagline', 'runtime',
                             'metadata_completeness', 'content_quality_score',
                             'quality_bucket', 'searchable', 'recommendable',
                             'public_demo_eligible']
@@ -155,6 +181,7 @@ class Recommender:
                 # Fallback if some columns don't exist
                 self._movies = pd.read_parquet(movies_path)
             self._optimize_movie_frame()
+            self._validate_vector_artifacts()
             logger.info(f"Loaded {len(self._movies):,} movies")
         else:
             raise FileNotFoundError("Movie data not found. Run the ETL pipeline first.")
@@ -226,6 +253,149 @@ class Recommender:
             if column in self._movies.columns:
                 self._movies[column] = self._movies[column].fillna("").astype("category")
 
+    def _disable_vector_artifacts(self, reason: str) -> None:
+        """Disable vector serving when artifacts violate row-alignment contracts."""
+        logger.warning("Disabling FAISS/SBERT recommendations: %s", reason)
+        self._artifact_status.update(
+            {
+                "vector_artifacts_ready": False,
+                "disabled_reason": reason,
+            }
+        )
+        self._index = None
+        self._vectors = None
+        gc.collect()
+
+    @staticmethod
+    def _movie_id_sha256(movie_ids: np.ndarray) -> str:
+        """Hash the exact ordered movie-id vector used by FAISS row positions."""
+        ids = np.asarray(movie_ids, dtype=np.int64).astype("<i8", copy=False)
+        return hashlib.sha256(ids.tobytes()).hexdigest()
+
+    def _expected_manifest_contract(self) -> dict[str, Any]:
+        """Extract row-level expectations from the optional pipeline manifest."""
+        manifest = self._artifact_manifest or {}
+        contract = manifest.get("serving_contract") or {}
+        quality = manifest.get("quality") or {}
+        return {
+            "movie_count": contract.get("movie_rows") or quality.get("serving_rows"),
+            "vector_count": contract.get("embedding_rows") or quality.get("embedding_rows"),
+            "index_count": contract.get("faiss_index_size") or quality.get("faiss_index_size"),
+            "id_map_count": contract.get("movie_id_map_rows") or quality.get("movie_id_map_rows"),
+            "movie_id_sha256": contract.get("movie_id_sha256") or quality.get("movie_id_sha256"),
+        }
+
+    def _validate_vector_artifacts(self) -> None:
+        """Validate that vector artifacts are row-aligned with the serving catalog."""
+        if self._movies is None:
+            return
+
+        movie_count = len(self._movies)
+        vector_count = int(self._vectors.shape[0]) if self._vectors is not None and len(self._vectors.shape) == 2 else None
+        index_count = int(getattr(self._index, "ntotal", 0)) if self._index is not None else None
+        id_map_count = int(len(self._artifact_movie_ids)) if self._artifact_movie_ids is not None else None
+
+        self._artifact_status.update(
+            {
+                "movie_count": movie_count,
+                "vector_count": vector_count,
+                "faiss_index_count": index_count,
+                "movie_id_map_count": id_map_count,
+            }
+        )
+
+        expected = self._expected_manifest_contract()
+        for key, actual in (
+            ("movie_count", movie_count),
+            ("vector_count", vector_count),
+            ("index_count", index_count),
+            ("id_map_count", id_map_count),
+        ):
+            expected_value = expected.get(key)
+            if expected_value is not None and actual is not None and int(expected_value) != int(actual):
+                self._disable_vector_artifacts(
+                    f"pipeline manifest {key} ({expected_value}) != loaded artifact count ({actual})"
+                )
+                return
+
+        if self._vectors is None and self._index is None:
+            return
+        if self._vectors is None or self._index is None:
+            self._disable_vector_artifacts("both embedding matrix and FAISS index must be present")
+            return
+        if vector_count != index_count:
+            self._disable_vector_artifacts(f"embedding rows ({vector_count}) != FAISS rows ({index_count})")
+            return
+
+        if self._artifact_movie_ids is None:
+            if _env_truthy("NOVA_ALLOW_LEGACY_ROW_ALIGNED_VECTORS"):
+                if vector_count != movie_count:
+                    self._disable_vector_artifacts(
+                        f"vector rows ({vector_count}) != serving catalog rows ({movie_count}) and no movie_ids.npy map exists"
+                    )
+                    return
+                self._artifact_status.update(
+                    {
+                        "vector_artifacts_ready": True,
+                        "disabled_reason": None,
+                        "legacy_row_alignment": True,
+                    }
+                )
+                return
+
+            self._disable_vector_artifacts(
+                "movie_ids.npy is required for vector serving; row count alone cannot prove FAISS/catalog alignment"
+            )
+            return
+
+        if id_map_count != vector_count:
+            self._disable_vector_artifacts(f"movie id map rows ({id_map_count}) != vector rows ({vector_count})")
+            return
+
+        artifact_id_values = np.asarray(self._artifact_movie_ids, dtype=np.int64)
+        actual_id_hash = self._movie_id_sha256(artifact_id_values)
+        self._artifact_status["movie_id_sha256"] = actual_id_hash
+        expected_id_hash = expected.get("movie_id_sha256")
+        if expected_id_hash and expected_id_hash != actual_id_hash:
+            self._disable_vector_artifacts("movie_ids.npy checksum does not match the pipeline manifest")
+            return
+
+        artifact_ids = pd.Series(artifact_id_values).astype("int64")
+        if artifact_ids.duplicated().any():
+            self._disable_vector_artifacts("movie_ids.npy contains duplicate movie ids")
+            return
+
+        movie_ids = pd.to_numeric(self._movies["id"], errors="coerce")
+        if movie_ids.isna().any():
+            self._disable_vector_artifacts("serving catalog contains non-numeric movie ids")
+            return
+
+        current_ids = movie_ids.astype("int64").to_numpy()
+        if len(current_ids) != len(artifact_id_values):
+            self._disable_vector_artifacts(
+                f"serving catalog rows ({len(current_ids)}) != vector id rows ({len(artifact_id_values)})"
+            )
+            return
+
+        if not np.array_equal(current_ids, artifact_id_values):
+            current_set = set(current_ids.tolist())
+            artifact_set = set(artifact_id_values.tolist())
+            if current_set != artifact_set:
+                self._disable_vector_artifacts("vector id map does not contain the same movie ids as the catalog")
+                return
+
+            logger.warning("Reordering serving catalog to match vector movie id map.")
+            reordered = (
+                self._movies.assign(_movie_id_for_alignment=current_ids)
+                .drop_duplicates(subset=["_movie_id_for_alignment"], keep="first")
+                .set_index("_movie_id_for_alignment")
+                .loc[artifact_id_values]
+                .reset_index(drop=True)
+            )
+            self._movies = reordered
+
+        self._artifact_status.update({"vector_artifacts_ready": True, "disabled_reason": None})
+
     def _build_sparse_retrieval_index(self) -> None:
         """Build a TF-IDF recall index for hybrid search and cold-start resilience."""
         from sklearn.feature_extraction.text import TfidfVectorizer
@@ -261,6 +431,53 @@ class Recommender:
         """Build sparse retrieval lazily when a request path needs AI search."""
         if self._tfidf_matrix is None or self._vectorizer is None:
             self._build_sparse_retrieval_index()
+
+    def _build_item_retrieval_index(self) -> None:
+        """Build a plot/genre-focused sparse index for item-to-item recommendations."""
+        from sklearn.feature_extraction.text import TfidfVectorizer
+
+        if self._movies is None:
+            return
+
+        def text_column(column: str) -> pd.Series:
+            if column not in self._movies.columns:
+                return pd.Series([""] * len(self._movies), index=self._movies.index)
+            return self._movies[column].fillna("").astype(str)
+
+        overview = text_column("overview")
+        tagline = text_column("tagline")
+        genres = text_column("genres").str.replace(",", " ", regex=False)
+        language = text_column("original_language")
+
+        # Item recommendations should be about story, tone, and genre. Title is
+        # deliberately omitted so "Avatar" does not mostly retrieve making-of
+        # documentaries just because they repeat the title.
+        item_text = (
+            overview
+            + ". "
+            + tagline
+            + ". Genres "
+            + genres
+            + ". Language "
+            + language
+        )
+
+        default_features = "18000" if self._low_memory else "40000"
+        max_features = int(os.getenv("NOVA_ITEM_TFIDF_MAX_FEATURES", default_features))
+        self._item_vectorizer = TfidfVectorizer(
+            max_features=max_features,
+            ngram_range=(1, 2),
+            stop_words="english",
+            min_df=1,
+            dtype=np.float32,
+        )
+        self._item_tfidf_matrix = self._item_vectorizer.fit_transform(item_text)
+        logger.info("Built item-to-item sparse retrieval index with %s features", len(self._item_vectorizer.vocabulary_))
+
+    def _ensure_item_retrieval_index(self) -> None:
+        """Build item recommendation sparse retrieval lazily."""
+        if self._item_tfidf_matrix is None or self._item_vectorizer is None:
+            self._build_item_retrieval_index()
 
     def _dense_query_enabled(self) -> bool:
         """Return whether online dense query encoding should be attempted."""
@@ -377,13 +594,33 @@ class Recommender:
 
     def _apply_learned_ranker(self, candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Apply the trained ranker artifact when available."""
-        if self._learned_ranker is None or not candidates:
+        if self._learned_ranker is None or not candidates or not self._learned_ranker_enabled():
             return candidates
         try:
             return self._learned_ranker.rerank(candidates)
         except Exception as exc:
             logger.warning("Learned ranker skipped: %s", exc)
             return candidates
+
+    def _learned_ranker_enabled(self) -> bool:
+        """Return whether the learned ranker has enough signal to influence serving."""
+        value = os.getenv("NOVA_ENABLE_LEARNED_RANKER", "auto").strip().lower()
+        if value in {"1", "true", "yes", "on"}:
+            return True
+        if value in {"0", "false", "no", "off"}:
+            return False
+
+        metadata = getattr(self._learned_ranker, "metadata", {}) or {}
+        training_mode = str(metadata.get("training_mode") or "").lower()
+        try:
+            feedback_count = int(metadata.get("feedback_item_count") or 0)
+        except (TypeError, ValueError):
+            feedback_count = 0
+        min_feedback = int(os.getenv("NOVA_MIN_RANKER_FEEDBACK_ITEMS", "100"))
+
+        if training_mode == "catalog_bootstrap" and feedback_count < min_feedback:
+            return False
+        return feedback_count >= min_feedback
 
     def _behavior_boost(self, movie_id: Any) -> tuple[float, list[str]]:
         """Return a bounded score nudge from recent product behavior."""
@@ -633,16 +870,16 @@ class Recommender:
         if not query:
             return []
             
-        q_lower = query.lower()
+        q_lower = query.lower().strip()
         
         # 1. Title Match (Weight: 10)
-        mask_title = self._movies["title"].str.lower().str.contains(q_lower, na=False)
+        mask_title = self._movies["title"].str.lower().str.contains(q_lower, regex=False, na=False)
         
         # 2. Overview Match (Weight: 3) - Allows searching by plot concepts
-        mask_overview = self._movies["overview"].str.lower().str.contains(q_lower, na=False)
+        mask_overview = self._movies["overview"].str.lower().str.contains(q_lower, regex=False, na=False)
         
         # 3. Genre Match (Weight: 5)
-        mask_genre = self._movies["genres"].str.lower().str.contains(q_lower, na=False)
+        mask_genre = self._movies["genres"].str.lower().str.contains(q_lower, regex=False, na=False)
         
         # Combine matches
         matches = self._movies[mask_title | mask_overview | mask_genre].copy()
@@ -678,16 +915,32 @@ class Recommender:
         return matches.to_dict(orient="records")
 
     def _metadata_recommend_by_index(self, movie_idx: int, n: int = 10) -> list[dict]:
-        """Free-tier fallback recommender when vector artifacts are intentionally not loaded."""
+        """Content-based fallback recommender when vector artifacts are unavailable."""
         if self._movies is None or movie_idx < 0 or movie_idx >= len(self._movies):
             return []
+
+        self.refresh_behavior_features()
+        try:
+            self._ensure_item_retrieval_index()
+            content_scores = self._item_tfidf_matrix[movie_idx].dot(self._item_tfidf_matrix.T).toarray().ravel()
+        except Exception as exc:
+            logger.warning("Item sparse similarity unavailable; using metadata-only scoring: %s", exc)
+            content_scores = np.zeros(len(self._movies), dtype=np.float32)
 
         query_movie = self.get_movie_by_index(movie_idx)
         q_genres = self._genre_set(query_movie)
         q_director = str(query_movie.get("director") or "").strip().lower()
         q_language = str(query_movie.get("original_language") or "").strip().lower()
+        query_votes = float(query_movie.get("vote_count") or 0)
+        query_runtime = float(query_movie.get("runtime") or 0)
+        q_title_tokens = {
+            token
+            for token in str(query_movie.get("title") or "").lower().replace(":", " ").replace("-", " ").split()
+            if len(token) >= 4 and token not in {"movie", "part", "chapter"}
+        }
 
-        scores = np.zeros(len(self._movies), dtype=np.float32)
+        scores = np.asarray(content_scores, dtype=np.float32) * 0.76
+
         def numeric_array(column: str, default: float = 0.0) -> np.ndarray:
             if column not in self._movies.columns:
                 return np.full(len(self._movies), default, dtype=np.float32)
@@ -696,57 +949,99 @@ class Recommender:
                 errors="coerce",
             ).fillna(default).to_numpy(dtype=np.float32)
 
+        genre_overlap = np.zeros(len(self._movies), dtype=np.float32)
         if q_genres and "genres" in self._movies.columns:
             genres = self._movies["genres"].fillna("").astype(str).str.lower()
             for genre in q_genres:
                 genre_mask = genres.str.contains(genre, regex=False, na=False).to_numpy()
-                scores += genre_mask.astype(np.float32) * 0.32
-            shared_count = np.maximum(scores / 0.32, 0)
-            scores += np.minimum(shared_count, 3) * 0.03
+                genre_overlap += genre_mask.astype(np.float32)
+            genre_ratio = genre_overlap / max(len(q_genres), 1)
+            scores += genre_ratio * 0.12
+            scores += np.minimum(genre_overlap, 2) * 0.02
 
         if q_director and q_director != "unknown" and "director" in self._movies.columns:
             directors = self._movies["director"].fillna("").astype(str).str.lower()
             director_mask = directors.eq(q_director).to_numpy()
-            scores += director_mask.astype(np.float32) * 0.18
+            scores += director_mask.astype(np.float32) * 0.08
 
         if q_language and "original_language" in self._movies.columns:
             languages = self._movies["original_language"].astype(str).str.lower()
             language_mask = languages.eq(q_language).to_numpy()
-            scores += language_mask.astype(np.float32) * 0.04
+            scores += language_mask.astype(np.float32) * 0.025
 
         if "content_quality_score" in self._movies.columns:
             quality = numeric_array("content_quality_score")
-            scores += np.clip(quality, 0, 1) * 0.22
+            scores += np.clip(quality, 0, 1) * 0.12
         else:
             vote_average = numeric_array("vote_average")
             vote_count = numeric_array("vote_count")
             confidence = np.minimum(1.0, np.log1p(np.maximum(vote_count, 0)) / 8.0)
-            scores += np.clip(vote_average / 10.0, 0, 1) * confidence * 0.18
+            scores += np.clip(vote_average / 10.0, 0, 1) * confidence * 0.10
+
+        if "vote_count" in self._movies.columns:
+            vote_count = numeric_array("vote_count")
+            scores += np.minimum(1.0, np.log1p(np.maximum(vote_count, 0)) / 10.0) * 0.06
 
         if "popularity" in self._movies.columns:
             popularity = numeric_array("popularity")
-            scores += np.minimum(1.0, np.log1p(np.maximum(popularity, 0)) / 8.0) * 0.12
+            scores += np.minimum(1.0, np.log1p(np.maximum(popularity, 0)) / 8.0) * 0.08
 
         scores[movie_idx] = -np.inf
         if len(scores) <= 1:
             return []
 
-        candidate_count = min(max(n * 6, n), len(scores) - 1)
+        candidate_count = min(max(n * 40, 250), len(scores) - 1)
         candidate_indices = np.argpartition(scores, -candidate_count)[-candidate_count:]
         candidate_indices = candidate_indices[np.argsort(scores[candidate_indices])[::-1]]
 
         results = []
         for idx in candidate_indices:
+            idx = int(idx)
             if len(results) >= n:
                 break
             if not np.isfinite(scores[idx]) or scores[idx] <= 0:
                 continue
 
-            movie = self.get_movie_by_index(int(idx))
+            movie = self.get_movie_by_index(idx)
+            movie_genres = self._genre_set(movie)
+            content_score = float(content_scores[idx]) if len(content_scores) > idx else 0.0
+            shared_genres = q_genres & movie_genres
+            candidate_votes = float(movie.get("vote_count") or 0)
+            candidate_runtime = float(movie.get("runtime") or 0)
+
+            if movie.get("public_demo_eligible") is False:
+                continue
+            if movie.get("recommendable") is False:
+                continue
+            if query_runtime >= 60 and 0 < candidate_runtime < 60:
+                continue
+            if "documentary" in movie_genres and "documentary" not in q_genres:
+                continue
+            if "tv movie" in movie_genres and "tv movie" not in q_genres:
+                continue
+            if not shared_genres and content_score < 0.10:
+                continue
+            min_votes = 500 if query_votes >= 5000 else 50
+            if candidate_votes < min_votes and content_score < 0.16:
+                continue
+            if {"animation", "family"} & movie_genres and not ({"animation", "family"} & q_genres):
+                scores[idx] -= 0.12
+            if "comedy" in movie_genres and "comedy" not in q_genres and content_score < 0.16:
+                continue
+
+            title_tokens = {
+                token
+                for token in str(movie.get("title") or "").lower().replace(":", " ").replace("-", " ").split()
+                if len(token) >= 4
+            }
+            if q_title_tokens & title_tokens and "documentary" not in movie_genres:
+                scores[idx] += 0.14
+
             reasons = []
-            shared_genres = q_genres & self._genre_set(movie)
             if shared_genres:
                 reasons.append(f"Shared genres: {', '.join(sorted(g.title() for g in shared_genres)[:2])}")
+            if content_score >= 0.18:
+                reasons.append("Similar story and setting")
             if q_director and str(movie.get("director") or "").strip().lower() == q_director:
                 reasons.append(f"Same director ({movie.get('director')})")
             if q_language and str(movie.get("original_language") or "").strip().lower() == q_language:
@@ -754,21 +1049,25 @@ class Recommender:
             if float(movie.get("vote_average") or 0) >= 7.5:
                 reasons.append(f"Strong audience rating ({float(movie.get('vote_average') or 0):.1f}/10)")
             if not reasons:
-                reasons.append("Closest metadata and catalog-quality match")
+                reasons.append("Closest content and catalog-quality match")
 
             behavior_boost, behavior_reasons = self._behavior_boost(movie.get("id"))
             score = float(scores[idx] + behavior_boost)
             movie["similarity_score"] = score
-            movie["retrieval_stage"] = "metadata_fallback"
+            movie["retrieval_stage"] = "content_sparse_fallback"
             movie["retrieval_signals"] = {
+                "content_sparse": round(content_score, 4),
+                "genre_overlap": round(float(len(shared_genres) / max(len(q_genres), 1)), 4),
                 "metadata": round(float(scores[idx]), 4),
                 "behavior": round(behavior_boost, 4),
                 "vector_artifacts_loaded": False,
+                "vector_artifact_status": self._artifact_status,
             }
             movie["explanation"] = (reasons + behavior_reasons)[:5]
             movie["explanation_text"] = " | ".join(movie["explanation"])
             results.append(movie)
 
+        results.sort(key=lambda item: float(item.get("similarity_score") or 0), reverse=True)
         return self._apply_learned_ranker(results)[:n]
     
     def recommend_by_index(self, movie_idx: int, n: int = 10) -> list[dict]:
@@ -783,7 +1082,7 @@ class Recommender:
             List of recommended movie dictionaries with similarity scores
         """
         if self._vectors is None or self._index is None:
-            logger.info("Vector artifacts not loaded; using metadata recommendation fallback.")
+            logger.info("Vector artifacts not loaded/aligned; using content sparse recommendation fallback.")
             return self._metadata_recommend_by_index(movie_idx, n=n)
 
         self.refresh_behavior_features()

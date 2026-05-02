@@ -9,8 +9,6 @@ services:
     buildFilter:
       paths:
         - backend/**
-        - models/**
-        - data/processed/**
         - requirements.txt
         - render.yaml
       ignoredPaths:
@@ -31,6 +29,16 @@ services:
         value: false
       - key: NOVA_TFIDF_MAX_FEATURES
         value: 12000
+      - key: NOVA_ITEM_TFIDF_MAX_FEATURES
+        value: 18000
+      - key: NOVA_ENABLE_LEARNED_RANKER
+        value: auto
+      - key: NOVA_MIN_RANKER_FEEDBACK_ITEMS
+        value: 100
+      - key: NOVA_ALLOW_LEGACY_ROW_ALIGNED_VECTORS
+        value: false
+      - key: NOVA_REFRESH_PIPELINE_MANIFEST
+        value: true
       - key: NOVA_ENABLE_LLM_RERANK
         value: false
       - key: NOVA_RECOMMENDER_SERVICE_URL

@@ -58,6 +58,7 @@ EXPOSE 7860 8000 8501
 # Set default port to 7860 for Hugging Face Spaces
 # Render will override this environment variable at runtime
 ENV PORT=7860
+ENV NOVA_REFRESH_PIPELINE_MANIFEST=true
 
 # Default command: run backend API.
 CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port $PORT"]

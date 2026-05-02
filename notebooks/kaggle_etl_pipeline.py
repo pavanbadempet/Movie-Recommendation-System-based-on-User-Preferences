@@ -576,7 +576,23 @@ print(f"Built HNSW index: {index.ntotal:,} vectors")
 # ============================================================
 assert len(df) == embeddings.shape[0] == index.ntotal, \
     f"ALIGNMENT MISMATCH! Movies: {len(df)}, Embeddings: {embeddings.shape[0]}, FAISS: {index.ntotal}"
+movie_ids = pd.to_numeric(df["id"], errors="raise").astype("int64").to_numpy()
+assert len(movie_ids) == len(df), \
+    f"MOVIE ID MAP MISMATCH! Movie IDs: {len(movie_ids)}, Movies: {len(df)}"
 print(f"ALIGNMENT VERIFIED: {len(df):,} movies = {embeddings.shape[0]:,} embeddings = {index.ntotal:,} FAISS vectors")
+
+
+def movie_id_sha256(ids):
+    ids = np.asarray(ids, dtype=np.int64).astype("<i8", copy=False)
+    return hashlib.sha256(ids.tobytes()).hexdigest()
+
+
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 # ============================================================
@@ -585,6 +601,7 @@ print(f"ALIGNMENT VERIFIED: {len(df):,} movies = {embeddings.shape[0]:,} embeddi
 OUT = Path("/kaggle/working")
 emb_path = OUT / "sbert_embeddings.npy"
 idx_path = OUT / "faiss.index"
+movie_ids_path = OUT / "movie_ids.npy"
 movies_path = OUT / "movies_transformed.parquet"
 scd_path = OUT / "movie_dimension_scd.parquet"
 current_dimension_path = OUT / "movie_dimension_current.parquet"
@@ -594,6 +611,7 @@ ranker_path = OUT / "nova_ranker.joblib"
 ranker_metadata_path = OUT / "nova_ranker.joblib.metadata.json"
 
 np.save(emb_path, embeddings)
+np.save(movie_ids_path, movie_ids)
 faiss.write_index(index, str(idx_path))
 
 cols = ['id', 'title', 'overview', 'genres', 'vote_average', 'vote_count',
@@ -620,10 +638,22 @@ quality_report = {
     "searchable_rows": int(df["searchable"].sum()),
     "embedding_rows": int(embeddings.shape[0]),
     "faiss_index_size": int(index.ntotal),
+    "movie_id_map_rows": int(len(movie_ids)),
+    "movie_id_sha256": movie_id_sha256(movie_ids),
     "scd_current_rows": int(len(movie_dimension_current)),
     "scd_total_versions": int(len(movie_dimension_scd)),
     "ranker_training_mode": ranker_report["metadata"]["training_mode"],
     "ranker_feedback_item_count": ranker_report["metadata"]["feedback_item_count"],
+}
+serving_contract = {
+    "version": 1,
+    "model_name": MODEL_NAME,
+    "movie_rows": int(len(df)),
+    "embedding_rows": int(embeddings.shape[0]),
+    "embedding_dimensions": int(embeddings.shape[1]),
+    "faiss_index_size": int(index.ntotal),
+    "movie_id_map_rows": int(len(movie_ids)),
+    "movie_id_sha256": quality_report["movie_id_sha256"],
 }
 manifest = {
     "run_id": RUN_ID,
@@ -635,21 +665,40 @@ manifest = {
         "movies": movies_path.name,
         "embeddings": emb_path.name,
         "faiss_index": idx_path.name,
+        "movie_ids": movie_ids_path.name,
         "movie_dimension_scd": scd_path.name,
         "movie_dimension_current": current_dimension_path.name,
         "quality_report": quality_path.name,
         "ranker": ranker_path.name,
         "ranker_metadata": ranker_metadata_path.name,
     },
+    "artifact_checksums": {},
+    "serving_contract": serving_contract,
     "quality": quality_report,
     "ranker": ranker_report["metadata"],
 }
 quality_path.write_text(json.dumps(quality_report, indent=2, sort_keys=True), encoding="utf-8")
+for artifact_name in [
+    emb_path,
+    idx_path,
+    movie_ids_path,
+    movies_path,
+    scd_path,
+    current_dimension_path,
+    quality_path,
+    ranker_path,
+    ranker_metadata_path,
+]:
+    manifest["artifact_checksums"][artifact_name.name] = {
+        "sha256": file_sha256(artifact_name),
+        "size_bytes": int(artifact_name.stat().st_size),
+    }
 manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
 
 print(
     f"Saved: embeddings ({emb_path.stat().st_size/1e6:.0f}MB), "
     f"index ({idx_path.stat().st_size/1e6:.0f}MB), "
+    f"movie ids ({movie_ids_path.stat().st_size/1e6:.1f}MB), "
     f"movies ({movies_path.stat().st_size/1e6:.0f}MB), "
     f"SCD history ({scd_path.stat().st_size/1e6:.0f}MB), "
     f"ranker ({ranker_path.stat().st_size/1e6:.1f}MB)"
@@ -664,6 +713,7 @@ if HF_TOKEN:
     files = [
         (emb_path, "sbert_embeddings.npy"),
         (idx_path, "faiss.index"),
+        (movie_ids_path, "movie_ids.npy"),
         (movies_path, "movies_transformed.parquet"),
         (scd_path, "movie_dimension_scd.parquet"),
         (current_dimension_path, "movie_dimension_current.parquet"),
