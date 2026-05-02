@@ -594,17 +594,19 @@ async def list_movies(
 
 
 @app.get("/movies/titles", response_model=list[MovieTitle])
-async def get_all_titles():
+async def get_all_titles(
+    limit: int = Query(default=5000, ge=1, le=20000, description="Maximum number of titles to return"),
+):
     """
     Get a lightweight list of all movie titles and IDs.
     Perfect for populating the Streamlit autocomplete dropdown.
     """
-    remote_payload = await remote_payload_or_raise("/movies/titles")
+    remote_payload = await remote_payload_or_raise("/movies/titles", params={"limit": limit})
     if remote_payload is not None:
         return remote_payload
 
     rec = get_rec()
-    return rec.get_all_titles()
+    return rec.get_all_titles(limit=limit)
 
 
 @app.get("/v1/search", response_model=list[Movie])
