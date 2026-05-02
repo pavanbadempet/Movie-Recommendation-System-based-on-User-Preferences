@@ -20,6 +20,9 @@ COPY etl/ ./etl/
 COPY backend/ ./backend/
 COPY streamlit_app.py .
 
+# Fail image builds early if synced Python source has a syntax error.
+RUN python -m compileall backend etl streamlit_app.py
+
 # Copy Pre-computed Models and Data
 COPY models/ ./models/
 COPY data/processed/ ./data/processed/
