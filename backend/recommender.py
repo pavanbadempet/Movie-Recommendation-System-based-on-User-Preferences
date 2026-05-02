@@ -11,15 +11,12 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-import faiss
 import os
 import json
-from huggingface_hub import InferenceClient
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 
 # Import model loader to handle external model downloads
 from backend.model_loader import ensure_model_files
+from backend.openrouter_client import chat_completion, configured_models, openrouter_api_key
 from backend.query_understanding import intent_score, parse_query_intent
 from backend.ranker import load_ranker
 
@@ -29,6 +26,48 @@ logger = logging.getLogger(__name__)
 MODELS_DIR = Path(__file__).parent.parent / "models"
 DATA_DIR = Path(__file__).parent.parent / "data" / "processed"
 
+
+def _env_truthy(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _render_like_environment() -> bool:
+    """Detect constrained PaaS runtimes where the full vector stack can exceed memory."""
+    return any(
+        os.getenv(name)
+        for name in (
+            "RENDER",
+            "RENDER_SERVICE_ID",
+            "RENDER_SERVICE_NAME",
+            "RENDER_EXTERNAL_URL",
+            "RENDER_EXTERNAL_HOSTNAME",
+        )
+    )
+
+
+def _serving_profile() -> str:
+    """Resolve the serving profile for this process."""
+    profile = os.getenv("NOVA_SERVING_PROFILE", "auto").strip().lower()
+    if profile in {"full", "lite", "light", "low-memory", "metadata"}:
+        return profile
+    return "auto"
+
+
+def _low_memory_serving_enabled() -> bool:
+    """Return true when serving should avoid loading heavyweight vector artifacts."""
+    if _env_truthy("NOVA_LOW_MEMORY"):
+        return True
+    if os.getenv("NOVA_LOW_MEMORY", "").strip().lower() in {"0", "false", "no", "off"}:
+        return False
+
+    profile = _serving_profile()
+    if profile in {"lite", "light", "low-memory", "metadata"}:
+        return True
+    if profile == "full":
+        return False
+
+    return _render_like_environment()
+
 class Recommender:
     """
     The brain of the operation.
@@ -36,8 +75,8 @@ class Recommender:
     """
     
     def __init__(self):
-        self._index: faiss.Index | None = None
-        self._vectorizer: TfidfVectorizer | None = None
+        self._index: Any | None = None
+        self._vectorizer: Any | None = None
         self._movies: pd.DataFrame | None = None
         self._vectors: np.ndarray | None = None
         self._content_text: pd.Series | None = None
@@ -47,6 +86,7 @@ class Recommender:
         self._learned_ranker = None
         self._behavior_features: dict[str, Any] = {}
         self._behavior_features_refreshed_at: datetime | None = None
+        self._low_memory = _low_memory_serving_enabled()
     
     def load(self) -> "Recommender":
         """
@@ -54,18 +94,34 @@ class Recommender:
         We use memory-mapping for the vectors so we don't blow up the RAM on the free tier.
         """
         logger.info("Loading recommendation engine...")
-        ensure_model_files(MODELS_DIR)
+        selected_artifacts = {
+            "movies_transformed.parquet",
+            "nova_ranker.joblib",
+            "nova_ranker.joblib.metadata.json",
+        }
+        if not self._low_memory or _env_truthy("NOVA_FORCE_VECTOR_ARTIFACTS"):
+            selected_artifacts.update({"sbert_embeddings.npy", "faiss.index"})
+        ensure_model_files(MODELS_DIR, selected_files=selected_artifacts)
+        if self._low_memory:
+            logger.info("Using low-memory serving profile; FAISS/SBERT artifacts are optional.")
         
         # Load FAISS index
         index_path = MODELS_DIR / "faiss.index"
-        if not index_path.exists():
+        if self._low_memory and not _env_truthy("NOVA_FORCE_VECTOR_ARTIFACTS"):
+            logger.info("Skipping FAISS index load in low-memory serving profile.")
+        elif not index_path.exists():
             raise FileNotFoundError(f"FAISS index not found at {index_path}. Run the ETL pipeline first.")
-        self._index = faiss.read_index(str(index_path))
-        logger.info(f"Loaded FAISS index with {self._index.ntotal:,} vectors")
+        else:
+            import faiss
+
+            self._index = faiss.read_index(str(index_path))
+            logger.info(f"Loaded FAISS index with {self._index.ntotal:,} vectors")
         
         # Load SBERT embeddings with memory-mapping (reads from disk, not RAM)
         vectors_path = MODELS_DIR / "sbert_embeddings.npy"
-        if vectors_path.exists():
+        if self._low_memory and not _env_truthy("NOVA_FORCE_VECTOR_ARTIFACTS"):
+            logger.info("Skipping embedding matrix load in low-memory serving profile.")
+        elif vectors_path.exists():
             # Memory-mapped mode: doesn't load entire array into RAM
             self._vectors = np.load(vectors_path, mmap_mode='r')
             logger.info(f"Loaded SBERT embeddings with shape {self._vectors.shape} (memory-mapped)")
@@ -85,22 +141,28 @@ class Recommender:
         
         if movies_path.exists():
             # Only load columns we actually need for recommendations
-            essential_cols = ['id', 'title', 'overview', 'genres', 'vote_average', 
+            essential_cols = ['id', 'title', 'overview', 'genres', 'vote_average',
                             'vote_count', 'popularity', 'release_date', 'poster_path',
-                            'director', 'cast', 'original_language',
+                            'director', 'original_language',
                             'metadata_completeness', 'content_quality_score',
                             'quality_bucket', 'searchable', 'recommendable',
                             'public_demo_eligible']
+            if not self._low_memory:
+                essential_cols.append('cast')
             try:
                 self._movies = pd.read_parquet(movies_path, columns=essential_cols)
             except (KeyError, ValueError):
                 # Fallback if some columns don't exist
                 self._movies = pd.read_parquet(movies_path)
+            self._optimize_movie_frame()
             logger.info(f"Loaded {len(self._movies):,} movies")
         else:
             raise FileNotFoundError("Movie data not found. Run the ETL pipeline first.")
 
-        self._build_sparse_retrieval_index()
+        if self._low_memory and not _env_truthy("NOVA_BUILD_SPARSE_ON_LOAD"):
+            logger.info("Deferring sparse retrieval index build until first AI search.")
+        else:
+            self._build_sparse_retrieval_index()
         self._learned_ranker = load_ranker(models_dir=MODELS_DIR)
 
         self.refresh_behavior_features(force=True)
@@ -138,8 +200,36 @@ class Recommender:
 
         return self._behavior_features
 
+    def _optimize_movie_frame(self) -> None:
+        """Reduce the in-memory footprint of the serving catalog."""
+        if self._movies is None:
+            return
+
+        for column in ("id", "vote_count"):
+            if column in self._movies.columns:
+                self._movies[column] = pd.to_numeric(self._movies[column], errors="coerce", downcast="integer")
+
+        for column in (
+            "vote_average",
+            "popularity",
+            "metadata_completeness",
+            "content_quality_score",
+        ):
+            if column in self._movies.columns:
+                self._movies[column] = pd.to_numeric(self._movies[column], errors="coerce", downcast="float")
+
+        for column in ("searchable", "recommendable", "public_demo_eligible"):
+            if column in self._movies.columns:
+                self._movies[column] = self._movies[column].fillna(False).astype(bool)
+
+        for column in ("quality_bucket", "original_language"):
+            if column in self._movies.columns:
+                self._movies[column] = self._movies[column].fillna("").astype("category")
+
     def _build_sparse_retrieval_index(self) -> None:
         """Build a TF-IDF recall index for hybrid search and cold-start resilience."""
+        from sklearn.feature_extraction.text import TfidfVectorizer
+
         text_parts = []
         for column in ("title", "overview", "genres", "director", "cast", "original_language"):
             if column in self._movies.columns:
@@ -153,15 +243,24 @@ class Recommender:
                 content_text = content_text + ". " + part
             self._content_text = content_text
 
-        max_features = int(os.getenv("NOVA_TFIDF_MAX_FEATURES", "50000"))
+        default_features = "12000" if self._low_memory else "50000"
+        max_features = int(os.getenv("NOVA_TFIDF_MAX_FEATURES", default_features))
+        ngram_range = (1, 1) if self._low_memory else (1, 2)
         self._vectorizer = TfidfVectorizer(
             max_features=max_features,
-            ngram_range=(1, 2),
+            ngram_range=ngram_range,
             stop_words="english",
             min_df=1,
+            dtype=np.float32,
         )
         self._tfidf_matrix = self._vectorizer.fit_transform(self._content_text)
         logger.info("Built sparse TF-IDF retrieval index with %s features", len(self._vectorizer.vocabulary_))
+        self._content_text = None
+
+    def _ensure_sparse_retrieval_index(self) -> None:
+        """Build sparse retrieval lazily when a request path needs AI search."""
+        if self._tfidf_matrix is None or self._vectorizer is None:
+            self._build_sparse_retrieval_index()
 
     def _dense_query_enabled(self) -> bool:
         """Return whether online dense query encoding should be attempted."""
@@ -171,6 +270,11 @@ class Recommender:
     def _cross_encoder_enabled(self) -> bool:
         """Return whether optional cross-encoder reranking should be attempted."""
         value = os.getenv("NOVA_ENABLE_CROSS_ENCODER", "false").strip().lower()
+        return value in {"1", "true", "yes", "on"}
+
+    def _llm_rerank_enabled(self) -> bool:
+        """Return whether slow OpenRouter LLM reranking should run in the hot path."""
+        value = os.getenv("NOVA_ENABLE_LLM_RERANK", "false").strip().lower()
         return value in {"1", "true", "yes", "on"}
 
     def _get_query_encoder(self):
@@ -572,6 +676,100 @@ class Recommender:
         matches = matches.sort_values("relevance", ascending=False).head(limit)
         
         return matches.to_dict(orient="records")
+
+    def _metadata_recommend_by_index(self, movie_idx: int, n: int = 10) -> list[dict]:
+        """Free-tier fallback recommender when vector artifacts are intentionally not loaded."""
+        if self._movies is None or movie_idx < 0 or movie_idx >= len(self._movies):
+            return []
+
+        query_movie = self.get_movie_by_index(movie_idx)
+        q_genres = self._genre_set(query_movie)
+        q_director = str(query_movie.get("director") or "").strip().lower()
+        q_language = str(query_movie.get("original_language") or "").strip().lower()
+
+        scores = np.zeros(len(self._movies), dtype=np.float32)
+        def numeric_array(column: str, default: float = 0.0) -> np.ndarray:
+            if column not in self._movies.columns:
+                return np.full(len(self._movies), default, dtype=np.float32)
+            return pd.to_numeric(
+                self._movies[column],
+                errors="coerce",
+            ).fillna(default).to_numpy(dtype=np.float32)
+
+        if q_genres and "genres" in self._movies.columns:
+            genres = self._movies["genres"].fillna("").astype(str).str.lower()
+            for genre in q_genres:
+                genre_mask = genres.str.contains(genre, regex=False, na=False).to_numpy()
+                scores += genre_mask.astype(np.float32) * 0.32
+            shared_count = np.maximum(scores / 0.32, 0)
+            scores += np.minimum(shared_count, 3) * 0.03
+
+        if q_director and q_director != "unknown" and "director" in self._movies.columns:
+            directors = self._movies["director"].fillna("").astype(str).str.lower()
+            director_mask = directors.eq(q_director).to_numpy()
+            scores += director_mask.astype(np.float32) * 0.18
+
+        if q_language and "original_language" in self._movies.columns:
+            languages = self._movies["original_language"].astype(str).str.lower()
+            language_mask = languages.eq(q_language).to_numpy()
+            scores += language_mask.astype(np.float32) * 0.04
+
+        if "content_quality_score" in self._movies.columns:
+            quality = numeric_array("content_quality_score")
+            scores += np.clip(quality, 0, 1) * 0.22
+        else:
+            vote_average = numeric_array("vote_average")
+            vote_count = numeric_array("vote_count")
+            confidence = np.minimum(1.0, np.log1p(np.maximum(vote_count, 0)) / 8.0)
+            scores += np.clip(vote_average / 10.0, 0, 1) * confidence * 0.18
+
+        if "popularity" in self._movies.columns:
+            popularity = numeric_array("popularity")
+            scores += np.minimum(1.0, np.log1p(np.maximum(popularity, 0)) / 8.0) * 0.12
+
+        scores[movie_idx] = -np.inf
+        if len(scores) <= 1:
+            return []
+
+        candidate_count = min(max(n * 6, n), len(scores) - 1)
+        candidate_indices = np.argpartition(scores, -candidate_count)[-candidate_count:]
+        candidate_indices = candidate_indices[np.argsort(scores[candidate_indices])[::-1]]
+
+        results = []
+        for idx in candidate_indices:
+            if len(results) >= n:
+                break
+            if not np.isfinite(scores[idx]) or scores[idx] <= 0:
+                continue
+
+            movie = self.get_movie_by_index(int(idx))
+            reasons = []
+            shared_genres = q_genres & self._genre_set(movie)
+            if shared_genres:
+                reasons.append(f"Shared genres: {', '.join(sorted(g.title() for g in shared_genres)[:2])}")
+            if q_director and str(movie.get("director") or "").strip().lower() == q_director:
+                reasons.append(f"Same director ({movie.get('director')})")
+            if q_language and str(movie.get("original_language") or "").strip().lower() == q_language:
+                reasons.append("Same catalog language")
+            if float(movie.get("vote_average") or 0) >= 7.5:
+                reasons.append(f"Strong audience rating ({float(movie.get('vote_average') or 0):.1f}/10)")
+            if not reasons:
+                reasons.append("Closest metadata and catalog-quality match")
+
+            behavior_boost, behavior_reasons = self._behavior_boost(movie.get("id"))
+            score = float(scores[idx] + behavior_boost)
+            movie["similarity_score"] = score
+            movie["retrieval_stage"] = "metadata_fallback"
+            movie["retrieval_signals"] = {
+                "metadata": round(float(scores[idx]), 4),
+                "behavior": round(behavior_boost, 4),
+                "vector_artifacts_loaded": False,
+            }
+            movie["explanation"] = (reasons + behavior_reasons)[:5]
+            movie["explanation_text"] = " | ".join(movie["explanation"])
+            results.append(movie)
+
+        return self._apply_learned_ranker(results)[:n]
     
     def recommend_by_index(self, movie_idx: int, n: int = 10) -> list[dict]:
         """
@@ -581,11 +779,12 @@ class Recommender:
             movie_idx: Index of the movie in the DataFrame
             n: Number of recommendations
             
-        Returns:
+            Returns:
             List of recommended movie dictionaries with similarity scores
         """
-        if self._vectors is None:
-            raise RuntimeError("Vectors not loaded")
+        if self._vectors is None or self._index is None:
+            logger.info("Vector artifacts not loaded; using metadata recommendation fallback.")
+            return self._metadata_recommend_by_index(movie_idx, n=n)
 
         self.refresh_behavior_features()
         
@@ -750,18 +949,18 @@ class Recommender:
         # Sort by boosted score
         results.sort(key=lambda x: x["similarity_score"], reverse=True)
         results = self._apply_learned_ranker(results)
-        top_candidates = results[:20]
+        llm_window = int(os.getenv("NOVA_LLM_RERANK_CANDIDATES", "12"))
+        top_candidates = results[: max(1, min(20, llm_window))]
         
-        # === NEW 2026 SOTA: LLM-as-a-Judge Reranking ===
-        # Pass the top 20 mathematically similar movies to the LLM to understand true aesthetic vibe
-        try:
-            llm_results = self._rerank_with_llm(query_movie, top_candidates, n)
-            if llm_results and len(llm_results) > 0:
-                return llm_results
-        except Exception as e:
-            logger.error(f"LLM Reranking failed, falling back to FAISS/MMR. Error: {e}")
-            if results:
-                results[0]["explanation_text"] = f"LLM Error: {str(e)[:200]}"
+        # Optional LLM-as-judge reranking. Keep this off by default because free
+        # OpenRouter models can be rate-limited and should never block serving.
+        if self._llm_rerank_enabled():
+            try:
+                llm_results = self._rerank_with_llm(query_movie, top_candidates, n)
+                if llm_results and len(llm_results) > 0:
+                    return llm_results
+            except Exception as e:
+                logger.warning("LLM reranking skipped; falling back to FAISS/MMR. Error: %s", e)
         
         # === MMR DIVERSITY (Maximal Marginal Relevance) ===
         # Prevents returning 5 nearly identical movies
@@ -775,8 +974,7 @@ class Recommender:
         """
         Uses OpenRouter API to semantically rerank candidates.
         """
-        import requests
-        openrouter_key = os.getenv("OPENROUTER_API_KEY")
+        openrouter_key = openrouter_api_key()
         if not openrouter_key:
             logger.warning("OPENROUTER_API_KEY missing. Skipping LLM reranking and falling back to FAISS/MMR.")
             raise ValueError("OPENROUTER_API_KEY environment variable is not set or accessible.")
@@ -806,45 +1004,13 @@ Output strictly in valid JSON format like this:
 }}
 Do not write any other text except the JSON object.
 """
-        headers = {
-            "Authorization": f"Bearer {openrouter_key}",
-            "HTTP-Referer": "https://github.com/pavanbadempet/Movie-Recommendation-System",
-            "X-Title": "Movie-Recommendation-System",
-        }
-        
-        models = [
-            "meta-llama/llama-3.3-70b-instruct:free",
-            "google/gemini-2.0-pro-exp-02-05:free",
-            "google/gemini-2.0-flash-lite-preview-02-05:free"
-        ]
-        
-        last_error = None
-        cleaned_response = None
-        
-        for model in models:
-            payload = {
-                "model": model,
-                "messages": [
-                    {"role": "user", "content": prompt}
-                ],
-                "temperature": 0.1
-            }
-            
-            try:
-                response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload, timeout=15)
-                response.raise_for_status()
-                response_json = response.json()
-                cleaned_response = response_json["choices"][0]["message"]["content"].strip()
-                break  # Successful response, exit fallback loop
-            except Exception as e:
-                error_msg = str(e)
-                if 'response' in locals() and hasattr(response, 'text'):
-                    error_msg += f" Response: {response.text[:200]}"
-                last_error = error_msg
-                logger.warning(f"Model {model} failed: {error_msg}. Trying next fallback model...")
-                
-        if not cleaned_response:
-            raise ValueError(f"OpenRouter API Error (All fallbacks failed). Last error: {last_error}")
+        cleaned_response = chat_completion(
+            messages=[{"role": "user", "content": prompt}],
+            models=configured_models("OPENROUTER_RERANK_MODELS"),
+            temperature=0.1,
+            timeout_seconds=float(os.getenv("OPENROUTER_RERANK_TIMEOUT_SECONDS", "8")),
+            api_key=openrouter_key,
+        )
         if cleaned_response.startswith("```json"):
             cleaned_response = cleaned_response[7:]
         if cleaned_response.startswith("```"):
@@ -990,7 +1156,10 @@ Do not write any other text except the JSON object.
         sparse_scores: dict[int, float] = {}
         dense_error = None
 
+        self._ensure_sparse_retrieval_index()
         if self._tfidf_matrix is not None and self._vectorizer is not None:
+            from sklearn.metrics.pairwise import cosine_similarity
+
             query_sparse = self._vectorizer.transform([query])
             sparse_similarities = cosine_similarity(query_sparse, self._tfidf_matrix).ravel()
             sparse_indices = np.argsort(sparse_similarities)[::-1][:fetch_k]
