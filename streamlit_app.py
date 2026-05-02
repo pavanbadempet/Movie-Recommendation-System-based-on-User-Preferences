@@ -6,11 +6,14 @@ import streamlit.components.v1 as components
 import requests
 import time
 import os
+from datetime import datetime, timedelta
+import pandas as pd
+import plotly.express as px
 from st_clickable_images import clickable_images
 
 st.set_page_config(
-    page_title="Movie Recommendation System",
-    page_icon="🎬",
+    page_title="Nova Recommendation Console",
+    page_icon="N",
     layout="wide"
 )
 
@@ -92,21 +95,114 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Config
-# Support multiple backends for high availability (failover)
-# Add your HF Space URL first, keep Render as fallback
+# Try both free hosts. Either one can sleep or time out, so product API calls
+# use request-level failover instead of trusting a single active backend.
+RENDER_GATEWAY_URL = "https://movie-recs-api-5qvy.onrender.com"
+HF_SPACE_URL = "https://pavanbadempet-movie-rec-api.hf.space"
+ENABLE_DIRECT_HF_FALLBACK = os.getenv("NOVA_ENABLE_DIRECT_HF_FALLBACK", "true").strip().lower() in {"1", "true", "yes", "on"}
+
 BACKEND_URLS = [
-    os.getenv("API_URL", ""),  # From Hugging Face Secrets or local env
-    "https://pavanbadempet-movie-rec-api.hf.space", # Primary (Hugging Face)
-    "https://movie-recs-api-5qvy.onrender.com" # Fallback (Render)
+    os.getenv("API_URL", ""),  # Local/dev override or Streamlit secret
+    os.getenv("NOVA_BACKEND_URL", ""),
+    RENDER_GATEWAY_URL,
 ]
-# Clean up empty strings
-BACKEND_URLS = [url.strip("/") for url in BACKEND_URLS if url]
+if ENABLE_DIRECT_HF_FALLBACK:
+    BACKEND_URLS.append(HF_SPACE_URL)
+
+BACKEND_URLS = list(dict.fromkeys(url.strip("/") for url in BACKEND_URLS if url))
 
 TMDB_KEY = os.getenv("TMDB_API_KEY")
+NOVA_API_KEY = os.getenv("NOVA_API_KEY", "")
+NOVA_TENANT_ID = os.getenv("NOVA_TENANT_ID", "demo-media-co")
+NOVA_CATALOG_ID = os.getenv("NOVA_CATALOG_ID", "tmdb-movies")
 
 # Validate TMDB Key
 if not TMDB_KEY:
     st.warning("⚠️ TMDB_API_KEY not set. Posters and trailers will not load. Set it in your environment or Streamlit secrets.")
+
+
+def api_headers(extra_headers=None):
+    """Return optional Nova product headers without requiring paid auth infra."""
+    headers = dict(extra_headers or {})
+    if NOVA_API_KEY:
+        headers["X-Nova-API-Key"] = NOVA_API_KEY
+    else:
+        headers["X-Tenant-ID"] = NOVA_TENANT_ID
+        headers["X-Catalog-ID"] = NOVA_CATALOG_ID
+    return headers
+
+
+def is_direct_hf_url(url):
+    """Return true for the vector-heavy HF Space when direct fallback is disabled."""
+    return "pavanbadempet-movie-rec-api.hf.space" in str(url)
+
+
+def candidate_backend_urls():
+    """Return active backend first, then configured fallbacks without duplicates."""
+    urls = []
+    active = st.session_state.get("API_URL")
+    if active:
+        urls.append(active)
+    urls.extend(BACKEND_URLS)
+
+    seen = set()
+    ordered = []
+    for url in urls:
+        if not url or url in seen:
+            continue
+        if is_direct_hf_url(url) and not ENABLE_DIRECT_HF_FALLBACK:
+            continue
+        ordered.append(url)
+        seen.add(url)
+    return ordered
+
+
+def set_active_backend(url):
+    st.session_state.API_URL = url
+    st.session_state.backend_ready = True
+
+
+def request_json_failover(method, path, params=None, payload=None, timeout=15, return_error=False):
+    """Call product API backends in order; one timed-out host should not break the UI."""
+    if not st.session_state.get("backend_ready"):
+        return None
+
+    last_error = None
+    for api_url in candidate_backend_urls():
+        try:
+            response = requests.request(
+                method,
+                f"{api_url}{path}",
+                params=params,
+                json=payload,
+                headers=api_headers(),
+                timeout=timeout,
+            )
+            if response.ok:
+                set_active_backend(api_url)
+                return response.json()
+
+            last_error = f"{response.status_code}: {response.text[:200]}"
+            if response.status_code < 500:
+                break
+        except requests.RequestException as exc:
+            last_error = str(exc)
+            continue
+
+    st.session_state.last_backend_error = last_error
+    if return_error and last_error:
+        return {"error": last_error}
+    return None
+
+
+def api_get(path, params=None, timeout=15):
+    """Call the active backend with the current tenant/API-key context."""
+    return request_json_failover("GET", path, params=params, timeout=timeout)
+
+
+def api_post(path, payload, timeout=15):
+    """Post to the active backend with the current tenant/API-key context."""
+    return request_json_failover("POST", path, payload=payload, timeout=timeout, return_error=True)
 
 
 @st.cache_data(ttl=600)
@@ -195,38 +291,56 @@ def wake_up_backend():
     """
     Wake up backend and find an active server from the failover list.
     """
-    # 1. Fast check existing known-good URL
-    if "API_URL" in st.session_state:
+    def catalog_ready(url, timeout=8):
         try:
-            r = requests.get(f"{st.session_state.API_URL}/health", timeout=2)
-            if r.ok:
-                return True
-        except requests.RequestException:
-            pass # Move to full scan
+            health = requests.get(f"{url}/health", timeout=3)
+            if not health.ok:
+                return False
 
-    # 2. Sequential ping of all configured backends
-    with st.spinner("🚀 Booting up the recommendation engine... (This can take ~45s if waking from sleep)"):
-        # We try all backends. Max 30 loops = ~60-90 seconds total wait.
-        for _ in range(30):
+            probe = requests.get(
+                f"{url}/movies/titles",
+                params={"limit": 1},
+                headers=api_headers(),
+                timeout=timeout,
+            )
+            if probe.ok and probe.json():
+                set_active_backend(url)
+                return True
+        except (requests.RequestException, ValueError):
+            return False
+        return False
+
+    # 1. Fast check existing known-good URL, but only if the catalog is ready.
+    if "API_URL" in st.session_state:
+        active_url = st.session_state.API_URL
+        if is_direct_hf_url(active_url) and not ENABLE_DIRECT_HF_FALLBACK:
+            st.session_state.pop("API_URL", None)
+        elif catalog_ready(active_url, timeout=5):
+            return True
+        else:
+            st.session_state.pop("API_URL", None)
+
+    # 2. Sequential ping of all configured backends.
+    with st.spinner("Booting up the recommendation engine... this can take a minute on free hosting"):
+        for attempt in range(18):
             for url in BACKEND_URLS:
-                try:
-                    r = requests.get(f"{url}/health", timeout=3)
-                    if r.ok:
-                        st.session_state.API_URL = url
-                        domain = url.split("//")[-1].split(".")[0]
-                        st.toast(f"✅ Connected to {domain}!", icon="⚡")
-                        return True
-                except requests.RequestException:
-                    pass
-            time.sleep(2)
-        
+                if is_direct_hf_url(url) and not ENABLE_DIRECT_HF_FALLBACK:
+                    continue
+                timeout = 6 if attempt < 3 else 12
+                if catalog_ready(url, timeout=timeout):
+                    domain = url.split("//")[-1].split(".")[0]
+                    st.toast(f"Connected to {domain}")
+                    return True
+            time.sleep(3)
+
     return False
+
 
 # Initialize connection on app load
 if "backend_ready" not in st.session_state or "API_URL" not in st.session_state:
     st.session_state.backend_ready = wake_up_backend()
 
-def search_movies(query):
+def legacy_search_movies(query):
     """Search movies via API."""
     if not st.session_state.backend_ready:
         st.error("⚠️ The engine is still waking up. Give it a moment to stretch its legs.")
@@ -234,7 +348,12 @@ def search_movies(query):
         
     try:
         api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
-        r = requests.get(f"{api_url}/search", params={"q": query, "limit": 100}, timeout=10)
+        r = requests.get(
+            f"{api_url}/v1/search",
+            params={"q": query, "limit": 100},
+            headers=api_headers(),
+            timeout=10,
+        )
         if r.ok:
             return r.json()
     except requests.RequestException:
@@ -242,36 +361,104 @@ def search_movies(query):
     return []
 
 
-@st.cache_data(ttl=3600)
-def fetch_all_movie_titles(version=3):
-    """Fetch all movie titles for the autocomplete dropdown."""
+def legacy_ai_search_movies(query):
+    """Hybrid AI search via sparse+dense/rerank endpoint."""
     if not st.session_state.backend_ready:
+        st.error("⚠️ The engine is still waking up. Give it a moment.")
         return []
-        
+
     try:
         api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
-        r = requests.get(f"{api_url}/movies/titles", timeout=20)
+        r = requests.get(
+            f"{api_url}/v1/search/ai",
+            params={"q": query, "limit": 100},
+            headers=api_headers(),
+            timeout=30,
+        )
         if r.ok:
-            data = r.json()
-            if data:
-                return data  # Returns list of {"id": X, "title": "Y"}
-    except Exception:
-        pass
+            return r.json()
+    except requests.RequestException:
+        st.error("⚠️ AI search is unavailable right now.")
+    return []
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def fetch_all_movie_titles(backend_urls, version=4):
+    """Fetch all movie titles for the autocomplete dropdown."""
+    for api_url in backend_urls:
+        try:
+            r = requests.get(
+                f"{api_url}/movies/titles",
+                params={"limit": 5000},
+                headers=api_headers(),
+                timeout=45,
+            )
+            if r.ok:
+                data = r.json()
+                if data:
+                    return {"api_url": api_url, "titles": data}
+        except Exception:
+            continue
         
-    # If we get here, it failed to load. Clear the cache so it retries later instead of serving [] for an hour.
+    # Do not cache a failed catalog fetch; free-tier backends may still be warming.
     fetch_all_movie_titles.clear()
+    return {"api_url": None, "titles": []}
+
+
+def legacy_get_recommendations(movie_id, n=10):
+    """Get recommendations via API."""
+    try:
+        api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
+        r = requests.get(
+            f"{api_url}/v1/recommendations/id/{movie_id}",
+            params={"n": n},
+            headers=api_headers(),
+            timeout=30,
+        )
+        if r.ok:
+            return r.json()
+    except Exception as e:
+            st.error(f"Error: {e}")
+    return {}
+
+
+def search_movies(query):
+    """Search movies via the API with backend failover."""
+    if not st.session_state.backend_ready:
+        st.error("The engine is still waking up. Give it a moment.")
+        return []
+
+    results = api_get("/v1/search", params={"q": query, "limit": 100}, timeout=15)
+    if results is not None:
+        return results
+
+    st.error("Search is unavailable right now. The backend may still be redeploying.")
+    return []
+
+
+def ai_search_movies(query):
+    """Hybrid AI search via the API with backend failover."""
+    if not st.session_state.backend_ready:
+        st.error("The engine is still waking up. Give it a moment.")
+        return []
+
+    results = api_get("/v1/search/ai", params={"q": query, "limit": 100}, timeout=45)
+    if results is not None:
+        return results
+
+    st.error("AI search is unavailable right now.")
     return []
 
 
 def get_recommendations(movie_id, n=10):
-    """Get recommendations via API."""
-    try:
-        api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
-        r = requests.get(f"{api_url}/recommend/id/{movie_id}", params={"n": n}, timeout=30)
-        if r.ok:
-            return r.json()
-    except Exception as e:
-        st.error(f"Error: {e}")
+    """Get recommendations via the API with backend failover."""
+    result = api_get(f"/v1/recommendations/id/{movie_id}", params={"n": n}, timeout=45)
+    if result is not None:
+        return result
+
+    last_error = st.session_state.get("last_backend_error")
+    if last_error:
+        st.error(f"Recommendation service is still warming or redeploying: {last_error}")
     return {}
 
 
@@ -919,6 +1106,14 @@ st.markdown("""
 if "page" not in st.session_state:
     st.session_state.page = "home"
 
+# Initialize monitoring state
+if "monitoring_data" not in st.session_state:
+    st.session_state.monitoring_data = {
+        "kafka_events": [],
+        "delta_state": {},
+        "system_metrics": {}
+    }
+
 
 def go_home():
     st.session_state.page = "home"
@@ -935,6 +1130,12 @@ def go_search():
 
 def go_chat():
     st.session_state.page = "chat"
+
+def go_monitoring():
+    st.session_state.page = "monitoring"
+
+def go_console():
+    st.session_state.page = "console"
 
 
 @st.cache_data(ttl=3600)
@@ -1050,6 +1251,11 @@ if st.session_state.page == "home":
         </style>
         """, unsafe_allow_html=True)
         
+        # Product Console Card
+        if st.button("NOVA CONSOLE", key="nav_console", use_container_width=True):
+            go_console()
+            st.rerun()
+
         # Search Card
         if st.button("🔍  DEEP SEARCH", key="nav_search", use_container_width=True):
             go_search()
@@ -1058,6 +1264,11 @@ if st.session_state.page == "home":
         # Chat Card
         if st.button("🧬  CINEBOT AI", key="nav_chat", use_container_width=True):
             go_chat()
+            st.rerun()
+
+        # Monitoring Card
+        if st.button("📊  REAL-TIME MONITORING", key="nav_monitoring", use_container_width=True):
+            go_monitoring()
             st.rerun()
 
     # RIGHT COLUMN: Visual Showcase (Trending)
@@ -1237,6 +1448,337 @@ if st.session_state.page == "home":
             st.info("Loading trends...")
 
 
+# ===== PAGE 1B: NOVA PRODUCT CONSOLE =====
+elif st.session_state.page == "console":
+    c1, c2 = st.columns([1, 8])
+    with c1:
+        if st.button("Home", key="back_console"):
+            go_home()
+            st.rerun()
+
+    st.title("Nova Console")
+    st.caption("B2B recommendation intelligence control plane")
+
+    context = api_get("/v1/platform/context") or {}
+    health = api_get("/health") or {}
+    usage = api_get("/v1/usage") or {}
+    behavior = api_get("/v1/events/features", params={"limit": 10}) or {}
+    experiments = api_get("/v1/experiments/metrics") or {}
+
+    metric_cols = st.columns(5)
+    metric_cols[0].metric("Mode", context.get("mode", "offline"))
+    metric_cols[1].metric("Tenant", context.get("tenant_id", NOVA_TENANT_ID))
+    metric_cols[2].metric("Catalog", context.get("catalog_id", NOVA_CATALOG_ID))
+    metric_cols[3].metric("Items", f"{health.get('movie_count', 0):,}")
+    metric_cols[4].metric(
+        "Event Store",
+        behavior.get("event_store", "jsonl"),
+        "durable" if behavior.get("durable") else "local",
+    )
+
+    overview_tab, catalog_tab, quality_tab, events_tab, integration_tab = st.tabs(
+        ["Overview", "Catalog Onboarding", "AI Quality", "Events", "Integration"]
+    )
+
+    with overview_tab:
+        left, right = st.columns([1, 1])
+        with left:
+            st.subheader("API Usage")
+            usage_rows = [
+                {"operation": key, "requests": value}
+                for key, value in (usage.get("operation_counts") or {}).items()
+            ]
+            if usage_rows:
+                usage_df = pd.DataFrame(usage_rows)
+                fig = px.bar(
+                    usage_df,
+                    x="operation",
+                    y="requests",
+                    color="operation",
+                    color_discrete_sequence=px.colors.qualitative.Set2,
+                )
+                fig.update_layout(
+                    showlegend=False,
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color="#ffffff"),
+                    margin=dict(t=10, b=10, l=10, r=10),
+                )
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            else:
+                st.info("Usage metrics will appear after API requests.")
+
+        with right:
+            st.subheader("Behavior Signals")
+            event_counts = behavior.get("event_type_counts") or {}
+            if event_counts:
+                event_df = pd.DataFrame(
+                    [{"event_type": key, "count": value} for key, value in event_counts.items()]
+                )
+                fig = px.pie(
+                    event_df,
+                    values="count",
+                    names="event_type",
+                    hole=0.45,
+                    color_discrete_sequence=px.colors.qualitative.Safe,
+                )
+                fig.update_layout(
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color="#ffffff"),
+                    margin=dict(t=10, b=10, l=10, r=10),
+                )
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            else:
+                st.info("Behavior signals appear after event collection.")
+
+        st.subheader("Top Trending Content")
+        trending = behavior.get("trending_movies") or {}
+        if trending:
+            trend_df = pd.DataFrame(list(trending.values()))
+            shown_cols = [col for col in ["movie_id", "content_id", "event_count", "views", "clicks", "ratings", "avg_rating"] if col in trend_df.columns]
+            st.dataframe(trend_df[shown_cols], use_container_width=True, hide_index=True)
+        else:
+            st.caption("No event-backed ranking signals yet.")
+
+    with catalog_tab:
+        st.subheader("Catalog Onboarding")
+        st.caption("Upload a CSV, map customer columns, preview quality issues, then store a raw upload manifest.")
+
+        uploaded_catalog = st.file_uploader("Customer catalog CSV", type=["csv"], key="catalog_uploader")
+        c_map_1, c_map_2, c_map_3 = st.columns(3)
+        with c_map_1:
+            id_col = st.text_input("Source ID column", value="id")
+            title_col = st.text_input("Title column", value="title")
+            description_col = st.text_input("Description column", value="overview")
+        with c_map_2:
+            genres_col = st.text_input("Genres column", value="genres")
+            people_col = st.text_input("People/cast column", value="cast")
+            language_col = st.text_input("Language column", value="original_language")
+        with c_map_3:
+            release_col = st.text_input("Release date column", value="release_date")
+            rating_col = st.text_input("Rating column", value="vote_average")
+            popularity_col = st.text_input("Popularity column", value="popularity")
+
+        mapping = {
+            "source_content_id": id_col,
+            "title": title_col,
+            "description": description_col,
+            "genres": genres_col,
+            "people": people_col,
+            "language": language_col,
+            "release_date": release_col,
+            "rating": rating_col,
+            "popularity": popularity_col,
+        }
+
+        if uploaded_catalog:
+            csv_text = uploaded_catalog.getvalue().decode("utf-8", errors="replace")
+            st.caption(f"{uploaded_catalog.name} - {len(csv_text):,} characters")
+
+            action_cols = st.columns([1, 1])
+            with action_cols[0]:
+                if st.button("Preview Catalog Quality", key="preview_catalog", use_container_width=True):
+                    st.session_state.catalog_profile = api_post(
+                        "/v1/catalog/preview",
+                        {
+                            "filename": uploaded_catalog.name,
+                            "csv_text": csv_text,
+                            "column_mapping": mapping,
+                            "sample_size": 10,
+                        },
+                        timeout=30,
+                    )
+            with action_cols[1]:
+                if st.button("Store Upload Manifest", key="upload_catalog", use_container_width=True):
+                    st.session_state.catalog_upload_result = api_post(
+                        "/v1/catalog/upload",
+                        {
+                            "filename": uploaded_catalog.name,
+                            "csv_text": csv_text,
+                            "column_mapping": mapping,
+                            "sample_size": 10,
+                        },
+                        timeout=30,
+                    )
+
+            profile = st.session_state.get("catalog_profile")
+            upload_result = st.session_state.get("catalog_upload_result")
+            if upload_result and not upload_result.get("error"):
+                st.success(f"Stored upload {upload_result.get('upload_id')}")
+                st.caption(upload_result.get("manifest_path"))
+                profile = upload_result.get("profile") or profile
+            elif upload_result and upload_result.get("error"):
+                st.error(upload_result.get("error"))
+
+            if profile:
+                if profile.get("error"):
+                    st.error(profile.get("error"))
+                else:
+                    p1, p2, p3, p4 = st.columns(4)
+                    p1.metric("Rows Profiled", f"{profile.get('total_rows_profiled', 0):,}")
+                    p2.metric("Valid Rows", f"{profile.get('valid_rows', 0):,}")
+                    p3.metric("Quality", profile.get("quality_score", 0))
+                    p4.metric("Ready", "Yes" if profile.get("ready_for_ingestion") else "No")
+
+                    warnings = profile.get("warnings") or []
+                    if warnings:
+                        st.warning(", ".join(warnings))
+                    else:
+                        st.success("No blocking catalog quality warnings found.")
+
+                    missing = profile.get("missing_mapped_columns") or []
+                    if missing:
+                        st.error(f"Missing mapped columns: {', '.join(missing)}")
+
+                    samples = profile.get("samples") or []
+                    if samples:
+                        st.dataframe(pd.DataFrame(samples), use_container_width=True, hide_index=True)
+
+                    with st.expander("Raw catalog profile"):
+                        st.json(profile)
+        else:
+            st.info("Upload a CSV to start the customer catalog onboarding flow.")
+
+    with quality_tab:
+        st.subheader("Recommendation Quality")
+        sample_size = st.slider("Sample size", min_value=5, max_value=100, value=25, step=5)
+        k = st.slider("Neighbors per item", min_value=5, max_value=25, value=10, step=5)
+        if st.button("Run Quality Check", key="run_quality_check", use_container_width=True):
+            st.session_state.quality_report = api_get(
+                "/v1/evaluation/recommendations",
+                params={"sample_size": sample_size, "k": k},
+                timeout=30,
+            )
+
+        quality = st.session_state.get("quality_report")
+        if quality:
+            q1, q2, q3, q4 = st.columns(4)
+            vectors = quality.get("vectors", {})
+            recs = quality.get("recommendations", {})
+            q1.metric("Vector Rows", f"{vectors.get('vector_count', 0):,}")
+            q2.metric("Dimensions", vectors.get("dimension", "-"))
+            q3.metric("Coverage@K", recs.get("catalog_coverage_at_k", "-"))
+            q4.metric("Genre Match", recs.get("genre_overlap_rate", "-"))
+
+            quality_rows = [
+                {"metric": "Self match", "value": recs.get("self_match_rate", 0)},
+                {"metric": "Coverage@K", "value": recs.get("catalog_coverage_at_k", 0)},
+                {"metric": "Genre overlap", "value": recs.get("genre_overlap_rate", 0)},
+                {"metric": "Genre diversity", "value": recs.get("avg_genre_diversity_per_list", 0)},
+            ]
+            quality_df = pd.DataFrame(quality_rows)
+            fig = px.bar(
+                quality_df,
+                x="metric",
+                y="value",
+                color="metric",
+                color_discrete_sequence=px.colors.qualitative.Pastel,
+            )
+            fig.update_yaxes(range=[0, 1])
+            fig.update_layout(
+                showlegend=False,
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#ffffff"),
+                margin=dict(t=10, b=10, l=10, r=10),
+            )
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            with st.expander("Raw quality report"):
+                st.json(quality)
+        else:
+            st.info("Run a quality check to inspect the current AI artifacts.")
+
+    with events_tab:
+        st.subheader("Event Lab")
+        c_event_1, c_event_2, c_event_3 = st.columns(3)
+        with c_event_1:
+            event_type = st.selectbox(
+                "Event type",
+                ["view", "click", "recommendation_impression", "rating", "search"],
+            )
+        with c_event_2:
+            content_id = st.text_input("Content ID", value="demo-content-001")
+        with c_event_3:
+            rating_value = st.number_input("Rating", min_value=1.0, max_value=5.0, value=4.0, step=0.5)
+
+        query_text = st.text_input("Search text", value="space adventure with strong visuals")
+        if st.button("Send Test Event", key="send_console_event", use_container_width=True):
+            payload = {
+                "event_type": event_type,
+                "content_id": content_id,
+                "user_id": "console-user",
+                "session_id": "console-session",
+            }
+            if event_type == "rating":
+                payload["rating"] = rating_value
+            if event_type == "search":
+                payload.pop("content_id", None)
+                payload["query_text"] = query_text
+
+            result = api_post("/v1/events", payload)
+            if result and not result.get("error"):
+                store_label = result.get("event_store", "jsonl")
+                durability = "durable" if result.get("durable") else "local"
+                st.success(f"Accepted event {result.get('event_id')} ({store_label}, {durability})")
+            else:
+                st.error(result.get("error", "Event write failed") if result else "Event write failed")
+
+        st.subheader("Current Behavior Features")
+        st.json(behavior)
+
+        experiment_rows = experiments.get("experiments") or []
+        if experiment_rows:
+            st.subheader("Experiment Outcomes")
+            st.dataframe(pd.DataFrame(experiment_rows), use_container_width=True, hide_index=True)
+
+        st.subheader("Personalization Probe")
+        probe_user_id = st.text_input("User ID for personalized recommendations", value="console-user")
+        if st.button("Get Personalized Recommendations", key="personalized_probe", use_container_width=True):
+            st.session_state.personalized_probe = api_get(
+                f"/v1/recommendations/user/{probe_user_id}",
+                params={"n": 10},
+                timeout=30,
+            )
+        personalized = st.session_state.get("personalized_probe")
+        if personalized:
+            st.dataframe(
+                pd.DataFrame(personalized)[
+                    [col for col in ["id", "title", "similarity_score", "retrieval_stage", "explanation_text"] if col in pd.DataFrame(personalized).columns]
+                ],
+                use_container_width=True,
+                hide_index=True,
+            )
+
+    with integration_tab:
+        st.subheader("Developer Integration")
+        api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
+        st.code(
+            f"""curl -X POST "{api_url}/v1/events" \\
+  -H "Content-Type: application/json" \\
+  -H "X-Nova-API-Key: $NOVA_API_KEY" \\
+  -d '{{
+    "event_type": "view",
+    "content_id": "customer-content-123",
+    "user_id": "user-42",
+    "session_id": "session-abc"
+  }}'""",
+            language="bash",
+        )
+        st.code(
+            f"""curl "{api_url}/v1/recommendations/id/100?n=10" \\
+  -H "X-Nova-API-Key: $NOVA_API_KEY" """,
+            language="bash",
+        )
+        st.markdown(
+            """
+            Core product contract: tenant + catalog + content + behavior events.
+            The demo uses TMDB movies, but the API and lakehouse model support
+            customer catalogs through `tenant_id`, `catalog_id`, and `content_id`.
+            """
+        )
+
+
 # ===== PAGE 2: SEARCH ENGINE =====
 elif st.session_state.page == "search":
     # Header navigation
@@ -1250,7 +1792,10 @@ elif st.session_state.page == "search":
     
     # Pre-fetch all titles for instant autocomplete
     with st.spinner("Loading movie catalog..."):
-        all_titles = fetch_all_movie_titles()
+        title_payload = fetch_all_movie_titles(tuple(candidate_backend_urls()))
+        all_titles = title_payload.get("titles", []) if title_payload else []
+        if title_payload and title_payload.get("api_url"):
+            set_active_backend(title_payload["api_url"])
     
     movie_to_fetch = None
     
@@ -1270,15 +1815,16 @@ elif st.session_state.page == "search":
             selected_id = title_options[selected_title]["id"]
             
             # Fetch the full movie object using the ID endpoint
-            try:
-                api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
-                r = requests.get(f"{api_url}/movie/{selected_id}", timeout=10)
-                if r.ok:
-                    movie_to_fetch = r.json()
-            except requests.RequestException:
+            movie_to_fetch = api_get(f"/movie/{selected_id}", timeout=15)
+            if not movie_to_fetch:
                 st.error("Failed to load movie details.")
     else:
         st.warning("⚠️ Could not load the movie catalog. The recommendation engine may still be starting up.")
+        if st.button("Retry catalog", key="retry_catalog_load"):
+            fetch_all_movie_titles.clear()
+            st.session_state.pop("API_URL", None)
+            st.session_state.backend_ready = wake_up_backend()
+            st.rerun()
     
     # 2. Semantic Search (The fallback/advanced UX)
     with st.expander("🔎 Search by plot, genre, or description"):
@@ -1287,7 +1833,7 @@ elif st.session_state.page == "search":
         
         if search_query and len(search_query) >= 2:
             with st.spinner("Analyzing semantic meaning..."):
-                movies = search_movies(search_query)
+                movies = ai_search_movies(search_query)
             
             if movies:
                 options = {format_option(m): m for m in movies}
@@ -1325,18 +1871,12 @@ elif st.session_state.page == "search":
         if st.button("✨ Get Similar Recommendations", type="primary", use_container_width=True):
             st.session_state.selected_rec = None
             with st.spinner("Analysing semantics..."):
-                # Call API
-                try:
-                    api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
-                    r = requests.get(f"{api_url}/recommend/id/{movie['id']}", params={"n": 10}, timeout=30)
-                    if r.ok:
-                        result = r.json()
-                        st.session_state.recs = result["recommendations"]
-                        st.session_state.source_movie = movie
-                    else:
-                        st.error("API Error")
-                except Exception as e:
-                    st.error(f"Connection Error: {e}")
+                result = get_recommendations(movie["id"], n=10)
+                if result and result.get("recommendations"):
+                    st.session_state.recs = result["recommendations"]
+                    st.session_state.source_movie = movie
+                else:
+                    st.error("Recommendations are unavailable right now. Please retry in a moment.")
 
     # Display Recommendations Grid (Shared Logic)
     if "recs" in st.session_state and st.session_state.recs:
@@ -1405,22 +1945,469 @@ elif st.session_state.page == "chat":
         st.session_state.chat_history.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
-            
+
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 try:
                     recent_msgs = st.session_state.chat_history[-6:]
                     clean_msgs = [{"role": m["role"], "content": m["content"]} for m in recent_msgs if m["role"] != "system"]
-                    
-                    api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
-                    r = requests.post(f"{api_url}/chat", json={"messages": clean_msgs}, timeout=60)
-                    
-                    if r.ok:
-                        response_text = r.json()["content"]
+
+                    result = api_post("/chat", {"messages": clean_msgs}, timeout=60)
+                    if result and not result.get("error"):
+                        response_text = result["content"]
                         st.markdown(response_text)
                         st.session_state.chat_history.append({"role": "assistant", "content": response_text})
                     else:
                          st.error("AI Brain Offline.")
                 except Exception as e:
                     st.error(f"Error: {e}")
+
+# ===== PAGE 4: REAL-TIME MONITORING =====
+elif st.session_state.page == "monitoring":
+    # Header navigation
+    c1, c2 = st.columns([1, 8])
+    with c1:
+        if st.button("🏠 Home", key="back_monitoring"):
+            go_home()
+            st.rerun()
+
+    st.title("📊 Real-Time Data Pipeline Monitoring")
+    st.caption("Kafka event stream and Delta table state visualization")
+
+    # Custom CSS for monitoring page
+    st.markdown("""
+    <style>
+    /* Monitoring page specific styles */
+    .monitoring-card {
+        background: rgba(0, 0, 0, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 15px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    }
+    .monitoring-title {
+        font-size: 1.2rem;
+        font-weight: 600;
+        color: #ffffff;
+        margin-bottom: 15px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        padding-bottom: 10px;
+    }
+    .event-stream {
+        height: 300px;
+        overflow-y: auto;
+        background: rgba(0, 0, 0, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        padding: 10px;
+        font-family: monospace;
+        font-size: 0.8rem;
+    }
+    .event-item {
+        padding: 8px;
+        margin-bottom: 5px;
+        border-radius: 5px;
+        background: rgba(255, 255, 255, 0.05);
+        border-left: 3px solid #e50914;
+    }
+    .event-item.view {
+        border-left-color: #4CAF50;
+    }
+    .event-item.rating {
+        border-left-color: #FFC107;
+    }
+    .event-timestamp {
+        color: #888;
+        font-size: 0.7rem;
+        margin-bottom: 3px;
+    }
+    .event-details {
+        color: #fff;
+        font-size: 0.85rem;
+    }
+    .metric-card {
+        background: rgba(0, 0, 0, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 15px;
+        padding: 15px;
+        text-align: center;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    }
+    .metric-value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #ffffff;
+        margin: 10px 0;
+    }
+    .metric-label {
+        font-size: 0.8rem;
+        color: #aaa;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    .chart-container {
+        background: rgba(0, 0, 0, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 15px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Initialize monitoring data if not exists
+    if "monitoring_data" not in st.session_state:
+        st.session_state.monitoring_data = {
+            "kafka_events": [],
+            "delta_state": {},
+            "system_metrics": {
+                "total_events": 0,
+                "view_events": 0,
+                "rating_events": 0,
+                "last_event_time": None,
+                "events_per_minute": 0
+            }
+        }
+
+    # Function to simulate Kafka consumer (will be replaced with real implementation)
+    def consume_kafka_events():
+        """Simulate consuming Kafka events for demo purposes"""
+        import random
+        from datetime import datetime
+
+        # Sample movie data for simulation
+        sample_movies = [
+            {"id": 1, "title": "The Shawshank Redemption"},
+            {"id": 2, "title": "The Godfather"},
+            {"id": 3, "title": "Pulp Fiction"},
+            {"id": 4, "title": "The Dark Knight"},
+            {"id": 5, "title": "Inception"},
+            {"id": 6, "title": "Fight Club"},
+            {"id": 7, "title": "Forrest Gump"},
+            {"id": 8, "title": "The Matrix"},
+            {"id": 9, "title": "Goodfellas"},
+            {"id": 10, "title": "The Silence of the Lambs"}
+        ]
+
+        # Generate random event
+        movie = random.choice(sample_movies)
+        event_types = ["view", "rating"]
+        event_type = random.choice(event_types)
+
+        event = {
+            "id": movie["id"],
+            "title": movie["title"],
+            "event_type": event_type,
+            "user_id": random.randint(100, 999),
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+        if event_type == "rating":
+            event["rating"] = random.randint(1, 5)
+
+        return event
+
+    # Function to simulate Delta table state
+    def get_delta_table_state():
+        """Simulate getting Delta table state for demo purposes"""
+        import random
+        from datetime import datetime, timedelta
+
+        # Simulate some processing state
+        states = ["idle", "processing", "updating", "optimizing"]
+        current_state = random.choice(states)
+
+        # Simulate last update time
+        last_update = datetime.now() - timedelta(minutes=random.randint(0, 60))
+        last_update_str = last_update.strftime("%Y-%m-%d %H:%M:%S")
+
+        # Simulate record counts
+        record_count = random.randint(10000, 50000)
+        new_records = random.randint(0, 100)
+
+        return {
+            "status": current_state,
+            "last_update": last_update_str,
+            "record_count": record_count,
+            "new_records": new_records,
+            "processing_time": f"{random.randint(1, 10)}.{random.randint(0, 99)}s",
+            "table_size": f"{random.randint(100, 999)}.{random.randint(0, 99)} MB"
+        }
+
+    # Function to update monitoring data
+    def update_monitoring_data():
+        """Update monitoring data with simulated values"""
+        # Simulate Kafka events
+        if len(st.session_state.monitoring_data["kafka_events"]) < 20:  # Limit to 20 events for display
+            event = consume_kafka_events()
+            st.session_state.monitoring_data["kafka_events"].insert(0, event)
+        else:
+            # Remove oldest event if we have too many
+            st.session_state.monitoring_data["kafka_events"].pop()
+            event = consume_kafka_events()
+            st.session_state.monitoring_data["kafka_events"].insert(0, event)
+
+        # Update metrics
+        metrics = st.session_state.monitoring_data["system_metrics"]
+        metrics["total_events"] += 1
+
+        if event["event_type"] == "view":
+            metrics["view_events"] += 1
+        elif event["event_type"] == "rating":
+            metrics["rating_events"] += 1
+
+        metrics["last_event_time"] = event["timestamp"]
+
+        # Calculate events per minute (simple simulation)
+        if metrics["total_events"] > 1:
+            metrics["events_per_minute"] = min(metrics["total_events"], 60)  # Cap at 60 for demo
+
+        # Simulate Delta table state
+        st.session_state.monitoring_data["delta_state"] = get_delta_table_state()
+
+    # Update monitoring data periodically
+    if st.session_state.get("last_monitoring_update", 0) < time.time() - 2:  # Update every 2 seconds
+        update_monitoring_data()
+        st.session_state.last_monitoring_update = time.time()
+
+    # Layout: Two columns for metrics and event stream
+    col1, col2 = st.columns([1, 1])
+
+    with col1:
+        # System Metrics
+        st.markdown('<div class="monitoring-title">📈 System Metrics</div>', unsafe_allow_html=True)
+
+        # Metrics grid
+        m1, m2, m3, m4 = st.columns(4)
+
+        metrics = st.session_state.monitoring_data["system_metrics"]
+
+        with m1:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-value">{metrics["total_events"]}</div>
+                <div class="metric-label">Total Events</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with m2:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-value">{metrics["view_events"]}</div>
+                <div class="metric-label">Views</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with m3:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-value">{metrics["rating_events"]}</div>
+                <div class="metric-label">Ratings</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with m4:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-value">{metrics["events_per_minute"]}</div>
+                <div class="metric-label">Events/Min</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # Delta Table State
+        st.markdown('<div class="monitoring-title">🔄 Delta Table State</div>', unsafe_allow_html=True)
+
+        delta_state = st.session_state.monitoring_data["delta_state"]
+
+        d1, d2, d3 = st.columns(3)
+
+        with d1:
+            st.metric("Status", delta_state.get("status", "unknown"))
+            st.metric("Last Update", delta_state.get("last_update", "never"))
+
+        with d2:
+            st.metric("Record Count", f"{delta_state.get('record_count', 0):,}")
+            st.metric("New Records", delta_state.get("new_records", 0))
+
+        with d3:
+            st.metric("Processing Time", delta_state.get("processing_time", "0s"))
+            st.metric("Table Size", delta_state.get("table_size", "0 MB"))
+
+    with col2:
+        # Event Stream
+        st.markdown('<div class="monitoring-title">📡 Kafka Event Stream</div>', unsafe_allow_html=True)
+
+        # Display event stream
+        event_stream_html = '<div class="event-stream">'
+        for event in st.session_state.monitoring_data["kafka_events"]:
+            event_type = event.get("event_type", "unknown")
+            event_class = f"event-item {event_type}"
+
+            event_details = f"""
+            <div class="event-timestamp">{event.get("timestamp", "")}</div>
+            <div class="event-details">
+                <strong>{event.get("title", "Unknown Movie")}</strong><br>
+                {event_type.upper()} by user {event.get("user_id", "?")}
+            """
+
+            if event_type == "rating":
+                event_details += f" (Rating: {event.get('rating', '?')}/5)"
+
+            event_details += "</div>"
+
+            event_stream_html += f'<div class="{event_class}">{event_details}</div>'
+        event_stream_html += '</div>'
+
+        st.markdown(event_stream_html, unsafe_allow_html=True)
+
+        # Auto-refresh toggle
+        if st.button("🔄 Refresh Now"):
+            update_monitoring_data()
+            st.rerun()
+
+    # Charts section
+    st.markdown('<div class="monitoring-title">📊 Data Pipeline Visualization</div>', unsafe_allow_html=True)
+
+    # Create two columns for charts
+    chart_col1, chart_col2 = st.columns(2)
+
+    with chart_col1:
+        # Event type distribution chart
+        st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+        st.subheader("Event Type Distribution")
+
+        # Prepare data for pie chart
+        event_counts = {
+            "Views": metrics["view_events"],
+            "Ratings": metrics["rating_events"]
+        }
+
+        # Create pie chart
+        import plotly.express as px
+        fig = px.pie(
+            values=list(event_counts.values()),
+            names=list(event_counts.keys()),
+            color=list(event_counts.keys()),
+            color_discrete_map={"Views": "#4CAF50", "Ratings": "#FFC107"},
+            hole=0.4
+        )
+        fig.update_layout(
+            margin=dict(t=0, b=0, l=0, r=0),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#ffffff"),
+            showlegend=True
+        )
+        fig.update_traces(textposition="inside", textinfo="percent+label")
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with chart_col2:
+        # Event timeline chart
+        st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+        st.subheader("Event Timeline")
+
+        # Prepare data for line chart (simulated)
+        import pandas as pd
+        import numpy as np
+
+        # Create simulated timeline data
+        now = datetime.now()
+        time_points = [now - timedelta(minutes=i) for i in range(10, 0, -1)]
+        event_counts = [metrics["events_per_minute"] * (1 + 0.2 * np.random.randn()) for _ in range(10)]
+        event_counts = [max(0, int(count)) for count in event_counts]
+
+        df = pd.DataFrame({
+            "Time": time_points,
+            "Events": event_counts
+        })
+
+        # Create line chart
+        fig = px.line(
+            df,
+            x="Time",
+            y="Events",
+            line_shape="spline",
+            color_discrete_sequence=["#e50914"]
+        )
+        fig.update_layout(
+            margin=dict(t=0, b=0, l=0, r=0),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#ffffff"),
+            xaxis=dict(showgrid=False, title=None),
+            yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.1)", title=None),
+            showlegend=False
+        )
+        fig.update_traces(line=dict(width=3))
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # System Architecture Diagram
+    st.markdown('<div class="monitoring-title">🏗️ Data Pipeline Architecture</div>', unsafe_allow_html=True)
+
+    st.markdown("""
+    <div class="monitoring-card">
+        <div style="text-align: center; padding: 20px;">
+            <svg width="100%" height="200" viewBox="0 0 800 200" style="background: rgba(0,0,0,0.3); border-radius: 10px; padding: 20px;">
+                <!-- Kafka -->
+                <rect x="50" y="80" width="120" height="60" rx="10" fill="#231F20" stroke="#e50914" stroke-width="2"/>
+                <text x="110" y="50" text-anchor="middle" fill="#ffffff" font-size="14" font-weight="bold">Kafka</text>
+                <text x="110" y="70" text-anchor="middle" fill="#e50914" font-size="12">movie_events</text>
+                <text x="110" y="115" text-anchor="middle" fill="#ffffff" font-size="10">Topic</text>
+
+                <!-- Spark -->
+                <rect x="250" y="80" width="120" height="60" rx="10" fill="#231F20" stroke="#4CAF50" stroke-width="2"/>
+                <text x="310" y="50" text-anchor="middle" fill="#ffffff" font-size="14" font-weight="bold">Spark</text>
+                <text x="310" y="100" text-anchor="middle" fill="#4CAF50" font-size="10">Streaming</text>
+                <text x="310" y="115" text-anchor="middle" fill="#4CAF50" font-size="10">Processing</text>
+
+                <!-- Delta Lake -->
+                <rect x="450" y="80" width="120" height="60" rx="10" fill="#231F20" stroke="#2196F3" stroke-width="2"/>
+                <text x="510" y="50" text-anchor="middle" fill="#ffffff" font-size="14" font-weight="bold">Delta</text>
+                <text x="510" y="70" text-anchor="middle" fill="#2196F3" font-size="12">movies</text>
+                <text x="510" y="115" text-anchor="middle" fill="#2196F3" font-size="10">Table</text>
+
+                <!-- Streamlit -->
+                <rect x="650" y="80" width="120" height="60" rx="10" fill="#231F20" stroke="#FF9800" stroke-width="2"/>
+                <text x="710" y="50" text-anchor="middle" fill="#ffffff" font-size="14" font-weight="bold">Streamlit</text>
+                <text x="710" y="100" text-anchor="middle" fill="#FF9800" font-size="10">Real-Time</text>
+                <text x="710" y="115" text-anchor="middle" fill="#FF9800" font-size="10">Dashboard</text>
+
+                <!-- Arrows -->
+                <line x1="170" y1="110" x2="250" y2="110" stroke="#e50914" stroke-width="2" marker-end="url(#arrowhead)"/>
+                <line x1="370" y1="110" x2="450" y2="110" stroke="#4CAF50" stroke-width="2" marker-end="url(#arrowhead)"/>
+                <line x1="570" y1="110" x2="650" y2="110" stroke="#2196F3" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+                <!-- Arrowhead marker -->
+                <defs>
+                    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#666"/>
+                    </marker>
+                </defs>
+
+                <!-- Labels -->
+                <text x="110" y="170" text-anchor="middle" fill="#ffffff" font-size="10">1. User Events</text>
+                <text x="310" y="170" text-anchor="middle" fill="#ffffff" font-size="10">2. Stream Processing</text>
+                <text x="510" y="170" text-anchor="middle" fill="#ffffff" font-size="10">3. Data Storage</text>
+                <text x="710" y="170" text-anchor="middle" fill="#ffffff" font-size="10">4. Visualization</text>
+            </svg>
+        </div>
+        <div style="text-align: center; margin-top: 10px; color: #aaa; font-size: 0.8rem;">
+            Real-time data flow: Kafka → Spark Streaming → Delta Lake → Streamlit Dashboard
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Footer
+    st.markdown("""
+    <div style="text-align: center; margin-top: 30px; color: #666; font-size: 0.8rem;">
+        <p>Real-time monitoring dashboard for Movie Recommendation System data pipeline</p>
+        <p>Showing simulated data - connect to actual Kafka and Delta Lake for production use</p>
+    </div>
+    """, unsafe_allow_html=True)
 

@@ -24,6 +24,9 @@ jobs:
       - name: Install dependencies
         run: pip install huggingface_hub
 
+      - name: Validate Python syntax before Space sync
+        run: python -m compileall backend etl airflow scripts streamlit_app.py manage.py tests test_delta_implementation.py test_llm.py
+
       - name: Deploy to Hugging Face Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -37,7 +40,21 @@ jobs:
               folder_path='.',
               repo_id='pavanbadempet/movie-rec-api',
               repo_type='space',
-              ignore_patterns=['.git/*', '.github/*']
+              ignore_patterns=[
+                  '.git/*',
+                  '.github/*',
+                  'models/*.npy',
+                  'models/*.index',
+                  'models/*.joblib',
+                  'models/*.joblib.metadata.json',
+                  'models/pipeline_manifest.json',
+                  'data/processed/*.parquet',
+                  'data/bronze/*',
+                  'data/silver/*',
+                  'data/gold/*',
+                  'data/manifests/*',
+                  'data/quality/*',
+              ]
           )
           print('Upload complete!')
           "

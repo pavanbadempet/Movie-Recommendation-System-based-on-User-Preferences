@@ -87,6 +87,38 @@ jobs:
           echo "https://www.kaggle.com/code/$KERNEL_ID"
           exit 1
 
+      - name: Validate Hugging Face serving artifact contract
+        if: success()
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          pip install numpy pandas pyarrow huggingface_hub
+          python scripts/validate_serving_artifacts.py --repo pavanbadempet/movie-recs-models
+
+      - name: Train and upload Nova ranker
+        if: success()
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          NOVA_EVENTS_URL: ${{ secrets.NOVA_EVENTS_URL }}
+          NOVA_EVENT_DATABASE_URL: ${{ secrets.NOVA_EVENT_DATABASE_URL }}
+        run: |
+          pip install pandas pyarrow numpy scikit-learn joblib huggingface_hub "psycopg[binary]"
+          EVENT_ARGS=()
+          if [ -n "$NOVA_EVENTS_URL" ]; then
+            EVENT_ARGS+=(--events-url "$NOVA_EVENTS_URL")
+          fi
+          if [ -n "$NOVA_EVENT_DATABASE_URL" ]; then
+            export NOVA_EVENT_STORE=postgres
+          fi
+          python scripts/train_ranker.py \
+            --download-movies-from-hf \
+            --upload-to-hf \
+            --promotion-gate \
+            --hf-repo pavanbadempet/movie-recs-models \
+            --output models/nova_ranker.candidate.joblib \
+            --production-output models/nova_ranker.joblib \
+            "${EVENT_ARGS[@]}"
+
       - name: Trigger Render backend restart
         if: success()
         run: |

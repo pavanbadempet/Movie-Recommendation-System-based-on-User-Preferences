@@ -20,6 +20,9 @@ COPY etl/ ./etl/
 COPY backend/ ./backend/
 COPY streamlit_app.py .
 
+# Fail image builds early if synced Python source has a syntax error.
+RUN python -m compileall backend etl streamlit_app.py
+
 # Copy Pre-computed Models and Data
 COPY models/ ./models/
 COPY data/processed/ ./data/processed/
@@ -55,6 +58,7 @@ EXPOSE 7860 8000 8501
 # Set default port to 7860 for Hugging Face Spaces
 # Render will override this environment variable at runtime
 ENV PORT=7860
+ENV NOVA_REFRESH_PIPELINE_MANIFEST=true
 
 # Default command: run backend API.
 CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port $PORT"]

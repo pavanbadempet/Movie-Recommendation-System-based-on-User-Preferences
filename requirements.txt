@@ -24,6 +24,7 @@ slowapi>=0.1.8  # Rate limiting
 # Frontend
 streamlit>=1.54.0
 st-clickable-images>=0.0.3  # Clickable image grid
+plotly>=5.0.0  # Frontend charts
 requests>=2.31.0
 
 # Utilities
@@ -31,6 +32,7 @@ python-dotenv>=1.0.0
 joblib>=1.3.0
 sentry-sdk[fastapi,pure_eval]>=1.39.0  # Error Monitoring
 httpx>=0.25.0  # Async HTTP client
+psycopg[binary]>=3.1.0  # Optional durable Postgres event store
 
 # Development & testing
 pytest>=7.4.0

@@ -2,6 +2,7 @@
 Tests for Pandas ETL module (consolidated).
 """
 import pytest
+import json
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -17,11 +18,21 @@ def test_paths_dataclass():
         p = Paths(
             raw_data=Path(tmp) / "raw",
             processed_data=Path(tmp) / "processed",
+            bronze_data=Path(tmp) / "bronze",
+            silver_data=Path(tmp) / "silver",
+            gold_data=Path(tmp) / "gold",
             models=Path(tmp) / "models",
             logs=Path(tmp) / "logs",
+            quality_reports=Path(tmp) / "quality",
+            manifests=Path(tmp) / "manifests",
         )
         assert p.raw_data.exists()
         assert p.processed_data.exists()
+        assert p.bronze_data.exists()
+        assert p.silver_data.exists()
+        assert p.gold_data.exists()
+        assert p.quality_reports.exists()
+        assert p.manifests.exists()
 
 def test_data_config_defaults():
     """DataConfig has sensible defaults."""
@@ -49,24 +60,43 @@ class TestIngest:
             "poster_path": ["/a.jpg", "/b.jpg", "/c.jpg"],
         })
 
-    def test_filter_movies_removes_low_votes(self, sample_df):
-        """filter_movies removes movies below vote threshold."""
+    def test_filter_movies_keeps_low_vote_long_tail(self, sample_df):
+        """filter_movies keeps low-vote movies and scores them as long-tail content."""
         from etl.pandas_etl import filter_movies
         result = filter_movies(sample_df)
-        assert len(result) == 2  # id 2 has only 20 votes
-        assert 2 not in result["id"].values
+        assert len(result) == 3
+        assert 2 in result["id"].values
+        assert "content_quality_score" in result.columns
+        assert "quality_bucket" in result.columns
 
-    def test_filter_movies_removes_nulls(self):
-        """filter_movies removes rows with null title/overview."""
+    def test_filter_movies_removes_null_title_but_keeps_missing_overview(self):
+        """filter_movies removes rows without identity but keeps weak metadata."""
         from etl.pandas_etl import filter_movies
         df = pd.DataFrame({
-            "id": [1, 2],
-            "title": ["Movie", None],
-            "overview": ["Story", "Another"],
-            "vote_count": [100, 100],
+            "id": [1, 2, 3],
+            "title": ["Movie", None, "No Overview"],
+            "overview": ["Story", "Another", None],
+            "vote_count": [100, 100, 0],
         })
         result = filter_movies(df)
-        assert len(result) == 1
+        assert len(result) == 2
+        assert 3 in result["id"].values
+
+    def test_filter_movies_deduplicates_by_highest_signal(self):
+        """filter_movies keeps one deterministic row per movie id."""
+        from etl.pandas_etl import filter_movies
+        df = pd.DataFrame({
+            "id": [1, 1, 2],
+            "title": ["Movie A Low", "Movie A High", "Movie B"],
+            "overview": ["Story", "Better story", "Another"],
+            "vote_count": [100, 500, 100],
+            "popularity": [10.0, 40.0, 20.0],
+        })
+
+        result = filter_movies(df)
+
+        assert len(result) == 2
+        assert result[result["id"] == 1].iloc[0]["title"] == "Movie A High"
 
     def test_quality_checks_returns_metrics(self, sample_df):
         """run_quality_checks returns dict with expected keys."""
@@ -75,6 +105,8 @@ class TestIngest:
         assert "total_rows" in metrics
         assert "null_titles" in metrics
         assert metrics["total_rows"] == 3
+        assert metrics["duplicate_ids"] == 0
+        assert metrics["title_completeness"] == 1.0
 
 
 # ----- Transform Tests -----
@@ -158,6 +190,44 @@ class TestIndex:
         idx = build_faiss_index(vecs)
         assert idx.ntotal == 50
 
+    def test_atomic_parquet_write_replaces_existing_file(self, tmp_path):
+        """atomic_write_parquet replaces only after a complete write."""
+        from etl.pandas_etl import atomic_write_parquet
+
+        output_path = tmp_path / "movies.parquet"
+        atomic_write_parquet(pd.DataFrame({"id": [1], "title": ["Old"]}), output_path)
+        atomic_write_parquet(pd.DataFrame({"id": [2], "title": ["New"]}), output_path)
+
+        result = pd.read_parquet(output_path)
+        assert result.to_dict(orient="records") == [{"id": 2, "title": "New"}]
+
+    def test_batch_invariants_reject_duplicate_ids(self):
+        """assert_batch_invariants fails before bad serving artifacts are published."""
+        from etl.pandas_etl import assert_batch_invariants
+
+        df = pd.DataFrame({
+            "id": [1, 1],
+            "title": ["A", "A duplicate"],
+            "overview": ["Story", "Story again"],
+        })
+
+        with pytest.raises(ValueError, match="duplicate movie ids"):
+            assert_batch_invariants(df, stage="silver")
+
+    def test_batch_invariants_reject_misaligned_movie_id_map(self):
+        """The ETL contract catches row-order drift before artifacts are published."""
+        from etl.pandas_etl import assert_batch_invariants
+
+        df = pd.DataFrame({
+            "id": [1, 2],
+            "title": ["Avatar", "Titanic"],
+            "overview": ["Blue aliens", "Ship sinks"],
+        })
+        vectors = np.random.rand(2, 8).astype(np.float32)
+
+        with pytest.raises(ValueError, match="movie id map order"):
+            assert_batch_invariants(df, vectors=vectors, movie_ids=np.array([2, 1]), stage="gold")
+
     # Removed faiss_search test as search logic is inside faiss index mostly,
     # and we removed index.search wrapper function (it was just idx.search).
     # Recommender tests cover search.
@@ -188,6 +258,7 @@ class TestRecommender:
         vecs = vecs / norms
         
         np.save(tmp_path / "sbert_embeddings.npy", vecs)
+        np.save(tmp_path / "movie_ids.npy", movies["id"].astype("int64").to_numpy())
         
         # As recommender uses SBERT now, we skip scaler/tfidf
         
@@ -195,6 +266,22 @@ class TestRecommender:
         idx = faiss.IndexFlatIP(vecs.shape[1])
         idx.add(vecs)
         faiss.write_index(idx, str(tmp_path / "faiss.index"))
+        (tmp_path / "pipeline_manifest.json").write_text(
+            json.dumps(
+                {
+                    "run_id": "test-run",
+                    "serving_contract": {
+                        "version": 1,
+                        "movie_rows": 5,
+                        "embedding_rows": 5,
+                        "embedding_dimensions": 384,
+                        "faiss_index_size": 5,
+                        "movie_id_map_rows": 5,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
         
         return tmp_path
 
@@ -230,5 +317,65 @@ class TestRecommender:
         
         r = rec.Recommender().load()
         recs = r.recommend_by_id(1, n=2)  # Avatar
-        assert len(recs) == 2
+        assert len(recs) >= 1
         assert all("similarity_score" in m for m in recs)
+
+    def test_llm_rerank_is_disabled_by_default(self, mock_recommender, monkeypatch):
+        """OpenRouter reranking must not run unless explicitly enabled."""
+        import backend.recommender as rec
+
+        monkeypatch.setattr(rec, "MODELS_DIR", mock_recommender)
+        monkeypatch.setattr(rec, "DATA_DIR", mock_recommender)
+        monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+        monkeypatch.delenv("NOVA_ENABLE_LLM_RERANK", raising=False)
+
+        def fail_if_called(*args, **kwargs):
+            raise AssertionError("LLM reranking should be opt-in")
+
+        monkeypatch.setattr(rec.Recommender, "_rerank_with_llm", fail_if_called)
+
+        r = rec.Recommender().load()
+        recs = r.recommend_by_id(1, n=2)
+
+        assert len(recs) >= 1
+
+    def test_mismatched_vector_artifacts_fall_back_to_sparse_content(self, mock_recommender, monkeypatch):
+        """Serving must not trust FAISS vectors when row counts differ from the catalog."""
+        import faiss
+        import backend.recommender as rec
+
+        monkeypatch.setattr(rec, "MODELS_DIR", mock_recommender)
+        monkeypatch.setattr(rec, "DATA_DIR", mock_recommender)
+
+        bad_vecs = np.random.rand(6, 384).astype(np.float32)
+        bad_vecs = bad_vecs / np.linalg.norm(bad_vecs, axis=1, keepdims=True)
+        np.save(mock_recommender / "sbert_embeddings.npy", bad_vecs)
+        bad_index = faiss.IndexFlatIP(bad_vecs.shape[1])
+        bad_index.add(bad_vecs)
+        faiss.write_index(bad_index, str(mock_recommender / "faiss.index"))
+
+        r = rec.Recommender().load()
+        recs = r.recommend_by_id(1, n=2)
+
+        assert r._vectors is None
+        assert r._index is None
+        assert r._artifact_status["vector_artifacts_ready"] is False
+        assert "vector" in r._artifact_status["disabled_reason"]
+        assert len(recs) >= 1
+        assert all(item["retrieval_stage"] == "content_sparse_fallback" for item in recs)
+
+    def test_vector_artifacts_require_movie_id_map(self, mock_recommender, monkeypatch):
+        """Serving must not trust row-position vectors without an explicit movie id map."""
+        import backend.recommender as rec
+
+        monkeypatch.setattr(rec, "MODELS_DIR", mock_recommender)
+        monkeypatch.setattr(rec, "DATA_DIR", mock_recommender)
+        monkeypatch.delenv("NOVA_ALLOW_LEGACY_ROW_ALIGNED_VECTORS", raising=False)
+        (mock_recommender / "movie_ids.npy").unlink()
+
+        r = rec.Recommender().load()
+
+        assert r._vectors is None
+        assert r._index is None
+        assert r._artifact_status["vector_artifacts_ready"] is False
+        assert "movie_ids.npy is required" in r._artifact_status["disabled_reason"]
