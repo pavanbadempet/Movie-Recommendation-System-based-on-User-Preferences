@@ -250,32 +250,65 @@ def wake_up_backend():
     """
     Wake up backend and find an active server from the failover list.
     """
-    # 1. Fast check existing known-good URL
-    if "API_URL" in st.session_state:
+    def catalog_ready(url, timeout=8):
         try:
-            r = requests.get(f"{st.session_state.API_URL}/health", timeout=2)
-            if r.ok:
-                return True
-        except requests.RequestException:
-            pass # Move to full scan
+            health = requests.get(f"{url}/health", timeout=3)
+            if not health.ok:
+                return False
 
-    # 2. Sequential ping of all configured backends
-    with st.spinner("🚀 Booting up the recommendation engine... (This can take ~45s if waking from sleep)"):
-        # We try all backends. Max 30 loops = ~60-90 seconds total wait.
-        for _ in range(30):
+            probe = requests.get(
+                f"{url}/movies/titles",
+                params={"limit": 1},
+                headers=api_headers(),
+                timeout=timeout,
+            )
+            if probe.ok and probe.json():
+                st.session_state.API_URL = url
+                return True
+        except (requests.RequestException, ValueError):
+            return False
+        return False
+
+    # 1. Fast check existing known-good URL, but only if the catalog is ready.
+    if "API_URL" in st.session_state:
+        if catalog_ready(st.session_state.API_URL, timeout=5):
+            return True
+        st.session_state.pop("API_URL", None)
+
+    # 2. Sequential ping of all configured backends.
+    with st.spinner("Booting up the recommendation engine... this can take a minute on free hosting"):
+        for attempt in range(18):
             for url in BACKEND_URLS:
-                try:
-                    r = requests.get(f"{url}/health", timeout=3)
-                    if r.ok:
-                        st.session_state.API_URL = url
-                        domain = url.split("//")[-1].split(".")[0]
-                        st.toast(f"✅ Connected to {domain}!", icon="⚡")
-                        return True
-                except requests.RequestException:
-                    pass
-            time.sleep(2)
-        
+                timeout = 6 if attempt < 3 else 12
+                if catalog_ready(url, timeout=timeout):
+                    domain = url.split("//")[-1].split(".")[0]
+                    st.toast(f"Connected to {domain}")
+                    return True
+            time.sleep(3)
+
     return False
+
+
+def candidate_backend_urls():
+    """Return active backend first, then fallbacks without duplicates."""
+    urls = []
+    active = st.session_state.get("API_URL")
+    if active:
+        urls.append(active)
+    urls.extend(BACKEND_URLS)
+    seen = set()
+    ordered = []
+    for url in urls:
+        if url and url not in seen:
+            ordered.append(url)
+            seen.add(url)
+    return ordered
+
+
+def set_active_backend(url):
+    st.session_state.API_URL = url
+    st.session_state.backend_ready = True
+
 
 # Initialize connection on app load
 if "backend_ready" not in st.session_state or "API_URL" not in st.session_state:
@@ -323,25 +356,27 @@ def ai_search_movies(query):
     return []
 
 
-@st.cache_data(ttl=3600)
-def fetch_all_movie_titles(version=3):
+@st.cache_data(ttl=900, show_spinner=False)
+def fetch_all_movie_titles(backend_urls, version=4):
     """Fetch all movie titles for the autocomplete dropdown."""
-    if not st.session_state.backend_ready:
-        return []
+    for api_url in backend_urls:
+        try:
+            r = requests.get(
+                f"{api_url}/movies/titles",
+                params={"limit": 5000},
+                headers=api_headers(),
+                timeout=45,
+            )
+            if r.ok:
+                data = r.json()
+                if data:
+                    return {"api_url": api_url, "titles": data}
+        except Exception:
+            continue
         
-    try:
-        api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
-        r = requests.get(f"{api_url}/movies/titles", timeout=20)
-        if r.ok:
-            data = r.json()
-            if data:
-                return data  # Returns list of {"id": X, "title": "Y"}
-    except Exception:
-        pass
-        
-    # If we get here, it failed to load. Clear the cache so it retries later instead of serving [] for an hour.
+    # Do not cache a failed catalog fetch; free-tier backends may still be warming.
     fetch_all_movie_titles.clear()
-    return []
+    return {"api_url": None, "titles": []}
 
 
 def get_recommendations(movie_id, n=10):
@@ -1691,7 +1726,10 @@ elif st.session_state.page == "search":
     
     # Pre-fetch all titles for instant autocomplete
     with st.spinner("Loading movie catalog..."):
-        all_titles = fetch_all_movie_titles()
+        title_payload = fetch_all_movie_titles(tuple(candidate_backend_urls()))
+        all_titles = title_payload.get("titles", []) if title_payload else []
+        if title_payload and title_payload.get("api_url"):
+            set_active_backend(title_payload["api_url"])
     
     movie_to_fetch = None
     
@@ -1720,6 +1758,11 @@ elif st.session_state.page == "search":
                 st.error("Failed to load movie details.")
     else:
         st.warning("⚠️ Could not load the movie catalog. The recommendation engine may still be starting up.")
+        if st.button("Retry catalog", key="retry_catalog_load"):
+            fetch_all_movie_titles.clear()
+            st.session_state.pop("API_URL", None)
+            st.session_state.backend_ready = wake_up_backend()
+            st.rerun()
     
     # 2. Semantic Search (The fallback/advanced UX)
     with st.expander("🔎 Search by plot, genre, or description"):
