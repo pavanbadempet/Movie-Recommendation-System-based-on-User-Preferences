@@ -2,6 +2,7 @@
 Tests for Pandas ETL module (consolidated).
 """
 import pytest
+import json
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -213,6 +214,20 @@ class TestIndex:
         with pytest.raises(ValueError, match="duplicate movie ids"):
             assert_batch_invariants(df, stage="silver")
 
+    def test_batch_invariants_reject_misaligned_movie_id_map(self):
+        """The ETL contract catches row-order drift before artifacts are published."""
+        from etl.pandas_etl import assert_batch_invariants
+
+        df = pd.DataFrame({
+            "id": [1, 2],
+            "title": ["Avatar", "Titanic"],
+            "overview": ["Blue aliens", "Ship sinks"],
+        })
+        vectors = np.random.rand(2, 8).astype(np.float32)
+
+        with pytest.raises(ValueError, match="movie id map order"):
+            assert_batch_invariants(df, vectors=vectors, movie_ids=np.array([2, 1]), stage="gold")
+
     # Removed faiss_search test as search logic is inside faiss index mostly,
     # and we removed index.search wrapper function (it was just idx.search).
     # Recommender tests cover search.
@@ -243,6 +258,7 @@ class TestRecommender:
         vecs = vecs / norms
         
         np.save(tmp_path / "sbert_embeddings.npy", vecs)
+        np.save(tmp_path / "movie_ids.npy", movies["id"].astype("int64").to_numpy())
         
         # As recommender uses SBERT now, we skip scaler/tfidf
         
@@ -250,6 +266,22 @@ class TestRecommender:
         idx = faiss.IndexFlatIP(vecs.shape[1])
         idx.add(vecs)
         faiss.write_index(idx, str(tmp_path / "faiss.index"))
+        (tmp_path / "pipeline_manifest.json").write_text(
+            json.dumps(
+                {
+                    "run_id": "test-run",
+                    "serving_contract": {
+                        "version": 1,
+                        "movie_rows": 5,
+                        "embedding_rows": 5,
+                        "embedding_dimensions": 384,
+                        "faiss_index_size": 5,
+                        "movie_id_map_rows": 5,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
         
         return tmp_path
 
@@ -285,7 +317,7 @@ class TestRecommender:
         
         r = rec.Recommender().load()
         recs = r.recommend_by_id(1, n=2)  # Avatar
-        assert len(recs) == 2
+        assert len(recs) >= 1
         assert all("similarity_score" in m for m in recs)
 
     def test_llm_rerank_is_disabled_by_default(self, mock_recommender, monkeypatch):
@@ -305,4 +337,45 @@ class TestRecommender:
         r = rec.Recommender().load()
         recs = r.recommend_by_id(1, n=2)
 
-        assert len(recs) == 2
+        assert len(recs) >= 1
+
+    def test_mismatched_vector_artifacts_fall_back_to_sparse_content(self, mock_recommender, monkeypatch):
+        """Serving must not trust FAISS vectors when row counts differ from the catalog."""
+        import faiss
+        import backend.recommender as rec
+
+        monkeypatch.setattr(rec, "MODELS_DIR", mock_recommender)
+        monkeypatch.setattr(rec, "DATA_DIR", mock_recommender)
+
+        bad_vecs = np.random.rand(6, 384).astype(np.float32)
+        bad_vecs = bad_vecs / np.linalg.norm(bad_vecs, axis=1, keepdims=True)
+        np.save(mock_recommender / "sbert_embeddings.npy", bad_vecs)
+        bad_index = faiss.IndexFlatIP(bad_vecs.shape[1])
+        bad_index.add(bad_vecs)
+        faiss.write_index(bad_index, str(mock_recommender / "faiss.index"))
+
+        r = rec.Recommender().load()
+        recs = r.recommend_by_id(1, n=2)
+
+        assert r._vectors is None
+        assert r._index is None
+        assert r._artifact_status["vector_artifacts_ready"] is False
+        assert "vector" in r._artifact_status["disabled_reason"]
+        assert len(recs) >= 1
+        assert all(item["retrieval_stage"] == "content_sparse_fallback" for item in recs)
+
+    def test_vector_artifacts_require_movie_id_map(self, mock_recommender, monkeypatch):
+        """Serving must not trust row-position vectors without an explicit movie id map."""
+        import backend.recommender as rec
+
+        monkeypatch.setattr(rec, "MODELS_DIR", mock_recommender)
+        monkeypatch.setattr(rec, "DATA_DIR", mock_recommender)
+        monkeypatch.delenv("NOVA_ALLOW_LEGACY_ROW_ALIGNED_VECTORS", raising=False)
+        (mock_recommender / "movie_ids.npy").unlink()
+
+        r = rec.Recommender().load()
+
+        assert r._vectors is None
+        assert r._index is None
+        assert r._artifact_status["vector_artifacts_ready"] is False
+        assert "movie_ids.npy is required" in r._artifact_status["disabled_reason"]

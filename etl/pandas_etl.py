@@ -27,6 +27,7 @@ from etl.config import paths, data_config
 logger = logging.getLogger(__name__)
 PIPELINE_NAME = "nova-pandas-etl"
 PIPELINE_VERSION = "1.0"
+SERVING_CONTRACT_VERSION = 1
 
 # ==========================================
 # 1. INGESTION LOGIC
@@ -366,9 +367,11 @@ def transform(df: pd.DataFrame | None = None) -> tuple[pd.DataFrame, np.ndarray]
 
     df = generate_tags(df)
     model, vectors = build_sbert_embeddings(df["tags"])
+    movie_ids = movie_id_vector(df)
     
     # Save serving artifacts atomically so failed runs do not corrupt the last good version.
     atomic_save_npy(vectors, paths.models / "sbert_embeddings.npy")
+    atomic_save_npy(movie_ids, paths.models / "movie_ids.npy")
     atomic_write_parquet(df, paths.processed_data / "movies_transformed.parquet")
     
     logger.info("Transformation complete")
@@ -507,6 +510,51 @@ def atomic_write_faiss_index(index: faiss.Index, output_path: Path | str) -> Pat
     return output_path
 
 
+def movie_id_vector(df: pd.DataFrame) -> np.ndarray:
+    """Return the ordered int64 movie-id vector that defines vector row alignment."""
+    if "id" not in df.columns:
+        raise ValueError("serving catalog missing id column")
+    ids = pd.to_numeric(df["id"], errors="coerce")
+    if ids.isna().any():
+        raise ValueError("serving catalog contains non-numeric movie ids")
+    return ids.astype("int64").to_numpy()
+
+
+def movie_id_sha256(movie_ids: np.ndarray) -> str:
+    """Hash the exact ordered movie-id vector used by FAISS row positions."""
+    ids = np.asarray(movie_ids, dtype=np.int64).astype("<i8", copy=False)
+    return hashlib.sha256(ids.tobytes()).hexdigest()
+
+
+def build_serving_contract(
+    df: pd.DataFrame,
+    vectors: np.ndarray,
+    index: faiss.Index | None = None,
+    movie_ids: np.ndarray | None = None,
+    model_name: str = "all-mpnet-base-v2",
+) -> dict:
+    """Build the artifact contract that serving validates before trusting FAISS rows."""
+    movie_ids = movie_id_vector(df) if movie_ids is None else np.asarray(movie_ids, dtype=np.int64)
+    gate = assert_batch_invariants(
+        df,
+        vectors=vectors,
+        index=index,
+        movie_ids=movie_ids,
+        stage="serving_contract",
+    )
+    return {
+        "version": SERVING_CONTRACT_VERSION,
+        "model_name": model_name,
+        "movie_rows": int(len(df)),
+        "embedding_rows": int(vectors.shape[0]),
+        "embedding_dimensions": int(vectors.shape[1]) if len(vectors.shape) > 1 else 0,
+        "faiss_index_size": int(index.ntotal) if index is not None else None,
+        "movie_id_map_rows": int(len(movie_ids)),
+        "movie_id_sha256": movie_id_sha256(movie_ids),
+        "quality_gate": gate,
+    }
+
+
 def persist_stage_dataset(df: pd.DataFrame, path_name: str, file_stem: str, run_id: str) -> dict | None:
     """Persist a run-scoped stage dataset for lineage and replay."""
     stage_dir = _local_artifact_dir(path_name, path_name)
@@ -545,6 +593,7 @@ def assert_batch_invariants(
     df: pd.DataFrame | None,
     vectors: np.ndarray | None = None,
     index: faiss.Index | None = None,
+    movie_ids: np.ndarray | None = None,
     stage: str = "batch",
 ) -> dict:
     """Fail the batch run when core row-level contracts are broken."""
@@ -575,6 +624,16 @@ def assert_batch_invariants(
         if index.ntotal != len(df):
             raise ValueError(f"{stage} index size does not match row count")
         result["index_size"] = int(index.ntotal)
+
+    if movie_ids is not None:
+        movie_ids = np.asarray(movie_ids, dtype=np.int64)
+        if len(movie_ids) != len(df):
+            raise ValueError(f"{stage} movie id map count does not match row count")
+        expected_ids = df["id"].astype("int64").to_numpy()
+        if not np.array_equal(expected_ids, movie_ids):
+            raise ValueError(f"{stage} movie id map order does not match serving catalog order")
+        result["movie_id_map_rows"] = int(len(movie_ids))
+        result["movie_id_sha256"] = movie_id_sha256(movie_ids)
 
     return result
 
@@ -731,8 +790,14 @@ def run_pipeline(
         # 2. Transform
         with PipelineStage("TRANSFORM"):
             df, vectors = transform(df)
+            movie_ids = movie_id_vector(df)
             metrics["final_rows"] = len(df)
-            metrics["quality_gates"]["gold"] = assert_batch_invariants(df, vectors=vectors, stage="gold")
+            metrics["quality_gates"]["gold"] = assert_batch_invariants(
+                df,
+                vectors=vectors,
+                movie_ids=movie_ids,
+                stage="gold",
+            )
             gold_artifact = persist_stage_dataset(df, "gold_data", "movies_features", run_id)
             if gold_artifact is not None:
                 metrics["stage_artifacts"]["gold"] = gold_artifact
@@ -748,7 +813,14 @@ def run_pipeline(
                 df,
                 vectors=vectors,
                 index=index,
+                movie_ids=movie_ids,
                 stage="serving",
+            )
+            metrics["serving_contract"] = build_serving_contract(
+                df,
+                vectors=vectors,
+                index=index,
+                movie_ids=movie_ids,
             )
 
         metrics["success"] = True
@@ -758,6 +830,7 @@ def run_pipeline(
             "movies": describe_file(paths.processed_data / "movies_transformed.parquet"),
             "embeddings": describe_file(paths.models / "sbert_embeddings.npy"),
             "faiss_index": describe_file(paths.models / "faiss.index"),
+            "movie_ids": describe_file(paths.models / "movie_ids.npy"),
         }
 
         manifest = {
@@ -774,6 +847,7 @@ def run_pipeline(
                 "index_size": metrics.get("index_size"),
             },
             "artifacts": metrics["artifacts"],
+            "serving_contract": metrics["serving_contract"],
             "stage_artifacts": metrics["stage_artifacts"],
             "time_travel_artifacts": metrics["time_travel_artifacts"],
             "quality_gates": metrics["quality_gates"],
@@ -785,6 +859,13 @@ def run_pipeline(
             "finished_at": metrics["finished_at"],
             "duration_seconds": metrics["duration_seconds"],
         }
+
+        if not _is_cloud_path(paths.models):
+            manifest_output_path = Path(paths.models) / "pipeline_manifest.json"
+            write_json_artifact(manifest, manifest_output_path)
+            metrics["artifacts"]["pipeline_manifest"] = describe_file(manifest_output_path)
+            manifest["artifacts"] = metrics["artifacts"]
+            write_json_artifact(manifest, manifest_output_path)
 
         if write_metadata:
             metrics["metadata_artifacts"] = persist_run_metadata(metrics, manifest, run_id)
