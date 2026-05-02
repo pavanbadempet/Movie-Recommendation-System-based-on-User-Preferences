@@ -93,3 +93,6 @@ def generate_chat_response(messages: list[dict]) -> dict:
                 
         logger.error(f"GenAI generation failed (All fallbacks exhausted): {last_error}")
         return {"role": "assistant", "content": "I'm having trouble connecting to my brain (OpenRouter API is currently overloaded). Please try again in exactly 15 seconds."}
+    except Exception as e:
+        logger.error(f"GenAI generation failed: {e}")
+        return {"role": "assistant", "content": "I'm having trouble generating a response right now. Please try again shortly."}

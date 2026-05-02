@@ -48,6 +48,8 @@ def mock_artifacts(tmp_path, monkeypatch):
     import backend.recommender as rec
     monkeypatch.setattr(rec, "MODELS_DIR", tmp_path)
     monkeypatch.setattr(rec, "DATA_DIR", tmp_path)
+    monkeypatch.setenv("NOVA_USAGE_PATH", str(tmp_path / "api_usage.jsonl"))
+    monkeypatch.delenv("NOVA_API_KEYS", raising=False)
     
     # Reset singleton
     rec._recommender = None
@@ -66,6 +68,45 @@ class TestHealthEndpoint:
         assert data["movie_count"] == 3
 
 
+class TestPlatformEndpoint:
+    def test_platform_context_public_demo(self, mock_artifacts):
+        from backend.main import app
+        client = TestClient(app)
+
+        resp = client.get("/v1/platform/context")
+
+        assert resp.status_code == 200
+        assert resp.json()["mode"] == "public-demo"
+        assert resp.json()["tenant_id"] == "demo-media-co"
+
+    def test_platform_context_requires_key_when_configured(self, mock_artifacts, monkeypatch):
+        monkeypatch.setenv("NOVA_API_KEYS", "secret-key:acme:main:free")
+
+        from backend.main import app
+        client = TestClient(app)
+
+        missing_resp = client.get("/v1/platform/context")
+        assert missing_resp.status_code == 401
+
+        valid_resp = client.get("/v1/platform/context", headers={"X-Nova-API-Key": "secret-key"})
+        assert valid_resp.status_code == 200
+        assert valid_resp.json()["tenant_id"] == "acme"
+        assert valid_resp.json()["catalog_id"] == "main"
+        assert valid_resp.json()["mode"] == "authenticated"
+
+    def test_platform_status(self, mock_artifacts):
+        from backend.main import app
+        client = TestClient(app)
+
+        resp = client.get("/v1/platform/status")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ready"
+        assert "personalization_v2" in data["capabilities"]
+        assert "event_store" in data
+
+
 class TestSearchEndpoint:
     def test_search_finds_movie(self, mock_artifacts):
         from backend.main import app
@@ -82,6 +123,29 @@ class TestSearchEndpoint:
         resp = client.get("/search", params={"q": "xyz123nonexistent"})
         assert resp.status_code == 200
         assert resp.json() == []
+
+    def test_v1_search_alias(self, mock_artifacts):
+        from backend.main import app
+        client = TestClient(app)
+        resp = client.get("/v1/search", params={"q": "Test Movie A"})
+        assert resp.status_code == 200
+        assert resp.json()[0]["title"] == "Test Movie A"
+
+    def test_v1_ai_search_uses_hybrid_retrieval(self, mock_artifacts, monkeypatch):
+        monkeypatch.setenv("NOVA_ENABLE_DENSE_QUERY", "false")
+
+        from backend.main import app
+        client = TestClient(app)
+
+        resp = client.get("/v1/search/ai", params={"q": "sci fi adventure", "top_k": 2})
+
+        assert resp.status_code == 200
+        results = resp.json()
+        assert len(results) >= 1
+        assert len(results) <= 2
+        assert results[0]["retrieval_stage"] == "sparse_metadata"
+        assert "retrieval_signals" in results[0]
+        assert results[0]["explanation"]
 
 
 class TestMoviesEndpoint:
@@ -102,6 +166,96 @@ class TestMoviesEndpoint:
         m1 = resp1.json()[0]
         m2 = resp2.json()[0]
         assert m1["id"] != m2["id"]
+
+
+class TestEventsEndpoint:
+    def test_record_event_and_read_features(self, tmp_path, monkeypatch, mock_artifacts):
+        monkeypatch.setenv("EVENT_LOG_PATH", str(tmp_path / "events.jsonl"))
+
+        from backend.main import app
+
+        client = TestClient(app)
+        resp = client.post(
+            "/events",
+            json={"event_type": "view", "movie_id": 100, "user_id": "test-user"},
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "accepted"
+        assert "event_id" in data
+
+        features_resp = client.get("/events/features")
+        assert features_resp.status_code == 200
+        features = features_resp.json()
+        assert features["total_events"] == 1
+        assert features["trending_movies"]["100"]["views"] == 1
+
+    def test_v1_event_alias_accepts_content_id(self, tmp_path, monkeypatch, mock_artifacts):
+        monkeypatch.setenv("EVENT_LOG_PATH", str(tmp_path / "events.jsonl"))
+
+        from backend.main import app
+
+        client = TestClient(app)
+        resp = client.post(
+            "/v1/events",
+            json={
+                "event_type": "view",
+                "tenant_id": "ott-startup",
+                "catalog_id": "short-films",
+                "content_id": "content-123",
+            },
+        )
+
+        assert resp.status_code == 200
+        features_resp = client.get("/v1/events/features")
+        assert features_resp.status_code == 200
+        assert features_resp.json()["trending_movies"]["content-123"]["tenant_id"] == "ott-startup"
+
+    def test_event_rejects_cross_tenant_payload_when_api_key_configured(self, tmp_path, monkeypatch, mock_artifacts):
+        monkeypatch.setenv("EVENT_LOG_PATH", str(tmp_path / "events.jsonl"))
+        monkeypatch.setenv("NOVA_API_KEYS", "secret-key:acme:main:free")
+
+        from backend.main import app
+
+        client = TestClient(app)
+        resp = client.post(
+            "/v1/events",
+            headers={"X-Nova-API-Key": "secret-key"},
+            json={
+                "event_type": "view",
+                "tenant_id": "other",
+                "catalog_id": "main",
+                "content_id": "content-123",
+            },
+        )
+
+        assert resp.status_code == 403
+
+    def test_record_event_requires_movie_id_for_movie_events(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("EVENT_LOG_PATH", str(tmp_path / "events.jsonl"))
+
+        from backend.main import app
+
+        client = TestClient(app)
+        resp = client.post("/events", json={"event_type": "click"})
+
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "movie_id or content_id is required for content events"
+
+    def test_record_event_validates_rating_range(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("EVENT_LOG_PATH", str(tmp_path / "events.jsonl"))
+
+        from backend.main import app
+
+        client = TestClient(app)
+        resp = client.post(
+            "/events",
+            json={"event_type": "rating", "movie_id": 100, "rating": 6},
+        )
+
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "rating must be between 1 and 5"
 
 
 class TestRecommendEndpoints:
@@ -128,3 +282,128 @@ class TestRecommendEndpoints:
         assert resp.status_code == 200
         data = resp.json()
         assert data["query_movie"]["title"] == "Test Movie B"
+
+    def test_recommend_for_user_from_events(self, tmp_path, monkeypatch, mock_artifacts):
+        monkeypatch.setenv("EVENT_LOG_PATH", str(tmp_path / "events.jsonl"))
+
+        from backend.main import app
+
+        client = TestClient(app)
+        event_resp = client.post(
+            "/v1/events",
+            json={"event_type": "view", "movie_id": 100, "user_id": "user-1"},
+        )
+        assert event_resp.status_code == 200
+
+        resp = client.get("/v1/recommendations/user/user-1", params={"top_k": 1})
+
+        assert resp.status_code == 200
+        results = resp.json()
+        assert len(results) == 1
+        assert results[0]["retrieval_stage"].startswith("personalized_v2")
+        assert "variant" in results[0]["retrieval_signals"]
+
+
+class TestEvaluationEndpoint:
+    def test_recommendation_quality_report(self, mock_artifacts):
+        from backend.main import app
+        client = TestClient(app)
+
+        resp = client.get("/v1/evaluation/recommendations", params={"sample_size": 2, "k": 2})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert data["movie_count"] == 3
+        assert data["vectors"]["available"] is True
+        assert data["vectors"]["index_rows_match_catalog"] is True
+        assert data["recommendations"]["available"] is True
+
+    def test_ranker_status_without_artifact(self, mock_artifacts):
+        from backend.main import app
+        client = TestClient(app)
+
+        resp = client.get("/v1/ranker/status")
+
+        assert resp.status_code == 200
+        assert resp.json()["available"] is False
+
+
+class TestExperimentsEndpoint:
+    def test_experiment_assignment_is_available(self, mock_artifacts):
+        from backend.main import app
+        client = TestClient(app)
+
+        resp = client.get("/v1/experiments/assignment", params={"user_id": "user-1"})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["experiment"]
+        assert data["variant"]
+
+    def test_experiment_metrics_from_events(self, tmp_path, monkeypatch, mock_artifacts):
+        monkeypatch.setenv("EVENT_LOG_PATH", str(tmp_path / "events.jsonl"))
+
+        from backend.main import app
+
+        client = TestClient(app)
+        event_resp = client.post(
+            "/v1/events",
+            json={
+                "event_type": "recommendation_impression",
+                "movie_id": 100,
+                "metadata": {"experiment": "ranker", "variant": "control"},
+            },
+        )
+        assert event_resp.status_code == 200
+
+        resp = client.get("/v1/experiments/metrics")
+
+        assert resp.status_code == 200
+        rows = resp.json()["experiments"]
+        assert rows[0]["experiment"] == "ranker"
+        assert rows[0]["impressions"] == 1
+
+
+class TestCatalogOnboardingEndpoints:
+    def test_catalog_preview_profiles_csv(self, mock_artifacts):
+        from backend.main import app
+        client = TestClient(app)
+
+        csv_text = (
+            "id,title,overview,genres\n"
+            "1,Arrival,A linguist communicates with alien visitors in a tense science fiction story,Sci-Fi\n"
+            "2,,Too short,Drama\n"
+        )
+        resp = client.post(
+            "/v1/catalog/preview",
+            json={"filename": "catalog.csv", "csv_text": csv_text, "sample_size": 2},
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_rows_profiled"] == 2
+        assert data["valid_rows"] == 1
+        assert data["missing_title_rows"] == 1
+        assert data["samples"][0]["title"] == "Arrival"
+
+    def test_catalog_upload_stores_manifest(self, tmp_path, monkeypatch, mock_artifacts):
+        monkeypatch.setenv("NOVA_CATALOG_UPLOAD_PATH", str(tmp_path))
+
+        from backend.main import app
+        client = TestClient(app)
+
+        csv_text = (
+            "id,title,overview,genres\n"
+            "1,Arrival,A linguist communicates with alien visitors in a tense science fiction story,Sci-Fi\n"
+        )
+        resp = client.post(
+            "/v1/catalog/upload",
+            json={"filename": "catalog.csv", "csv_text": csv_text},
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "stored"
+        assert data["upload_id"]
+        assert data["profile"]["ready_for_ingestion"] is True

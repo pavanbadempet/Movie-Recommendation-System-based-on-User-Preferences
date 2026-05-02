@@ -39,21 +39,33 @@ if HF_TOKEN == "HF_TOKEN_PLACEHOLDER":
         HF_TOKEN = None
 
 HF_REPO = "pavanbadempet/movie-recs-models"
+INCLUDE_ADULT_CONTENT = os.getenv("NOVA_INCLUDE_ADULT_CONTENT", "false").lower() in {"1", "true", "yes"}
 
 # Dependencies (sentence-transformers uses PyTorch CUDA automatically)
-!pip install -q sentence-transformers faiss-cpu huggingface_hub
+!pip install -q sentence-transformers faiss-cpu huggingface_hub scikit-learn joblib
 
 import ast
+import hashlib
+import json
+import math
 import re
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
+import joblib
 import numpy as np
 import pandas as pd
 import torch
 import faiss
 from sentence_transformers import SentenceTransformer
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, hf_hub_download
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import ndcg_score
+
+RUN_TS = datetime.now(timezone.utc).replace(microsecond=0)
+RUN_ID = RUN_TS.strftime("%Y%m%dT%H%M%SZ")
+RUN_DATE = RUN_TS.date().isoformat()
 
 # GPU check
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -67,21 +79,31 @@ if not os.path.exists(DATA_PATH):
     DATA_PATH = "/kaggle/input/tmdb-movies-daily-updates/TMDB_all_movies.csv"
 
 df = pd.read_csv(DATA_PATH, low_memory=False)
+raw_row_count = len(df)
 print(f"Loaded {len(df):,} movies")
 
 # Filter — stricter than before for quality
-df = df.dropna(subset=["title", "overview"])
-df = df[df["overview"].str.len() > 20]               # Must have real overview
-if "vote_count" in df.columns:
-    df = df[df["vote_count"] >= 5]                    # At least 5 votes (was 1)
-if "popularity" in df.columns:
-    df = df[df["popularity"] >= 1.0]                  # Meaningful popularity (was 0.5)
-if "adult" in df.columns:
-    df = df[df["adult"] != True]
+df = df.dropna(subset=["title"])
+df["title"] = df["title"].astype(str).str.strip()
+df = df[df["title"] != ""]
+if "overview" not in df.columns:
+    df["overview"] = ""
+df["overview"] = df["overview"].fillna("").astype(str)
+adult_excluded_count = 0
+if "adult" in df.columns and not INCLUDE_ADULT_CONTENT:
+    adult_flag = df["adult"]
+    if adult_flag.dtype == object:
+        adult_flag = adult_flag.astype(str).str.lower().isin({"true", "1", "yes"})
+    adult_excluded_count = int(adult_flag.sum())
+    df = df[~adult_flag]
 if "id" in df.columns:
-    df = df.drop_duplicates(subset=["id"])
+    df = df.dropna(subset=["id"])
+    sort_columns = [column for column in ["vote_count", "popularity"] if column in df.columns]
+    if sort_columns:
+        df = df.sort_values(sort_columns, ascending=False, na_position="last")
+    df = df.drop_duplicates(subset=["id"], keep="first")
 df = df.reset_index(drop=True)
-print(f"Filtered to {len(df):,} quality movies")
+print(f"Retained {len(df):,} movies after identity gates ({adult_excluded_count:,} adult rows excluded for public demo)")
 
 
 # ============================================================
@@ -104,6 +126,69 @@ def clean(text):
         return ""
     text = re.sub(r"[^\w\s.,;:!?-]", " ", str(text))
     return re.sub(r"\s+", " ", text).strip()
+
+
+def add_catalog_coverage_features(frame):
+    """Add quality features without deleting obscure long-tail titles."""
+    frame = frame.copy()
+
+    def text_len(column):
+        if column not in frame.columns:
+            return pd.Series(0, index=frame.index)
+        return frame[column].fillna("").astype(str).str.strip().str.len()
+
+    def numeric(column):
+        if column not in frame.columns:
+            return pd.Series(0.0, index=frame.index)
+        return pd.to_numeric(frame[column], errors="coerce").fillna(0.0)
+
+    title_len = text_len("title")
+    overview_len = text_len("overview")
+    genres_len = text_len("genres")
+    release_len = text_len("release_date")
+    poster_len = text_len("poster_path")
+    vote_count = numeric("vote_count")
+    vote_average = numeric("vote_average")
+    popularity = numeric("popularity")
+
+    frame["metadata_completeness"] = (
+        np.where(title_len > 0, 0.20, 0.0)
+        + np.where(overview_len >= 20, 0.25, np.where(overview_len > 0, 0.10, 0.0))
+        + np.where(genres_len > 0, 0.15, 0.0)
+        + np.where(vote_count > 0, 0.15, 0.0)
+        + np.where(popularity > 0, 0.10, 0.0)
+        + np.where(release_len >= 4, 0.10, 0.0)
+        + np.where(poster_len > 0, 0.05, 0.0)
+    )
+    vote_confidence = np.minimum(1.0, np.log1p(np.maximum(vote_count, 0.0)) / 8.0)
+    popularity_norm = np.minimum(1.0, np.log1p(np.maximum(popularity, 0.0)) / 8.0)
+    frame["content_quality_score"] = np.clip(
+        frame["metadata_completeness"] * 0.45
+        + (vote_average / 10.0) * vote_confidence * 0.30
+        + popularity_norm * 0.25,
+        0.0,
+        1.0,
+    )
+    frame["quality_bucket"] = np.select(
+        [
+            frame["content_quality_score"] >= 0.70,
+            frame["content_quality_score"] >= 0.45,
+            frame["metadata_completeness"] >= 0.35,
+        ],
+        ["premium", "standard", "long_tail"],
+        default="thin_metadata",
+    )
+    frame["searchable"] = title_len > 0
+    frame["recommendable"] = (overview_len >= 20) | (genres_len > 0) | (frame["metadata_completeness"] >= 0.45)
+    if "adult" in frame.columns:
+        adult_flag = frame["adult"]
+        if adult_flag.dtype == object:
+            adult_flag = adult_flag.astype(str).str.lower().isin({"true", "1", "yes"})
+        frame["is_adult_content"] = adult_flag.fillna(False).astype(bool)
+    else:
+        frame["is_adult_content"] = False
+    frame["public_demo_eligible"] = ~frame["is_adult_content"]
+    return frame
 
 
 # Parse JSON columns
@@ -164,12 +249,293 @@ tags = tags + "Movie: " + title + " by " + director + "."
 df["tags"] = pd.Series(tags).apply(clean)
 df = df.drop(columns=[c for c in df.columns if c.startswith("_")], errors="ignore")
 df = df[df["tags"].str.len() > 10].reset_index(drop=True)
+df = add_catalog_coverage_features(df)
 print(f"Generated rich tags for {len(df):,} movies")
+print("Quality buckets:", df["quality_bucket"].value_counts(dropna=False).to_dict())
 
 # Show sample tag for verification
 sample = df[df['title'] == 'Avatar']
 if len(sample) > 0:
     print(f"\nSample tag (Avatar):\n{sample.iloc[0]['tags'][:300]}...")
+
+
+# ============================================================
+# STEP 2B: Build SCD Type 2 movie dimension artifacts
+# ============================================================
+SCD_START_COL = "effective_start_at"
+SCD_END_COL = "effective_end_at"
+SCD_CURRENT_COL = "is_current"
+SCD_HASH_COL = "record_hash"
+SCD_HIGH_DATE = "9999-12-31T00:00:00Z"
+SCD_TRACKED_COLUMNS = [
+    "title",
+    "overview",
+    "genres",
+    "vote_average",
+    "vote_count",
+    "popularity",
+    "release_date",
+    "poster_path",
+    "director",
+    "cast",
+    "original_language",
+]
+
+
+def ensure_scd_columns(frame):
+    """Ensure the SCD tracked columns exist before hashing."""
+    frame = frame.copy()
+    for column in SCD_TRACKED_COLUMNS:
+        if column not in frame.columns:
+            frame[column] = None
+    return frame
+
+
+def normalize_scd_value(value):
+    """Normalize values before hashing so daily runs are deterministic."""
+    if pd.isna(value):
+        return "<NULL>"
+    if isinstance(value, float):
+        return f"{value:.12g}"
+    return str(value).strip()
+
+
+def add_record_hash(frame):
+    """Add a stable hash for attributes that should create a new SCD version."""
+    frame = ensure_scd_columns(frame)
+    frame[SCD_HASH_COL] = frame[SCD_TRACKED_COLUMNS].apply(
+        lambda row: hashlib.sha256(
+            "||".join(normalize_scd_value(value) for value in row).encode("utf-8")
+        ).hexdigest(),
+        axis=1,
+    )
+    return frame
+
+
+def prepare_scd_versions(frame):
+    """Prepare a latest snapshot as open-ended current SCD records."""
+    versions = add_record_hash(frame)
+    versions[SCD_START_COL] = f"{RUN_DATE}T00:00:00Z"
+    versions[SCD_END_COL] = SCD_HIGH_DATE
+    versions[SCD_CURRENT_COL] = True
+    return versions
+
+
+def load_existing_scd_history():
+    """Download prior SCD history from Hugging Face when available."""
+    try:
+        path = hf_hub_download(
+            repo_id=HF_REPO,
+            filename="movie_dimension_scd.parquet",
+            repo_type="model",
+            token=HF_TOKEN,
+        )
+        history = pd.read_parquet(path)
+        print(f"Loaded existing SCD history from Hugging Face: {len(history):,} versions")
+        return history
+    except Exception as exc:
+        print(f"No existing SCD history found; starting a new history table. Reason: {exc}")
+        return None
+
+
+def apply_scd_type2(existing, latest_snapshot):
+    """Apply SCD Type 2 changes to the latest movie metadata snapshot."""
+    incoming = prepare_scd_versions(latest_snapshot)
+
+    if existing is None or len(existing) == 0:
+        return incoming.reset_index(drop=True)
+
+    existing = ensure_scd_columns(existing)
+    if SCD_HASH_COL not in existing.columns:
+        existing = add_record_hash(existing)
+    if SCD_START_COL not in existing.columns:
+        existing[SCD_START_COL] = f"{RUN_DATE}T00:00:00Z"
+    if SCD_END_COL not in existing.columns:
+        existing[SCD_END_COL] = SCD_HIGH_DATE
+    if SCD_CURRENT_COL not in existing.columns:
+        existing[SCD_CURRENT_COL] = True
+
+    current = existing[existing[SCD_CURRENT_COL].astype(bool)].copy()
+    current_by_id = current.set_index("id")[SCD_HASH_COL].to_dict()
+
+    rows_to_insert = []
+    ids_to_expire = set()
+
+    for _, row in incoming.iterrows():
+        movie_id = row["id"]
+        current_hash = current_by_id.get(movie_id)
+        if current_hash is None:
+            rows_to_insert.append(row)
+        elif current_hash != row[SCD_HASH_COL]:
+            ids_to_expire.add(movie_id)
+            rows_to_insert.append(row)
+
+    if ids_to_expire:
+        expire_mask = existing["id"].isin(ids_to_expire) & existing[SCD_CURRENT_COL].astype(bool)
+        existing.loc[expire_mask, SCD_CURRENT_COL] = False
+        existing.loc[expire_mask, SCD_END_COL] = f"{RUN_DATE}T00:00:00Z"
+
+    if rows_to_insert:
+        existing = pd.concat([existing, pd.DataFrame(rows_to_insert)], ignore_index=True, sort=False)
+
+    return existing.reset_index(drop=True)
+
+
+scd_input_columns = ["id"] + SCD_TRACKED_COLUMNS
+scd_input = df[[column for column in scd_input_columns if column in df.columns]].copy()
+scd_sort_columns = [column for column in ["vote_count", "popularity"] if column in scd_input.columns]
+if scd_sort_columns:
+    scd_input = scd_input.sort_values(scd_sort_columns, ascending=False, na_position="last")
+scd_input = scd_input.drop_duplicates(subset=["id"], keep="first")
+
+existing_scd = load_existing_scd_history() if HF_TOKEN else None
+movie_dimension_scd = apply_scd_type2(existing_scd, scd_input)
+movie_dimension_current = movie_dimension_scd[movie_dimension_scd[SCD_CURRENT_COL].astype(bool)].copy()
+
+print(
+    "SCD artifacts ready: "
+    f"{len(movie_dimension_current):,} current movies, "
+    f"{len(movie_dimension_scd):,} historical versions"
+)
+
+
+# ============================================================
+# STEP 2B: Train free-tier learned ranker
+# ============================================================
+RANKER_FEATURE_COLUMNS = [
+    "base_similarity",
+    "dense_score",
+    "sparse_score",
+    "metadata_score",
+    "behavior_score",
+    "cross_encoder_score",
+    "vote_average_norm",
+    "vote_confidence",
+    "popularity_norm",
+    "release_year_norm",
+    "is_recent",
+]
+
+
+def safe_float(value, default=0.0):
+    try:
+        if value is None:
+            return default
+        value = float(value)
+        if math.isnan(value) or math.isinf(value):
+            return default
+        return value
+    except Exception:
+        return default
+
+
+def release_year(value):
+    try:
+        year = int(str(value or "")[:4])
+        if 1800 <= year <= 2100:
+            return year
+    except Exception:
+        return None
+    return None
+
+
+def catalog_quality_label(row):
+    existing_score = row.get("content_quality_score")
+    if existing_score is not None:
+        try:
+            existing_score = float(existing_score)
+            if not math.isnan(existing_score):
+                return max(0.0, min(1.0, existing_score))
+        except Exception:
+            pass
+    vote_average = safe_float(row.get("vote_average"))
+    vote_count = safe_float(row.get("vote_count"))
+    popularity = safe_float(row.get("popularity"))
+    quality = (vote_average / 10.0) * min(1.0, np.log1p(max(vote_count, 0.0)) / 8.0)
+    popularity_score = min(1.0, np.log1p(max(popularity, 0.0)) / 8.0)
+    return float(0.55 * popularity_score + 0.45 * quality)
+
+
+def ranker_features(row, current_year=None):
+    current_year = current_year or RUN_TS.year
+    metadata_score = catalog_quality_label(row)
+    year = release_year(row.get("release_date"))
+    years_old = current_year - year if year else None
+    vote_average = safe_float(row.get("vote_average"))
+    vote_count = safe_float(row.get("vote_count"))
+    popularity = safe_float(row.get("popularity"))
+    return [
+        metadata_score * 0.35,
+        0.0,
+        0.0,
+        metadata_score,
+        0.0,
+        0.0,
+        min(1.0, max(0.0, vote_average / 10.0)),
+        min(1.0, math.log1p(max(vote_count, 0.0)) / 10.0),
+        min(1.0, math.log1p(max(popularity, 0.0)) / 8.0),
+        min(1.0, max(0.0, ((year or 1900) - 1900) / 140.0)),
+        1.0 if years_old is not None and years_old <= 5 else 0.0,
+    ]
+
+
+def recall_at_k(labels, predictions, k=10, positive_threshold=0.2):
+    positives = set(np.where(labels >= positive_threshold)[0])
+    if not positives:
+        return 0.0
+    top_k = set(np.argsort(predictions)[::-1][:k])
+    return round(len(positives & top_k) / len(positives), 6)
+
+
+def train_catalog_ranker(movies_df, output_path):
+    features = pd.DataFrame(
+        [ranker_features(row) for _, row in movies_df.iterrows()],
+        columns=RANKER_FEATURE_COLUMNS,
+    )
+    labels = np.asarray([catalog_quality_label(row) for _, row in movies_df.iterrows()], dtype=np.float32)
+    model = RandomForestRegressor(
+        n_estimators=120,
+        max_depth=8,
+        min_samples_leaf=1,
+        random_state=42,
+        n_jobs=-1,
+    )
+    model.fit(features, labels)
+    predictions = np.asarray(model.predict(features), dtype=np.float32)
+    top_k = min(10, len(labels))
+    ndcg = ndcg_score([labels], [predictions], k=top_k) if np.any(labels > 0) and top_k > 0 else 0.0
+    metadata = {
+        "training_mode": "catalog_bootstrap",
+        "movie_count": int(len(movies_df)),
+        "feedback_item_count": 0,
+        "generated_at": RUN_TS.isoformat().replace("+00:00", "Z"),
+        "evaluation": {
+            "recall_at_k": recall_at_k(labels, predictions, k=top_k),
+            "ndcg_at_k": round(float(ndcg), 6),
+            "top_k": int(top_k),
+            "prediction_min": round(float(predictions.min()), 6),
+            "prediction_max": round(float(predictions.max()), 6),
+        },
+        "feature_importances": {
+            column: round(float(importance), 6)
+            for column, importance in zip(RANKER_FEATURE_COLUMNS, model.feature_importances_)
+        },
+    }
+    joblib.dump(
+        {
+            "model": model,
+            "feature_columns": RANKER_FEATURE_COLUMNS,
+            "metadata": metadata,
+        },
+        output_path,
+    )
+    report = {
+        "artifact_path": Path(output_path).name,
+        "metadata": metadata,
+    }
+    report_path = Path(str(output_path) + ".metadata.json")
+    report_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+    return report, report_path
 
 
 # ============================================================
@@ -220,16 +586,74 @@ OUT = Path("/kaggle/working")
 emb_path = OUT / "sbert_embeddings.npy"
 idx_path = OUT / "faiss.index"
 movies_path = OUT / "movies_transformed.parquet"
+scd_path = OUT / "movie_dimension_scd.parquet"
+current_dimension_path = OUT / "movie_dimension_current.parquet"
+quality_path = OUT / "quality_report.json"
+manifest_path = OUT / "pipeline_manifest.json"
+ranker_path = OUT / "nova_ranker.joblib"
+ranker_metadata_path = OUT / "nova_ranker.joblib.metadata.json"
 
 np.save(emb_path, embeddings)
 faiss.write_index(index, str(idx_path))
 
 cols = ['id', 'title', 'overview', 'genres', 'vote_average', 'vote_count',
         'popularity', 'release_date', 'poster_path', 'director', 'cast',
-        'original_language', 'tagline', 'keywords', 'tags']
+        'original_language', 'tagline', 'keywords', 'tags',
+        'metadata_completeness', 'content_quality_score', 'quality_bucket',
+        'searchable', 'recommendable', 'is_adult_content', 'public_demo_eligible']
 df[[c for c in cols if c in df.columns]].to_parquet(movies_path, index=False)
+movie_dimension_scd.to_parquet(scd_path, index=False)
+movie_dimension_current.to_parquet(current_dimension_path, index=False)
+ranker_report, generated_ranker_metadata_path = train_catalog_ranker(df, ranker_path)
+ranker_metadata_path = generated_ranker_metadata_path
 
-print(f"Saved: embeddings ({emb_path.stat().st_size/1e6:.0f}MB), index ({idx_path.stat().st_size/1e6:.0f}MB), movies ({movies_path.stat().st_size/1e6:.0f}MB)")
+quality_report = {
+    "run_id": RUN_ID,
+    "run_date": RUN_DATE,
+    "raw_rows": int(raw_row_count),
+    "serving_rows": int(len(df)),
+    "adult_excluded_rows": int(adult_excluded_count),
+    "quality_buckets": {str(key): int(value) for key, value in df["quality_bucket"].value_counts(dropna=False).items()},
+    "long_tail_rows": int((df["quality_bucket"] == "long_tail").sum()),
+    "thin_metadata_rows": int((df["quality_bucket"] == "thin_metadata").sum()),
+    "recommendable_rows": int(df["recommendable"].sum()),
+    "searchable_rows": int(df["searchable"].sum()),
+    "embedding_rows": int(embeddings.shape[0]),
+    "faiss_index_size": int(index.ntotal),
+    "scd_current_rows": int(len(movie_dimension_current)),
+    "scd_total_versions": int(len(movie_dimension_scd)),
+    "ranker_training_mode": ranker_report["metadata"]["training_mode"],
+    "ranker_feedback_item_count": ranker_report["metadata"]["feedback_item_count"],
+}
+manifest = {
+    "run_id": RUN_ID,
+    "run_date": RUN_DATE,
+    "model_name": MODEL_NAME,
+    "device": device,
+    "hf_repo": HF_REPO,
+    "artifacts": {
+        "movies": movies_path.name,
+        "embeddings": emb_path.name,
+        "faiss_index": idx_path.name,
+        "movie_dimension_scd": scd_path.name,
+        "movie_dimension_current": current_dimension_path.name,
+        "quality_report": quality_path.name,
+        "ranker": ranker_path.name,
+        "ranker_metadata": ranker_metadata_path.name,
+    },
+    "quality": quality_report,
+    "ranker": ranker_report["metadata"],
+}
+quality_path.write_text(json.dumps(quality_report, indent=2, sort_keys=True), encoding="utf-8")
+manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
+
+print(
+    f"Saved: embeddings ({emb_path.stat().st_size/1e6:.0f}MB), "
+    f"index ({idx_path.stat().st_size/1e6:.0f}MB), "
+    f"movies ({movies_path.stat().st_size/1e6:.0f}MB), "
+    f"SCD history ({scd_path.stat().st_size/1e6:.0f}MB), "
+    f"ranker ({ranker_path.stat().st_size/1e6:.1f}MB)"
+)
 
 
 # ============================================================
@@ -241,6 +665,12 @@ if HF_TOKEN:
         (emb_path, "sbert_embeddings.npy"),
         (idx_path, "faiss.index"),
         (movies_path, "movies_transformed.parquet"),
+        (scd_path, "movie_dimension_scd.parquet"),
+        (current_dimension_path, "movie_dimension_current.parquet"),
+        (quality_path, "quality_report.json"),
+        (manifest_path, "pipeline_manifest.json"),
+        (ranker_path, "nova_ranker.joblib"),
+        (ranker_metadata_path, "nova_ranker.joblib.metadata.json"),
     ]
     for path, name in files:
         api.upload_file(path_or_fileobj=str(path), path_in_repo=name, repo_id=HF_REPO, repo_type="model", token=HF_TOKEN)

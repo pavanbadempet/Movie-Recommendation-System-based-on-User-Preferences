@@ -3,9 +3,14 @@ Tests for Airflow DAG integrity.
 Ensures the DAG loads correctly and has the expected structure.
 """
 import pytest
-from airflow.models import DagBag
 from pathlib import Path
 import os
+
+airflow_models = pytest.importorskip(
+    "airflow.models",
+    reason="Airflow DAG tests require apache-airflow to be installed.",
+)
+DagBag = airflow_models.DagBag
 
 # Mock Airflow environment variables if not present
 os.environ["KAGGLE_KEY"] = "mock_key"
