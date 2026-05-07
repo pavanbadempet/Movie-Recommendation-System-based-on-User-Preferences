@@ -5,6 +5,15 @@
 name: Daily Data Refresh
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/data-refresh.yml'
+      - 'notebooks/kaggle_etl_pipeline.py'
+      - 'scripts/validate_serving_artifacts.py'
+      - 'scripts/evaluate_semantic_benchmark.py'
+      - 'scripts/train_ranker.py'
   schedule:
     # Run daily at 6 AM UTC
     - cron: '0 6 * * *'
