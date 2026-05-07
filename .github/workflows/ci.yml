@@ -39,7 +39,28 @@ jobs:
         run: ruff check . --ignore=E501,F401,E402,F541 --exclude=.venv,.venv_cuda,notebooks
 
       - name: Run tests
-        run: pytest tests/ -v --tb=short
+        shell: bash
+        run: |
+          set +e
+          pytest tests/ -v --tb=short 2>&1 | tee pytest-output.txt
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            python - <<'PY'
+          from pathlib import Path
+
+          text = Path("pytest-output.txt").read_text(encoding="utf-8", errors="replace")
+          lines = text.splitlines()
+          failure_start = 0
+          for idx, line in enumerate(lines):
+              if line.startswith("================================== FAILURES"):
+                  failure_start = idx
+                  break
+          tail = "\n".join(lines[failure_start:][-120:])
+          escaped = tail[:7000].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Pytest failure::{escaped}")
+          PY
+          fi
+          exit "$status"
 
   build:
     runs-on: ubuntu-latest
