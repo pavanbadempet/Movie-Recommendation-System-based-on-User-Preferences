@@ -13,6 +13,7 @@ from pathlib import Path
 from pyspark.sql import SparkSession
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import col, concat_ws, coalesce, current_timestamp, desc, expr, greatest, length, lit, row_number, sha2, udf, when
+from pyspark.sql.types import StringType
 from pyspark.sql.window import Window
 
 from etl.config import paths
