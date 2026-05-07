@@ -21,6 +21,7 @@ from backend.model_loader import ensure_model_files
 from backend.openrouter_client import chat_completion, configured_models, openrouter_api_key
 from backend.query_understanding import intent_score, parse_query_intent
 from backend.ranker import load_ranker
+from backend.semantic_twin import build_semantic_twin, compare_semantic_twins
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +93,7 @@ class Recommender:
         self._learned_ranker = None
         self._behavior_features: dict[str, Any] = {}
         self._behavior_features_refreshed_at: datetime | None = None
+        self._semantic_twin_cache: dict[int, dict[str, Any]] = {}
         self._low_memory = _low_memory_serving_enabled()
         self._artifact_status: dict[str, Any] = {"vector_artifacts_ready": False}
     
@@ -550,6 +552,27 @@ class Recommender:
     def _genre_set(self, movie: dict[str, Any]) -> set[str]:
         return {part.strip().lower() for part in str(movie.get("genres") or "").split(",") if part.strip()}
 
+    def _semantic_twin_for_index(self, movie_idx: int) -> dict[str, Any]:
+        """Build/cache the deterministic semantic twin for a catalog row."""
+        if movie_idx not in self._semantic_twin_cache:
+            self._semantic_twin_cache[movie_idx] = build_semantic_twin(self.get_movie_by_index(movie_idx))
+        return self._semantic_twin_cache[movie_idx]
+
+    def get_semantic_twin_by_id(self, movie_id: int) -> dict[str, Any] | None:
+        """Return the semantic item twin for a movie ID."""
+        matches = self._movies[self._movies["id"] == movie_id].index
+        if len(matches) == 0:
+            return None
+        return self._semantic_twin_for_index(int(matches[0]))
+
+    def _semantic_affinity_for_indices(self, query_idx: int, candidate_idx: int) -> dict[str, Any]:
+        """Compare query/candidate semantic twins and return serializable signals."""
+        affinity = compare_semantic_twins(
+            self._semantic_twin_for_index(query_idx),
+            self._semantic_twin_for_index(candidate_idx),
+        )
+        return affinity.as_dict()
+
     def _apply_query_mmr(
         self,
         candidates: list[dict],
@@ -928,6 +951,7 @@ class Recommender:
             content_scores = np.zeros(len(self._movies), dtype=np.float32)
 
         query_movie = self.get_movie_by_index(movie_idx)
+        query_twin = self._semantic_twin_for_index(movie_idx)
         q_genres = self._genre_set(query_movie)
         q_director = str(query_movie.get("director") or "").strip().lower()
         q_language = str(query_movie.get("original_language") or "").strip().lower()
@@ -1008,6 +1032,8 @@ class Recommender:
             shared_genres = q_genres & movie_genres
             candidate_votes = float(movie.get("vote_count") or 0)
             candidate_runtime = float(movie.get("runtime") or 0)
+            semantic_affinity = compare_semantic_twins(query_twin, self._semantic_twin_for_index(idx)).as_dict()
+            semantic_score = float(semantic_affinity["score"])
 
             if movie.get("public_demo_eligible") is False:
                 continue
@@ -1029,6 +1055,8 @@ class Recommender:
             if "comedy" in movie_genres and "comedy" not in q_genres and content_score < 0.16:
                 continue
 
+            scores[idx] += semantic_score * 0.18
+
             title_tokens = {
                 token
                 for token in str(movie.get("title") or "").lower().replace(":", " ").replace("-", " ").split()
@@ -1042,6 +1070,7 @@ class Recommender:
                 reasons.append(f"Shared genres: {', '.join(sorted(g.title() for g in shared_genres)[:2])}")
             if content_score >= 0.18:
                 reasons.append("Similar story and setting")
+            reasons.extend(semantic_affinity.get("reasons") or [])
             if q_director and str(movie.get("director") or "").strip().lower() == q_director:
                 reasons.append(f"Same director ({movie.get('director')})")
             if q_language and str(movie.get("original_language") or "").strip().lower() == q_language:
@@ -1057,6 +1086,8 @@ class Recommender:
             movie["retrieval_stage"] = "content_sparse_fallback"
             movie["retrieval_signals"] = {
                 "content_sparse": round(content_score, 4),
+                "semantic_twin": round(semantic_score, 4),
+                "semantic_twin_details": semantic_affinity,
                 "genre_overlap": round(float(len(shared_genres) / max(len(q_genres), 1)), 4),
                 "metadata": round(float(scores[idx]), 4),
                 "behavior": round(behavior_boost, 4),
@@ -1107,6 +1138,7 @@ class Recommender:
         
         # Get Query Metadata for Re-Ranking
         query_movie = self.get_movie_by_index(movie_idx)
+        query_twin = self._semantic_twin_for_index(movie_idx)
         q_director = query_movie.get("director")
         q_title_tokens = set(query_movie["title"].lower().split())
         stop_words = {"the", "a", "an", "of", "and", "in", "to", "part", "vol", "volume", "chapter"}
@@ -1121,6 +1153,9 @@ class Recommender:
             cand = self.get_movie_by_index(idx)
             raw_score = float(dist)
             final_score = raw_score
+            semantic_affinity = compare_semantic_twins(query_twin, self._semantic_twin_for_index(int(idx))).as_dict()
+            semantic_score = float(semantic_affinity["score"])
+            final_score += semantic_score * 0.14
             
             # --- BUSINESS LOGIC RE-RANKING ---
             
@@ -1216,6 +1251,8 @@ class Recommender:
             if shared_genres:
                 top_genres = list(shared_genres)[:2]
                 explanation_tags.append(f"Shared genres: {', '.join(g.title() for g in top_genres)}")
+
+            explanation_tags.extend(semantic_affinity.get("reasons") or [])
             
             # Era match
             try:
@@ -1241,6 +1278,13 @@ class Recommender:
                 explanation_tags.append("Similar themes and plot")
                 
             cand["similarity_score"] = final_score
+            cand["retrieval_stage"] = "vector_semantic_ranked"
+            cand["retrieval_signals"] = {
+                "dense": round(raw_score, 4),
+                "semantic_twin": round(semantic_score, 4),
+                "semantic_twin_details": semantic_affinity,
+                "behavior": round(behavior_boost, 4),
+            }
             cand["explanation"] = explanation_tags  # NEW: Add explanation
             cand["explanation_text"] = " | ".join(explanation_tags)  # Human-readable
             results.append(cand)

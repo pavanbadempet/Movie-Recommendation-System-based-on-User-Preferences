@@ -1,0 +1,91 @@
+export type Movie = {
+  id: number;
+  title: string;
+  overview?: string | null;
+  genres?: string | null;
+  vote_average?: number | null;
+  vote_count?: number | null;
+  popularity?: number | null;
+  release_date?: string | null;
+  poster_path?: string | null;
+  metadata_completeness?: number | null;
+  content_quality_score?: number | null;
+  quality_bucket?: string | null;
+  recommendable?: boolean | null;
+  similarity_score?: number | null;
+  retrieval_stage?: string | null;
+  retrieval_signals?: Record<string, unknown> | null;
+  semantic_twin?: Record<string, unknown> | null;
+  semantic_signals?: Record<string, unknown> | null;
+  explanation_text?: string | null;
+  explanation?: string[] | null;
+  trailer_key?: string | null;
+  runtime?: number | null;
+  director?: string | null;
+  cast?: string | null;
+};
+
+export type MovieTitle = {
+  id: number;
+  title: string;
+};
+
+export type RecommendationResponse = {
+  query_movie: Movie;
+  recommendations: Movie[];
+};
+
+export type BackendHealth = {
+  status: string;
+  movie_count: number;
+};
+
+export type ApiRoot = {
+  status: string;
+  message?: string;
+  version?: string;
+};
+
+export type PlatformStatus = {
+  status: string;
+  tenant_id: string;
+  catalog_id: string;
+  movie_count: number;
+  event_store?: {
+    mode?: string | null;
+    durable?: boolean | null;
+    total_events?: number | null;
+  };
+  ranker?: {
+    available?: boolean;
+    training_mode?: string | null;
+    promotion?: string | null;
+  };
+  capabilities?: string[];
+};
+
+export type ArtifactHealth = {
+  generated_at: string;
+  status: "ready" | "degraded" | "unavailable" | string;
+  run_id?: string | null;
+  run_date?: string | null;
+  model_name?: string | null;
+  row_counts?: {
+    movies?: number | null;
+    movie_ids?: number | null;
+    semantic_twins?: number | null;
+  };
+  checks?: Record<string, boolean | null | string | number>;
+  semantic_summary?: {
+    row_count?: number | null;
+    avg_confidence?: number | null;
+    coverage?: Record<string, number> | null;
+  };
+  recommendations?: string[];
+  errors?: string[];
+};
+
+export type BackendResult<T> = {
+  data: T;
+  baseUrl: string;
+};

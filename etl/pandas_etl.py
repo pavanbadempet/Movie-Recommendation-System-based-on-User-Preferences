@@ -23,6 +23,7 @@ from pandera.pandas import Column, Check, DataFrameSchema
 from sentence_transformers import SentenceTransformer
 
 from etl.config import paths, data_config
+from etl.semantic_artifacts import write_semantic_artifacts
 
 logger = logging.getLogger(__name__)
 PIPELINE_NAME = "nova-pandas-etl"
@@ -277,6 +278,12 @@ def generate_tags(df: pd.DataFrame) -> pd.DataFrame:
             df[target] = df[col_name].apply(parse_json_column).str.join(", ")
         else:
             df[target] = ""
+
+    # Keep the serving catalog normalized too. The old pipeline used parsed
+    # genres for embeddings but left raw JSON-like genre strings in the API
+    # parquet, which weakened genre overlap and explanations.
+    if "_genres" in df.columns:
+        df["genres"] = df["_genres"]
             
     # 2. Clean Overview
     df["_overview"] = df["overview"].fillna("").astype(str).apply(clean_text)
@@ -804,6 +811,15 @@ def run_pipeline(
             gold_snapshot = persist_time_travel_snapshot(df, "gold_data", "movies_features", run_id, run_date)
             if gold_snapshot is not None:
                 metrics["time_travel_artifacts"]["movies_features"] = gold_snapshot
+
+            semantic_artifacts = write_semantic_artifacts(
+                df,
+                paths.processed_data,
+                run_id=run_id,
+                run_date=run_date,
+            )
+            metrics["quality_gates"]["semantic_twins"] = semantic_artifacts["quality_gate"]
+            metrics["semantic_twin_summary"] = semantic_artifacts["summary"]
         
         # 3. Index
         with PipelineStage("INDEX"):
@@ -828,6 +844,8 @@ def run_pipeline(
         metrics["duration_seconds"] = round(time.time() - start_time, 3)
         metrics["artifacts"] = {
             "movies": describe_file(paths.processed_data / "movies_transformed.parquet"),
+            "semantic_twins": describe_file(paths.processed_data / "semantic_twins.parquet"),
+            "semantic_twin_summary": describe_file(paths.processed_data / "semantic_twin_summary.json"),
             "embeddings": describe_file(paths.models / "sbert_embeddings.npy"),
             "faiss_index": describe_file(paths.models / "faiss.index"),
             "movie_ids": describe_file(paths.models / "movie_ids.npy"),

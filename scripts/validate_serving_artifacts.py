@@ -19,6 +19,8 @@ REQUIRED_FILES = {
     "faiss.index",
     "movie_ids.npy",
     "pipeline_manifest.json",
+    "semantic_twins.parquet",
+    "semantic_twin_summary.json",
 }
 
 
@@ -64,10 +66,18 @@ def validate(repo_id: str, token: str | None = None, repo_type: str = "model") -
             token=token,
             cache_dir=cache_dir,
         )
+        semantic_twins_path = hf_hub_download(
+            repo_id=repo_id,
+            filename="semantic_twins.parquet",
+            repo_type=repo_type,
+            token=token,
+            cache_dir=cache_dir,
+        )
 
         manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
         movie_ids = np.load(movie_ids_path)
         movies = pd.read_parquet(movies_path, columns=["id"])
+        semantic_twins = pd.read_parquet(semantic_twins_path, columns=["id"])
 
     expected_movie_rows = contract_value(manifest, "movie_rows") or contract_value(manifest, "serving_rows")
     expected_embedding_rows = contract_value(manifest, "embedding_rows")
@@ -84,6 +94,7 @@ def validate(repo_id: str, token: str | None = None, repo_type: str = "model") -
         "manifest_movie_id_map_rows": int(expected_id_rows) if expected_id_rows is not None else None,
         "movie_id_sha256": movie_id_sha256(movie_ids),
         "manifest_movie_id_sha256": expected_id_hash,
+        "semantic_twin_rows": int(len(semantic_twins)),
         "run_id": manifest.get("run_id"),
         "run_date": manifest.get("run_date"),
     }
@@ -105,6 +116,10 @@ def validate(repo_id: str, token: str | None = None, repo_type: str = "model") -
 
     if expected_id_hash and expected_id_hash != checks["movie_id_sha256"]:
         raise RuntimeError("manifest movie_id_sha256 does not match movie_ids.npy")
+    if len(semantic_twins) != len(movies):
+        raise RuntimeError(f"semantic twin rows ({len(semantic_twins)}) != movie rows ({len(movies)})")
+    if not np.array_equal(semantic_twins["id"].astype("int64").to_numpy(), movie_ids.astype("int64")):
+        raise RuntimeError("semantic_twins.parquet id order does not match movie_ids.npy")
 
     return checks
 
