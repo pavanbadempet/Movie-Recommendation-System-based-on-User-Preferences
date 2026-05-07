@@ -43,7 +43,7 @@ jobs:
           PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
         run: |
           set +e
-          pytest tests/ -v --tb=short 2>&1 | tee pytest-output.txt
+          pytest tests/ -q --tb=short 2>&1 | tee pytest-output.txt
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
             python - <<'PY'
