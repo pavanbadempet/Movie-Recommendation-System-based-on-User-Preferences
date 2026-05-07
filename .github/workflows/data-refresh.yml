@@ -5,6 +5,15 @@
 name: Daily Data Refresh
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/data-refresh.yml'
+      - 'notebooks/kaggle_etl_pipeline.py'
+      - 'scripts/validate_serving_artifacts.py'
+      - 'scripts/evaluate_semantic_benchmark.py'
+      - 'scripts/train_ranker.py'
   schedule:
     # Run daily at 6 AM UTC
     - cron: '0 6 * * *'
@@ -92,8 +101,22 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          pip install numpy pandas pyarrow huggingface_hub
+          pip install numpy pandas pyarrow huggingface_hub scikit-learn joblib
           python scripts/validate_serving_artifacts.py --repo pavanbadempet/movie-recs-models
+
+      - name: Evaluate semantic recommendation benchmark
+        if: success()
+        continue-on-error: true
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          pip install numpy pandas pyarrow huggingface_hub scikit-learn joblib
+          python scripts/evaluate_semantic_benchmark.py \
+            --download-movies-from-hf \
+            --hf-repo pavanbadempet/movie-recs-models \
+            --hf-token "$HF_TOKEN" \
+            --output reports/semantic_benchmark_report.json \
+            --k 10
 
       - name: Train and upload Nova ranker
         if: success()

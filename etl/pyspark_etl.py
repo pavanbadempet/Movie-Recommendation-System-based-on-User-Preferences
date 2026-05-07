@@ -3,6 +3,7 @@ PySpark ETL - processes TMDB movie data using Spark.
 
 Canonical batch/lakehouse pipeline for the project.
 """
+import ast
 import hashlib
 import json
 import logging
@@ -11,7 +12,8 @@ from pathlib import Path
 
 from pyspark.sql import SparkSession
 from pyspark.sql import DataFrame
-from pyspark.sql.functions import col, concat_ws, coalesce, current_timestamp, desc, expr, greatest, length, lit, row_number, sha2, when
+from pyspark.sql.functions import col, concat_ws, coalesce, current_timestamp, desc, expr, greatest, length, lit, row_number, sha2, udf, when
+from pyspark.sql.types import StringType
 from pyspark.sql.window import Window
 
 from etl.config import paths
@@ -28,6 +30,7 @@ from etl.delta_lakehouse import (
     write_embedding_jobs,
     write_pipeline_run,
 )
+from etl.semantic_artifacts import write_semantic_artifacts
 
 logger = logging.getLogger(__name__)
 
@@ -257,6 +260,33 @@ def _optional_string(df: DataFrame, column_name: str):
     if column_name in df.columns:
         return col(column_name).cast("string")
     return lit(None).cast("string")
+
+
+def parse_metadata_name_list(value) -> str:
+    """Normalize Kaggle list/dict metadata strings into comma-separated names."""
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if not text or text.lower() == "nan":
+        return ""
+    try:
+        parsed = ast.literal_eval(text)
+    except (ValueError, SyntaxError):
+        return ", ".join(part.strip() for part in text.split(",") if part.strip())
+
+    if isinstance(parsed, list):
+        names = []
+        for item in parsed:
+            if isinstance(item, dict):
+                name = str(item.get("name") or "").strip()
+                if name:
+                    names.append(name)
+            elif item:
+                names.append(str(item).strip())
+        return ", ".join(names)
+    if isinstance(parsed, dict):
+        return str(parsed.get("name") or "").strip()
+    return str(parsed).strip()
 
 
 def split_valid_and_quarantined_movies(
@@ -501,6 +531,10 @@ def run_spark_etl(
         run_date=run_date,
         run_id=run_id,
     )
+    parse_names_udf = udf(parse_metadata_name_list, StringType())
+    for metadata_column in ("genres", "keywords", "production_companies"):
+        if metadata_column in df.columns:
+            df = df.withColumn(metadata_column, parse_names_udf(col(metadata_column)))
     valid_count = df.count()
     quarantine_count = quarantine_df.count()
     logger.info("DQ Success: %s valid rows, %s quarantined rows", valid_count, quarantine_count)
@@ -931,7 +965,44 @@ def run_spark_etl(
             if run_date:
                 gold_path += f"/run_date={run_date}"
             gold_df = spark.read.format(sink_format).load(gold_path)
-        rows = gold_df.select("id", "vector").orderBy("id").collect()
+        serving_df = gold_df.orderBy("id")
+        serving_columns = [
+            column
+            for column in [
+                "id",
+                "title",
+                "overview",
+                "genres",
+                "vote_average",
+                "vote_count",
+                "popularity",
+                "release_date",
+                "poster_path",
+                "director",
+                "cast",
+                "original_language",
+                "tags",
+                "metadata_completeness",
+                "content_quality_score",
+                "quality_bucket",
+                "searchable",
+                "recommendable",
+                "is_adult_content",
+                "public_demo_eligible",
+            ]
+            if column in serving_df.columns
+        ]
+        serving_pdf = serving_df.select(*serving_columns).toPandas()
+        paths.processed_data.mkdir(parents=True, exist_ok=True)
+        serving_pdf.to_parquet(paths.processed_data / "movies_transformed.parquet", index=False)
+        semantic_artifacts = write_semantic_artifacts(
+            serving_pdf,
+            paths.processed_data,
+            run_id=run_id,
+            run_date=run_date,
+        )
+
+        rows = serving_df.select("id", "vector").collect()
 
         import numpy as np
         import faiss
@@ -982,10 +1053,13 @@ def run_spark_etl(
             },
             "artifacts": {
                 "movies": "movies_transformed.parquet",
+                "semantic_twins": "semantic_twins.parquet",
+                "semantic_twin_summary": "semantic_twin_summary.json",
                 "embeddings": "sbert_embeddings.npy",
                 "faiss_index": "faiss.index",
                 "movie_ids": "movie_ids.npy",
             },
+            "semantic_twins": semantic_artifacts["summary"],
         }
         (paths.models / "pipeline_manifest.json").write_text(
             json.dumps(manifest, indent=2, sort_keys=True),

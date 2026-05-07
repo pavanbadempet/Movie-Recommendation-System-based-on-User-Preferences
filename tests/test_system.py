@@ -16,7 +16,7 @@ import os
 from etl import pandas_etl
 from backend.recommender import Recommender
 
-def test_full_system_flow():
+def test_full_system_flow(monkeypatch):
     """
     End-to-End System Test:
     1. Create dummy CSV data
@@ -74,6 +74,19 @@ def test_full_system_flow():
             
         # Apply mock to modules
         pandas_etl.paths = MockPaths()
+
+        class FakeSentenceTransformer:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def encode(self, texts, **kwargs):
+                vectors = np.zeros((len(texts), 8), dtype=np.float32)
+                for idx, _ in enumerate(texts):
+                    vectors[idx, idx % 8] = 1.0
+                    vectors[idx, (idx + 1) % 8] = 0.5
+                return vectors
+
+        monkeypatch.setattr(pandas_etl, "SentenceTransformer", FakeSentenceTransformer)
         
         # 2. Run ETL Pipeline (Ingest, Transform, Index)
         metrics = pandas_etl.run_pipeline(raw_data_path=csv_path, run_id="test-run", run_date="2026-05-02")
@@ -85,13 +98,18 @@ def test_full_system_flow():
         assert metrics["quality_gates"]["silver"]["rows"] == 3
         assert metrics["quality_gates"]["gold"]["vector_rows"] == 3
         assert metrics["quality_gates"]["serving"]["index_size"] == 3
+        assert metrics["quality_gates"]["semantic_twins"]["semantic_twin_rows"] == 3
         assert metrics["artifacts"]["movies"]["exists"] is True
+        assert metrics["artifacts"]["semantic_twins"]["exists"] is True
+        assert metrics["artifacts"]["semantic_twin_summary"]["exists"] is True
         assert metrics["time_travel_artifacts"]["movies_raw"]["row_count"] == 3
         assert metrics["time_travel_artifacts"]["movies_curated"]["row_count"] == 3
         assert metrics["time_travel_artifacts"]["movies_features"]["row_count"] == 3
         
         # 3. Verify Artifacts
         assert (processed_dir / "movies_transformed.parquet").exists()
+        assert (processed_dir / "semantic_twins.parquet").exists()
+        assert (processed_dir / "semantic_twin_summary.json").exists()
         assert (models_dir / "sbert_embeddings.npy").exists()
         assert (models_dir / "faiss.index").exists()
         assert (quality_dir / "test-run.json").exists()
@@ -108,6 +126,8 @@ def test_full_system_flow():
         assert manifest["row_counts"]["raw_rows"] == 3
         assert manifest["row_counts"]["serving_rows"] == 3
         assert manifest["artifacts"]["faiss_index"]["exists"] is True
+        assert manifest["artifacts"]["semantic_twins"]["exists"] is True
+        assert manifest["quality_gates"]["semantic_twins"]["semantic_twin_rows"] == 3
         assert manifest["stage_artifacts"]["bronze"]["exists"] is True
         assert manifest["stage_artifacts"]["silver"]["exists"] is True
         assert manifest["stage_artifacts"]["gold"]["exists"] is True

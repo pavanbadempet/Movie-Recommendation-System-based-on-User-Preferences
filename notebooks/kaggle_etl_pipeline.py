@@ -50,6 +50,7 @@ import json
 import math
 import re
 import time
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -195,6 +196,9 @@ def add_catalog_coverage_features(frame):
 for col in ["genres", "keywords", "production_companies"]:
     key = "_companies" if col == "production_companies" else f"_{col}"
     df[key] = df[col].apply(parse_json).str.join(", ") if col in df.columns else ""
+
+if "_genres" in df.columns:
+    df["genres"] = df["_genres"]
 
 df["_overview"] = df["overview"].fillna("").astype(str).apply(clean)
 
@@ -595,6 +599,158 @@ def file_sha256(path):
     return digest.hexdigest()
 
 
+SEMANTIC_STOPWORDS = {
+    "about", "after", "again", "against", "also", "and", "are", "around", "back",
+    "become", "becomes", "been", "before", "being", "between", "but", "can",
+    "during", "each", "find", "finds", "for", "from", "has", "have", "her",
+    "him", "his", "into", "its", "life", "lives", "man", "movie", "must",
+    "new", "one", "only", "out", "own", "set", "she", "that", "the", "their",
+    "them", "then", "they", "this", "through", "two", "when", "where", "who",
+    "with", "years",
+}
+
+SEMANTIC_ARCS = {
+    "adventure": {"adventure", "journey", "quest", "mission", "explore", "expedition"},
+    "wonder": {"wonder", "magical", "mystical", "planet", "space", "future", "fantasy", "dream"},
+    "survival": {"survival", "survive", "stranded", "escape", "disaster", "apocalypse", "wilderness"},
+    "tension": {"war", "battle", "conflict", "enemy", "threat", "danger", "conspiracy", "chase"},
+    "mystery": {"mystery", "detective", "secret", "investigation", "hidden", "murder", "missing"},
+    "humor": {"comedy", "funny", "comic", "hilarious", "satire", "parody"},
+    "romance": {"romance", "love", "relationship", "marriage", "heart", "couple"},
+    "melancholy": {"grief", "loss", "lonely", "memory", "past", "regret", "death"},
+    "fear": {"horror", "terror", "haunted", "monster", "demon", "nightmare", "killer"},
+    "heroism": {"hero", "save", "protect", "rescue", "justice", "legend", "chosen"},
+}
+
+SEMANTIC_VIEWER_JOBS = {
+    "escape_and_spectacle": {"adventure", "action", "space", "fantasy", "epic", "battle", "planet"},
+    "world_immersion": {"world", "kingdom", "planet", "civilization", "future", "myth", "universe"},
+    "intellectual_puzzle": {"mystery", "detective", "investigation", "conspiracy", "mind", "memory"},
+    "emotional_catharsis": {"family", "love", "loss", "friendship", "grief", "home"},
+    "adrenaline": {"chase", "fight", "war", "mission", "crime", "revenge", "explosion"},
+    "comfort_laughs": {"comedy", "funny", "family", "romance", "friendship"},
+    "dark_thrill": {"horror", "thriller", "killer", "haunted", "terror", "danger"},
+}
+
+
+def semantic_tokens(text):
+    tokens = re.findall(r"[a-z][a-z0-9]{2,}", str(text or "").lower())
+    return [token for token in tokens if token not in SEMANTIC_STOPWORDS and len(token) >= 3]
+
+
+def parse_genre_labels(value):
+    labels = []
+    for item in re.split(r"[,|;/]", str(value or "")):
+        label = item.strip().lower()
+        if label:
+            labels.append(label)
+    return sorted(set(labels))
+
+
+def labels_from_lexicon(tokens, lexicon):
+    return [label for label, keywords in lexicon.items() if tokens & keywords]
+
+
+def build_semantic_twin(row):
+    genres = parse_genre_labels(row.get("genres"))
+    text = " ".join(
+        str(row.get(column) or "")
+        for column in ["title", "tagline", "overview", "genres", "keywords", "director"]
+    )
+    tokens = semantic_tokens(text)
+    title_tokens = set(semantic_tokens(row.get("title")))
+    genre_tokens = set(semantic_tokens(row.get("genres")))
+    counts = Counter(tokens)
+    for token in title_tokens:
+        counts[token] += 1.25
+    for token in genre_tokens:
+        counts[token] += 0.75
+    concepts = [token for token, _ in counts.most_common(14)]
+    token_set = set(tokens) | set(genres)
+    risk_tags = []
+    if len(str(row.get("overview") or "").strip()) < 30:
+        risk_tags.append("thin_metadata")
+    if float(row.get("vote_count") or 0) < 25:
+        risk_tags.append("low_confidence")
+    if "documentary" in token_set:
+        risk_tags.append("documentary_spinoff")
+    if token_set & {"sequel", "prequel", "reboot", "superhero", "mutant", "justice", "league"}:
+        risk_tags.append("franchise_saturation")
+    confidence = float(row.get("content_quality_score") or row.get("metadata_completeness") or 0)
+    if confidence <= 0:
+        confidence = min(1.0, 0.25 + 0.04 * len(concepts) + 0.08 * len(genres))
+    return {
+        "item_id": int(row.get("id")),
+        "title": row.get("title"),
+        "genres": genres,
+        "concepts": concepts,
+        "emotional_arcs": labels_from_lexicon(token_set, SEMANTIC_ARCS),
+        "viewer_jobs": labels_from_lexicon(token_set, SEMANTIC_VIEWER_JOBS),
+        "risk_tags": sorted(set(risk_tags)),
+        "confidence": round(max(0.0, min(1.0, confidence)), 4),
+        "generated_by": {
+            "method": "deterministic_catalog_semantic_twin",
+            "version": "1.0",
+            "llm_in_hot_path": False,
+        },
+    }
+
+
+def build_semantic_twin_artifacts(frame):
+    rows = []
+    concept_counts = Counter()
+    arc_counts = Counter()
+    job_counts = Counter()
+    risk_counts = Counter()
+    for row in frame.to_dict(orient="records"):
+        twin = build_semantic_twin(row)
+        concept_counts.update(twin["concepts"])
+        arc_counts.update(twin["emotional_arcs"])
+        job_counts.update(twin["viewer_jobs"])
+        risk_counts.update(twin["risk_tags"])
+        rows.append(
+            {
+                "id": int(row["id"]),
+                "title": row.get("title"),
+                "genres": json.dumps(twin["genres"], sort_keys=True),
+                "concepts": json.dumps(twin["concepts"], sort_keys=True),
+                "emotional_arcs": json.dumps(twin["emotional_arcs"], sort_keys=True),
+                "viewer_jobs": json.dumps(twin["viewer_jobs"], sort_keys=True),
+                "risk_tags": json.dumps(twin["risk_tags"], sort_keys=True),
+                "confidence": float(twin["confidence"]),
+                "semantic_twin_json": json.dumps(twin, sort_keys=True),
+            }
+        )
+    twins = pd.DataFrame(rows)
+    expected_ids = pd.to_numeric(frame["id"], errors="raise").astype("int64").to_numpy()
+    actual_ids = pd.to_numeric(twins["id"], errors="raise").astype("int64").to_numpy()
+    assert np.array_equal(expected_ids, actual_ids), "SEMANTIC TWIN ALIGNMENT MISMATCH"
+    summary = {
+        "artifact_version": 1,
+        "run_id": RUN_ID,
+        "run_date": RUN_DATE,
+        "row_count": int(len(twins)),
+        "avg_confidence": round(float(twins["confidence"].mean()), 6) if len(twins) else 0.0,
+        "coverage": {
+            "rows_with_concepts": int((twins["concepts"] != "[]").sum()),
+            "rows_with_emotional_arcs": int((twins["emotional_arcs"] != "[]").sum()),
+            "rows_with_viewer_jobs": int((twins["viewer_jobs"] != "[]").sum()),
+            "rows_with_risk_tags": int((twins["risk_tags"] != "[]").sum()),
+        },
+        "top_concepts": dict(concept_counts.most_common(30)),
+        "top_emotional_arcs": dict(arc_counts.most_common(20)),
+        "top_viewer_jobs": dict(job_counts.most_common(20)),
+        "risk_tags": dict(risk_counts.most_common(20)),
+        "quality_gate": {
+            "stage": "semantic_twins",
+            "rows": int(len(twins)),
+            "semantic_twin_rows": int(len(twins)),
+            "id_order_matches_catalog": True,
+        },
+    }
+    return twins, summary
+
+
 # ============================================================
 # STEP 6: Save artifacts
 # ============================================================
@@ -609,6 +765,8 @@ quality_path = OUT / "quality_report.json"
 manifest_path = OUT / "pipeline_manifest.json"
 ranker_path = OUT / "nova_ranker.joblib"
 ranker_metadata_path = OUT / "nova_ranker.joblib.metadata.json"
+semantic_twins_path = OUT / "semantic_twins.parquet"
+semantic_summary_path = OUT / "semantic_twin_summary.json"
 
 np.save(emb_path, embeddings)
 np.save(movie_ids_path, movie_ids)
@@ -622,6 +780,9 @@ cols = ['id', 'title', 'overview', 'genres', 'vote_average', 'vote_count',
 df[[c for c in cols if c in df.columns]].to_parquet(movies_path, index=False)
 movie_dimension_scd.to_parquet(scd_path, index=False)
 movie_dimension_current.to_parquet(current_dimension_path, index=False)
+semantic_twins, semantic_summary = build_semantic_twin_artifacts(df)
+semantic_twins.to_parquet(semantic_twins_path, index=False)
+semantic_summary_path.write_text(json.dumps(semantic_summary, indent=2, sort_keys=True), encoding="utf-8")
 ranker_report, generated_ranker_metadata_path = train_catalog_ranker(df, ranker_path)
 ranker_metadata_path = generated_ranker_metadata_path
 
@@ -644,6 +805,8 @@ quality_report = {
     "scd_total_versions": int(len(movie_dimension_scd)),
     "ranker_training_mode": ranker_report["metadata"]["training_mode"],
     "ranker_feedback_item_count": ranker_report["metadata"]["feedback_item_count"],
+    "semantic_twin_rows": int(len(semantic_twins)),
+    "semantic_twin_avg_confidence": semantic_summary["avg_confidence"],
 }
 serving_contract = {
     "version": 1,
@@ -669,12 +832,15 @@ manifest = {
         "movie_dimension_scd": scd_path.name,
         "movie_dimension_current": current_dimension_path.name,
         "quality_report": quality_path.name,
+        "semantic_twins": semantic_twins_path.name,
+        "semantic_twin_summary": semantic_summary_path.name,
         "ranker": ranker_path.name,
         "ranker_metadata": ranker_metadata_path.name,
     },
     "artifact_checksums": {},
     "serving_contract": serving_contract,
     "quality": quality_report,
+    "semantic_twins": semantic_summary,
     "ranker": ranker_report["metadata"],
 }
 quality_path.write_text(json.dumps(quality_report, indent=2, sort_keys=True), encoding="utf-8")
@@ -686,6 +852,8 @@ for artifact_name in [
     scd_path,
     current_dimension_path,
     quality_path,
+    semantic_twins_path,
+    semantic_summary_path,
     ranker_path,
     ranker_metadata_path,
 ]:
@@ -700,6 +868,7 @@ print(
     f"index ({idx_path.stat().st_size/1e6:.0f}MB), "
     f"movie ids ({movie_ids_path.stat().st_size/1e6:.1f}MB), "
     f"movies ({movies_path.stat().st_size/1e6:.0f}MB), "
+    f"semantic twins ({semantic_twins_path.stat().st_size/1e6:.0f}MB), "
     f"SCD history ({scd_path.stat().st_size/1e6:.0f}MB), "
     f"ranker ({ranker_path.stat().st_size/1e6:.1f}MB)"
 )
@@ -718,6 +887,8 @@ if HF_TOKEN:
         (scd_path, "movie_dimension_scd.parquet"),
         (current_dimension_path, "movie_dimension_current.parquet"),
         (quality_path, "quality_report.json"),
+        (semantic_twins_path, "semantic_twins.parquet"),
+        (semantic_summary_path, "semantic_twin_summary.json"),
         (manifest_path, "pipeline_manifest.json"),
         (ranker_path, "nova_ranker.joblib"),
         (ranker_metadata_path, "nova_ranker.joblib.metadata.json"),
