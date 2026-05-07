@@ -21,9 +21,11 @@ from backend.events import append_event, aggregate_behavior_features, build_user
 from backend.evaluation import evaluate_recommendation_quality
 from backend.experiments import assign_experiment, attach_experiment, summarize_experiment_metrics
 from backend.auth import TenantContext, enforce_payload_context, resolve_tenant_context
+from backend.artifact_health import evaluate_artifact_health
 from backend.catalogs import profile_catalog_csv, persist_catalog_upload
 from backend.recommender import get_recommender, Recommender
 from backend.remote_recommender import remote_get_json
+from backend.semantic_benchmark import evaluate_semantic_benchmark
 from backend.usage import record_usage, summarize_usage
 
 # Configure logging
@@ -85,18 +87,24 @@ limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS configuration for Streamlit frontend
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "").split(",")
-if not ALLOWED_ORIGINS or ALLOWED_ORIGINS == [""]:
+# CORS configuration for hosted frontends.
+ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv("ALLOWED_ORIGINS", "").split(",") if origin.strip()]
+if not ALLOWED_ORIGINS:
     ALLOWED_ORIGINS = [
         "https://movie-recommendation-system.streamlit.app",
         "http://localhost:8501",
+        "http://localhost:5173",
         "http://localhost:3000",
     ]
+ALLOWED_ORIGIN_REGEX = os.getenv(
+    "ALLOWED_ORIGIN_REGEX",
+    r"https://.*\.(vercel\.app|pages\.dev|netlify\.app)",
+)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=ALLOWED_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -123,6 +131,8 @@ class Movie(BaseModel):
     ranker_score: Optional[float] = None
     retrieval_stage: Optional[str] = None
     retrieval_signals: Optional[dict] = None
+    semantic_twin: Optional[dict] = None
+    semantic_signals: Optional[dict] = None
     explanation_text: Optional[str] = None
     explanation: Optional[list[str]] = None
 
@@ -149,6 +159,10 @@ class EnrichedMovie(BaseModel):
     quality_bucket: Optional[str] = None
     recommendable: Optional[bool] = None
     similarity_score: Optional[float] = None
+    retrieval_stage: Optional[str] = None
+    retrieval_signals: Optional[dict] = None
+    semantic_twin: Optional[dict] = None
+    semantic_signals: Optional[dict] = None
     explanation_text: Optional[str] = None
     explanation: Optional[list[str]] = None
     # Enriched fields
@@ -410,6 +424,8 @@ async def platform_status(
         },
         "capabilities": [
             "hybrid_ai_search",
+            "semantic_item_twins",
+            "semantic_benchmark",
             "learned_ranker",
             "personalization_v2",
             "experiment_metrics",
@@ -446,6 +462,45 @@ async def recommendation_quality_report(
     report = evaluate_recommendation_quality(rec, sample_size=sample_size, k=k)
     record_usage(
         "evaluation.recommendations",
+        context.tenant_id,
+        context.catalog_id,
+        plan=context.plan,
+        authenticated=context.authenticated,
+    )
+    return report
+
+
+@app.get("/v1/evaluation/semantic-benchmark")
+async def semantic_benchmark_report(
+    context: TenantContext = Depends(resolve_tenant_context),
+    k: int = Query(default=10, ge=1, le=50),
+):
+    """Return human-labeled semantic benchmark metrics for obvious bad-match detection."""
+    rec = get_rec()
+    report = evaluate_semantic_benchmark(rec, k=k)
+    record_usage(
+        "evaluation.semantic_benchmark",
+        context.tenant_id,
+        context.catalog_id,
+        plan=context.plan,
+        authenticated=context.authenticated,
+    )
+    return report
+
+
+@app.get("/v1/artifacts/health")
+async def artifact_health_report(
+    context: TenantContext = Depends(resolve_tenant_context),
+):
+    """Return serving artifact availability and alignment diagnostics."""
+    from backend import recommender as recommender_module
+
+    report = evaluate_artifact_health(
+        models_dir=recommender_module.MODELS_DIR,
+        data_dir=recommender_module.DATA_DIR,
+    )
+    record_usage(
+        "artifacts.health",
         context.tenant_id,
         context.catalog_id,
         plan=context.plan,
@@ -607,6 +662,26 @@ async def get_all_titles(
 
     rec = get_rec()
     return rec.get_all_titles(limit=limit)
+
+
+@app.get("/v1/semantic-twins/id/{movie_id}")
+async def semantic_twin_by_id(
+    movie_id: int,
+    context: TenantContext = Depends(resolve_tenant_context),
+):
+    """Return the deterministic semantic item twin used for explainable scoring."""
+    rec = get_rec()
+    twin = rec.get_semantic_twin_by_id(movie_id)
+    if twin is None:
+        raise HTTPException(status_code=404, detail=f"Movie with ID {movie_id} not found")
+    record_usage(
+        "semantic_twins.id",
+        context.tenant_id,
+        context.catalog_id,
+        plan=context.plan,
+        authenticated=context.authenticated,
+    )
+    return twin
 
 
 @app.get("/v1/search", response_model=list[Movie])

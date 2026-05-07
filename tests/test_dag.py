@@ -10,7 +10,13 @@ airflow_models = pytest.importorskip(
     "airflow.models",
     reason="Airflow DAG tests require apache-airflow to be installed.",
 )
-DagBag = airflow_models.DagBag
+try:
+    DagBag = airflow_models.DagBag
+except (ImportError, ModuleNotFoundError) as exc:
+    pytest.skip(
+        f"Airflow DAG tests require a compatible Airflow runtime: {exc}",
+        allow_module_level=True,
+    )
 
 # Mock Airflow environment variables if not present
 os.environ["KAGGLE_KEY"] = "mock_key"

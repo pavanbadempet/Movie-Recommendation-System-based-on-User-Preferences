@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "purpose": "Small human-labeled cases for catching obvious semantic recommendation failures before real user traffic exists.",
+  "cases": [
+    {
+      "case_id": "avatar_worldbuilding_scifi",
+      "seed": {"id": 19995, "title": "Avatar"},
+      "intent": "Immersive sci-fi/worldbuilding with spectacle, survival, alien worlds, or ecological conflict. Avoid generic superhero/cartoon/action drift.",
+      "good_matches": [
+        {"title": "Dune"},
+        {"title": "The Creator"},
+        {"title": "Guardians of the Galaxy"},
+        {"title": "Valerian and the City of a Thousand Planets"},
+        {"title": "John Carter"}
+      ],
+      "bad_matches": [
+        {"title": "Small Soldiers"},
+        {"title": "Supergirl"},
+        {"title": "Barbarella"},
+        {"title": "Kids Next Door: Operation Z.E.R.O."}
+      ]
+    },
+    {
+      "case_id": "interstellar_serious_space",
+      "seed": {"title": "Interstellar"},
+      "intent": "Serious space exploration, survival, time, family emotion, and cosmic mystery. Avoid generic action comedy.",
+      "good_matches": [
+        {"title": "Arrival"},
+        {"title": "The Martian"},
+        {"title": "Contact"},
+        {"title": "Gravity"},
+        {"title": "Ad Astra"}
+      ],
+      "bad_matches": [
+        {"title": "Scary Movie"},
+        {"title": "Space Jam"},
+        {"title": "Mars Needs Moms"}
+      ]
+    },
+    {
+      "case_id": "inception_mind_bending_thriller",
+      "seed": {"title": "Inception"},
+      "intent": "Mind-bending thriller with reality, dreams, memory, or puzzle-box structure. Avoid ordinary action titles.",
+      "good_matches": [
+        {"title": "The Matrix"},
+        {"title": "Tenet"},
+        {"title": "Memento"},
+        {"title": "Source Code"},
+        {"title": "Shutter Island"}
+      ],
+      "bad_matches": [
+        {"title": "Paul Blart: Mall Cop"},
+        {"title": "The Hangover"},
+        {"title": "Grown Ups"}
+      ]
+    }
+  ]
+}
