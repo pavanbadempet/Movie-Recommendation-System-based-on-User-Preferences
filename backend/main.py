@@ -362,7 +362,16 @@ async def health_check():
     """Health check endpoint."""
     load_recommender = os.getenv("NOVA_HEALTH_LOAD_RECOMMENDER", "true").strip().lower()
     if load_recommender in {"0", "false", "no", "off"}:
-        return HealthResponse(status="healthy", movie_count=0)
+        from backend import recommender as recommender_module
+
+        report = evaluate_artifact_health(
+            models_dir=recommender_module.MODELS_DIR,
+            data_dir=recommender_module.DATA_DIR,
+        )
+        return HealthResponse(
+            status="healthy" if report.get("files", {}).get("movies", {}).get("exists") else "degraded",
+            movie_count=int((report.get("row_counts") or {}).get("movies") or 0),
+        )
 
     try:
         rec = get_rec()
