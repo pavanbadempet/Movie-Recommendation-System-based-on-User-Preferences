@@ -40,6 +40,8 @@ jobs:
 
       - name: Run tests
         shell: bash
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
         run: |
           set +e
           pytest tests/ -v --tb=short 2>&1 | tee pytest-output.txt
