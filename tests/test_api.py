@@ -30,6 +30,16 @@ def mock_artifacts(tmp_path, monkeypatch):
         "poster_path": [None, None, None],
     })
     movies.to_parquet(tmp_path / "movies_transformed.parquet")
+    pd.DataFrame(
+        {
+            "id": movies["id"].astype("int64"),
+            "semantic_twin_json": ["{}"] * len(movies),
+        }
+    ).to_parquet(tmp_path / "semantic_twins.parquet", index=False)
+    (tmp_path / "semantic_twin_summary.json").write_text(
+        json.dumps({"row_count": len(movies), "avg_confidence": 0.8}),
+        encoding="utf-8",
+    )
     
     # Mock vectors (MPNet style - 768 dims)
     vecs = np.random.rand(3, 768).astype(np.float32)
@@ -209,6 +219,41 @@ class TestSearchEndpoint:
         results = resp.json()
         assert results[0]["title"] == "Remote Space Movie"
         assert results[0]["retrieval_stage"] == "remote_hybrid"
+
+    def test_semantic_twin_endpoint_returns_structured_catalog_evidence(self, mock_artifacts):
+        from backend.main import app
+        client = TestClient(app)
+
+        resp = client.get("/v1/semantic-twins/id/300")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["item_id"] == 300
+        assert "concepts" in data
+        assert data["generated_by"]["llm_in_hot_path"] is False
+
+    def test_semantic_benchmark_endpoint_is_available(self, mock_artifacts):
+        from backend.main import app
+        client = TestClient(app)
+
+        resp = client.get("/v1/evaluation/semantic-benchmark", params={"k": 3})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "status" in data
+        assert "case_count" in data
+
+    def test_artifact_health_endpoint_reports_alignment(self, mock_artifacts):
+        from backend.main import app
+        client = TestClient(app)
+
+        resp = client.get("/v1/artifacts/health")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ready"
+        assert data["checks"]["catalog_vector_aligned"] is True
+        assert data["checks"]["semantic_catalog_aligned"] is True
 
 
 class TestMoviesEndpoint:
