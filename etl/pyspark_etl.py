@@ -3,7 +3,6 @@ PySpark ETL - processes TMDB movie data using Spark.
 
 Canonical batch/lakehouse pipeline for the project.
 """
-import ast
 import hashlib
 import json
 import logging
@@ -30,6 +29,7 @@ from etl.delta_lakehouse import (
     write_embedding_jobs,
     write_pipeline_run,
 )
+from etl.metadata_parsing import parse_metadata_name_list
 from etl.semantic_artifacts import write_semantic_artifacts
 
 logger = logging.getLogger(__name__)
@@ -260,33 +260,6 @@ def _optional_string(df: DataFrame, column_name: str):
     if column_name in df.columns:
         return col(column_name).cast("string")
     return lit(None).cast("string")
-
-
-def parse_metadata_name_list(value) -> str:
-    """Normalize Kaggle list/dict metadata strings into comma-separated names."""
-    if value is None:
-        return ""
-    text = str(value).strip()
-    if not text or text.lower() == "nan":
-        return ""
-    try:
-        parsed = ast.literal_eval(text)
-    except (ValueError, SyntaxError):
-        return ", ".join(part.strip() for part in text.split(",") if part.strip())
-
-    if isinstance(parsed, list):
-        names = []
-        for item in parsed:
-            if isinstance(item, dict):
-                name = str(item.get("name") or "").strip()
-                if name:
-                    names.append(name)
-            elif item:
-                names.append(str(item).strip())
-        return ", ".join(names)
-    if isinstance(parsed, dict):
-        return str(parsed.get("name") or "").strip()
-    return str(parsed).strip()
 
 
 def split_valid_and_quarantined_movies(

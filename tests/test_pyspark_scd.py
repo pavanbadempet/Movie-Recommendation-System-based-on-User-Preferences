@@ -9,7 +9,7 @@ import pytest
 
 
 def test_parse_metadata_name_list_normalizes_kaggle_jsonish_values():
-    from etl.pyspark_etl import parse_metadata_name_list
+    from etl.metadata_parsing import parse_metadata_name_list
 
     assert parse_metadata_name_list("[{'id': 1, 'name': 'Action'}, {'id': 2, 'name': 'Drama'}]") == "Action, Drama"
     assert parse_metadata_name_list("Action, Comedy") == "Action, Comedy"
