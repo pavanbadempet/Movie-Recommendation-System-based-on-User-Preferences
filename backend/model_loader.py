@@ -56,6 +56,22 @@ MODEL_FILES = {
         ),
         "dest": "../data/processed/movies_transformed.parquet"
     },
+    "semantic_twins.parquet": {
+        "url": os.getenv(
+            "SEMANTIC_TWINS_URL",
+            "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/semantic_twins.parquet"
+        ),
+        "dest": "../data/processed/semantic_twins.parquet",
+        "required": False,
+    },
+    "semantic_twin_summary.json": {
+        "url": os.getenv(
+            "SEMANTIC_TWIN_SUMMARY_URL",
+            "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/semantic_twin_summary.json"
+        ),
+        "dest": "../data/processed/semantic_twin_summary.json",
+        "required": False,
+    },
     "nova_ranker.joblib": {
         "url": os.getenv(
             "NOVA_RANKER_URL",

@@ -152,6 +152,7 @@ class TestTransform:
         result = generate_tags(df)
         assert "tags" in result.columns
         assert "adventure" in result.iloc[0]["tags"]
+        assert result.iloc[0]["genres"] == "Adventure"
 
     def test_build_sbert_embeddings(self, monkeypatch):
         """build_sbert_embeddings returns model and normalized embeddings."""

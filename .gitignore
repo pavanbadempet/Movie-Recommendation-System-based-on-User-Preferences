@@ -26,7 +26,7 @@ data/raw/*.zip
 data/processed/*.parquet
 
 # Model artifacts (hosted on HuggingFace, NOT in GitHub)
-# Kaggle generates → HuggingFace stores → Render downloads at runtime
+# Kaggle generates -> Hugging Face stores -> Render downloads at runtime
 models/*.index
 models/*.npy
 models/*.joblib
@@ -56,6 +56,10 @@ Thumbs.db
 dist/
 build/
 *.egg-info/
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/*.tsbuildinfo
 
 # Temp debug scripts
 analyze_features.py

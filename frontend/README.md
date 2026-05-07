@@ -1,0 +1,33 @@
+# Nova React Frontend
+
+Static React UI for the Nova recommendation platform.
+
+## Local
+
+```bash
+npm install
+npm run dev
+```
+
+## Build
+
+```bash
+npm run build
+```
+
+## Free Hosting Settings
+
+Cloudflare Pages, Vercel, or Netlify can deploy this as a static Vite app.
+
+- Root directory: `frontend`
+- Build command: `npm run build`
+- Output directory: `dist`
+- Node version: `24` or current LTS
+
+Optional environment variables:
+
+- `VITE_API_URL`: primary API gateway, default Render backend
+- `VITE_BACKUP_API_URL`: backup API, default Hugging Face Space
+- `VITE_TMDB_IMAGE_BASE`: poster image base URL
+
+The UI has request-level backend failover, so a sleeping free host should not break the whole app.
