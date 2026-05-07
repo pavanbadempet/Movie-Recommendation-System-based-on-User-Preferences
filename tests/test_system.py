@@ -16,7 +16,7 @@ import os
 from etl import pandas_etl
 from backend.recommender import Recommender
 
-def test_full_system_flow():
+def test_full_system_flow(monkeypatch):
     """
     End-to-End System Test:
     1. Create dummy CSV data
@@ -74,6 +74,19 @@ def test_full_system_flow():
             
         # Apply mock to modules
         pandas_etl.paths = MockPaths()
+
+        class FakeSentenceTransformer:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def encode(self, texts, **kwargs):
+                vectors = np.zeros((len(texts), 8), dtype=np.float32)
+                for idx, _ in enumerate(texts):
+                    vectors[idx, idx % 8] = 1.0
+                    vectors[idx, (idx + 1) % 8] = 0.5
+                return vectors
+
+        monkeypatch.setattr(pandas_etl, "SentenceTransformer", FakeSentenceTransformer)
         
         # 2. Run ETL Pipeline (Ingest, Transform, Index)
         metrics = pandas_etl.run_pipeline(raw_data_path=csv_path, run_id="test-run", run_date="2026-05-02")
