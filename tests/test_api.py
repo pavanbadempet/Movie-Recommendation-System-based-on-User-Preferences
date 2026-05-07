@@ -95,6 +95,19 @@ class TestHealthEndpoint:
         assert data["status"] == "healthy"
         assert data["movie_count"] == 3
 
+    def test_health_without_recommender_load_reports_catalog_count(self, mock_artifacts, monkeypatch):
+        monkeypatch.setenv("NOVA_HEALTH_LOAD_RECOMMENDER", "false")
+
+        from backend.main import app
+        client = TestClient(app)
+
+        resp = client.get("/health")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "healthy"
+        assert data["movie_count"] == 3
+
 
 class TestPlatformEndpoint:
     def test_platform_context_public_demo(self, mock_artifacts):
