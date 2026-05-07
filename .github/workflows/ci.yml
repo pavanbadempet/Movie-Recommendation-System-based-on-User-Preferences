@@ -33,7 +33,7 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
           pip install ruff
-          pip install apache-airflow
+          pip install "apache-airflow==2.10.5" --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.10.5/constraints-3.11.txt"
 
       - name: Lint with ruff
         run: ruff check . --ignore=E501,F401,E402,F541 --exclude=.venv,.venv_cuda,notebooks
