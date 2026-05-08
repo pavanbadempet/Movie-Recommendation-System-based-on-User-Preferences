@@ -96,6 +96,26 @@ jobs:
           echo "https://www.kaggle.com/code/$KERNEL_ID"
           exit 1
 
+      - name: Annotate Kaggle failure
+        if: failure()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          log_paths = sorted(Path("/tmp/kaggle_output").glob("*"))
+          if log_paths:
+              text = "\n\n".join(
+                  f"--- {path.name} ---\n{path.read_text(encoding='utf-8', errors='replace')}"
+                  for path in log_paths
+                  if path.is_file()
+              )
+          else:
+              text = "Kaggle notebook failed or timed out before output logs were available."
+          tail = "\n".join(text.splitlines()[-140:])
+          escaped = tail[:7000].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Kaggle refresh failure::{escaped}")
+          PY
+
       - name: Validate Hugging Face serving artifact contract
         if: success()
         env:
