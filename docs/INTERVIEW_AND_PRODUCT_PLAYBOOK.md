@@ -4,7 +4,7 @@ This project should be presented as an AI-powered data product, not only as a mo
 
 The strongest positioning is:
 
-> Nova is a batch-first semantic discovery platform that ingests raw catalog data, validates and curates it, generates embeddings, indexes them with FAISS, and serves low-latency recommendations through FastAPI and Streamlit. Lakehouse, orchestration, streaming, and warehouse patterns are introduced only when the requirement justifies them.
+> Nova is a batch-first semantic discovery platform that ingests raw catalog data, validates and curates it, generates embeddings, indexes them with FAISS, and serves low-latency recommendations through FastAPI and product UIs. Lakehouse, orchestration, streaming, and warehouse patterns are introduced only when the requirement justifies them.
 
 ## What This Project Proves
 
@@ -31,12 +31,12 @@ Use this concise explanation in interviews:
 
 1. Raw movie data is ingested as a batch source because catalog freshness does not require streaming.
 2. The ETL validates schema, filters low-quality records, deduplicates IDs, and curates metadata.
-3. The local path writes Parquet serving artifacts; the lakehouse path can map the same logic to Bronze/Silver/Gold when Delta is available.
+3. The PySpark path owns the canonical Bronze/Silver/Gold lakehouse flow; the local fallback writes compatible Parquet serving artifacts for free-tier execution.
 4. Gold/serving features include searchable text, ranking attributes, and curated movie metadata.
 5. SBERT converts movie text into dense embeddings.
 6. FAISS indexes normalized vectors for fast nearest-neighbor retrieval.
 7. FastAPI serves search, recommendation, health, and chat endpoints.
-8. Streamlit provides the product UI and monitoring dashboard.
+8. React provides the product UI; Streamlit remains useful for lightweight demos and monitoring.
 9. CI runs compile, lint, and tests; optional infra tests are explicitly gated so local checks stay deterministic.
 
 ## Interview Answer: Why This Is Data Engineering
@@ -45,8 +45,8 @@ This is not just a machine learning demo. The core data engineering work is:
 
 - Ingestion: raw source data is fetched and normalized.
 - Data quality: null checks, vote thresholds, schema validation, and curated output.
-- Storage design: Parquet for the current serving artifacts, with Delta Lake reserved for production lakehouse requirements.
-- Processing: Pandas for local reliability and PySpark for scale.
+- Storage design: Parquet for portable serving artifacts, Delta Lake for ACID lakehouse tables, SCD history, and time travel.
+- Processing: PySpark-first ETL for the DE path, with Pandas limited to local fallback, tests, and artifact inspection.
 - Orchestration: Airflow when scheduled refresh, retries, backfills, and dependency ownership are required.
 - Serving: precomputed embeddings and FAISS index avoid expensive online computation.
 - Reliability: tests, health checks, retries, Docker, and safe artifact loading.
@@ -56,14 +56,14 @@ This is not just a machine learning demo. The core data engineering work is:
 
 Use truthful bullets that match the repository:
 
-- Built Nova, an AI-powered semantic discovery platform that processes TMDB catalog data through Pandas/PySpark ETL, validates data quality, generates SBERT embeddings, indexes vectors with FAISS, and serves low-latency recommendations through FastAPI and Streamlit.
-- Designed a batch-first data pipeline with Parquet serving artifacts and a documented lakehouse extension path for Bronze/Silver/Gold and Delta Lake when ACID MERGE, time travel, and backfills are required.
+- Built Nova, an AI-powered semantic discovery platform with PySpark-first batch ETL, Delta/Parquet data modeling, SBERT embeddings, FAISS vector search, and low-latency FastAPI serving.
+- Designed a batch-first data pipeline with Parquet serving artifacts plus a Delta Lake Bronze/Silver/Gold path for ACID MERGE, SCD Type 2 history, time travel, and backfills.
 - Implemented semantic search and recommendation APIs with FAISS vector retrieval, metadata re-ranking, and MMR-style diversification to improve recommendation relevance and reduce duplicate-style results.
 - Added CI-quality checks with pytest, compile validation, linting, optional Airflow/Kafka/Spark integration tests, and safer artifact loading to prevent import-time network calls or tracked data rewrites.
 
 Shorter version for a one-page resume:
 
-- Built an AI semantic recommendation platform using Pandas/PySpark ETL, Parquet serving artifacts, SBERT embeddings, FAISS vector search, FastAPI, Streamlit, Docker, and pytest.
+- Built an AI semantic recommendation platform using PySpark ETL, Delta/Parquet artifacts, SBERT embeddings, FAISS vector search, FastAPI, React/Streamlit, Docker, and pytest.
 - Designed data quality checks, idempotent refresh flow, model artifact generation, API serving, and documented tradeoffs for Delta, Kafka, Airflow, Databricks, SQL/NoSQL, and SCD Type 2.
 
 ## Claims To Avoid
@@ -150,7 +150,7 @@ Use this sequence in a live demo:
 - Add partitioned outputs by `run_date`.
 - Add a small lineage manifest for every pipeline run.
 - Add Airflow DAG tests that run in CI with a pinned Airflow dependency.
-- Use the SCD Type 2 implementation in `etl/scd.py` to explain historical dimension handling.
+- Use the Spark SCD Type 2 implementation in `etl/pyspark_etl.py` and the Delta contracts in `etl/delta_lakehouse.py` to explain historical dimension handling.
 - Use `sql/movie_recommendation_star_schema.sql` to discuss dimensions, facts, ranking analytics, and SQL tradeoffs.
 
 ### Tier 3: Product Signal
@@ -201,9 +201,10 @@ Startup MVP version:
 ## Deep-Dive References
 
 - `docs/DATA_ENGINEERING_SYSTEM_DESIGN.md`: Spark, Delta, Kafka, Airflow, Databricks, SQL/NoSQL, SCD, and serving tradeoffs.
-- `etl/scd.py`: deterministic SCD Type 2 helper for movie dimension history.
+- `etl/pyspark_etl.py`: Spark SCD Type 2 and batch ETL path.
+- `etl/delta_lakehouse.py`: Delta schemas, contracts, history, restore, and time-travel helpers.
 - `sql/movie_recommendation_star_schema.sql`: SCD2 dimension, recommendation/search/user-event facts, and analytical SQL examples.
 
 ## One-Minute Pitch
 
-Nova is an AI discovery platform I built to demonstrate end-to-end data engineering and AI serving. It ingests raw movie catalog data, validates and curates it into lakehouse-style layers, generates SBERT embeddings, builds a FAISS vector index, and serves semantic recommendations through FastAPI and Streamlit. The important part is not movies; the same architecture applies to e-commerce products, articles, support tickets, or enterprise knowledge bases. I focused on idempotent ETL, data quality, artifact management, low-latency serving, and CI-tested reliability so it behaves like a real data product rather than a notebook demo.
+Nova is an AI discovery platform I built to demonstrate end-to-end data engineering and AI serving. It ingests raw movie catalog data, validates and curates it through a PySpark-first lakehouse path, generates SBERT embeddings, builds a FAISS vector index, and serves semantic recommendations through FastAPI and product UIs. The important part is not movies; the same architecture applies to e-commerce products, articles, support tickets, or enterprise knowledge bases. I focused on idempotent ETL, data quality, artifact management, low-latency serving, and CI-tested reliability so it behaves like a real data product rather than a notebook demo.
