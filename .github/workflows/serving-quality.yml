@@ -13,6 +13,7 @@ on:
 env:
   PYTHON_VERSION: '3.11'
   NOVA_SERVING_URL: https://pavanbadempet-movie-rec-api.hf.space
+  NOVA_RENDER_GATEWAY_URL: https://movie-recs-api-5qvy.onrender.com
 
 concurrency:
   group: serving-quality-${{ github.ref }}
@@ -49,10 +50,25 @@ jobs:
             --min-explanation-coverage 0.90 \
             --fail-on-threshold
 
+      - name: Evaluate Render gateway quality
+        run: |
+          python scripts/evaluate_live_serving.py \
+            --base-url "$NOVA_RENDER_GATEWAY_URL" \
+            --output reports/render_gateway_quality.json \
+            --timeout 60 \
+            --retries 10 \
+            --retry-delay-seconds 30 \
+            --k 10 \
+            --skip-semantic-benchmark \
+            --allow-degraded-artifact-health \
+            --fail-on-threshold
+
       - name: Upload quality report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: live-serving-quality
-          path: reports/live_serving_quality.json
+          path: |
+            reports/live_serving_quality.json
+            reports/render_gateway_quality.json
           if-no-files-found: ignore
