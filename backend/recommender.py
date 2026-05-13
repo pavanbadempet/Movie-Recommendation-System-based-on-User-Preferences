@@ -5,6 +5,7 @@ of making recommendations feel personalized.
 """
 import logging
 import hashlib
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
@@ -947,11 +948,21 @@ class Recommender:
             return []
             
         q_lower = query.lower().strip()
+        q_norm = re.sub(r"[^a-z0-9]+", " ", q_lower).strip()
 
         def text_column(column: str) -> pd.Series:
             if column not in self._movies.columns:
                 return pd.Series("", index=self._movies.index, dtype="string")
             return self._movies[column].fillna("").astype(str)
+
+        def normalized_text_column(column: str) -> pd.Series:
+            return (
+                text_column(column)
+                .str.lower()
+                .str.replace(r"[^a-z0-9]+", " ", regex=True)
+                .str.replace(r"\s+", " ", regex=True)
+                .str.strip()
+            )
 
         def numeric_column(column: str) -> pd.Series:
             if column not in self._movies.columns:
@@ -961,15 +972,24 @@ class Recommender:
         titles = text_column("title")
         overviews = text_column("overview")
         genres = text_column("genres")
+        normalized_titles = normalized_text_column("title")
+        normalized_overviews = normalized_text_column("overview")
+        normalized_genres = normalized_text_column("genres")
         
         # 1. Title Match (Weight: 10)
         mask_title = titles.str.lower().str.contains(q_lower, regex=False, na=False)
+        if q_norm:
+            mask_title = mask_title | normalized_titles.str.contains(q_norm, regex=False, na=False)
         
         # 2. Overview Match (Weight: 3) - Allows searching by plot concepts
         mask_overview = overviews.str.lower().str.contains(q_lower, regex=False, na=False)
+        if q_norm:
+            mask_overview = mask_overview | normalized_overviews.str.contains(q_norm, regex=False, na=False)
         
         # 3. Genre Match (Weight: 5)
         mask_genre = genres.str.lower().str.contains(q_lower, regex=False, na=False)
+        if q_norm:
+            mask_genre = mask_genre | normalized_genres.str.contains(q_norm, regex=False, na=False)
         
         # Combine matches
         matches = self._movies[mask_title | mask_overview | mask_genre].copy()
@@ -981,18 +1001,27 @@ class Recommender:
         
         # Title Factors
         m_title = text_column("title").loc[matches.index].str.lower()
+        m_title_norm = normalized_text_column("title").loc[matches.index]
         exact_title = m_title == q_lower
+        if q_norm:
+            exact_title = exact_title | (m_title_norm == q_norm)
         starts_with_boundary = (
             exact_title
             | m_title.str.startswith(f"{q_lower} ", na=False)
             | m_title.str.startswith(f"{q_lower}:", na=False)
             | m_title.str.startswith(f"{q_lower}-", na=False)
         )
+        if q_norm:
+            starts_with_boundary = starts_with_boundary | m_title_norm.str.startswith(f"{q_norm} ", na=False)
         starts_with_prefix = m_title.str.startswith(q_lower, na=False) & ~starts_with_boundary
-        matches.loc[m_title == q_lower, "relevance"] += 50.0
+        if q_norm:
+            starts_with_prefix = starts_with_prefix | (m_title_norm.str.startswith(q_norm, na=False) & ~starts_with_boundary)
+        matches.loc[exact_title, "relevance"] += 50.0
         matches.loc[starts_with_boundary, "relevance"] += 20.0
         matches.loc[starts_with_prefix, "relevance"] += 8.0
         matches.loc[m_title.str.contains(q_lower, regex=False), "relevance"] += 10.0
+        if q_norm:
+            matches.loc[m_title_norm.str.contains(q_norm, regex=False), "relevance"] += 10.0
         
         # Other Factors
         # Note: We use the masks subsetted by the matches index
@@ -1015,6 +1044,7 @@ class Recommender:
             (
                 m_title.str.startswith(f"{q_lower}: ", na=False)
                 | m_title.str.startswith(f"{q_lower} - ", na=False)
+                | (m_title_norm.str.startswith(f"{q_norm} ", na=False) if q_norm else False)
             )
             & ((vote_count >= 250) | (popularity >= 20))
         )

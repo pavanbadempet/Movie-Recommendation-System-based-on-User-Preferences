@@ -14,6 +14,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+from backend.search_benchmark import DEFAULT_SEARCH_BENCHMARK_PATH, evaluate_search_benchmark
+
 
 def _parse_title_csv(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
@@ -47,6 +49,7 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
             "health": {},
             "artifact_health": {},
             "search_smoke": [],
+            "search_benchmark": {},
             "recommendation_smoke": {},
             "semantic_benchmark": {},
         }
@@ -55,6 +58,18 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
             report["artifact_health"] = _get_json(args.base_url, "/v1/artifacts/health", args.timeout)
             search_params = urllib.parse.urlencode({"q": args.search_query, "limit": args.search_limit})
             report["search_smoke"] = _get_json(args.base_url, f"/v1/search?{search_params}", args.timeout)
+            if args.skip_search_benchmark:
+                report["search_benchmark"] = {"status": "skipped", "reason": "disabled by live gate"}
+            else:
+                report["search_benchmark"] = evaluate_search_benchmark(
+                    lambda query, limit: _get_json(
+                        args.base_url,
+                        f"/v1/search?{urllib.parse.urlencode({'q': query, 'limit': limit})}",
+                        args.timeout,
+                    ),
+                    benchmark_path=args.search_benchmark_path,
+                    k=args.search_benchmark_k,
+                )
             recommendation_params = urllib.parse.urlencode({"n": args.recommendation_smoke_k})
             report["recommendation_smoke"] = _get_json(
                 args.base_url,
@@ -117,6 +132,37 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
                     f"below {args.min_required_search_hits}",
                     report,
                 )
+
+        search_benchmark = report.get("search_benchmark") or {}
+        if not args.skip_search_benchmark:
+            if search_benchmark.get("status") not in {"ok", "needs_attention"}:
+                _threshold_failure(
+                    f"search benchmark unavailable: {search_benchmark.get('reason') or search_benchmark.get('status')}",
+                    report,
+                )
+            search_metrics = search_benchmark.get("metrics") or {}
+            search_checks = {
+                "search_top1_hit_rate": (
+                    float(search_metrics.get("top1_hit_rate") or 0.0),
+                    ">=",
+                    args.min_search_top1_hit_rate,
+                ),
+                "search_hit_rate_at_k": (
+                    float(search_metrics.get("hit_rate_at_k") or 0.0),
+                    ">=",
+                    args.min_search_hit_rate,
+                ),
+                "search_blocked_hit_case_rate": (
+                    float(search_metrics.get("blocked_hit_case_rate") or 0.0),
+                    "<=",
+                    args.max_search_blocked_hit_case_rate,
+                ),
+            }
+            for name, (actual, op, expected) in search_checks.items():
+                if op == "<=" and actual > expected:
+                    _threshold_failure(f"{name} {actual} exceeds {expected}", report)
+                if op == ">=" and actual < expected:
+                    _threshold_failure(f"{name} {actual} below {expected}", report)
 
         recommendation_payload = report.get("recommendation_smoke")
         if not isinstance(recommendation_payload, dict):
@@ -207,6 +253,12 @@ def main() -> None:
     parser.add_argument("--expected-search-title", default="Avatar")
     parser.add_argument("--required-search-titles", default="Avatar: Fire and Ash,Avatar: The Way of Water")
     parser.add_argument("--min-required-search-hits", type=int, default=2)
+    parser.add_argument("--search-benchmark-path", type=Path, default=DEFAULT_SEARCH_BENCHMARK_PATH)
+    parser.add_argument("--search-benchmark-k", type=int, default=5)
+    parser.add_argument("--min-search-top1-hit-rate", type=float, default=0.98)
+    parser.add_argument("--min-search-hit-rate", type=float, default=1.0)
+    parser.add_argument("--max-search-blocked-hit-case-rate", type=float, default=0.0)
+    parser.add_argument("--skip-search-benchmark", action="store_true")
     parser.add_argument("--recommendation-smoke-movie-id", type=int, default=19995)
     parser.add_argument("--recommendation-smoke-k", type=int, default=10)
     parser.add_argument("--min-recommendation-results", type=int, default=5)
@@ -241,6 +293,7 @@ def main() -> None:
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
 
     benchmark_metrics = (report.get("semantic_benchmark") or {}).get("metrics") or {}
+    search_benchmark_metrics = (report.get("search_benchmark") or {}).get("metrics") or {}
     summary = {
         "status": report.get("status"),
         "failures": report.get("failures"),
@@ -255,6 +308,10 @@ def main() -> None:
             else None
         ),
         "search_required_hit_count": (report.get("search_smoke_summary") or {}).get("required_hit_count"),
+        "search_benchmark_top1_hit_rate": search_benchmark_metrics.get("top1_hit_rate"),
+        "search_benchmark_hit_rate_at_k": search_benchmark_metrics.get("hit_rate_at_k"),
+        "search_benchmark_blocked_hit_case_rate": search_benchmark_metrics.get("blocked_hit_case_rate"),
+        "search_benchmark_case_count": (report.get("search_benchmark") or {}).get("evaluated_case_count"),
         "recommendation_result_count": (report.get("recommendation_smoke_summary") or {}).get("result_count"),
         "recommendation_required_hit_count": (report.get("recommendation_smoke_summary") or {}).get("required_hit_count"),
         "recommendation_blocked_hits": (report.get("recommendation_smoke_summary") or {}).get("blocked_hits"),
