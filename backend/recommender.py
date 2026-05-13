@@ -257,6 +257,25 @@ class Recommender:
             if column in self._movies.columns:
                 self._movies[column] = self._movies[column].fillna("").astype("category")
 
+    @staticmethod
+    def _clean_response_value(value: Any) -> Any:
+        """Convert pandas/numpy missing values and scalars to JSON-safe values."""
+        if value is None:
+            return None
+        try:
+            if pd.isna(value):
+                return None
+        except (TypeError, ValueError):
+            pass
+        if isinstance(value, np.generic):
+            return value.item()
+        return value
+
+    @classmethod
+    def _clean_response_record(cls, record: dict[str, Any]) -> dict[str, Any]:
+        """Normalize a movie record before FastAPI response validation."""
+        return {key: cls._clean_response_value(value) for key, value in record.items()}
+
     def _disable_vector_artifacts(self, reason: str) -> None:
         """Disable vector serving when artifacts violate row-alignment contracts."""
         logger.warning("Disabling FAISS/SBERT recommendations: %s", reason)
@@ -818,11 +837,11 @@ class Recommender:
         matches = self._movies[self._movies["id"] == movie_id]
         if len(matches) == 0:
             return None
-        return matches.iloc[0].to_dict()
+        return self._clean_response_record(matches.iloc[0].to_dict())
     
     def get_movie_by_index(self, idx: int) -> dict:
         """Get movie details by DataFrame index."""
-        return self._movies.iloc[idx].to_dict()
+        return self._clean_response_record(self._movies.iloc[idx].to_dict())
         
     def get_all_titles(self, limit: int = 5000) -> list[dict]:
         """
@@ -954,7 +973,7 @@ class Recommender:
         # Sort by relevance
         matches = matches.sort_values("relevance", ascending=False).head(limit)
         
-        return matches.to_dict(orient="records")
+        return [self._clean_response_record(record) for record in matches.to_dict(orient="records")]
 
     def _metadata_recommend_by_index(self, movie_idx: int, n: int = 10) -> list[dict]:
         """Content-based fallback recommender when vector artifacts are unavailable."""
@@ -1556,7 +1575,7 @@ Do not write any other text except the JSON object.
         alpha = 0.62 if normalized_dense else 0.0
         ranked_candidates = []
         for idx in candidate_indices:
-            movie = self._movies.iloc[idx].to_dict()
+            movie = self._clean_response_record(self._movies.iloc[idx].to_dict())
             sparse_score = normalized_sparse.get(idx, 0.0)
             dense_score = normalized_dense.get(idx, 0.0)
             metadata_score = self._popularity_quality_score(movie)
