@@ -18,7 +18,7 @@ jobs:
   live-serving-quality:
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
-    timeout-minutes: 20
+    timeout-minutes: 45
 
     steps:
       - name: Checkout repository
@@ -34,7 +34,8 @@ jobs:
           python scripts/evaluate_live_serving.py \
             --base-url "$NOVA_SERVING_URL" \
             --output reports/live_serving_quality.json \
-            --retries 20 \
+            --timeout 45 \
+            --retries 40 \
             --retry-delay-seconds 30 \
             --k 10 \
             --max-bad-match-rate 0.05 \
