@@ -18,7 +18,10 @@ services:
         - .github/**
         - README.md
     env: python
-    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    buildCommand: >-
+      python -c "import os, pathlib; sha=os.getenv('RENDER_GIT_COMMIT') or os.getenv('SOURCE_VERSION') or ''; pathlib.Path('REVISION').write_text(sha, encoding='utf-8') if sha else None"
+      && pip install --upgrade pip
+      && pip install -r requirements.txt
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
