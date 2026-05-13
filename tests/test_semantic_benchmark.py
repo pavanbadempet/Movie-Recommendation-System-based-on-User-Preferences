@@ -59,7 +59,12 @@ def test_semantic_benchmark_reports_good_and_bad_hits(tmp_path):
     assert report["evaluated_case_count"] == 1
     assert report["metrics"]["good_hit_count"] == 1
     assert report["metrics"]["bad_hit_count"] == 1
+    assert report["metrics"]["hit_rate_at_k"] == 1.0
+    assert report["metrics"]["mrr_at_k"] == 1.0
+    assert report["metrics"]["ndcg_at_k"] == 1.0
+    assert report["metrics"]["explanation_coverage"] == 1.0
     assert report["cases"][0]["good_hits"][0]["title"] == "Dune"
+    assert report["cases"][0]["good_hits"][0]["rank"] == 1
 
 
 def test_offline_benchmark_recommender_uses_catalog_without_vectors(tmp_path):

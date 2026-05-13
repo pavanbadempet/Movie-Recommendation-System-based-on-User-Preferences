@@ -26,6 +26,7 @@ RUN python -m compileall backend etl streamlit_app.py
 # Copy Pre-computed Models and Data
 COPY models/ ./models/
 COPY data/processed/ ./data/processed/
+COPY data/evaluation/ ./data/evaluation/
 
 # Create other directories
 RUN mkdir -p data/raw logs
