@@ -25,6 +25,7 @@ def _args(
         min_required_search_hits=2,
         search_benchmark_path=search_benchmark_path,
         search_benchmark_k=5,
+        search_benchmark_mode="endpoint",
         min_search_top1_hit_rate=0.98,
         min_search_hit_rate=1.0,
         max_search_blocked_hit_case_rate=0.0,
@@ -68,6 +69,17 @@ def _healthy_payload(path: str):
                 "mrr_at_k": 0.9,
                 "ndcg_at_k": 0.6,
                 "explanation_coverage": 1.0,
+            },
+        }
+    if path.startswith("/v1/evaluation/search-benchmark?"):
+        return {
+            "status": "ok",
+            "case_count": 1,
+            "evaluated_case_count": 1,
+            "metrics": {
+                "top1_hit_rate": 1.0,
+                "hit_rate_at_k": 1.0,
+                "blocked_hit_case_rate": 0.0,
             },
         }
     raise AssertionError(f"Unexpected path: {path}")
