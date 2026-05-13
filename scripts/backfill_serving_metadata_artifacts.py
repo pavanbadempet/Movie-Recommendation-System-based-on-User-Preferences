@@ -52,6 +52,26 @@ def describe_file(path: Path) -> dict[str, Any]:
     }
 
 
+def describe_embedding_artifact(path: Path) -> dict[str, Any]:
+    vectors = np.load(path, mmap_mode="r")
+    shape = tuple(int(value) for value in vectors.shape)
+    return {
+        **describe_file(path),
+        "rows": int(shape[0]) if shape else 0,
+        "dimensions": int(shape[1]) if len(shape) > 1 else None,
+    }
+
+
+def describe_faiss_artifact(path: Path) -> dict[str, Any]:
+    import faiss
+
+    index = faiss.read_index(str(path))
+    return {
+        **describe_file(path),
+        "rows": int(index.ntotal),
+    }
+
+
 def load_movies_from_hf(repo_id: str, repo_type: str, token: str | None, cache_dir: Path) -> tuple[pd.DataFrame, Path]:
     movies_path = Path(
         hf_hub_download(
@@ -65,8 +85,18 @@ def load_movies_from_hf(repo_id: str, repo_type: str, token: str | None, cache_d
     return pd.read_parquet(movies_path), movies_path
 
 
-def build_backfill_artifacts(movies: pd.DataFrame, movies_path: Path, output_dir: Path) -> dict[str, Any]:
+def build_backfill_artifacts(
+    movies: pd.DataFrame,
+    movies_path: Path,
+    output_dir: Path,
+    *,
+    semantic_output_dir: Path | None = None,
+    embeddings_path: Path | None = None,
+    faiss_path: Path | None = None,
+) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
+    semantic_output_dir = semantic_output_dir or output_dir
+    semantic_output_dir.mkdir(parents=True, exist_ok=True)
     run_ts = datetime.now(UTC).replace(microsecond=0)
     run_id = f"backfill-{run_ts.strftime('%Y%m%dT%H%M%SZ')}"
     run_date = run_ts.date().isoformat()
@@ -78,7 +108,7 @@ def build_backfill_artifacts(movies: pd.DataFrame, movies_path: Path, output_dir
     movie_ids_path = output_dir / "movie_ids.npy"
     np.save(movie_ids_path, movie_ids)
 
-    semantic = write_semantic_artifacts(movies, output_dir, run_id=run_id, run_date=run_date)
+    semantic = write_semantic_artifacts(movies, semantic_output_dir, run_id=run_id, run_date=run_date)
     semantic_twins_path = Path(semantic["semantic_twins_path"])
     semantic_summary_path = Path(semantic["semantic_twin_summary_path"])
 
@@ -90,15 +120,49 @@ def build_backfill_artifacts(movies: pd.DataFrame, movies_path: Path, output_dir
         "source": "serving_metadata_backfill",
         "serving_rows": row_count,
         "movie_rows": row_count,
-        "embedding_rows": row_count,
-        "faiss_index_size": row_count,
         "movie_id_map_rows": row_count,
         "movie_id_sha256": id_hash,
         "semantic_twin_rows": int(semantic["summary"]["row_count"]),
         "semantic_twin_avg_confidence": semantic["summary"]["avg_confidence"],
     }
+    serving_contract: dict[str, Any] = {
+        "version": 1,
+        "model_name": MODEL_NAME,
+        "movie_rows": row_count,
+        "movie_id_map_rows": row_count,
+        "movie_id_sha256": id_hash,
+    }
+
+    artifact_checksums = {
+        "movies_transformed.parquet": describe_file(movies_path),
+        movie_ids_path.name: describe_file(movie_ids_path),
+        semantic_twins_path.name: describe_file(semantic_twins_path),
+        semantic_summary_path.name: describe_file(semantic_summary_path),
+    }
+
+    if embeddings_path is not None:
+        embedding_info = describe_embedding_artifact(embeddings_path)
+        quality_report["embedding_rows"] = embedding_info["rows"]
+        serving_contract["embedding_rows"] = embedding_info["rows"]
+        if embedding_info["dimensions"] is not None:
+            serving_contract["embedding_dimensions"] = embedding_info["dimensions"]
+        artifact_checksums[embeddings_path.name] = {
+            "sha256": embedding_info["sha256"],
+            "size_bytes": embedding_info["size_bytes"],
+        }
+
+    if faiss_path is not None:
+        faiss_info = describe_faiss_artifact(faiss_path)
+        quality_report["faiss_index_size"] = faiss_info["rows"]
+        serving_contract["faiss_index_size"] = faiss_info["rows"]
+        artifact_checksums[faiss_path.name] = {
+            "sha256": faiss_info["sha256"],
+            "size_bytes": faiss_info["size_bytes"],
+        }
+
     quality_path = output_dir / "quality_report.json"
     quality_path.write_text(json.dumps(quality_report, indent=2, sort_keys=True), encoding="utf-8")
+    artifact_checksums[quality_path.name] = describe_file(quality_path)
 
     manifest = {
         "run_id": run_id,
@@ -115,22 +179,8 @@ def build_backfill_artifacts(movies: pd.DataFrame, movies_path: Path, output_dir
             "semantic_twins": semantic_twins_path.name,
             "semantic_twin_summary": semantic_summary_path.name,
         },
-        "artifact_checksums": {
-            "movies_transformed.parquet": describe_file(movies_path),
-            movie_ids_path.name: describe_file(movie_ids_path),
-            semantic_twins_path.name: describe_file(semantic_twins_path),
-            semantic_summary_path.name: describe_file(semantic_summary_path),
-            quality_path.name: describe_file(quality_path),
-        },
-        "serving_contract": {
-            "version": 1,
-            "model_name": MODEL_NAME,
-            "movie_rows": row_count,
-            "embedding_rows": row_count,
-            "faiss_index_size": row_count,
-            "movie_id_map_rows": row_count,
-            "movie_id_sha256": id_hash,
-        },
+        "artifact_checksums": artifact_checksums,
+        "serving_contract": serving_contract,
         "quality": quality_report,
         "semantic_twins": semantic["summary"],
     }
@@ -143,6 +193,9 @@ def build_backfill_artifacts(movies: pd.DataFrame, movies_path: Path, output_dir
         "row_count": row_count,
         "movie_id_sha256": id_hash,
         "paths": {
+            "movies": movies_path,
+            "embeddings": embeddings_path,
+            "faiss_index": faiss_path,
             "movie_ids": movie_ids_path,
             "semantic_twins": semantic_twins_path,
             "semantic_twin_summary": semantic_summary_path,
@@ -157,6 +210,8 @@ def upload_artifacts(repo_id: str, repo_type: str, token: str | None, artifacts:
         raise ValueError("HF token is required for upload")
     api = HfApi(token=token)
     for path in artifacts["paths"].values():
+        if path is None:
+            continue
         api.upload_file(
             path_or_fileobj=str(path),
             path_in_repo=Path(path).name,
