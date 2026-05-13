@@ -28,17 +28,18 @@ def _threshold_failure(message: str, report: dict[str, Any]) -> None:
 
 
 def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
-    report: dict[str, Any] = {
-        "base_url": args.base_url,
-        "status": "ok",
-        "failures": [],
-        "health": {},
-        "artifact_health": {},
-        "semantic_benchmark": {},
-    }
-
+    last_report: dict[str, Any] | None = None
     last_error = None
     for attempt in range(1, args.retries + 1):
+        report: dict[str, Any] = {
+            "base_url": args.base_url,
+            "status": "ok",
+            "attempt": attempt,
+            "failures": [],
+            "health": {},
+            "artifact_health": {},
+            "semantic_benchmark": {},
+        }
         try:
             report["health"] = _get_json(args.base_url, "/health", args.timeout)
             report["artifact_health"] = _get_json(args.base_url, "/v1/artifacts/health", args.timeout)
@@ -47,41 +48,50 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
                 f"/v1/evaluation/semantic-benchmark?k={args.k}",
                 args.timeout,
             )
-            break
         except Exception as exc:
             last_error = str(exc)
             if attempt < args.retries:
                 time.sleep(args.retry_delay_seconds)
+                continue
+            _threshold_failure(f"live API did not respond after {args.retries} attempts: {last_error}", report)
+            return report
+
+        if report["health"].get("status") != "healthy":
+            _threshold_failure(f"/health status is {report['health'].get('status')}", report)
+
+        artifact_status = report["artifact_health"].get("status")
+        if artifact_status != "ready":
+            _threshold_failure(f"/v1/artifacts/health status is {artifact_status}", report)
+
+        benchmark = report["semantic_benchmark"]
+        if benchmark.get("status") not in {"ok", "needs_attention"}:
+            _threshold_failure(f"semantic benchmark unavailable: {benchmark.get('reason') or benchmark.get('status')}", report)
+
+        metrics = benchmark.get("metrics") or {}
+        checks = {
+            "bad_match_rate_at_k": (float(metrics.get("bad_match_rate_at_k") or 0.0), "<=", args.max_bad_match_rate),
+            "hit_rate_at_k": (float(metrics.get("hit_rate_at_k") or 0.0), ">=", args.min_hit_rate),
+            "mrr_at_k": (float(metrics.get("mrr_at_k") or 0.0), ">=", args.min_mrr),
+            "ndcg_at_k": (float(metrics.get("ndcg_at_k") or 0.0), ">=", args.min_ndcg),
+            "explanation_coverage": (float(metrics.get("explanation_coverage") or 0.0), ">=", args.min_explanation_coverage),
+        }
+        for name, (actual, op, expected) in checks.items():
+            if op == "<=" and actual > expected:
+                _threshold_failure(f"{name} {actual} exceeds {expected}", report)
+            if op == ">=" and actual < expected:
+                _threshold_failure(f"{name} {actual} below {expected}", report)
+
+        if report.get("status") == "ok":
+            return report
+        last_report = report
+        if attempt < args.retries:
+            time.sleep(args.retry_delay_seconds)
     else:
-        _threshold_failure(f"live API did not respond after {args.retries} attempts: {last_error}", report)
-        return report
-
-    if report["health"].get("status") != "healthy":
-        _threshold_failure(f"/health status is {report['health'].get('status')}", report)
-
-    artifact_status = report["artifact_health"].get("status")
-    if artifact_status != "ready":
-        _threshold_failure(f"/v1/artifacts/health status is {artifact_status}", report)
-
-    benchmark = report["semantic_benchmark"]
-    if benchmark.get("status") not in {"ok", "needs_attention"}:
-        _threshold_failure(f"semantic benchmark unavailable: {benchmark.get('reason') or benchmark.get('status')}", report)
-
-    metrics = benchmark.get("metrics") or {}
-    checks = {
-        "bad_match_rate_at_k": (float(metrics.get("bad_match_rate_at_k") or 0.0), "<=", args.max_bad_match_rate),
-        "hit_rate_at_k": (float(metrics.get("hit_rate_at_k") or 0.0), ">=", args.min_hit_rate),
-        "mrr_at_k": (float(metrics.get("mrr_at_k") or 0.0), ">=", args.min_mrr),
-        "ndcg_at_k": (float(metrics.get("ndcg_at_k") or 0.0), ">=", args.min_ndcg),
-        "explanation_coverage": (float(metrics.get("explanation_coverage") or 0.0), ">=", args.min_explanation_coverage),
-    }
-    for name, (actual, op, expected) in checks.items():
-        if op == "<=" and actual > expected:
-            _threshold_failure(f"{name} {actual} exceeds {expected}", report)
-        if op == ">=" and actual < expected:
-            _threshold_failure(f"{name} {actual} below {expected}", report)
-
-    return report
+        return last_report or {
+            "base_url": args.base_url,
+            "status": "failed",
+            "failures": ["live serving quality gate did not produce a report"],
+        }
 
 
 def main() -> None:
