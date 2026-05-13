@@ -2,18 +2,13 @@ name: Serving Quality Gate
 
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows: ["Sync to Hugging Face Hub"]
+    types:
+      - completed
   schedule:
     # Run after the daily refresh window so serving regressions are visible.
     - cron: '30 8 * * *'
-  push:
-    branches:
-      - main
-    paths:
-      - '.github/workflows/serving-quality.yml'
-      - 'backend/semantic_benchmark.py'
-      - 'data/evaluation/semantic_similarity_benchmark.json'
-      - 'scripts/evaluate_live_serving.py'
-      - 'Dockerfile'
 
 env:
   PYTHON_VERSION: '3.11'
@@ -22,6 +17,7 @@ env:
 jobs:
   live-serving-quality:
     runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     timeout-minutes: 20
 
     steps:
