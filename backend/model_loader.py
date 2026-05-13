@@ -10,6 +10,8 @@ from pathlib import Path
 import urllib.request
 import shutil
 
+import numpy as np
+
 logger = logging.getLogger(__name__)
 
 # Model hosting configuration
@@ -159,6 +161,24 @@ def _load_manifest_checksums(models_dir: Path) -> dict[str, dict]:
     return manifest.get("artifact_checksums") or {}
 
 
+def _load_manifest_contract(models_dir: Path) -> dict[str, object]:
+    manifest_path = models_dir / "pipeline_manifest.json"
+    if not manifest_path.exists():
+        return {}
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.warning("Could not parse pipeline manifest %s: %s", manifest_path, exc)
+        return {}
+
+    contract = dict(manifest.get("serving_contract") or {})
+    quality = manifest.get("quality") or {}
+    for key in ("movie_rows", "embedding_rows", "faiss_index_size", "movie_id_map_rows", "movie_id_sha256"):
+        if contract.get(key) is None and quality.get(key) is not None:
+            contract[key] = quality.get(key)
+    return contract
+
+
 def _manifest_entry_matches(file_path: Path, manifest_entry: dict | None) -> bool:
     """Return true when the local artifact matches the manifest size/checksum."""
     if not manifest_entry or not file_path.exists() or not file_path.is_file():
@@ -170,6 +190,52 @@ def _manifest_entry_matches(file_path: Path, manifest_entry: dict | None) -> boo
     if expected_hash and expected_hash != file_sha256(file_path):
         return False
     return True
+
+
+def _manifest_contract_matches(file_path: Path, filename: str, manifest_contract: dict[str, object]) -> tuple[bool, str | None]:
+    """Validate local artifact row counts against the serving contract when available."""
+    if not manifest_contract:
+        return True, None
+
+    try:
+        if filename == "movie_ids.npy":
+            expected_rows = manifest_contract.get("movie_id_map_rows") or manifest_contract.get("movie_rows")
+            movie_ids = np.load(file_path, mmap_mode="r")
+            actual_rows = int(len(movie_ids))
+            if expected_rows is not None and actual_rows != int(expected_rows):
+                return False, f"pipeline manifest movie_id_map_rows ({expected_rows}) != local rows ({actual_rows})"
+            expected_hash = manifest_contract.get("movie_id_sha256")
+            if expected_hash:
+                actual_hash = hashlib.sha256(np.asarray(movie_ids, dtype=np.int64).astype("<i8", copy=False).tobytes()).hexdigest()
+                if actual_hash != expected_hash:
+                    return False, "pipeline manifest movie_id_sha256 does not match local movie_ids.npy"
+            return True, None
+
+        if filename == "sbert_embeddings.npy":
+            expected_rows = manifest_contract.get("embedding_rows")
+            if expected_rows is None:
+                return True, None
+            vectors = np.load(file_path, mmap_mode="r")
+            actual_rows = int(vectors.shape[0]) if len(vectors.shape) >= 1 else 0
+            if actual_rows != int(expected_rows):
+                return False, f"pipeline manifest embedding_rows ({expected_rows}) != local rows ({actual_rows})"
+            return True, None
+
+        if filename == "faiss.index":
+            expected_rows = manifest_contract.get("faiss_index_size")
+            if expected_rows is None:
+                return True, None
+            import faiss
+
+            index = faiss.read_index(str(file_path))
+            actual_rows = int(index.ntotal)
+            if actual_rows != int(expected_rows):
+                return False, f"pipeline manifest faiss_index_size ({expected_rows}) != local rows ({actual_rows})"
+            return True, None
+    except Exception as exc:
+        return False, f"could not validate {filename} against the pipeline manifest: {exc}"
+
+    return True, None
 
 
 def _env_truthy(name: str) -> bool:
@@ -235,6 +301,7 @@ def ensure_model_files(models_dir: Path, selected_files: set[str] | list[str] | 
                 )
 
     manifest_checksums = _load_manifest_checksums(models_dir)
+    manifest_contract = _load_manifest_contract(models_dir)
     
     for filename, config in MODEL_FILES.items():
         if selected is not None and filename not in selected:
@@ -269,8 +336,14 @@ def ensure_model_files(models_dir: Path, selected_files: set[str] | list[str] | 
             logger.info("%s exists but does not match pipeline manifest; re-downloading.", filename)
             manifest_mismatch = True
 
+        contract_mismatch = False
+        contract_matches, contract_reason = _manifest_contract_matches(file_path, filename, manifest_contract) if local_valid else (True, None)
+        if local_valid and not manifest_mismatch and not contract_matches:
+            logger.info("%s exists but violates the pipeline manifest contract; re-downloading. Reason: %s", filename, contract_reason)
+            contract_mismatch = True
+
         # Skip if file already exists and is valid
-        if local_valid and not force_refresh and not manifest_mismatch:
+        if local_valid and not force_refresh and not manifest_mismatch and not contract_mismatch:
             logger.info(f"{filename} already exists ({file_path.stat().st_size // (1024*1024)}MB)")
             results[filename] = True
             continue

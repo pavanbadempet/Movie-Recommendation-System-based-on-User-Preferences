@@ -2,6 +2,7 @@
 
 import json
 
+import faiss
 import numpy as np
 import pandas as pd
 
@@ -35,6 +36,51 @@ def test_build_backfill_artifacts_creates_alignment_contract(tmp_path):
     assert manifest["serving_contract"]["movie_rows"] == 2
     assert manifest["serving_contract"]["movie_id_map_rows"] == 2
     assert manifest["serving_contract"]["movie_id_sha256"] == result["movie_id_sha256"]
+    assert "embedding_rows" not in manifest["serving_contract"]
+    assert "faiss_index_size" not in manifest["serving_contract"]
     assert semantic_summary["row_count"] == 2
     assert result["paths"]["semantic_twins"].exists()
 
+
+def test_build_backfill_artifacts_can_include_heavy_artifact_contract(tmp_path):
+    movies_path = tmp_path / "movies_transformed.parquet"
+    movies = pd.DataFrame(
+        {
+            "id": [10, 20],
+            "title": ["Avatar", "Dune"],
+            "overview": [
+                "A marine discovers an alien world and a conflict over nature.",
+                "A desert planet epic about prophecy, politics, and survival.",
+            ],
+            "genres": ["Action, Adventure, Science Fiction", "Adventure, Science Fiction"],
+            "tags": ["avatar pandora ecology", "dune prophecy desert"],
+            "vote_count": [100, 100],
+            "content_quality_score": [0.8, 0.8],
+        }
+    )
+    movies.to_parquet(movies_path, index=False)
+
+    embeddings = np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32)
+    embeddings_path = tmp_path / "sbert_embeddings.npy"
+    np.save(embeddings_path, embeddings)
+
+    index = faiss.IndexFlatIP(embeddings.shape[1])
+    index.add(embeddings)
+    faiss_path = tmp_path / "faiss.index"
+    faiss.write_index(index, str(faiss_path))
+
+    result = build_backfill_artifacts(
+        movies,
+        movies_path,
+        tmp_path / "out",
+        embeddings_path=embeddings_path,
+        faiss_path=faiss_path,
+    )
+
+    manifest = json.loads(result["paths"]["pipeline_manifest"].read_text(encoding="utf-8"))
+
+    assert manifest["serving_contract"]["embedding_rows"] == 2
+    assert manifest["serving_contract"]["embedding_dimensions"] == 2
+    assert manifest["serving_contract"]["faiss_index_size"] == 2
+    assert "sbert_embeddings.npy" in manifest["artifact_checksums"]
+    assert "faiss.index" in manifest["artifact_checksums"]
