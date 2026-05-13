@@ -181,6 +181,31 @@ class TestSearchEndpoint:
         assert resp.status_code == 200
         assert resp.json()[0]["title"] == "Test Movie A"
 
+    def test_v1_search_sanitizes_nan_optional_fields(self, monkeypatch):
+        import backend.main as main
+        from backend.main import app
+        from backend.recommender import Recommender
+
+        rec = Recommender()
+        rec._movies = pd.DataFrame(
+            {
+                "id": [19995],
+                "title": ["Avatar"],
+                "overview": ["Alien world adventure"],
+                "genres": [np.nan],
+                "poster_path": [np.nan],
+                "popularity": [100.0],
+            }
+        )
+        monkeypatch.setattr(main, "get_rec", lambda: rec)
+
+        client = TestClient(app)
+        resp = client.get("/v1/search", params={"q": "avatar"})
+
+        assert resp.status_code == 200
+        assert resp.json()[0]["genres"] is None
+        assert resp.json()[0]["poster_path"] is None
+
     def test_v1_ai_search_uses_hybrid_retrieval(self, mock_artifacts, monkeypatch):
         monkeypatch.setenv("NOVA_ENABLE_DENSE_QUERY", "false")
 
