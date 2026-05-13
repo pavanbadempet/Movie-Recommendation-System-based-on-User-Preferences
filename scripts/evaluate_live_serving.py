@@ -95,6 +95,17 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
         if report["health"].get("status") != "healthy":
             _threshold_failure(f"/health status is {report['health'].get('status')}", report)
 
+        expected_commit = str(args.expected_app_commit or "").strip()
+        actual_commit = str(report["health"].get("app_commit") or "").strip()
+        if expected_commit:
+            if not actual_commit:
+                _threshold_failure("/health did not expose app_commit for revision verification", report)
+            elif not expected_commit.startswith(actual_commit) and not actual_commit.startswith(expected_commit):
+                _threshold_failure(
+                    f"/health app_commit {actual_commit!r} does not match expected {expected_commit[:12]!r}",
+                    report,
+                )
+
         artifact_status = report["artifact_health"].get("status")
         accepted_artifact_statuses = {"ready"}
         if args.allow_degraded_artifact_health:
@@ -246,6 +257,7 @@ def main() -> None:
     parser.add_argument("--timeout", type=int, default=120)
     parser.add_argument("--retries", type=int, default=12)
     parser.add_argument("--retry-delay-seconds", type=int, default=30)
+    parser.add_argument("--expected-app-commit", default="")
     parser.add_argument("--k", type=int, default=10)
     parser.add_argument("--search-query", default="Avatar")
     parser.add_argument("--search-limit", type=int, default=5)
