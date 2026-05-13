@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from starlette.concurrency import run_in_threadpool
 
 from backend.events import append_event, aggregate_behavior_features, build_user_behavior_profile, event_storage_status, get_events_path, summarize_recommendation_events
 from backend.evaluation import evaluate_recommendation_quality
@@ -661,8 +662,10 @@ async def recommendation_quality_report(
     k: int = Query(default=10, ge=1, le=50),
 ):
     """Return label-free recommendation quality metrics for the current artifacts."""
-    rec = get_rec()
-    report = evaluate_recommendation_quality(rec, sample_size=sample_size, k=k)
+    rec = await run_in_threadpool(get_rec)
+    report = await run_in_threadpool(
+        lambda: evaluate_recommendation_quality(rec, sample_size=sample_size, k=k)
+    )
     record_usage(
         "evaluation.recommendations",
         context.tenant_id,
@@ -679,8 +682,8 @@ async def semantic_benchmark_report(
     k: int = Query(default=10, ge=1, le=50),
 ):
     """Return human-labeled semantic benchmark metrics for obvious bad-match detection."""
-    rec = get_rec()
-    report = evaluate_semantic_benchmark(rec, k=k)
+    rec = await run_in_threadpool(get_rec)
+    report = await run_in_threadpool(lambda: evaluate_semantic_benchmark(rec, k=k))
     record_usage(
         "evaluation.semantic_benchmark",
         context.tenant_id,

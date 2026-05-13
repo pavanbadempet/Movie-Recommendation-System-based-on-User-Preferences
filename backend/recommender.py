@@ -7,7 +7,7 @@ import logging
 import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
-from functools import lru_cache
+from threading import Lock
 from typing import Any
 import gc
 
@@ -1642,12 +1642,15 @@ def _get_sbert_model():
 
 # Global singleton instance (lazy loaded)
 _recommender: Recommender | None = None
+_recommender_lock = Lock()
 
 
 def get_recommender() -> Recommender:
     """Get or create the global Recommender instance."""
     global _recommender
     if _recommender is None:
-        _recommender = Recommender().load()
+        with _recommender_lock:
+            if _recommender is None:
+                _recommender = Recommender().load()
     return _recommender
 
