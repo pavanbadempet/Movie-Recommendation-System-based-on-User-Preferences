@@ -43,6 +43,8 @@ jobs:
             --retries 40 \
             --retry-delay-seconds 30 \
             --k 10 \
+            --min-search-top1-hit-rate 0.98 \
+            --min-search-hit-rate 1.0 \
             --max-bad-match-rate 0.05 \
             --min-hit-rate 0.95 \
             --min-mrr 0.35 \
@@ -59,6 +61,7 @@ jobs:
             --retries 10 \
             --retry-delay-seconds 30 \
             --k 10 \
+            --skip-search-benchmark \
             --skip-semantic-benchmark \
             --allow-degraded-artifact-health \
             --fail-on-threshold

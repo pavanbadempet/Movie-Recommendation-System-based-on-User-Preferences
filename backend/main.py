@@ -36,6 +36,7 @@ from backend.chat import generate_chat_response
 from backend.recommender import get_recommender, Recommender
 from backend.remote_recommender import remote_get_json
 from backend.semantic_benchmark import evaluate_semantic_benchmark
+from backend.search_benchmark import evaluate_search_benchmark
 from backend.usage import record_usage, summarize_usage
 
 # Configure logging
@@ -798,6 +799,7 @@ async def platform_status(
         },
         "capabilities": [
             "hybrid_ai_search",
+            "search_benchmark",
             "semantic_item_twins",
             "semantic_benchmark",
             "learned_ranker",
@@ -863,6 +865,44 @@ async def semantic_benchmark_report(
         report = await run_in_threadpool(lambda: _compute_semantic_benchmark_cached(rec, k=k))
     record_usage(
         "evaluation.semantic_benchmark",
+        context.tenant_id,
+        context.catalog_id,
+        plan=context.plan,
+        authenticated=context.authenticated,
+    )
+    return report
+
+
+@app.get("/v1/evaluation/search-benchmark")
+async def search_benchmark_report(
+    context: TenantContext = Depends(resolve_tenant_context),
+    k: int = Query(default=5, ge=1, le=20),
+):
+    """Return human-labeled search relevance metrics for canonical title queries."""
+    remote_payload = await remote_payload_or_raise(
+        "/v1/evaluation/search-benchmark",
+        params={"k": k},
+        context=context,
+    )
+    if remote_payload is not None:
+        record_usage(
+            "evaluation.search_benchmark.remote",
+            context.tenant_id,
+            context.catalog_id,
+            plan=context.plan,
+            authenticated=context.authenticated,
+        )
+        return remote_payload
+
+    rec = await run_in_threadpool(get_rec)
+    report = await run_in_threadpool(
+        lambda: evaluate_search_benchmark(
+            lambda query, limit: rec.search_movies(query, limit=limit),
+            k=k,
+        )
+    )
+    record_usage(
+        "evaluation.search_benchmark",
         context.tenant_id,
         context.catalog_id,
         plan=context.plan,
