@@ -34,15 +34,37 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Evaluate live serving quality
+      - name: Determine app revision wait target
+        id: app_revision
+        shell: bash
         run: |
+          if git rev-parse HEAD^ >/dev/null 2>&1; then
+            changed_files="$(git diff --name-only HEAD^ HEAD)"
+          else
+            changed_files="$(git ls-files)"
+          fi
+
+          expected_app_commit=""
+          if echo "$changed_files" | grep -E '^(backend/|etl/|data/evaluation/|Dockerfile|requirements\.txt|streamlit_app\.py|render\.yaml|REVISION)$' >/dev/null; then
+            expected_app_commit="$GITHUB_SHA"
+          fi
+          echo "expected_app_commit=$expected_app_commit" >> "$GITHUB_OUTPUT"
+
+      - name: Evaluate live serving quality
+        env:
+          EXPECTED_APP_COMMIT: ${{ steps.app_revision.outputs.expected_app_commit }}
+        run: |
+          expected_args=()
+          if [ -n "$EXPECTED_APP_COMMIT" ]; then
+            expected_args+=(--expected-app-commit "$EXPECTED_APP_COMMIT")
+          fi
           python scripts/evaluate_live_serving.py \
             --base-url "$NOVA_SERVING_URL" \
             --output reports/live_serving_quality.json \
             --timeout 45 \
             --retries 40 \
             --retry-delay-seconds 30 \
-            --expected-app-commit "$GITHUB_SHA" \
+            "${expected_args[@]}" \
             --k 10 \
             --min-search-top1-hit-rate 0.98 \
             --min-search-hit-rate 1.0 \
