@@ -27,6 +27,9 @@ jobs:
       - name: Validate Python syntax before Space sync
         run: python -m compileall backend etl airflow scripts streamlit_app.py manage.py tests test_delta_implementation.py test_llm.py
 
+      - name: Stamp app revision
+        run: echo "${GITHUB_SHA}" > REVISION
+
       - name: Deploy to Hugging Face Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
