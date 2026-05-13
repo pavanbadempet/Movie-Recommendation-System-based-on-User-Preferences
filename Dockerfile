@@ -60,6 +60,7 @@ EXPOSE 7860 8000 8501
 # Render will override this environment variable at runtime
 ENV PORT=7860
 ENV NOVA_REFRESH_PIPELINE_MANIFEST=true
+ENV NOVA_HEALTH_LOAD_RECOMMENDER=false
 
 # Default command: run backend API.
 CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port $PORT"]
