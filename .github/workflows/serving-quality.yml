@@ -1,0 +1,57 @@
+name: Serving Quality Gate
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Run after the daily refresh window so serving regressions are visible.
+    - cron: '30 8 * * *'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/serving-quality.yml'
+      - 'backend/semantic_benchmark.py'
+      - 'data/evaluation/semantic_similarity_benchmark.json'
+      - 'scripts/evaluate_live_serving.py'
+      - 'Dockerfile'
+
+env:
+  PYTHON_VERSION: '3.11'
+  NOVA_SERVING_URL: https://pavanbadempet-movie-rec-api.hf.space
+
+jobs:
+  live-serving-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Evaluate live serving quality
+        run: |
+          python scripts/evaluate_live_serving.py \
+            --base-url "$NOVA_SERVING_URL" \
+            --output reports/live_serving_quality.json \
+            --retries 20 \
+            --retry-delay-seconds 30 \
+            --k 10 \
+            --max-bad-match-rate 0.05 \
+            --min-hit-rate 0.95 \
+            --min-mrr 0.35 \
+            --min-ndcg 0.25 \
+            --min-explanation-coverage 0.90 \
+            --fail-on-threshold
+
+      - name: Upload quality report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-serving-quality
+          path: reports/live_serving_quality.json
+          if-no-files-found: ignore

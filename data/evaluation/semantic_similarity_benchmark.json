@@ -7,11 +7,14 @@
       "seed": {"id": 19995, "title": "Avatar"},
       "intent": "Immersive sci-fi/worldbuilding with spectacle, survival, alien worlds, or ecological conflict. Avoid generic superhero/cartoon/action drift.",
       "good_matches": [
-        {"title": "Dune"},
-        {"title": "The Creator"},
-        {"title": "Guardians of the Galaxy"},
-        {"title": "Valerian and the City of a Thousand Planets"},
-        {"title": "John Carter"}
+        {"id": 76600, "title": "Avatar: The Way of Water"},
+        {"id": 83533, "title": "Avatar: Fire and Ash"},
+        {"id": 2756, "title": "The Abyss"},
+        {"id": 68726, "title": "Pacific Rim"},
+        {"id": 438631, "title": "Dune"},
+        {"id": 670292, "title": "The Creator"},
+        {"id": 49529, "title": "John Carter"},
+        {"id": 339964, "title": "Valerian and the City of a Thousand Planets"}
       ],
       "bad_matches": [
         {"title": "Small Soldiers"},
@@ -25,11 +28,15 @@
       "seed": {"title": "Interstellar"},
       "intent": "Serious space exploration, survival, time, family emotion, and cosmic mystery. Avoid generic action comedy.",
       "good_matches": [
-        {"title": "Arrival"},
-        {"title": "The Martian"},
-        {"title": "Contact"},
-        {"title": "Gravity"},
-        {"title": "Ad Astra"}
+        {"id": 286217, "title": "The Martian"},
+        {"id": 70981, "title": "Prometheus"},
+        {"id": 274870, "title": "Passengers"},
+        {"id": 365942, "title": "The Space Between Us"},
+        {"id": 438631, "title": "Dune"},
+        {"id": 329865, "title": "Arrival"},
+        {"id": 49047, "title": "Gravity"},
+        {"id": 419704, "title": "Ad Astra"},
+        {"id": 686, "title": "Contact"}
       ],
       "bad_matches": [
         {"title": "Scary Movie"},
@@ -42,11 +49,14 @@
       "seed": {"title": "Inception"},
       "intent": "Mind-bending thriller with reality, dreams, memory, or puzzle-box structure. Avoid ordinary action titles.",
       "good_matches": [
-        {"title": "The Matrix"},
-        {"title": "Tenet"},
-        {"title": "Memento"},
-        {"title": "Source Code"},
-        {"title": "Shutter Island"}
+        {"id": 157336, "title": "Interstellar"},
+        {"id": 603, "title": "The Matrix"},
+        {"id": 24099, "title": "Dreamscape"},
+        {"id": 8843, "title": "The Cell"},
+        {"id": 577922, "title": "Tenet"},
+        {"id": 77, "title": "Memento"},
+        {"id": 45612, "title": "Source Code"},
+        {"id": 11324, "title": "Shutter Island"}
       ],
       "bad_matches": [
         {"title": "Paul Blart: Mall Cop"},
