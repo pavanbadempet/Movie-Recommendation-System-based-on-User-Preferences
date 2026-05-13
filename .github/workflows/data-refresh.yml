@@ -15,9 +15,6 @@ on:
       - 'scripts/evaluate_semantic_benchmark.py'
       - 'scripts/rebuild_serving_artifacts.py'
       - 'scripts/train_ranker.py'
-      - 'backend/auth.py'
-      - 'backend/main.py'
-      - 'backend/model_loader.py'
       - 'backend/semantic_benchmark.py'
       - 'data/evaluation/semantic_similarity_benchmark.json'
   schedule:
