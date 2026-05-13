@@ -172,6 +172,38 @@ def _manifest_entry_matches(file_path: Path, manifest_entry: dict | None) -> boo
     return True
 
 
+def _env_truthy(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _minimum_valid_size(filename: str) -> int:
+    if filename.endswith(".json"):
+        return 1
+    if filename.endswith(".npy"):
+        return 64
+    return 1000
+
+
+def _local_artifact_is_valid(file_path: Path, filename: str) -> bool:
+    """Detect usable local artifacts without rejecting tiny but valid test fixtures."""
+    if not file_path.exists() or not file_path.is_file():
+        return False
+    if file_path.stat().st_size < _minimum_valid_size(filename):
+        return False
+
+    try:
+        with file_path.open("rb") as handle:
+            header = handle.read(128)
+    except OSError:
+        return False
+
+    if header.startswith(b"version https://git-lfs"):
+        return False
+    if filename.endswith(".npy") and not header.startswith(b"\x93NUMPY"):
+        return False
+    return True
+
+
 def ensure_model_files(models_dir: Path, selected_files: set[str] | list[str] | tuple[str, ...] | None = None) -> dict[str, bool]:
     """
     Ensure all required model files exist, downloading if necessary.
@@ -185,17 +217,22 @@ def ensure_model_files(models_dir: Path, selected_files: set[str] | list[str] | 
         force_refresh
         or os.getenv("NOVA_REFRESH_PIPELINE_MANIFEST", "").strip().lower() in {"1", "true", "yes", "on"}
     )
+    downloads_disabled = _env_truthy("NOVA_DISABLE_MODEL_DOWNLOADS")
     selected = set(selected_files) if selected_files is not None else None
 
     if selected is None or "pipeline_manifest.json" in selected:
         manifest_config = MODEL_FILES.get("pipeline_manifest.json", {})
         manifest_path = (models_dir / manifest_config.get("dest", "pipeline_manifest.json")).resolve()
         if not manifest_path.exists() or refresh_manifest:
-            results["pipeline_manifest.json"] = download_file(
-                manifest_config.get("url"),
-                manifest_path,
-                required=bool(manifest_config.get("required", False)),
-            )
+            if downloads_disabled:
+                logger.info("Skipping pipeline_manifest.json download because NOVA_DISABLE_MODEL_DOWNLOADS is set.")
+                results["pipeline_manifest.json"] = False
+            else:
+                results["pipeline_manifest.json"] = download_file(
+                    manifest_config.get("url"),
+                    manifest_path,
+                    required=bool(manifest_config.get("required", False)),
+                )
 
     manifest_checksums = _load_manifest_checksums(models_dir)
     
@@ -220,11 +257,11 @@ def ensure_model_files(models_dir: Path, selected_files: set[str] | list[str] | 
             required = True
             file_path = models_dir / filename
 
-        min_valid_size = 1 if filename.endswith(".json") else 1000
+        local_valid = _local_artifact_is_valid(file_path, filename)
             
         manifest_entry = manifest_checksums.get(filename)
         manifest_mismatch = False
-        if file_path.exists() and file_path.stat().st_size >= min_valid_size and manifest_entry:
+        if local_valid and manifest_entry:
             if _manifest_entry_matches(file_path, manifest_entry) and not force_refresh:
                 logger.info("%s matches pipeline manifest (%sMB)", filename, file_path.stat().st_size // (1024 * 1024))
                 results[filename] = True
@@ -233,12 +270,12 @@ def ensure_model_files(models_dir: Path, selected_files: set[str] | list[str] | 
             manifest_mismatch = True
 
         # Skip if file already exists and is valid
-        if file_path.exists() and file_path.stat().st_size >= min_valid_size and not force_refresh and not manifest_mismatch:
+        if local_valid and not force_refresh and not manifest_mismatch:
             logger.info(f"{filename} already exists ({file_path.stat().st_size // (1024*1024)}MB)")
             results[filename] = True
             continue
 
-        if file_path.exists() and file_path.stat().st_size >= min_valid_size and force_refresh:
+        if local_valid and force_refresh:
             # Check if remote file has changed (size-based cache invalidation)
             if url:
                 try:
@@ -262,14 +299,20 @@ def ensure_model_files(models_dir: Path, selected_files: set[str] | list[str] | 
                 results[filename] = True
                 continue
         
+        if downloads_disabled:
+            log_fn = logger.warning if required else logger.info
+            log_fn("Skipping %s download because NOVA_DISABLE_MODEL_DOWNLOADS is set.", filename)
+            results[filename] = False
+            continue
+
         # Try to download if URL is configured
         if url:
             results[filename] = download_file(url, file_path, required=required)
         else:
             # No URL configured, check if file exists locally
             if file_path.exists():
-                # Might be an LFS pointer file - check size
-                if file_path.stat().st_size < min_valid_size:
+                # Might be an LFS pointer file or malformed artifact.
+                if not _local_artifact_is_valid(file_path, filename):
                     logger.warning(f"⚠ {filename} appears to be an LFS pointer. Configure {filename.upper().replace('.', '_')}_URL in environment.")
                     results[filename] = False
                 else:
