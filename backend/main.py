@@ -9,6 +9,7 @@ import os
 import uuid
 from collections import Counter
 from contextlib import asynccontextmanager, contextmanager
+from threading import Lock, Thread
 from typing import Literal, Optional
 from urllib.parse import quote
 
@@ -59,6 +60,12 @@ TMDB_BASE = "https://api.themoviedb.org/3"
 
 # Async HTTP client (initialized via lifespan)
 http_client: httpx.AsyncClient | None = None
+_warmup_thread: Thread | None = None
+_warmup_thread_lock = Lock()
+
+
+def _env_truthy(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 @asynccontextmanager
@@ -66,6 +73,8 @@ async def lifespan(app: FastAPI):
     """Manage async resources for app lifetime."""
     global http_client
     http_client = httpx.AsyncClient(timeout=10.0)
+    if _env_truthy("NOVA_BACKGROUND_RECOMMENDER_WARMUP"):
+        _start_background_recommender_warmup()
     yield
     await http_client.aclose()
 
@@ -271,6 +280,30 @@ def get_rec() -> Recommender:
         logger.info("Loading recommender on first request...")
         _recommender = get_recommender()
     return _recommender
+
+
+def _background_recommender_warmup() -> None:
+    """Warm the recommender after startup without blocking health probes."""
+    try:
+        logger.info("Starting background recommender warmup...")
+        get_rec()
+        logger.info("Background recommender warmup completed.")
+    except Exception as exc:
+        logger.exception("Background recommender warmup failed: %s", exc)
+
+
+def _start_background_recommender_warmup() -> None:
+    """Start one daemon warmup thread per process."""
+    global _warmup_thread
+    with _warmup_thread_lock:
+        if _warmup_thread is not None and _warmup_thread.is_alive():
+            return
+        _warmup_thread = Thread(
+            target=_background_recommender_warmup,
+            name="recommender-warmup",
+            daemon=True,
+        )
+        _warmup_thread.start()
 
 
 @contextmanager
