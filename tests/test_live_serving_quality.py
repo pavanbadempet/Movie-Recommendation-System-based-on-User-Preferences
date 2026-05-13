@@ -15,6 +15,7 @@ def _args(
         timeout=1,
         retries=1,
         retry_delay_seconds=0,
+        expected_app_commit="",
         k=10,
         search_query="Avatar",
         search_limit=5,
@@ -49,7 +50,7 @@ def _args(
 
 def _healthy_payload(path: str):
     if path == "/health":
-        return {"status": "healthy", "movie_count": 75253}
+        return {"status": "healthy", "movie_count": 75253, "app_commit": "abcdef123456"}
     if path == "/v1/artifacts/health":
         return {"status": "ready"}
     if path.startswith("/v1/search?"):
@@ -184,6 +185,30 @@ def test_live_serving_gate_runs_search_benchmark(monkeypatch, tmp_path):
 
     assert report["status"] == "ok"
     assert report["search_benchmark"]["metrics"]["top1_hit_rate"] == 1.0
+
+
+def test_live_serving_gate_rejects_stale_deploy_revision(monkeypatch):
+    def fake_get_json(base_url, path, timeout):
+        if path.startswith("/v1/recommendations/id/19995?"):
+            return {
+                "recommendations": [
+                    {"title": "Avatar: The Way of Water"},
+                    {"title": "The Abyss"},
+                    {"title": "Pacific Rim"},
+                    {"title": "Dune"},
+                    {"title": "Prometheus"},
+                ]
+            }
+        return _healthy_payload(path)
+
+    monkeypatch.setattr(live, "_get_json", fake_get_json)
+    args = _args()
+    args.expected_app_commit = "fffffff999999999"
+
+    report = live.evaluate_live_serving(args)
+
+    assert report["status"] == "failed"
+    assert any("does not match expected" in failure for failure in report["failures"])
 
 
 def test_live_serving_gate_can_skip_semantic_benchmark_for_lite_gateway(monkeypatch):
