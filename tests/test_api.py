@@ -148,6 +148,23 @@ class TestPlatformEndpoint:
         assert "event_store" in data
 
 
+class TestCorsPolicy:
+    def test_github_pages_origin_is_allowed_by_default(self, mock_artifacts):
+        from backend.main import app
+        client = TestClient(app)
+
+        resp = client.options(
+            "/v1/search",
+            headers={
+                "Origin": "https://pavanbadempet.github.io",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+
+        assert resp.status_code == 200
+        assert resp.headers["access-control-allow-origin"] == "https://pavanbadempet.github.io"
+
+
 class TestSearchEndpoint:
     def test_movie_titles_limit_for_readiness_probe(self, mock_artifacts):
         from backend.main import app
