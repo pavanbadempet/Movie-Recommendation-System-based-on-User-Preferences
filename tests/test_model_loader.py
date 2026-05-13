@@ -1,5 +1,7 @@
 """Tests for external artifact loader behavior."""
 
+import json
+
 import numpy as np
 
 
@@ -102,4 +104,41 @@ def test_ensure_model_files_redownloads_faiss_when_manifest_rows_do_not_match(tm
     result = loader.ensure_model_files(tmp_path, selected_files={"faiss.index"})
 
     assert result["faiss.index"] is True
+    assert len(calls) == 1
+
+
+def test_force_refresh_downloads_when_manifest_checksum_does_not_match(tmp_path, monkeypatch):
+    """Manifest checksum mismatches must not be bypassed by same-size remote files."""
+    import backend.model_loader as loader
+
+    local_ids = np.array([1, 2, 3], dtype=np.int64)
+    np.save(tmp_path / "movie_ids.npy", local_ids)
+    local_size = (tmp_path / "movie_ids.npy").stat().st_size
+    (tmp_path / "pipeline_manifest.json").write_text(
+        json.dumps(
+            {
+                "artifact_checksums": {
+                    "movie_ids.npy": {
+                        "size_bytes": local_size,
+                        "sha256": "not-the-local-checksum",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    calls = []
+    monkeypatch.delenv("NOVA_DISABLE_MODEL_DOWNLOADS", raising=False)
+    monkeypatch.setenv("FORCE_MODEL_REFRESH", "1")
+    monkeypatch.setattr(loader, "download_file", lambda *args, **kwargs: calls.append(args) or True)
+    monkeypatch.setattr(
+        loader.urllib.request,
+        "urlopen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("HEAD should not run on manifest mismatch")),
+    )
+
+    result = loader.ensure_model_files(tmp_path, selected_files={"movie_ids.npy"})
+
+    assert result["movie_ids.npy"] is True
     assert len(calls) == 1

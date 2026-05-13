@@ -15,6 +15,9 @@ on:
       - 'scripts/evaluate_semantic_benchmark.py'
       - 'scripts/rebuild_serving_artifacts.py'
       - 'scripts/train_ranker.py'
+      - 'backend/auth.py'
+      - 'backend/main.py'
+      - 'backend/model_loader.py'
       - 'backend/semantic_benchmark.py'
       - 'data/evaluation/semantic_similarity_benchmark.json'
   schedule:
@@ -172,7 +175,18 @@ jobs:
 
       - name: Trigger Render backend restart
         if: success()
+        env:
+          NOVA_ADMIN_TOKEN: ${{ secrets.NOVA_ADMIN_TOKEN }}
+          NOVA_RENDER_API_URL: ${{ secrets.NOVA_RENDER_API_URL }}
         run: |
-          echo "Pinging Render to pick up new HuggingFace artifacts..."
-          curl -sf --max-time 60 "https://movie-recs-api-5qvy.onrender.com/health" || echo "Backend pinged (may be sleeping)"
-          echo "Done! Backend will download new files on next cold start."
+          API_URL="${NOVA_RENDER_API_URL:-https://movie-recs-api-5qvy.onrender.com}"
+          if [ -n "$NOVA_ADMIN_TOKEN" ]; then
+            echo "Refreshing deployed backend artifacts from Hugging Face..."
+            curl -sfS --max-time 300 -X POST \
+              -H "X-Nova-Admin-Token: $NOVA_ADMIN_TOKEN" \
+              "$API_URL/v1/artifacts/reload?force_download=true&load=true"
+            echo "Backend artifacts reloaded."
+          else
+            echo "::warning title=Backend artifact reload skipped::Set NOVA_ADMIN_TOKEN in GitHub Actions and Render to let the daily refresh reload artifacts without waiting for a cold start."
+            curl -sf --max-time 60 "$API_URL/health" || echo "Backend pinged (may be sleeping)"
+          fi
