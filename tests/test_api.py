@@ -3,19 +3,16 @@ API integration tests for FastAPI backend
 """
 import pytest
 import json
+import sys
 from fastapi.testclient import TestClient
 import pandas as pd
 import numpy as np
-from pathlib import Path
-import tempfile
 
 
 @pytest.fixture
 def mock_artifacts(tmp_path, monkeypatch):
     """Set up mock model artifacts for testing."""
     import faiss
-    import joblib
-    from sklearn.feature_extraction.text import TfidfVectorizer
     
     # Mock movies
     movies = pd.DataFrame({
@@ -82,6 +79,8 @@ def mock_artifacts(tmp_path, monkeypatch):
     
     # Reset singleton
     rec._recommender = None
+    if "backend.main" in sys.modules:
+        sys.modules["backend.main"]._recommender = None
     
     return tmp_path
 
@@ -268,6 +267,50 @@ class TestSearchEndpoint:
         assert data["status"] == "ready"
         assert data["checks"]["catalog_vector_aligned"] is True
         assert data["checks"]["semantic_catalog_aligned"] is True
+
+    def test_artifact_reload_is_disabled_without_admin_token(self, mock_artifacts, monkeypatch):
+        monkeypatch.delenv("NOVA_ADMIN_TOKEN", raising=False)
+
+        from backend.main import app
+
+        client = TestClient(app)
+        resp = client.post("/v1/artifacts/reload", params={"force_download": False})
+
+        assert resp.status_code == 404
+
+    def test_artifact_reload_requires_valid_admin_token(self, mock_artifacts, monkeypatch):
+        monkeypatch.setenv("NOVA_ADMIN_TOKEN", "admin-secret")
+
+        from backend.main import app
+
+        client = TestClient(app)
+        resp = client.post(
+            "/v1/artifacts/reload",
+            params={"force_download": False},
+            headers={"X-Nova-Admin-Token": "wrong"},
+        )
+
+        assert resp.status_code == 401
+
+    def test_artifact_reload_swaps_loaded_recommender(self, mock_artifacts, monkeypatch):
+        monkeypatch.setenv("NOVA_ADMIN_TOKEN", "admin-secret")
+
+        import backend.main as main
+        from backend.main import app
+
+        client = TestClient(app)
+        resp = client.post(
+            "/v1/artifacts/reload",
+            params={"force_download": False, "load": True},
+            headers={"X-Nova-Admin-Token": "admin-secret"},
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "reloaded"
+        assert data["artifact_health"]["status"] == "ready"
+        assert data["lineage"]["movie_count"] == 3
+        assert main._recommender is not None
 
 
 class TestMoviesEndpoint:

@@ -329,12 +329,14 @@ def ensure_model_files(models_dir: Path, selected_files: set[str] | list[str] | 
         manifest_entry = manifest_checksums.get(filename)
         manifest_mismatch = False
         if local_valid and manifest_entry:
-            if _manifest_entry_matches(file_path, manifest_entry) and not force_refresh:
-                logger.info("%s matches pipeline manifest (%sMB)", filename, file_path.stat().st_size // (1024 * 1024))
-                results[filename] = True
-                continue
-            logger.info("%s exists but does not match pipeline manifest; re-downloading.", filename)
-            manifest_mismatch = True
+            if _manifest_entry_matches(file_path, manifest_entry):
+                if not force_refresh:
+                    logger.info("%s matches pipeline manifest (%sMB)", filename, file_path.stat().st_size // (1024 * 1024))
+                    results[filename] = True
+                    continue
+            else:
+                logger.info("%s exists but does not match pipeline manifest; re-downloading.", filename)
+                manifest_mismatch = True
 
         contract_mismatch = False
         contract_matches, contract_reason = _manifest_contract_matches(file_path, filename, manifest_contract) if local_valid else (True, None)
@@ -348,7 +350,7 @@ def ensure_model_files(models_dir: Path, selected_files: set[str] | list[str] | 
             results[filename] = True
             continue
 
-        if local_valid and force_refresh:
+        if local_valid and force_refresh and not manifest_mismatch and not contract_mismatch:
             # Check if remote file has changed (size-based cache invalidation)
             if url:
                 try:
