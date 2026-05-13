@@ -42,6 +42,7 @@ jobs:
             --timeout 45 \
             --retries 40 \
             --retry-delay-seconds 30 \
+            --expected-app-commit "$GITHUB_SHA" \
             --k 10 \
             --min-search-top1-hit-rate 0.98 \
             --min-search-hit-rate 1.0 \
@@ -58,8 +59,9 @@ jobs:
             --base-url "$NOVA_RENDER_GATEWAY_URL" \
             --output reports/render_gateway_quality.json \
             --timeout 60 \
-            --retries 10 \
+            --retries 20 \
             --retry-delay-seconds 30 \
+            --expected-app-commit "$GITHUB_SHA" \
             --k 10 \
             --skip-search-benchmark \
             --skip-semantic-benchmark \
