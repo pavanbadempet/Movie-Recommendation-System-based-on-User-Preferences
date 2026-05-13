@@ -849,16 +849,22 @@ async def artifact_reload(
 
     try:
         if load:
-            rec = _reload_local_recommender(force_download=force_download)
+            rec = await run_in_threadpool(
+                lambda: _reload_local_recommender(force_download=force_download)
+            )
             download_results = None
             lineage = _serving_lineage(rec)
         else:
-            download_results = _refresh_artifact_files(force_download=force_download)
+            download_results = await run_in_threadpool(
+                lambda: _refresh_artifact_files(force_download=force_download)
+            )
             lineage = _serving_lineage(_recommender)
 
-        report = evaluate_artifact_health(
-            models_dir=recommender_module.MODELS_DIR,
-            data_dir=recommender_module.DATA_DIR,
+        report = await run_in_threadpool(
+            lambda: evaluate_artifact_health(
+                models_dir=recommender_module.MODELS_DIR,
+                data_dir=recommender_module.DATA_DIR,
+            )
         )
         record_usage(
             "artifacts.reload",
