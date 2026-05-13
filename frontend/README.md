@@ -39,3 +39,4 @@ The repository includes `.github/workflows/frontend-pages.yml` for a zero-cost s
 - In repository settings, set Pages source to `GitHub Actions`.
 - Push changes under `frontend/**` or run `Deploy Frontend to GitHub Pages` manually.
 - The workflow builds with `VITE_BASE_PATH` set to the repository path, so Vite assets resolve correctly on `https://<user>.github.io/<repo>/`.
+- If Pages is not enabled yet, the workflow still validates the frontend build and skips only the publish step.
