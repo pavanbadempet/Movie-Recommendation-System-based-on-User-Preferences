@@ -11,6 +11,7 @@ import uuid
 from collections import Counter
 from contextlib import asynccontextmanager, contextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from threading import Lock, Thread
 from typing import Literal, Optional
 from urllib.parse import quote
@@ -59,6 +60,8 @@ else:
 # TMDB API config
 TMDB_KEY = os.getenv("TMDB_API_KEY")
 TMDB_BASE = "https://api.themoviedb.org/3"
+APP_VERSION = "2.0.0"
+REVISION_FILE = Path(__file__).resolve().parent.parent / "REVISION"
 
 # Async HTTP client (initialized via lifespan)
 http_client: httpx.AsyncClient | None = None
@@ -89,16 +92,52 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Movie Recommendation API",
     description="Content-based movie recommendation engine using FAISS",
-    version="2.0.0",
+    version=APP_VERSION,
     lifespan=lifespan,
 )
 
+
+def app_metadata() -> dict[str, str | None]:
+    """Return deploy lineage without loading the recommender."""
+    commit = None
+    source = None
+    for env_name in (
+        "NOVA_APP_COMMIT",
+        "RENDER_GIT_COMMIT",
+        "SOURCE_VERSION",
+        "GITHUB_SHA",
+        "COMMIT_SHA",
+    ):
+        value = os.getenv(env_name, "").strip()
+        if value:
+            commit = value
+            source = env_name
+            break
+    if not commit and REVISION_FILE.exists():
+        try:
+            value = REVISION_FILE.read_text(encoding="utf-8").strip()
+        except OSError:
+            value = ""
+        else:
+            if value:
+                commit = value
+                source = "REVISION"
+    return {
+        "version": APP_VERSION,
+        "commit": commit[:12] if commit else None,
+        "commit_full": commit if commit else None,
+        "source": source,
+    }
+
+
 @app.get("/")
 async def root():
+    metadata = app_metadata()
     return {
         "status": "online",
         "message": "Welcome to the Movie Recommendation API. Head over to /docs to explore the endpoints!",
-        "version": "2.0.0"
+        "version": metadata["version"],
+        "app": metadata,
     }
 
 # Rate limiting (30 requests/minute per IP)
@@ -195,6 +234,8 @@ class HealthResponse(BaseModel):
     """Health check response."""
     status: str
     movie_count: int
+    app_version: Optional[str] = None
+    app_commit: Optional[str] = None
 
 
 class RecommendationResponse(BaseModel):
@@ -665,6 +706,7 @@ async def enrich_movie(movie: dict) -> dict:
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint."""
+    metadata = app_metadata()
     load_recommender = os.getenv("NOVA_HEALTH_LOAD_RECOMMENDER", "true").strip().lower()
     if load_recommender in {"0", "false", "no", "off"}:
         from backend import recommender as recommender_module
@@ -676,14 +718,26 @@ async def health_check():
         return HealthResponse(
             status="healthy" if report.get("files", {}).get("movies", {}).get("exists") else "degraded",
             movie_count=int((report.get("row_counts") or {}).get("movies") or 0),
+            app_version=metadata["version"],
+            app_commit=metadata["commit"],
         )
 
     try:
         rec = get_rec()
-        return HealthResponse(status="healthy", movie_count=len(rec.movies))
+        return HealthResponse(
+            status="healthy",
+            movie_count=len(rec.movies),
+            app_version=metadata["version"],
+            app_commit=metadata["commit"],
+        )
     except Exception as e:
         logger.error(f"Health check failed: {e}")
-        return HealthResponse(status="unhealthy", movie_count=0)
+        return HealthResponse(
+            status="unhealthy",
+            movie_count=0,
+            app_version=metadata["version"],
+            app_commit=metadata["commit"],
+        )
 
 
 @app.get("/v1/platform/context", response_model=PlatformContextResponse)
@@ -718,6 +772,7 @@ async def platform_status(
     )
     return {
         "status": "ready",
+        "app": app_metadata(),
         "tenant_id": context.tenant_id,
         "catalog_id": context.catalog_id,
         "movie_count": len(rec.movies),

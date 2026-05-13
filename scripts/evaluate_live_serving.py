@@ -220,6 +220,8 @@ def main() -> None:
         "status": report.get("status"),
         "failures": report.get("failures"),
         "artifact_status": (report.get("artifact_health") or {}).get("status"),
+        "app_commit": (report.get("health") or {}).get("app_commit"),
+        "app_version": (report.get("health") or {}).get("app_version"),
         "movie_count": (report.get("health") or {}).get("movie_count"),
         "search_result_count": len(report.get("search_smoke") or []) if isinstance(report.get("search_smoke"), list) else None,
         "search_first_title": (
