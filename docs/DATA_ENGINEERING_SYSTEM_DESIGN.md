@@ -17,7 +17,7 @@ If a component cannot answer those questions, it does not belong in the core arc
 | Area | Current Core | Add Only When |
 | --- | --- | --- |
 | Catalog ingestion | Batch ETL | Source updates become near-real-time |
-| Processing | Pandas locally, PySpark for scale path | Data volume exceeds single-machine limits or needs distributed joins |
+| Processing | PySpark-first batch ETL with local Pandas fallback | Data volume exceeds free/local compute or needs managed distributed jobs |
 | Storage | Parquet serving artifacts | Delta/Iceberg when ACID, MERGE, time travel, or concurrent writes matter |
 | Orchestration | CLI/CI locally, Airflow as scheduled pipeline option | Multiple dependent jobs, retries, backfills, SLAs |
 | Streaming | Not required for static catalog refresh | User behavior events need replay, backpressure, and consumer groups |
@@ -29,8 +29,8 @@ If a component cannot answer those questions, it does not belong in the core arc
 Nova can be explained in four planes. Not every plane needs every enterprise component in the local MVP:
 
 - Data plane: raw catalog data, curated metadata, optional user events and search logs.
-- Processing plane: Pandas for local/dev runs, PySpark for scalable batch.
-- Serving plane: SBERT embeddings, FAISS index, FastAPI recommendation/search endpoints, Streamlit UI.
+- Processing plane: PySpark for canonical batch/lakehouse runs, with Pandas only for small local fallback and deterministic tests.
+- Serving plane: SBERT embeddings, FAISS index, FastAPI recommendation/search endpoints, React/Streamlit UIs.
 - Operations plane: CI tests, Docker, health checks, optional Airflow orchestration, data quality reports, artifact manifests, monitoring.
 
 ## Batch vs Streaming
@@ -47,19 +47,19 @@ Recommended Nova design:
 - User events should be streaming only if the product uses views, ratings, clicks, or searches for personalization or analytics.
 - Embeddings can be rebuilt batch-first; later, incremental embedding updates can be added for changed movies only.
 
-## Pandas vs PySpark
+## PySpark vs Pandas
 
 | Choice | Use It For | Why | Tradeoff |
 | --- | --- | --- | --- |
-| Pandas | Local demo, tests, small curated data, deterministic CI | Fast developer loop, simple debugging | Single-machine memory limit |
-| PySpark | Large raw files, distributed joins, partitioned lakehouse writes | Scales horizontally and matches production DE work | More setup, slower local iteration |
+| PySpark | Canonical batch pipeline, distributed joins, partitioned lakehouse writes, SCD updates | Scales horizontally and matches production DE work | More setup, slower local iteration |
+| Pandas | Small local fallback, unit tests, artifact inspection | Fast developer loop, simple debugging | Single-machine memory limit; not the main DE story |
 | Databricks Spark | Managed production lakehouse | Jobs, clusters, Delta, governance | Cloud cost and platform dependency |
 
 Recommended Nova design:
 
-- Keep Pandas ETL as the reliable local path.
-- Keep PySpark ETL as the scale path.
-- Ensure both produce compatible serving artifacts.
+- Treat `etl/pyspark_etl.py` and `etl/delta_lakehouse.py` as the canonical DE implementation.
+- Keep Pandas helpers for deterministic local fallback, tests, and lightweight artifact inspection.
+- Ensure the Spark and fallback paths produce compatible serving artifacts.
 
 ## Parquet vs Delta Lake
 
@@ -99,8 +99,10 @@ Nova does not need SCD Type 2 for the online recommendation API. It is useful fo
 
 Implementation in repo:
 
-- `etl/scd.py` contains a deterministic Pandas SCD Type 2 helper.
-- `tests/test_scd.py` verifies initial load, no-change, changed-record, and new-key behavior.
+- `etl/pyspark_etl.py` contains Spark SCD Type 2 helpers and an upsert path for `gold.dim_movie_scd`.
+- `etl/delta_lakehouse.py` defines the Delta table contracts, schemas, time-travel helpers, and restore/history utilities.
+- `etl/scd.py` remains a small deterministic fallback used by local tests and manifest-backed inspection utilities.
+- `tests/test_pyspark_scd.py` verifies Spark SCD change tracking and the Parquet fallback path.
 - `sql/movie_recommendation_star_schema.sql` contains the analytical dimension/fact model.
 
 ## SQL vs NoSQL
@@ -219,6 +221,6 @@ Only query-time text search/chat should compute a query embedding or call an LLM
 2. Needed now: add deterministic sample data so reviewers can run the project quickly.
 3. Needed now: add API latency/load smoke test because serving speed is part of the product claim.
 4. Needed if analytics is a goal: write recommendation impression/search logs into fact tables.
-5. Needed if catalog history matters: wire SCD Type 2 into the Gold/warehouse path.
+5. Needed if catalog history matters at production scale: run the Spark/Delta SCD path in managed CI or Databricks/EMR with real Delta runtime.
 6. Needed if user behavior matters: add Kafka event ingestion and Gold engagement features.
 7. Needed if cloud deployment matters: add a Databricks or AWS job config, not both unless both are actually targeted.
