@@ -6,9 +6,11 @@ import asyncio
 import gc
 import logging
 import os
+import time
 import uuid
 from collections import Counter
 from contextlib import asynccontextmanager, contextmanager
+from datetime import UTC, datetime
 from threading import Lock, Thread
 from typing import Literal, Optional
 from urllib.parse import quote
@@ -62,6 +64,10 @@ TMDB_BASE = "https://api.themoviedb.org/3"
 http_client: httpx.AsyncClient | None = None
 _warmup_thread: Thread | None = None
 _warmup_thread_lock = Lock()
+_semantic_benchmark_cache: dict[int, tuple[float, dict]] = {}
+_semantic_benchmark_threads: dict[int, Thread] = {}
+_semantic_benchmark_cache_lock = Lock()
+_semantic_benchmark_compute_lock = Lock()
 
 
 def _env_truthy(name: str) -> bool:
@@ -286,7 +292,10 @@ def _background_recommender_warmup() -> None:
     """Warm the recommender after startup without blocking health probes."""
     try:
         logger.info("Starting background recommender warmup...")
-        get_rec()
+        rec = get_rec()
+        if _env_truthy("NOVA_PRECOMPUTE_SEMANTIC_BENCHMARK"):
+            k = int(os.getenv("NOVA_SEMANTIC_BENCHMARK_K", "10"))
+            _compute_semantic_benchmark_cached(rec, k=k)
         logger.info("Background recommender warmup completed.")
     except Exception as exc:
         logger.exception("Background recommender warmup failed: %s", exc)
@@ -304,6 +313,74 @@ def _start_background_recommender_warmup() -> None:
             daemon=True,
         )
         _warmup_thread.start()
+
+
+def _semantic_benchmark_ttl_seconds() -> int:
+    return max(60, int(os.getenv("NOVA_SEMANTIC_BENCHMARK_CACHE_TTL_SECONDS", "3600")))
+
+
+def _warming_semantic_benchmark_report(k: int) -> dict:
+    return {
+        "generated_at": datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "status": "warming",
+        "reason": "Semantic benchmark is warming in the background. Retry shortly.",
+        "case_count": 0,
+        "evaluated_case_count": 0,
+        "skipped_case_count": 0,
+        "k": k,
+        "metrics": {},
+        "cases": [],
+        "skipped": [],
+    }
+
+
+def _get_cached_semantic_benchmark(k: int) -> dict | None:
+    with _semantic_benchmark_cache_lock:
+        cached = _semantic_benchmark_cache.get(k)
+    if cached is None:
+        return None
+    cached_at, report = cached
+    if time.time() - cached_at > _semantic_benchmark_ttl_seconds():
+        return None
+    return report
+
+
+def _compute_semantic_benchmark_cached(rec: Recommender, k: int) -> dict:
+    cached = _get_cached_semantic_benchmark(k)
+    if cached is not None:
+        return cached
+
+    with _semantic_benchmark_compute_lock:
+        cached = _get_cached_semantic_benchmark(k)
+        if cached is not None:
+            return cached
+        report = evaluate_semantic_benchmark(rec, k=k)
+        with _semantic_benchmark_cache_lock:
+            _semantic_benchmark_cache[k] = (time.time(), report)
+        return report
+
+
+def _background_semantic_benchmark(k: int) -> None:
+    try:
+        rec = get_rec()
+        _compute_semantic_benchmark_cached(rec, k=k)
+    except Exception as exc:
+        logger.exception("Background semantic benchmark failed: %s", exc)
+
+
+def _start_background_semantic_benchmark(k: int) -> None:
+    with _semantic_benchmark_cache_lock:
+        thread = _semantic_benchmark_threads.get(k)
+        if thread is not None and thread.is_alive():
+            return
+        thread = Thread(
+            target=_background_semantic_benchmark,
+            args=(k,),
+            name=f"semantic-benchmark-{k}",
+            daemon=True,
+        )
+        _semantic_benchmark_threads[k] = thread
+        thread.start()
 
 
 @contextmanager
@@ -715,8 +792,15 @@ async def semantic_benchmark_report(
     k: int = Query(default=10, ge=1, le=50),
 ):
     """Return human-labeled semantic benchmark metrics for obvious bad-match detection."""
-    rec = await run_in_threadpool(get_rec)
-    report = await run_in_threadpool(lambda: evaluate_semantic_benchmark(rec, k=k))
+    cached_report = _get_cached_semantic_benchmark(k)
+    if cached_report is not None:
+        report = cached_report
+    elif _env_truthy("NOVA_ASYNC_EVALUATION_CACHE"):
+        _start_background_semantic_benchmark(k)
+        report = _warming_semantic_benchmark_report(k)
+    else:
+        rec = await run_in_threadpool(get_rec)
+        report = await run_in_threadpool(lambda: _compute_semantic_benchmark_cached(rec, k=k))
     record_usage(
         "evaluation.semantic_benchmark",
         context.tenant_id,
