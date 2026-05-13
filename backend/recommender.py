@@ -105,6 +105,8 @@ class Recommender:
         logger.info("Loading recommendation engine...")
         selected_artifacts = {
             "movies_transformed.parquet",
+            "semantic_twins.parquet",
+            "semantic_twin_summary.json",
             "pipeline_manifest.json",
             "nova_ranker.joblib",
             "nova_ranker.joblib.metadata.json",
