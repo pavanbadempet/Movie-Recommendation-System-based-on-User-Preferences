@@ -35,6 +35,7 @@ from backend.catalogs import profile_catalog_csv, persist_catalog_upload
 from backend.chat import generate_chat_response
 from backend.recommender import get_recommender, Recommender
 from backend.remote_recommender import remote_get_json
+from backend.recommendation_benchmark import evaluate_recommendation_benchmark
 from backend.semantic_benchmark import evaluate_semantic_benchmark
 from backend.search_benchmark import evaluate_search_benchmark
 from backend.usage import record_usage, summarize_usage
@@ -72,6 +73,10 @@ _semantic_benchmark_cache: dict[int, tuple[float, dict]] = {}
 _semantic_benchmark_threads: dict[int, Thread] = {}
 _semantic_benchmark_cache_lock = Lock()
 _semantic_benchmark_compute_lock = Lock()
+_recommendation_benchmark_cache: dict[int, tuple[float, dict]] = {}
+_recommendation_benchmark_threads: dict[int, Thread] = {}
+_recommendation_benchmark_cache_lock = Lock()
+_recommendation_benchmark_compute_lock = Lock()
 
 
 def _env_truthy(name: str) -> bool:
@@ -343,6 +348,9 @@ def _background_recommender_warmup() -> None:
         if _env_truthy("NOVA_PRECOMPUTE_SEMANTIC_BENCHMARK"):
             k = int(os.getenv("NOVA_SEMANTIC_BENCHMARK_K", "10"))
             _compute_semantic_benchmark_cached(rec, k=k)
+        if _env_truthy("NOVA_PRECOMPUTE_RECOMMENDATION_BENCHMARK"):
+            k = int(os.getenv("NOVA_RECOMMENDATION_BENCHMARK_K", "10"))
+            _compute_recommendation_benchmark_cached(rec, k=k)
         logger.info("Background recommender warmup completed.")
     except Exception as exc:
         logger.exception("Background recommender warmup failed: %s", exc)
@@ -366,11 +374,30 @@ def _semantic_benchmark_ttl_seconds() -> int:
     return max(60, int(os.getenv("NOVA_SEMANTIC_BENCHMARK_CACHE_TTL_SECONDS", "3600")))
 
 
+def _recommendation_benchmark_ttl_seconds() -> int:
+    return max(60, int(os.getenv("NOVA_RECOMMENDATION_BENCHMARK_CACHE_TTL_SECONDS", "3600")))
+
+
 def _warming_semantic_benchmark_report(k: int) -> dict:
     return {
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
         "status": "warming",
         "reason": "Semantic benchmark is warming in the background. Retry shortly.",
+        "case_count": 0,
+        "evaluated_case_count": 0,
+        "skipped_case_count": 0,
+        "k": k,
+        "metrics": {},
+        "cases": [],
+        "skipped": [],
+    }
+
+
+def _warming_recommendation_benchmark_report(k: int) -> dict:
+    return {
+        "generated_at": datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "status": "warming",
+        "reason": "Recommendation benchmark is warming in the background. Retry shortly.",
         "case_count": 0,
         "evaluated_case_count": 0,
         "skipped_case_count": 0,
@@ -427,6 +454,55 @@ def _start_background_semantic_benchmark(k: int) -> None:
             daemon=True,
         )
         _semantic_benchmark_threads[k] = thread
+        thread.start()
+
+
+def _get_cached_recommendation_benchmark(k: int) -> dict | None:
+    with _recommendation_benchmark_cache_lock:
+        cached = _recommendation_benchmark_cache.get(k)
+    if cached is None:
+        return None
+    cached_at, report = cached
+    if time.time() - cached_at > _recommendation_benchmark_ttl_seconds():
+        return None
+    return report
+
+
+def _compute_recommendation_benchmark_cached(rec: Recommender, k: int) -> dict:
+    cached = _get_cached_recommendation_benchmark(k)
+    if cached is not None:
+        return cached
+
+    with _recommendation_benchmark_compute_lock:
+        cached = _get_cached_recommendation_benchmark(k)
+        if cached is not None:
+            return cached
+        report = evaluate_recommendation_benchmark(rec, k=k)
+        with _recommendation_benchmark_cache_lock:
+            _recommendation_benchmark_cache[k] = (time.time(), report)
+        return report
+
+
+def _background_recommendation_benchmark(k: int) -> None:
+    try:
+        rec = get_rec()
+        _compute_recommendation_benchmark_cached(rec, k=k)
+    except Exception as exc:
+        logger.exception("Background recommendation benchmark failed: %s", exc)
+
+
+def _start_background_recommendation_benchmark(k: int) -> None:
+    with _recommendation_benchmark_cache_lock:
+        thread = _recommendation_benchmark_threads.get(k)
+        if thread is not None and thread.is_alive():
+            return
+        thread = Thread(
+            target=_background_recommendation_benchmark,
+            args=(k,),
+            name=f"recommendation-benchmark-{k}",
+            daemon=True,
+        )
+        _recommendation_benchmark_threads[k] = thread
         thread.start()
 
 
@@ -802,6 +878,7 @@ async def platform_status(
             "search_benchmark",
             "semantic_item_twins",
             "semantic_benchmark",
+            "recommendation_benchmark",
             "learned_ranker",
             "personalization_v2",
             "experiment_metrics",
@@ -903,6 +980,46 @@ async def search_benchmark_report(
     )
     record_usage(
         "evaluation.search_benchmark",
+        context.tenant_id,
+        context.catalog_id,
+        plan=context.plan,
+        authenticated=context.authenticated,
+    )
+    return report
+
+
+@app.get("/v1/evaluation/recommendation-benchmark")
+async def recommendation_benchmark_report(
+    context: TenantContext = Depends(resolve_tenant_context),
+    k: int = Query(default=10, ge=1, le=50),
+):
+    """Return human-labeled item-to-item recommendation benchmark metrics."""
+    remote_payload = await remote_payload_or_raise(
+        "/v1/evaluation/recommendation-benchmark",
+        params={"k": k},
+        context=context,
+    )
+    if remote_payload is not None:
+        record_usage(
+            "evaluation.recommendation_benchmark.remote",
+            context.tenant_id,
+            context.catalog_id,
+            plan=context.plan,
+            authenticated=context.authenticated,
+        )
+        return remote_payload
+
+    cached_report = _get_cached_recommendation_benchmark(k)
+    if cached_report is not None:
+        report = cached_report
+    elif _env_truthy("NOVA_ASYNC_EVALUATION_CACHE"):
+        _start_background_recommendation_benchmark(k)
+        report = _warming_recommendation_benchmark_report(k)
+    else:
+        rec = await run_in_threadpool(get_rec)
+        report = await run_in_threadpool(lambda: _compute_recommendation_benchmark_cached(rec, k=k))
+    record_usage(
+        "evaluation.recommendation_benchmark",
         context.tenant_id,
         context.catalog_id,
         plan=context.plan,

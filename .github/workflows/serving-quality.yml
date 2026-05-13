@@ -61,13 +61,16 @@ jobs:
           python scripts/evaluate_live_serving.py \
             --base-url "$NOVA_SERVING_URL" \
             --output reports/live_serving_quality.json \
-            --timeout 45 \
+            --timeout 240 \
             --retries 40 \
             --retry-delay-seconds 30 \
             "${expected_args[@]}" \
             --k 10 \
             --min-search-top1-hit-rate 0.98 \
             --min-search-hit-rate 1.0 \
+            --min-recommendation-benchmark-pass-rate 0.80 \
+            --min-recommendation-benchmark-hit-rate 0.90 \
+            --max-recommendation-benchmark-bad-case-rate 0.0 \
             --max-bad-match-rate 0.05 \
             --min-hit-rate 0.95 \
             --min-mrr 0.35 \
@@ -85,6 +88,7 @@ jobs:
             --retry-delay-seconds 30 \
             --k 10 \
             --skip-search-benchmark \
+            --skip-recommendation-benchmark \
             --skip-semantic-benchmark \
             --allow-degraded-artifact-health \
             --fail-on-threshold
