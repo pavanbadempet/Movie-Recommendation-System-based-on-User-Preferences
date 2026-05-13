@@ -310,6 +310,25 @@ class TestRecommender:
         assert len(results) == 1
         assert results[0]["title"] == "Avatar"
 
+    def test_search_movies_handles_minimal_catalog_columns(self):
+        """Search should degrade gracefully when optional serving columns are absent."""
+        import backend.recommender as rec
+
+        r = rec.Recommender()
+        r._movies = pd.DataFrame(
+            {
+                "id": [1, 2],
+                "title": ["Avatar", "Untitled Drama"],
+            }
+        )
+
+        results = r.search_movies("avatar")
+
+        assert len(results) == 1
+        assert results[0]["id"] == 1
+        assert results[0]["title"] == "Avatar"
+        assert "relevance" in results[0]
+
     def test_recommend_by_id(self, mock_recommender, monkeypatch):
         """recommend_by_id returns similar movies."""
         import backend.recommender as rec
