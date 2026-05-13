@@ -3,7 +3,7 @@ from argparse import Namespace
 from scripts import evaluate_live_serving as live
 
 
-def _args() -> Namespace:
+def _args(skip_semantic_benchmark: bool = False, allow_degraded_artifact_health: bool = False) -> Namespace:
     return Namespace(
         base_url="https://example.test",
         timeout=1,
@@ -27,6 +27,8 @@ def _args() -> Namespace:
         min_mrr=0.35,
         min_ndcg=0.25,
         min_explanation_coverage=0.90,
+        skip_semantic_benchmark=skip_semantic_benchmark,
+        allow_degraded_artifact_health=allow_degraded_artifact_health,
         fail_on_threshold=True,
     )
 
@@ -97,3 +99,54 @@ def test_live_serving_gate_rejects_bad_recommendation_drift(monkeypatch):
     assert any("required semantic hits" in failure for failure in report["failures"])
     assert any("blocked drift titles" in failure for failure in report["failures"])
 
+
+def test_live_serving_gate_can_skip_semantic_benchmark_for_lite_gateway(monkeypatch):
+    seen_paths = []
+
+    def fake_get_json(base_url, path, timeout):
+        seen_paths.append(path)
+        if path.startswith("/v1/recommendations/id/19995?"):
+            return {
+                "recommendations": [
+                    {"title": "Avatar: The Way of Water"},
+                    {"title": "The Abyss"},
+                    {"title": "Pacific Rim"},
+                    {"title": "Dune"},
+                    {"title": "Prometheus"},
+                ]
+            }
+        return _healthy_payload(path)
+
+    monkeypatch.setattr(live, "_get_json", fake_get_json)
+
+    report = live.evaluate_live_serving(_args(skip_semantic_benchmark=True))
+
+    assert report["status"] == "ok"
+    assert report["semantic_benchmark"]["status"] == "skipped"
+    assert not any(path.startswith("/v1/evaluation/semantic-benchmark") for path in seen_paths)
+
+
+def test_live_serving_gate_can_allow_degraded_artifacts_for_gateway(monkeypatch):
+    def fake_get_json(base_url, path, timeout):
+        if path == "/v1/artifacts/health":
+            return {"status": "degraded"}
+        if path.startswith("/v1/recommendations/id/19995?"):
+            return {
+                "recommendations": [
+                    {"title": "Avatar: The Way of Water"},
+                    {"title": "The Abyss"},
+                    {"title": "Pacific Rim"},
+                    {"title": "Dune"},
+                    {"title": "Prometheus"},
+                ]
+            }
+        return _healthy_payload(path)
+
+    monkeypatch.setattr(live, "_get_json", fake_get_json)
+
+    report = live.evaluate_live_serving(
+        _args(skip_semantic_benchmark=True, allow_degraded_artifact_health=True)
+    )
+
+    assert report["status"] == "ok"
+    assert report["artifact_health"]["status"] == "degraded"

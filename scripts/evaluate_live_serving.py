@@ -61,11 +61,14 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
                 f"/v1/recommendations/id/{args.recommendation_smoke_movie_id}?{recommendation_params}",
                 args.timeout,
             )
-            report["semantic_benchmark"] = _get_json(
-                args.base_url,
-                f"/v1/evaluation/semantic-benchmark?k={args.k}",
-                args.timeout,
-            )
+            if args.skip_semantic_benchmark:
+                report["semantic_benchmark"] = {"status": "skipped", "reason": "disabled by live gate"}
+            else:
+                report["semantic_benchmark"] = _get_json(
+                    args.base_url,
+                    f"/v1/evaluation/semantic-benchmark?k={args.k}",
+                    args.timeout,
+                )
         except Exception as exc:
             last_error = str(exc)
             if attempt < args.retries:
@@ -78,7 +81,10 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
             _threshold_failure(f"/health status is {report['health'].get('status')}", report)
 
         artifact_status = report["artifact_health"].get("status")
-        if artifact_status != "ready":
+        accepted_artifact_statuses = {"ready"}
+        if args.allow_degraded_artifact_health:
+            accepted_artifact_statuses.add("degraded")
+        if artifact_status not in accepted_artifact_statuses:
             _threshold_failure(f"/v1/artifacts/health status is {artifact_status}", report)
 
         search_results = report.get("search_smoke")
@@ -142,22 +148,23 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
             )
 
         benchmark = report["semantic_benchmark"]
-        if benchmark.get("status") not in {"ok", "needs_attention"}:
-            _threshold_failure(f"semantic benchmark unavailable: {benchmark.get('reason') or benchmark.get('status')}", report)
+        if not args.skip_semantic_benchmark:
+            if benchmark.get("status") not in {"ok", "needs_attention"}:
+                _threshold_failure(f"semantic benchmark unavailable: {benchmark.get('reason') or benchmark.get('status')}", report)
 
-        metrics = benchmark.get("metrics") or {}
-        checks = {
-            "bad_match_rate_at_k": (float(metrics.get("bad_match_rate_at_k") or 0.0), "<=", args.max_bad_match_rate),
-            "hit_rate_at_k": (float(metrics.get("hit_rate_at_k") or 0.0), ">=", args.min_hit_rate),
-            "mrr_at_k": (float(metrics.get("mrr_at_k") or 0.0), ">=", args.min_mrr),
-            "ndcg_at_k": (float(metrics.get("ndcg_at_k") or 0.0), ">=", args.min_ndcg),
-            "explanation_coverage": (float(metrics.get("explanation_coverage") or 0.0), ">=", args.min_explanation_coverage),
-        }
-        for name, (actual, op, expected) in checks.items():
-            if op == "<=" and actual > expected:
-                _threshold_failure(f"{name} {actual} exceeds {expected}", report)
-            if op == ">=" and actual < expected:
-                _threshold_failure(f"{name} {actual} below {expected}", report)
+            metrics = benchmark.get("metrics") or {}
+            checks = {
+                "bad_match_rate_at_k": (float(metrics.get("bad_match_rate_at_k") or 0.0), "<=", args.max_bad_match_rate),
+                "hit_rate_at_k": (float(metrics.get("hit_rate_at_k") or 0.0), ">=", args.min_hit_rate),
+                "mrr_at_k": (float(metrics.get("mrr_at_k") or 0.0), ">=", args.min_mrr),
+                "ndcg_at_k": (float(metrics.get("ndcg_at_k") or 0.0), ">=", args.min_ndcg),
+                "explanation_coverage": (float(metrics.get("explanation_coverage") or 0.0), ">=", args.min_explanation_coverage),
+            }
+            for name, (actual, op, expected) in checks.items():
+                if op == "<=" and actual > expected:
+                    _threshold_failure(f"{name} {actual} exceeds {expected}", report)
+                if op == ">=" and actual < expected:
+                    _threshold_failure(f"{name} {actual} below {expected}", report)
 
         if report.get("status") == "ok":
             return report
@@ -208,6 +215,8 @@ def main() -> None:
     parser.add_argument("--min-mrr", type=float, default=0.35)
     parser.add_argument("--min-ndcg", type=float, default=0.25)
     parser.add_argument("--min-explanation-coverage", type=float, default=0.90)
+    parser.add_argument("--skip-semantic-benchmark", action="store_true")
+    parser.add_argument("--allow-degraded-artifact-health", action="store_true")
     parser.add_argument("--fail-on-threshold", action="store_true")
     args = parser.parse_args()
 
