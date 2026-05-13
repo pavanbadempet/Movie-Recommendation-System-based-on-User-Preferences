@@ -329,6 +329,43 @@ class TestRecommender:
         assert results[0]["title"] == "Avatar"
         assert "relevance" in results[0]
 
+    def test_quality_gate_drops_low_rated_recommendation_drift(self):
+        """MMR should not rescue weak low-rated candidates when enough strong matches exist."""
+        import backend.recommender as rec
+
+        r = rec.Recommender()
+        query = {"title": "Avatar", "genres": "Science Fiction, Action, Adventure"}
+        candidates = [
+            {
+                "id": 1,
+                "title": "Strong Sci-Fi Match",
+                "genres": "Science Fiction, Adventure",
+                "vote_average": 7.8,
+                "vote_count": 5000,
+                "retrieval_signals": {"semantic_twin": 0.7},
+            },
+            {
+                "id": 2,
+                "title": "Low Rated Drift",
+                "genres": "Action, Adventure, Fantasy",
+                "vote_average": 4.6,
+                "vote_count": 4000,
+                "retrieval_signals": {"semantic_twin": 0.65},
+            },
+            {
+                "id": 3,
+                "title": "Another Sci-Fi Match",
+                "genres": "Science Fiction, Action",
+                "vote_average": 6.8,
+                "vote_count": 900,
+                "retrieval_signals": {"semantic_twin": 0.64},
+            },
+        ]
+
+        gated = r._quality_gate_item_recommendations(candidates, query, n=2)
+
+        assert [item["title"] for item in gated] == ["Strong Sci-Fi Match", "Another Sci-Fi Match"]
+
     def test_recommend_by_id(self, mock_recommender, monkeypatch):
         """recommend_by_id returns similar movies."""
         import backend.recommender as rec
