@@ -36,6 +36,37 @@ export type RecommendationResponse = {
   recommendations: Movie[];
 };
 
+export type EventType =
+  | "view"
+  | "search"
+  | "click"
+  | "rating"
+  | "recommendation_request"
+  | "recommendation_impression";
+
+export type EventPayload = {
+  event_type: EventType;
+  tenant_id?: string | null;
+  catalog_id?: string | null;
+  content_id?: string | null;
+  source_content_id?: string | null;
+  movie_id?: number | null;
+  query_text?: string | null;
+  user_id?: string | null;
+  session_id?: string | null;
+  rating?: number | null;
+  request_id?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+export type EventResponse = {
+  status: string;
+  event_id: string;
+  event_path: string;
+  event_store: string;
+  durable: boolean;
+};
+
 export type BackendHealth = {
   status: string;
   movie_count: number;
