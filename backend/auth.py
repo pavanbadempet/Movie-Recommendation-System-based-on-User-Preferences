@@ -84,6 +84,22 @@ def configured_api_keys() -> dict[str, dict[str, str]]:
         raise HTTPException(status_code=500, detail="Invalid NOVA_API_KEYS JSON") from exc
 
 
+def resolve_admin_token(
+    x_nova_admin_token: str | None = Header(default=None, alias="X-Nova-Admin-Token"),
+) -> None:
+    """
+    Require an out-of-band admin token for operational mutation endpoints.
+
+    This is intentionally separate from customer API keys. Customer keys may be
+    exposed to frontends; this token must stay server-to-server only.
+    """
+    expected_token = os.getenv("NOVA_ADMIN_TOKEN", "").strip()
+    if not expected_token:
+        raise HTTPException(status_code=404, detail="Admin operations are disabled")
+    if not x_nova_admin_token or not hmac.compare_digest(expected_token, x_nova_admin_token):
+        raise HTTPException(status_code=401, detail="Invalid X-Nova-Admin-Token")
+
+
 def resolve_tenant_context(
     x_nova_api_key: str | None = Header(default=None, alias="X-Nova-API-Key"),
     x_tenant_id: str | None = Header(default=None, alias="X-Tenant-ID"),

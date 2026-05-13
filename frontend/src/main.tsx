@@ -18,6 +18,8 @@ import {
   Server,
   Sparkles,
   Star,
+  ThumbsDown,
+  ThumbsUp,
   TrendingUp,
   WandSparkles,
 } from "lucide-react";
@@ -31,13 +33,16 @@ import {
   loadTitles,
   pingApi,
   platformStatus,
+  recordEvent,
   searchMovies,
+  semanticBenchmark,
 } from "./api";
-import type { ArtifactHealth, Movie, MovieTitle, PlatformStatus } from "./types";
+import type { ArtifactHealth, EventPayload, Movie, MovieTitle, PlatformStatus, SemanticBenchmark } from "./types";
 import "./styles.css";
 
 const imageBase = import.meta.env.VITE_TMDB_IMAGE_BASE || "https://image.tmdb.org/t/p/w500";
 const RECENT_STORAGE_KEY = "nova_recent_movies_v2";
+const SESSION_STORAGE_KEY = "nova_session_id_v1";
 
 const starterTitles = ["Avatar", "Inception", "The Dark Knight", "Interstellar"];
 const starterPrompts = [
@@ -50,6 +55,8 @@ const starterPrompts = [
 type SearchMode = "title" | "semantic";
 type CatalogState = "booting" | "warming" | "ready" | "error";
 type ResultsKind = "idle" | "search" | "recommendations";
+type SelectionSource = "title_search" | "semantic_search" | "search_result" | "recommendation_card" | "recent_pick";
+type FeedbackValue = "positive" | "negative";
 
 function posterUrl(path?: string | null): string {
   if (!path) return "https://placehold.co/500x750/141418/f8fafc?text=Nova";
@@ -174,6 +181,23 @@ function saveRecentMovies(movies: Movie[]) {
   }
 }
 
+function createSessionId(): string {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  return `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function getSessionId(): string {
+  try {
+    const existing = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (existing) return existing;
+    const next = createSessionId();
+    window.sessionStorage.setItem(SESSION_STORAGE_KEY, next);
+    return next;
+  } catch {
+    return createSessionId();
+  }
+}
+
 function SkeletonRows() {
   return (
     <div className="skeleton-list" aria-hidden="true">
@@ -235,6 +259,23 @@ function checkValue(value: unknown): string {
   return String(value);
 }
 
+function percentValue(value?: number | null): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "N/A";
+  return `${Math.round(value * 100)}%`;
+}
+
+function decimalValue(value?: number | null): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "N/A";
+  return value.toFixed(3);
+}
+
+function qualityLabel(report: SemanticBenchmark | null): string {
+  if (!report) return "Pending";
+  if (report.status === "unavailable") return "Unavailable";
+  const hitRate = report.metrics?.hit_rate_at_k;
+  return typeof hitRate === "number" ? `${Math.round(hitRate * 100)}% hit` : report.status;
+}
+
 function DiagnosticsPanel({ health }: { health: ArtifactHealth | null }) {
   const checks = health?.checks || {};
   const rows = [
@@ -263,6 +304,34 @@ function DiagnosticsPanel({ health }: { health: ArtifactHealth | null }) {
   );
 }
 
+function QualityPanel({ report }: { report: SemanticBenchmark | null }) {
+  const metrics = report?.metrics || {};
+  const rows = [
+    ["Hit rate", percentValue(metrics.hit_rate_at_k)],
+    ["MRR", decimalValue(metrics.mrr_at_k)],
+    ["NDCG", decimalValue(metrics.ndcg_at_k)],
+    ["Bad matches", percentValue(metrics.bad_match_rate_at_k)],
+    ["Explanations", percentValue(metrics.explanation_coverage)],
+  ];
+  return (
+    <div className={`quality-panel ${report?.status || "pending"}`}>
+      <div className="section-mini-title">
+        <span>Serving quality</span>
+        <small>{report?.status || "Pending"}</small>
+      </div>
+      <div className="diagnostic-rows">
+        {rows.map(([label, value]) => (
+          <div className="diagnostic-row" key={label}>
+            <span>{label}</span>
+            <strong>{value}</strong>
+          </div>
+        ))}
+      </div>
+      {report?.evaluated_case_count ? <div className="quiet-line">{report.evaluated_case_count} benchmark cases</div> : null}
+    </div>
+  );
+}
+
 function MoviePoster({
   movie,
   onSelect,
@@ -281,9 +350,13 @@ function MoviePoster({
 function RecommendationCard({
   movie,
   onSelect,
+  feedback,
+  onFeedback,
 }: {
   movie: Movie;
   onSelect: (movie: Movie) => void;
+  feedback?: FeedbackValue;
+  onFeedback: (movie: Movie, value: FeedbackValue) => void;
 }) {
   const reasons = movieReasons(movie);
   const semantic = semanticPercent(movie);
@@ -321,6 +394,26 @@ function RecommendationCard({
           </div>
         )}
         {reasons.length > 0 && <p>{reasons[0]}</p>}
+        <div className="feedback-row" role="group" aria-label={`Feedback for ${movie.title}`}>
+          <button
+            className={feedback === "positive" ? "active positive" : ""}
+            type="button"
+            title="More like this"
+            onClick={() => onFeedback(movie, "positive")}
+          >
+            <ThumbsUp size={14} />
+            <span>More</span>
+          </button>
+          <button
+            className={feedback === "negative" ? "active negative" : ""}
+            type="button"
+            title="Less like this"
+            onClick={() => onFeedback(movie, "negative")}
+          >
+            <ThumbsDown size={14} />
+            <span>Less</span>
+          </button>
+        </div>
       </div>
     </article>
   );
@@ -455,7 +548,13 @@ function App() {
   const [lastUpdated, setLastUpdated] = React.useState("");
   const [platform, setPlatform] = React.useState<PlatformStatus | null>(null);
   const [artifactReport, setArtifactReport] = React.useState<ArtifactHealth | null>(null);
+  const [qualityReport, setQualityReport] = React.useState<SemanticBenchmark | null>(null);
   const [recentMovies, setRecentMovies] = React.useState<Movie[]>(() => loadRecentMovies());
+  const [feedbackByMovieId, setFeedbackByMovieId] = React.useState<Record<number, FeedbackValue>>({});
+  const [feedbackNotice, setFeedbackNotice] = React.useState("");
+  const [lastRecommendationRequestId, setLastRecommendationRequestId] = React.useState<string | null>(null);
+  const [recommendationSource, setRecommendationSource] = React.useState<Movie | null>(null);
+  const [sessionId] = React.useState(() => getSessionId());
   const bootstrapped = React.useRef(false);
   const loadedPlatform = React.useRef(false);
 
@@ -476,9 +575,81 @@ function App() {
     saveRecentMovies(next);
   }
 
-  function selectMovie(movie: Movie) {
+  function emitBehaviorEvent(payload: EventPayload) {
+    const eventPayload: EventPayload = {
+      ...payload,
+      session_id: payload.session_id || sessionId,
+      metadata: {
+        client: "react",
+        surface: "web",
+        ...(payload.metadata || {}),
+      },
+    };
+    if (eventPayload.movie_id !== null && eventPayload.movie_id !== undefined && !eventPayload.content_id) {
+      eventPayload.content_id = String(eventPayload.movie_id);
+    }
+
+    void recordEvent(eventPayload).catch((error) => {
+      console.warn("Behavior event was not recorded", error);
+    });
+  }
+
+  function selectMovie(movie: Movie, source: SelectionSource, track = true) {
     setSelectedMovie(movie);
     rememberMovie(movie);
+    if (!track) return;
+    emitBehaviorEvent({
+      event_type: "view",
+      movie_id: movie.id,
+      metadata: {
+        source,
+        title: movie.title,
+        results_kind: resultsKind,
+      },
+    });
+  }
+
+  function selectResultMovie(movie: Movie) {
+    if (resultsKind === "recommendations") {
+      const sourceMovie = recommendationSource || selectedMovie;
+      emitBehaviorEvent({
+        event_type: "click",
+        movie_id: movie.id,
+        source_content_id: sourceMovie ? String(sourceMovie.id) : undefined,
+        request_id: lastRecommendationRequestId,
+        metadata: {
+          title: movie.title,
+          source_title: sourceMovie?.title,
+          retrieval_stage: movie.retrieval_stage,
+          similarity_score: movie.similarity_score,
+        },
+      });
+      selectMovie(movie, "recommendation_card");
+      return;
+    }
+    selectMovie(movie, "search_result");
+  }
+
+  function recordFeedback(movie: Movie, value: FeedbackValue) {
+    const rating = value === "positive" ? 5 : 1;
+    const sourceMovie = resultsKind === "recommendations" ? recommendationSource || selectedMovie : selectedMovie;
+    setFeedbackByMovieId((current) => ({ ...current, [movie.id]: value }));
+    setFeedbackNotice(value === "positive" ? "Preference saved" : "Negative signal saved");
+    emitBehaviorEvent({
+      event_type: "rating",
+      movie_id: movie.id,
+      source_content_id: sourceMovie && sourceMovie.id !== movie.id ? String(sourceMovie.id) : undefined,
+      rating,
+      request_id: lastRecommendationRequestId,
+      metadata: {
+        title: movie.title,
+        source_title: sourceMovie?.title,
+        sentiment: value,
+        results_kind: resultsKind,
+        retrieval_stage: movie.retrieval_stage,
+        similarity_score: movie.similarity_score,
+      },
+    });
   }
 
   async function bootstrap(silent = false) {
@@ -520,9 +691,10 @@ function App() {
     if (catalogState !== "ready" || loadedPlatform.current) return;
     loadedPlatform.current = true;
     const timer = window.setTimeout(() => {
-      void Promise.allSettled([platformStatus(), artifactHealth()]).then((results) => {
+      void Promise.allSettled([platformStatus(), artifactHealth(), semanticBenchmark(10)]).then((results) => {
         const platformResult = results[0];
         const artifactResult = results[1];
+        const qualityResult = results[2];
         if (platformResult.status === "fulfilled") {
           setBackend(platformResult.value.baseUrl);
           setPlatform(platformResult.value.data);
@@ -531,7 +703,11 @@ function App() {
           setBackend(artifactResult.value.baseUrl);
           setArtifactReport(artifactResult.value.data);
         }
-        if (platformResult.status === "rejected" && artifactResult.status === "rejected") {
+        if (qualityResult.status === "fulfilled") {
+          setBackend(qualityResult.value.baseUrl);
+          setQualityReport(qualityResult.value.data);
+        }
+        if (platformResult.status === "rejected" && artifactResult.status === "rejected" && qualityResult.status === "rejected") {
           loadedPlatform.current = false;
         }
       });
@@ -544,11 +720,15 @@ function App() {
     setTitleQuery(item.title);
     setResults([]);
     setResultsKind("idle");
+    setLastRecommendationRequestId(null);
+    setRecommendationSource(null);
+    setFeedbackByMovieId({});
+    setFeedbackNotice("");
     setNotice("Opening title");
     try {
       const result = await getMovie(item.id);
       setBackend(result.baseUrl);
-      selectMovie(result.data);
+      selectMovie(result.data, "title_search");
       setNotice("Title ready");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Title unavailable");
@@ -570,13 +750,27 @@ function App() {
     setNotice(mode === "semantic" ? "Searching by intent" : "Searching catalog");
     setResults([]);
     setResultsKind("search");
+    setLastRecommendationRequestId(null);
+    setRecommendationSource(null);
+    setFeedbackByMovieId({});
+    setFeedbackNotice("");
+    emitBehaviorEvent({
+      event_type: "search",
+      query_text: query,
+      metadata: {
+        mode,
+      },
+    });
     try {
       const response = mode === "semantic" ? await aiSearch(query) : await searchMovies(query);
       const movies = dedupeMovies(response.data);
       setBackend(response.baseUrl);
       setResults(movies);
-      setSelectedMovie(movies[0] || null);
-      if (movies[0]) rememberMovie(movies[0]);
+      if (movies[0]) {
+        selectMovie(movies[0], mode === "semantic" ? "semantic_search" : "title_search");
+      } else {
+        setSelectedMovie(null);
+      }
       setNotice(`${movies.length} matches`);
     } catch (error) {
       setCatalogState("error");
@@ -594,9 +788,13 @@ function App() {
       const response = await getRecommendations(movie.id, 16);
       const recommendations = dedupeMovies(response.data.recommendations);
       setBackend(response.baseUrl);
-      selectMovie(response.data.query_movie);
+      setRecommendationSource(response.data.query_movie);
+      selectMovie(response.data.query_movie, "search_result", false);
       setResults(recommendations);
       setResultsKind("recommendations");
+      setFeedbackByMovieId({});
+      setFeedbackNotice("");
+      setLastRecommendationRequestId(response.data.request_id || null);
       setNotice(`${recommendations.length} recommendations ranked`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Recommendations unavailable");
@@ -646,6 +844,7 @@ function App() {
         <MetricTile icon={<Database size={18} />} label="Catalog" value={catalogValue ? catalogValue.toLocaleString() : "Loading"} />
         <MetricTile icon={<Server size={18} />} label="Service" value={serviceLabel(backend)} />
         <MetricTile icon={<BarChart3 size={18} />} label="Ranking" value={rankerValue} />
+        <MetricTile icon={<Gauge size={18} />} label="Quality" value={qualityLabel(qualityReport)} />
         <MetricTile icon={<Activity size={18} />} label="Artifacts" value={healthLabel(artifactReport)} />
       </section>
 
@@ -703,6 +902,7 @@ function App() {
           </div>
 
           <DiagnosticsPanel health={artifactReport} />
+          <QualityPanel report={qualityReport} />
 
           {mode === "title" ? (
             <div className="title-browser">
@@ -724,7 +924,7 @@ function App() {
               ) : recentMovies.length > 0 ? (
                 <div className="recent-list">
                   {recentMovies.map((movie) => (
-                    <button type="button" key={`${movie.id}-${movie.title}`} onClick={() => selectMovie(movie)}>
+                    <button type="button" key={`${movie.id}-${movie.title}`} onClick={() => selectMovie(movie, "recent_pick")}>
                       <img src={posterUrl(movie.poster_path)} alt="" loading="lazy" />
                       <span>{movie.title}</span>
                     </button>
@@ -768,12 +968,19 @@ function App() {
                 <div>
                   <span>{resultsKind === "recommendations" ? "Ranked set" : "Catalog results"}</span>
                   <h2>{resultHeading}</h2>
+                  {feedbackNotice && <small className="feedback-status">{feedbackNotice}</small>}
                 </div>
                 <strong>{results.length} titles</strong>
               </div>
               <div className="poster-grid">
                 {results.map((movie) => (
-                  <RecommendationCard key={`${movie.id}-${movie.title}`} movie={movie} onSelect={selectMovie} />
+                  <RecommendationCard
+                    key={`${movie.id}-${movie.title}`}
+                    movie={movie}
+                    onSelect={selectResultMovie}
+                    feedback={feedbackByMovieId[movie.id]}
+                    onFeedback={recordFeedback}
+                  />
                 ))}
               </div>
             </section>

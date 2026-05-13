@@ -3,19 +3,16 @@ API integration tests for FastAPI backend
 """
 import pytest
 import json
+import sys
 from fastapi.testclient import TestClient
 import pandas as pd
 import numpy as np
-from pathlib import Path
-import tempfile
 
 
 @pytest.fixture
 def mock_artifacts(tmp_path, monkeypatch):
     """Set up mock model artifacts for testing."""
     import faiss
-    import joblib
-    from sklearn.feature_extraction.text import TfidfVectorizer
     
     # Mock movies
     movies = pd.DataFrame({
@@ -77,10 +74,13 @@ def mock_artifacts(tmp_path, monkeypatch):
     monkeypatch.setattr(rec, "MODELS_DIR", tmp_path)
     monkeypatch.setattr(rec, "DATA_DIR", tmp_path)
     monkeypatch.setenv("NOVA_USAGE_PATH", str(tmp_path / "api_usage.jsonl"))
+    monkeypatch.setenv("EVENT_LOG_PATH", str(tmp_path / "events.jsonl"))
     monkeypatch.delenv("NOVA_API_KEYS", raising=False)
     
     # Reset singleton
     rec._recommender = None
+    if "backend.main" in sys.modules:
+        sys.modules["backend.main"]._recommender = None
     
     return tmp_path
 
@@ -94,6 +94,35 @@ class TestHealthEndpoint:
         data = resp.json()
         assert data["status"] == "healthy"
         assert data["movie_count"] == 3
+        assert data["app_version"] == "2.0.0"
+
+    def test_health_includes_app_commit_when_available(self, mock_artifacts, monkeypatch):
+        monkeypatch.setenv("NOVA_APP_COMMIT", "abcdef1234567890")
+
+        from backend.main import app
+        client = TestClient(app)
+        resp = client.get("/health")
+
+        assert resp.status_code == 200
+        assert resp.json()["app_commit"] == "abcdef123456"
+
+    def test_app_metadata_prefers_revision_file_over_host_commit(self, tmp_path, monkeypatch):
+        import backend.main as main
+
+        revision_path = tmp_path / "REVISION"
+        revision_path.write_text("sourceabcdef1234567890", encoding="utf-8")
+        monkeypatch.setattr(main, "REVISION_FILE", revision_path)
+        monkeypatch.delenv("NOVA_APP_COMMIT", raising=False)
+        monkeypatch.delenv("RENDER_GIT_COMMIT", raising=False)
+        monkeypatch.delenv("SOURCE_VERSION", raising=False)
+        monkeypatch.delenv("GITHUB_SHA", raising=False)
+        monkeypatch.setenv("SOURCE_VERSION", "hostabcdef1234567890")
+        monkeypatch.setenv("COMMIT_SHA", "spaceabcdef1234567890")
+
+        metadata = main.app_metadata()
+
+        assert metadata["commit"] == "sourceabcdef"
+        assert metadata["source"] == "REVISION"
 
     def test_health_without_recommender_load_reports_catalog_count(self, mock_artifacts, monkeypatch):
         monkeypatch.setenv("NOVA_HEALTH_LOAD_RECOMMENDER", "false")
@@ -144,8 +173,27 @@ class TestPlatformEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "ready"
+        assert data["app"]["version"] == "2.0.0"
         assert "personalization_v2" in data["capabilities"]
+        assert "recommendation_benchmark" in data["capabilities"]
         assert "event_store" in data
+
+
+class TestCorsPolicy:
+    def test_github_pages_origin_is_allowed_by_default(self, mock_artifacts):
+        from backend.main import app
+        client = TestClient(app)
+
+        resp = client.options(
+            "/v1/search",
+            headers={
+                "Origin": "https://pavanbadempet.github.io",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+
+        assert resp.status_code == 200
+        assert resp.headers["access-control-allow-origin"] == "https://pavanbadempet.github.io"
 
 
 class TestSearchEndpoint:
@@ -180,6 +228,31 @@ class TestSearchEndpoint:
         resp = client.get("/v1/search", params={"q": "Test Movie A"})
         assert resp.status_code == 200
         assert resp.json()[0]["title"] == "Test Movie A"
+
+    def test_v1_search_sanitizes_nan_optional_fields(self, monkeypatch):
+        import backend.main as main
+        from backend.main import app
+        from backend.recommender import Recommender
+
+        rec = Recommender()
+        rec._movies = pd.DataFrame(
+            {
+                "id": [19995],
+                "title": ["Avatar"],
+                "overview": ["Alien world adventure"],
+                "genres": [np.nan],
+                "poster_path": [np.nan],
+                "popularity": [100.0],
+            }
+        )
+        monkeypatch.setattr(main, "get_rec", lambda: rec)
+
+        client = TestClient(app)
+        resp = client.get("/v1/search", params={"q": "avatar"})
+
+        assert resp.status_code == 200
+        assert resp.json()[0]["genres"] is None
+        assert resp.json()[0]["poster_path"] is None
 
     def test_v1_ai_search_uses_hybrid_retrieval(self, mock_artifacts, monkeypatch):
         monkeypatch.setenv("NOVA_ENABLE_DENSE_QUERY", "false")
@@ -256,6 +329,64 @@ class TestSearchEndpoint:
         assert "status" in data
         assert "case_count" in data
 
+    def test_search_benchmark_endpoint_is_available(self, mock_artifacts):
+        from backend.main import app
+        client = TestClient(app)
+
+        resp = client.get("/v1/evaluation/search-benchmark", params={"k": 3})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "status" in data
+        assert "case_count" in data
+        assert "top1_hit_rate" in data["metrics"]
+
+    def test_recommendation_benchmark_endpoint_is_available(self, mock_artifacts):
+        from backend.main import app
+        client = TestClient(app)
+
+        resp = client.get("/v1/evaluation/recommendation-benchmark", params={"k": 3})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "status" in data
+        assert "case_count" in data
+        assert "case_pass_rate" in data["metrics"]
+
+    def test_semantic_benchmark_async_cache_returns_warming(self, mock_artifacts, monkeypatch):
+        monkeypatch.setenv("NOVA_ASYNC_EVALUATION_CACHE", "true")
+
+        import backend.main as main
+        from backend.main import app
+
+        main._semantic_benchmark_cache.clear()
+        monkeypatch.setattr(main, "_start_background_semantic_benchmark", lambda k: None)
+
+        client = TestClient(app)
+        resp = client.get("/v1/evaluation/semantic-benchmark", params={"k": 3})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "warming"
+        assert data["k"] == 3
+
+    def test_recommendation_benchmark_async_cache_returns_warming(self, mock_artifacts, monkeypatch):
+        monkeypatch.setenv("NOVA_ASYNC_EVALUATION_CACHE", "true")
+
+        import backend.main as main
+        from backend.main import app
+
+        main._recommendation_benchmark_cache.clear()
+        monkeypatch.setattr(main, "_start_background_recommendation_benchmark", lambda k: None)
+
+        client = TestClient(app)
+        resp = client.get("/v1/evaluation/recommendation-benchmark", params={"k": 3})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "warming"
+        assert data["k"] == 3
+
     def test_artifact_health_endpoint_reports_alignment(self, mock_artifacts):
         from backend.main import app
         client = TestClient(app)
@@ -267,6 +398,50 @@ class TestSearchEndpoint:
         assert data["status"] == "ready"
         assert data["checks"]["catalog_vector_aligned"] is True
         assert data["checks"]["semantic_catalog_aligned"] is True
+
+    def test_artifact_reload_is_disabled_without_admin_token(self, mock_artifacts, monkeypatch):
+        monkeypatch.delenv("NOVA_ADMIN_TOKEN", raising=False)
+
+        from backend.main import app
+
+        client = TestClient(app)
+        resp = client.post("/v1/artifacts/reload", params={"force_download": False})
+
+        assert resp.status_code == 404
+
+    def test_artifact_reload_requires_valid_admin_token(self, mock_artifacts, monkeypatch):
+        monkeypatch.setenv("NOVA_ADMIN_TOKEN", "admin-secret")
+
+        from backend.main import app
+
+        client = TestClient(app)
+        resp = client.post(
+            "/v1/artifacts/reload",
+            params={"force_download": False},
+            headers={"X-Nova-Admin-Token": "wrong"},
+        )
+
+        assert resp.status_code == 401
+
+    def test_artifact_reload_swaps_loaded_recommender(self, mock_artifacts, monkeypatch):
+        monkeypatch.setenv("NOVA_ADMIN_TOKEN", "admin-secret")
+
+        import backend.main as main
+        from backend.main import app
+
+        client = TestClient(app)
+        resp = client.post(
+            "/v1/artifacts/reload",
+            params={"force_download": False, "load": True},
+            headers={"X-Nova-Admin-Token": "admin-secret"},
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "reloaded"
+        assert data["artifact_health"]["status"] == "ready"
+        assert data["lineage"]["movie_count"] == 3
+        assert main._recommender is not None
 
 
 class TestMoviesEndpoint:
@@ -386,9 +561,54 @@ class TestRecommendEndpoints:
         resp = client.get("/recommend/id/100", params={"n": 2})
         assert resp.status_code == 200
         data = resp.json()
+        assert data["request_id"]
         assert "query_movie" in data
         assert "recommendations" in data
         assert data["query_movie"]["id"] == 100
+
+    def test_recommend_by_id_writes_request_and_impression_events(self, tmp_path, monkeypatch, mock_artifacts):
+        event_path = tmp_path / "recommendation_events.jsonl"
+        monkeypatch.setenv("EVENT_LOG_PATH", str(event_path))
+
+        from backend.events import iter_events
+        from backend.main import app
+
+        client = TestClient(app)
+        resp = client.get(
+            "/v1/recommendations/id/100",
+            params={
+                "n": 2,
+                "request_id": "req-test-1",
+                "user_id": "user-1",
+                "session_id": "session-1",
+            },
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["request_id"] == "req-test-1"
+
+        events = list(iter_events(event_path))
+        assert [event["event_type"] for event in events].count("recommendation_request") == 1
+        assert [event["event_type"] for event in events].count("recommendation_impression") == 2
+        request_event = next(event for event in events if event["event_type"] == "recommendation_request")
+        assert request_event["request_id"] == "req-test-1"
+        assert request_event["user_id"] == "user-1"
+        assert request_event["session_id"] == "session-1"
+        assert request_event["metadata"]["endpoint"] == "recommendations.id"
+        assert request_event["metadata"]["query_movie"]["id"] == 100
+        assert request_event["metadata"]["candidate_ids"]
+
+        impression_events = [event for event in events if event["event_type"] == "recommendation_impression"]
+        assert [event["metadata"]["rank"] for event in impression_events] == [1, 2]
+        assert all(event["metadata"]["retrieval_stage"] for event in impression_events)
+
+        analytics_resp = client.get("/v1/events/recommendation-analytics")
+        assert analytics_resp.status_code == 200
+        analytics = analytics_resp.json()
+        assert analytics["request_count"] == 1
+        assert analytics["impression_count"] == 2
+        assert analytics["top_seed_movies"][0]["movie_id"] == "100"
 
     def test_recommend_by_id_not_found(self, mock_artifacts):
         from backend.main import app

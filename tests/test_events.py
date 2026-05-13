@@ -4,7 +4,7 @@ Tests for behavior event capture and feature aggregation.
 
 import pytest
 
-from backend.events import append_event, aggregate_behavior_features, build_user_behavior_profile, event_storage_status, iter_events, normalize_event
+from backend.events import append_event, aggregate_behavior_features, build_user_behavior_profile, event_storage_status, iter_events, normalize_event, summarize_recommendation_events
 from backend.recommender import Recommender
 
 
@@ -36,6 +36,87 @@ def test_append_event_and_aggregate_features(tmp_path):
     assert movie_stats["tenant_id"] == "demo-media-co"
     assert movie_stats["catalog_id"] == "tmdb-movies"
     assert features["top_searches"] == [{"query_text": "space drama", "count": 1}]
+
+
+def test_recommendation_request_is_counted_without_trending_bias(tmp_path):
+    event_path = tmp_path / "movie_events.jsonl"
+
+    append_event(
+        {
+            "event_type": "recommendation_request",
+            "movie_id": 100,
+            "request_id": "request-1",
+            "metadata": {
+                "candidate_ids": [200],
+                "numpy_like_score": 0.91,
+            },
+        },
+        event_path,
+    )
+    append_event(
+        {
+            "event_type": "recommendation_impression",
+            "movie_id": 200,
+            "request_id": "request-1",
+            "metadata": {"rank": 1},
+        },
+        event_path,
+    )
+
+    features = aggregate_behavior_features(event_path)
+
+    assert features["total_events"] == 2
+    assert features["event_type_counts"]["recommendation_request"] == 1
+    assert features["event_type_counts"]["recommendation_impression"] == 1
+    assert "100" not in features["trending_movies"]
+    assert features["trending_movies"]["200"]["impressions"] == 1
+
+
+def test_summarize_recommendation_events(tmp_path):
+    event_path = tmp_path / "movie_events.jsonl"
+
+    append_event(
+        {
+            "event_type": "recommendation_request",
+            "movie_id": 100,
+            "request_id": "request-1",
+            "metadata": {
+                "query_movie": {"id": 100, "title": "Seed"},
+                "retrieval_stage_counts": {"semantic": 2},
+            },
+        },
+        event_path,
+    )
+    append_event(
+        {
+            "event_type": "recommendation_impression",
+            "movie_id": 200,
+            "request_id": "request-1",
+            "metadata": {"rank": 1, "retrieval_stage": "semantic"},
+        },
+        event_path,
+    )
+    append_event(
+        {
+            "event_type": "click",
+            "movie_id": 200,
+            "request_id": "request-1",
+        },
+        event_path,
+    )
+
+    summary = summarize_recommendation_events(event_path)
+
+    assert summary["request_count"] == 1
+    assert summary["distinct_request_count"] == 1
+    assert summary["impression_count"] == 1
+    assert summary["click_count"] == 1
+    assert summary["click_through_rate"] == 1.0
+    assert summary["avg_impressions_per_request"] == 1.0
+    assert summary["top_seed_movies"] == [{"movie_id": "100", "request_count": 1}]
+    assert summary["top_recommended_movies"] == [{"movie_id": "200", "impression_count": 1}]
+    assert summary["rank_position_counts"]["1"] == 1
+    assert summary["retrieval_stage_counts"]["semantic"] == 1
 
 
 def test_content_event_uses_product_identifiers(tmp_path):

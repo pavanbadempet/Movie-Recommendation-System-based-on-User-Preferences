@@ -174,7 +174,7 @@ input:focus-visible {
 
 .metrics-strip {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   padding: 18px 0 4px;
 }
@@ -450,7 +450,8 @@ input:focus-visible {
   background: rgba(255, 255, 255, 0.085);
 }
 
-.diagnostics-panel {
+.diagnostics-panel,
+.quality-panel {
   display: grid;
   gap: 10px;
   margin-top: 14px;
@@ -460,11 +461,13 @@ input:focus-visible {
   background: rgba(255, 255, 255, 0.04);
 }
 
-.diagnostics-panel.ready {
+.diagnostics-panel.ready,
+.quality-panel.ok {
   border-color: rgba(94, 234, 212, 0.22);
 }
 
-.diagnostics-panel.degraded {
+.diagnostics-panel.degraded,
+.quality-panel.needs_attention {
   border-color: rgba(251, 191, 36, 0.24);
 }
 
@@ -722,6 +725,14 @@ input:focus-visible {
   letter-spacing: 0;
 }
 
+.feedback-status {
+  display: block;
+  margin-top: 4px;
+  color: #5eead4;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
 .section-title strong {
   color: #d8dde8;
 }
@@ -850,6 +861,54 @@ input:focus-visible {
   line-height: 1.38;
 }
 
+.feedback-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.feedback-row button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 8px;
+  overflow: hidden;
+  color: #dce3ee;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.055);
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.feedback-row button:hover {
+  border-color: rgba(94, 234, 212, 0.28);
+  background: rgba(94, 234, 212, 0.09);
+}
+
+.feedback-row button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feedback-row button.active.positive {
+  color: #ccfbf1;
+  border-color: rgba(94, 234, 212, 0.42);
+  background: rgba(20, 184, 166, 0.18);
+}
+
+.feedback-row button.active.negative {
+  color: #fecdd3;
+  border-color: rgba(251, 113, 133, 0.38);
+  background: rgba(251, 113, 133, 0.12);
+}
+
 .spin {
   animation: spin 1s linear infinite;
 }
@@ -877,7 +936,7 @@ input:focus-visible {
   }
 
   .metrics-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 

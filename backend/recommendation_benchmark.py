@@ -1,4 +1,4 @@
-"""Human-readable semantic benchmark evaluation for recommendations."""
+"""Human-labeled recommendation benchmark utilities."""
 
 from __future__ import annotations
 
@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import Any
 
 
-DEFAULT_BENCHMARK_PATH = Path(__file__).resolve().parent.parent / "data" / "evaluation" / "semantic_similarity_benchmark.json"
+DEFAULT_RECOMMENDATION_BENCHMARK_PATH = (
+    Path(__file__).resolve().parent.parent / "data" / "evaluation" / "recommendation_quality_benchmark.json"
+)
 
 
 def _canonical_title(value: Any) -> str:
@@ -26,16 +28,15 @@ def _case_items(items: list[Any]) -> list[dict[str, Any]]:
     return normalized
 
 
-def _matches_item(movie: dict[str, Any], expected: dict[str, Any]) -> bool:
-    if expected.get("id") is not None and movie.get("id") is not None:
+def _matches_item(result: dict[str, Any], expected: dict[str, Any]) -> bool:
+    if expected.get("id") is not None and result.get("id") is not None:
         try:
-            if int(expected["id"]) == int(movie["id"]):
-                return True
+            return int(expected["id"]) == int(result["id"])
         except (TypeError, ValueError):
-            pass
+            return False
     expected_title = _canonical_title(expected.get("title"))
-    movie_title = _canonical_title(movie.get("title"))
-    return bool(expected_title and movie_title and expected_title == movie_title)
+    result_title = _canonical_title(result.get("title"))
+    return bool(expected_title and result_title and expected_title == result_title)
 
 
 def _find_seed_movie(recommender: Any, case: dict[str, Any]) -> dict[str, Any] | None:
@@ -62,9 +63,9 @@ def _find_seed_movie(recommender: Any, case: dict[str, Any]) -> dict[str, Any] |
     return None
 
 
-def load_semantic_benchmark(path: Path | str | None = None) -> list[dict[str, Any]]:
-    """Load benchmark cases from JSON."""
-    benchmark_path = Path(path) if path is not None else DEFAULT_BENCHMARK_PATH
+def load_recommendation_benchmark(path: Path | str | None = None) -> list[dict[str, Any]]:
+    """Load recommendation benchmark cases from JSON."""
+    benchmark_path = Path(path) if path is not None else DEFAULT_RECOMMENDATION_BENCHMARK_PATH
     if not benchmark_path.exists():
         return []
     payload = json.loads(benchmark_path.read_text(encoding="utf-8"))
@@ -75,31 +76,32 @@ def load_semantic_benchmark(path: Path | str | None = None) -> list[dict[str, An
     return []
 
 
-def evaluate_semantic_benchmark(
+def evaluate_recommendation_benchmark(
     recommender: Any,
     benchmark_path: Path | str | None = None,
     k: int = 10,
 ) -> dict[str, Any]:
-    """Evaluate recommender output against small human-labeled semantic cases."""
-    cases = load_semantic_benchmark(benchmark_path)
+    """Evaluate recommendation output against product-quality labeled cases."""
+    cases = load_recommendation_benchmark(benchmark_path)
     generated_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
     if not cases:
         return {
             "generated_at": generated_at,
             "status": "unavailable",
-            "reason": "No semantic benchmark cases found",
+            "reason": "No recommendation benchmark cases found",
             "case_count": 0,
         }
 
     evaluated = []
     skipped = []
+    pass_count = 0
     total_good_hits = 0
     total_bad_hits = 0
     total_good_labels = 0
-    reciprocal_ranks = []
-    ndcg_scores = []
     good_hit_cases = 0
     bad_hit_cases = 0
+    reciprocal_ranks = []
+    ndcg_scores = []
     explanation_hits = 0
     stage_counts: dict[str, int] = {}
     total_results = 0
@@ -112,8 +114,11 @@ def evaluate_semantic_benchmark(
 
         good_items = _case_items(case.get("good_matches") or [])
         bad_items = _case_items(case.get("bad_matches") or [])
+        min_good_hits = int(case.get("min_good_hits") or (1 if good_items else 0))
+        max_bad_hits = int(case.get("max_bad_hits", 0))
+
         recommendations = recommender.recommend_by_id(int(seed_movie["id"]), n=max(k, 1))
-        top_recommendations = recommendations[:k]
+        top_recommendations = [item for item in recommendations[:k] if isinstance(item, dict)]
 
         good_hits = []
         bad_hits = []
@@ -134,6 +139,9 @@ def evaluate_semantic_benchmark(
             if any(_matches_item(rec, item) for item in bad_items):
                 bad_hits.append({"id": rec.get("id"), "title": rec.get("title"), "rank": rank})
 
+        case_passed = len(good_hits) >= min_good_hits and len(bad_hits) <= max_bad_hits
+        if case_passed:
+            pass_count += 1
         if good_hits:
             good_hit_cases += 1
         if bad_hits:
@@ -152,6 +160,9 @@ def evaluate_semantic_benchmark(
                 "seed": {"id": seed_movie.get("id"), "title": seed_movie.get("title")},
                 "intent": case.get("intent"),
                 "k": k,
+                "passed": case_passed,
+                "min_good_hits": min_good_hits,
+                "max_bad_hits": max_bad_hits,
                 "good_hit_count": len(good_hits),
                 "bad_hit_count": len(bad_hits),
                 "good_hits": good_hits,
@@ -170,15 +181,13 @@ def evaluate_semantic_benchmark(
         )
 
     evaluated_count = len(evaluated)
+    pass_rate = pass_count / max(evaluated_count, 1)
     bad_rate = total_bad_hits / max(evaluated_count * k, 1)
     good_recall = total_good_hits / max(total_good_labels, 1)
-    precision = total_good_hits / max(evaluated_count * k, 1)
     hit_rate = good_hit_cases / max(evaluated_count, 1)
     bad_case_rate = bad_hit_cases / max(evaluated_count, 1)
     status = "ok" if evaluated_count else "unavailable"
-    if evaluated_count and bad_rate > 0.15:
-        status = "needs_attention"
-    if evaluated_count and hit_rate < 0.5:
+    if evaluated_count and (pass_rate < 0.8 or bad_case_rate > 0.05):
         status = "needs_attention"
 
     return {
@@ -189,13 +198,14 @@ def evaluate_semantic_benchmark(
         "skipped_case_count": len(skipped),
         "k": k,
         "metrics": {
+            "case_pass_rate": round(pass_rate, 4),
+            "case_pass_count": pass_count,
+            "good_hit_case_rate": round(hit_rate, 4),
+            "bad_case_rate_at_k": round(bad_case_rate, 4),
+            "bad_match_rate_at_k": round(bad_rate, 4),
             "good_recall_at_k": round(good_recall, 4),
-            "precision_at_k": round(precision, 4),
-            "hit_rate_at_k": round(hit_rate, 4),
             "mrr_at_k": round(sum(reciprocal_ranks) / max(len(reciprocal_ranks), 1), 4),
             "ndcg_at_k": round(sum(ndcg_scores) / max(len(ndcg_scores), 1), 4),
-            "bad_match_rate_at_k": round(bad_rate, 4),
-            "bad_case_rate_at_k": round(bad_case_rate, 4),
             "good_hit_count": total_good_hits,
             "bad_hit_count": total_bad_hits,
             "stage_distribution": dict(sorted(stage_counts.items())),

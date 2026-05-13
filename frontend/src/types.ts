@@ -31,8 +31,40 @@ export type MovieTitle = {
 };
 
 export type RecommendationResponse = {
+  request_id?: string | null;
   query_movie: Movie;
   recommendations: Movie[];
+};
+
+export type EventType =
+  | "view"
+  | "search"
+  | "click"
+  | "rating"
+  | "recommendation_request"
+  | "recommendation_impression";
+
+export type EventPayload = {
+  event_type: EventType;
+  tenant_id?: string | null;
+  catalog_id?: string | null;
+  content_id?: string | null;
+  source_content_id?: string | null;
+  movie_id?: number | null;
+  query_text?: string | null;
+  user_id?: string | null;
+  session_id?: string | null;
+  rating?: number | null;
+  request_id?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+export type EventResponse = {
+  status: string;
+  event_id: string;
+  event_path: string;
+  event_store: string;
+  durable: boolean;
 };
 
 export type BackendHealth = {
@@ -83,6 +115,28 @@ export type ArtifactHealth = {
   };
   recommendations?: string[];
   errors?: string[];
+};
+
+export type SemanticBenchmark = {
+  generated_at?: string;
+  status: "ok" | "needs_attention" | "unavailable" | string;
+  case_count?: number;
+  evaluated_case_count?: number;
+  k?: number;
+  reason?: string;
+  metrics?: {
+    good_recall_at_k?: number;
+    precision_at_k?: number;
+    hit_rate_at_k?: number;
+    mrr_at_k?: number;
+    ndcg_at_k?: number;
+    bad_match_rate_at_k?: number;
+    bad_case_rate_at_k?: number;
+    explanation_coverage?: number;
+    good_hit_count?: number;
+    bad_hit_count?: number;
+    stage_distribution?: Record<string, number>;
+  };
 };
 
 export type BackendResult<T> = {

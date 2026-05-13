@@ -13,7 +13,10 @@ on:
       - 'notebooks/kaggle_etl_pipeline.py'
       - 'scripts/validate_serving_artifacts.py'
       - 'scripts/evaluate_semantic_benchmark.py'
+      - 'scripts/rebuild_serving_artifacts.py'
       - 'scripts/train_ranker.py'
+      - 'backend/semantic_benchmark.py'
+      - 'data/evaluation/semantic_similarity_benchmark.json'
   schedule:
     # Run daily at 6 AM UTC
     - cron: '0 6 * * *'
@@ -22,10 +25,14 @@ on:
 env:
   PYTHON_VERSION: '3.11'
 
+concurrency:
+  group: daily-data-refresh-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   trigger-kaggle-notebook:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 120
     
     steps:
       - name: Checkout repository
@@ -59,6 +66,8 @@ jobs:
           echo "Notebook pushed! Kaggle will now execute it with GPU."
 
       - name: Wait for Kaggle execution to complete
+        id: kaggle_execution
+        continue-on-error: true
         env:
           KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_KEY }}
         run: |
@@ -68,10 +77,11 @@ jobs:
           # Wait 2 minutes before first check (notebook needs time to start)
           sleep 120
           
-          # Poll for completion (max 30 minutes, check every 30s)
-          for i in $(seq 1 56); do
+          # Poll for completion (max 90 minutes, check every 30s).
+          # Full catalog embedding rebuilds can outlive the old 30-minute window.
+          for i in $(seq 1 180); do
             STATUS=$(kaggle kernels status "$KERNEL_ID" 2>&1 | tail -1)
-            echo "[$i/56] Status: $STATUS"
+            echo "[$i/180] Status: $STATUS"
             
             if echo "$STATUS" | grep -qi "complete"; then
               echo "Kaggle notebook completed successfully!"
@@ -92,12 +102,12 @@ jobs:
             sleep 30
           done
           
-          echo "Timeout after 30 minutes. Check Kaggle manually:"
+          echo "Timeout after 90 minutes. Check Kaggle manually:"
           echo "https://www.kaggle.com/code/$KERNEL_ID"
           exit 1
 
-      - name: Annotate Kaggle failure
-        if: failure()
+      - name: Annotate Kaggle fallback
+        if: steps.kaggle_execution.outcome == 'failure'
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -113,11 +123,10 @@ jobs:
               text = "Kaggle notebook failed or timed out before output logs were available."
           tail = "\n".join(text.splitlines()[-140:])
           escaped = tail[:7000].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-          print(f"::error title=Kaggle refresh failure::{escaped}")
+          print(f"::warning title=Kaggle refresh fallback::Kaggle did not produce a fresh run. The workflow will validate the current Hugging Face serving artifacts instead.%0A{escaped}")
           PY
 
       - name: Validate Hugging Face serving artifact contract
-        if: success()
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
@@ -125,8 +134,6 @@ jobs:
           python scripts/validate_serving_artifacts.py --repo pavanbadempet/movie-recs-models
 
       - name: Evaluate semantic recommendation benchmark
-        if: success()
-        continue-on-error: true
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
@@ -136,7 +143,12 @@ jobs:
             --hf-repo pavanbadempet/movie-recs-models \
             --hf-token "$HF_TOKEN" \
             --output reports/semantic_benchmark_report.json \
-            --k 10
+            --k 10 \
+            --max-bad-match-rate 0.05 \
+            --min-hit-rate 0.95 \
+            --min-mrr 0.35 \
+            --min-ndcg 0.25 \
+            --fail-on-threshold
 
       - name: Train and upload Nova ranker
         if: success()
@@ -164,7 +176,18 @@ jobs:
 
       - name: Trigger Render backend restart
         if: success()
+        env:
+          NOVA_ADMIN_TOKEN: ${{ secrets.NOVA_ADMIN_TOKEN }}
+          NOVA_RENDER_API_URL: ${{ secrets.NOVA_RENDER_API_URL }}
         run: |
-          echo "Pinging Render to pick up new HuggingFace artifacts..."
-          curl -sf --max-time 60 "https://movie-recs-api-5qvy.onrender.com/health" || echo "Backend pinged (may be sleeping)"
-          echo "Done! Backend will download new files on next cold start."
+          API_URL="${NOVA_RENDER_API_URL:-https://movie-recs-api-5qvy.onrender.com}"
+          if [ -n "$NOVA_ADMIN_TOKEN" ]; then
+            echo "Refreshing deployed backend artifacts from Hugging Face..."
+            curl -sfS --max-time 300 -X POST \
+              -H "X-Nova-Admin-Token: $NOVA_ADMIN_TOKEN" \
+              "$API_URL/v1/artifacts/reload?force_download=true&load=true"
+            echo "Backend artifacts reloaded."
+          else
+            echo "::warning title=Backend artifact reload skipped::Set NOVA_ADMIN_TOKEN in GitHub Actions and Render to let the daily refresh reload artifacts without waiting for a cold start."
+            curl -sf --max-time 60 "$API_URL/health" || echo "Backend pinged (may be sleeping)"
+          fi

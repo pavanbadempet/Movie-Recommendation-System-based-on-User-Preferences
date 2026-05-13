@@ -5,9 +5,10 @@ of making recommendations feel personalized.
 """
 import logging
 import hashlib
+import re
 from datetime import UTC, datetime
 from pathlib import Path
-from functools import lru_cache
+from threading import Lock
 from typing import Any
 import gc
 
@@ -94,6 +95,8 @@ class Recommender:
         self._behavior_features: dict[str, Any] = {}
         self._behavior_features_refreshed_at: datetime | None = None
         self._semantic_twin_cache: dict[int, dict[str, Any]] = {}
+        self._search_text_cache: dict[str, pd.Series] = {}
+        self._search_text_cache_frame_id: int | None = None
         self._low_memory = _low_memory_serving_enabled()
         self._artifact_status: dict[str, Any] = {"vector_artifacts_ready": False}
     
@@ -105,6 +108,8 @@ class Recommender:
         logger.info("Loading recommendation engine...")
         selected_artifacts = {
             "movies_transformed.parquet",
+            "semantic_twins.parquet",
+            "semantic_twin_summary.json",
             "pipeline_manifest.json",
             "nova_ranker.joblib",
             "nova_ranker.joblib.metadata.json",
@@ -254,6 +259,25 @@ class Recommender:
         for column in ("quality_bucket", "original_language"):
             if column in self._movies.columns:
                 self._movies[column] = self._movies[column].fillna("").astype("category")
+
+    @staticmethod
+    def _clean_response_value(value: Any) -> Any:
+        """Convert pandas/numpy missing values and scalars to JSON-safe values."""
+        if value is None:
+            return None
+        try:
+            if pd.isna(value):
+                return None
+        except (TypeError, ValueError):
+            pass
+        if isinstance(value, np.generic):
+            return value.item()
+        return value
+
+    @classmethod
+    def _clean_response_record(cls, record: dict[str, Any]) -> dict[str, Any]:
+        """Normalize a movie record before FastAPI response validation."""
+        return {key: cls._clean_response_value(value) for key, value in record.items()}
 
     def _disable_vector_artifacts(self, reason: str) -> None:
         """Disable vector serving when artifacts violate row-alignment contracts."""
@@ -625,6 +649,36 @@ class Recommender:
             logger.warning("Learned ranker skipped: %s", exc)
             return candidates
 
+    def _quality_gate_item_recommendations(
+        self,
+        candidates: list[dict[str, Any]],
+        query_movie: dict[str, Any],
+        n: int,
+    ) -> list[dict[str, Any]]:
+        """Drop obvious low-quality or genre-drift candidates when enough alternatives exist."""
+        if len(candidates) <= n:
+            return candidates
+
+        query_genres = self._genre_set(query_movie)
+        gated: list[dict[str, Any]] = []
+        for candidate in candidates:
+            rating = float(candidate.get("vote_average") or 0.0)
+            votes = float(candidate.get("vote_count") or 0.0)
+            candidate_genres = self._genre_set(candidate)
+            shared_genres = query_genres & candidate_genres
+            signals = candidate.get("retrieval_signals") or {}
+            semantic_score = float(signals.get("semantic_twin") or 0.0)
+
+            if votes >= 500 and 0 < rating < 5.5:
+                continue
+            if "science fiction" in query_genres and "science fiction" not in candidate_genres:
+                if len(shared_genres) < 2 and semantic_score < 0.62:
+                    continue
+
+            gated.append(candidate)
+
+        return gated if len(gated) >= n else candidates
+
     def _learned_ranker_enabled(self) -> bool:
         """Return whether the learned ranker has enough signal to influence serving."""
         value = os.getenv("NOVA_ENABLE_LEARNED_RANKER", "auto").strip().lower()
@@ -816,11 +870,11 @@ class Recommender:
         matches = self._movies[self._movies["id"] == movie_id]
         if len(matches) == 0:
             return None
-        return matches.iloc[0].to_dict()
+        return self._clean_response_record(matches.iloc[0].to_dict())
     
     def get_movie_by_index(self, idx: int) -> dict:
         """Get movie details by DataFrame index."""
-        return self._movies.iloc[idx].to_dict()
+        return self._clean_response_record(self._movies.iloc[idx].to_dict())
         
     def get_all_titles(self, limit: int = 5000) -> list[dict]:
         """
@@ -892,17 +946,61 @@ class Recommender:
         """
         if not query:
             return []
+        if self._movies is None:
+            return []
             
         q_lower = query.lower().strip()
+        q_norm = re.sub(r"[^a-z0-9]+", " ", q_lower).strip()
+
+        def text_column(column: str) -> pd.Series:
+            if column not in self._movies.columns:
+                return pd.Series("", index=self._movies.index, dtype="string")
+            return self._movies[column].fillna("").astype(str)
+
+        def normalized_text_column(column: str) -> pd.Series:
+            frame_id = id(self._movies)
+            if self._search_text_cache_frame_id != frame_id:
+                self._search_text_cache.clear()
+                self._search_text_cache_frame_id = frame_id
+            cached = self._search_text_cache.get(column)
+            if cached is not None and cached.index.equals(self._movies.index):
+                return cached
+            normalized = (
+                text_column(column)
+                .str.lower()
+                .str.replace(r"[^a-z0-9]+", " ", regex=True)
+                .str.replace(r"\s+", " ", regex=True)
+                .str.strip()
+            )
+            self._search_text_cache[column] = normalized
+            return normalized
+
+        def numeric_column(column: str) -> pd.Series:
+            if column not in self._movies.columns:
+                return pd.Series(0.0, index=self._movies.index, dtype="float32")
+            return pd.to_numeric(self._movies[column], errors="coerce").fillna(0.0)
+
+        titles = text_column("title")
+        overviews = text_column("overview")
+        genres = text_column("genres")
+        normalized_titles = normalized_text_column("title")
+        normalized_overviews = normalized_text_column("overview")
+        normalized_genres = normalized_text_column("genres")
         
         # 1. Title Match (Weight: 10)
-        mask_title = self._movies["title"].str.lower().str.contains(q_lower, regex=False, na=False)
+        mask_title = titles.str.lower().str.contains(q_lower, regex=False, na=False)
+        if q_norm:
+            mask_title = mask_title | normalized_titles.str.contains(q_norm, regex=False, na=False)
         
         # 2. Overview Match (Weight: 3) - Allows searching by plot concepts
-        mask_overview = self._movies["overview"].str.lower().str.contains(q_lower, regex=False, na=False)
+        mask_overview = overviews.str.lower().str.contains(q_lower, regex=False, na=False)
+        if q_norm:
+            mask_overview = mask_overview | normalized_overviews.str.contains(q_norm, regex=False, na=False)
         
         # 3. Genre Match (Weight: 5)
-        mask_genre = self._movies["genres"].str.lower().str.contains(q_lower, regex=False, na=False)
+        mask_genre = genres.str.lower().str.contains(q_lower, regex=False, na=False)
+        if q_norm:
+            mask_genre = mask_genre | normalized_genres.str.contains(q_norm, regex=False, na=False)
         
         # Combine matches
         matches = self._movies[mask_title | mask_overview | mask_genre].copy()
@@ -910,32 +1008,63 @@ class Recommender:
         if len(matches) == 0:
             return []
             
-        # Heuristic Scoring (The "Secret Sauce")
-        # I tweaked these weights based on trial and error.
-        # - Exact Match (+50): If you type "Avatar", you want "Avatar".
-        # - Starts With (+20): "Ava..." should still show "Avatar".
-        # - Popularity (*2.0): Hits usually beat indie films in search intent.
-        
         matches["relevance"] = 0.0
         
         # Title Factors
-        m_title = matches["title"].str.lower()
-        matches.loc[m_title == q_lower, "relevance"] += 50.0
-        matches.loc[m_title.str.startswith(q_lower), "relevance"] += 20.0
+        m_title = text_column("title").loc[matches.index].str.lower()
+        m_title_norm = normalized_text_column("title").loc[matches.index]
+        exact_title = m_title == q_lower
+        if q_norm:
+            exact_title = exact_title | (m_title_norm == q_norm)
+        starts_with_boundary = (
+            exact_title
+            | m_title.str.startswith(f"{q_lower} ", na=False)
+            | m_title.str.startswith(f"{q_lower}:", na=False)
+            | m_title.str.startswith(f"{q_lower}-", na=False)
+        )
+        if q_norm:
+            starts_with_boundary = starts_with_boundary | m_title_norm.str.startswith(f"{q_norm} ", na=False)
+        starts_with_prefix = m_title.str.startswith(q_lower, na=False) & ~starts_with_boundary
+        if q_norm:
+            starts_with_prefix = starts_with_prefix | (m_title_norm.str.startswith(q_norm, na=False) & ~starts_with_boundary)
+        matches.loc[exact_title, "relevance"] += 50.0
+        matches.loc[starts_with_boundary, "relevance"] += 20.0
+        matches.loc[starts_with_prefix, "relevance"] += 8.0
         matches.loc[m_title.str.contains(q_lower, regex=False), "relevance"] += 10.0
+        if q_norm:
+            matches.loc[m_title_norm.str.contains(q_norm, regex=False), "relevance"] += 10.0
         
         # Other Factors
         # Note: We use the masks subsetted by the matches index
         matches.loc[mask_genre[matches.index], "relevance"] += 5.0
         matches.loc[mask_overview[matches.index], "relevance"] += 3.0
         
-        # Popularity Boost
-        matches["relevance"] += np.log1p(matches["popularity"]) * 2.0
+        # Ranking intent: exact title should find the canonical title first, but
+        # weak duplicate-title records should not bury major franchise entries.
+        popularity = numeric_column("popularity").loc[matches.index].clip(lower=0)
+        vote_count = numeric_column("vote_count").loc[matches.index].clip(lower=0)
+        matches["relevance"] += np.log1p(popularity) * 2.0
+        matches["relevance"] += np.log1p(vote_count) * 0.8
+
+        strong_exact_exists = bool((exact_title & ((vote_count >= 500) | (popularity >= 20))).any())
+        if strong_exact_exists:
+            weak_exact_duplicate = exact_title & (vote_count < 100) & (popularity < 15)
+            matches.loc[weak_exact_duplicate, "relevance"] -= 55.0
+
+        franchise_continuation = (
+            (
+                m_title.str.startswith(f"{q_lower}: ", na=False)
+                | m_title.str.startswith(f"{q_lower} - ", na=False)
+                | (m_title_norm.str.startswith(f"{q_norm} ", na=False) if q_norm else False)
+            )
+            & ((vote_count >= 250) | (popularity >= 20))
+        )
+        matches.loc[franchise_continuation, "relevance"] += 16.0
         
         # Sort by relevance
         matches = matches.sort_values("relevance", ascending=False).head(limit)
         
-        return matches.to_dict(orient="records")
+        return [self._clean_response_record(record) for record in matches.to_dict(orient="records")]
 
     def _metadata_recommend_by_index(self, movie_idx: int, n: int = 10) -> list[dict]:
         """Content-based fallback recommender when vector artifacts are unavailable."""
@@ -1099,7 +1228,8 @@ class Recommender:
             results.append(movie)
 
         results.sort(key=lambda item: float(item.get("similarity_score") or 0), reverse=True)
-        return self._apply_learned_ranker(results)[:n]
+        results = self._apply_learned_ranker(results)
+        return self._quality_gate_item_recommendations(results, query_movie, n)[:n]
     
     def recommend_by_index(self, movie_idx: int, n: int = 10) -> list[dict]:
         """
@@ -1292,6 +1422,7 @@ class Recommender:
         # Sort by boosted score
         results.sort(key=lambda x: x["similarity_score"], reverse=True)
         results = self._apply_learned_ranker(results)
+        results = self._quality_gate_item_recommendations(results, query_movie, n)
         llm_window = int(os.getenv("NOVA_LLM_RERANK_CANDIDATES", "12"))
         top_candidates = results[: max(1, min(20, llm_window))]
         
@@ -1537,7 +1668,7 @@ Do not write any other text except the JSON object.
         alpha = 0.62 if normalized_dense else 0.0
         ranked_candidates = []
         for idx in candidate_indices:
-            movie = self._movies.iloc[idx].to_dict()
+            movie = self._clean_response_record(self._movies.iloc[idx].to_dict())
             sparse_score = normalized_sparse.get(idx, 0.0)
             dense_score = normalized_dense.get(idx, 0.0)
             metadata_score = self._popularity_quality_score(movie)
@@ -1640,12 +1771,15 @@ def _get_sbert_model():
 
 # Global singleton instance (lazy loaded)
 _recommender: Recommender | None = None
+_recommender_lock = Lock()
 
 
 def get_recommender() -> Recommender:
     """Get or create the global Recommender instance."""
     global _recommender
     if _recommender is None:
-        _recommender = Recommender().load()
+        with _recommender_lock:
+            if _recommender is None:
+                _recommender = Recommender().load()
     return _recommender
 

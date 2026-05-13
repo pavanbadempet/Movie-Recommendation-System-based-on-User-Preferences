@@ -310,6 +310,112 @@ class TestRecommender:
         assert len(results) == 1
         assert results[0]["title"] == "Avatar"
 
+    def test_search_movies_handles_minimal_catalog_columns(self):
+        """Search should degrade gracefully when optional serving columns are absent."""
+        import backend.recommender as rec
+
+        r = rec.Recommender()
+        r._movies = pd.DataFrame(
+            {
+                "id": [1, 2],
+                "title": ["Avatar", "Untitled Drama"],
+            }
+        )
+
+        results = r.search_movies("avatar")
+
+        assert len(results) == 1
+        assert results[0]["id"] == 1
+        assert results[0]["title"] == "Avatar"
+        assert "relevance" in results[0]
+
+    def test_search_promotes_canonical_franchise_over_weak_duplicate_titles(self):
+        """Exact-title duplicates should not bury high-signal franchise continuations."""
+        import backend.recommender as rec
+
+        r = rec.Recommender()
+        r._movies = pd.DataFrame(
+            {
+                "id": [19995, 1096978, 83533, 76600, 1132450],
+                "title": [
+                    "Avatar",
+                    "Avatar",
+                    "Avatar: Fire and Ash",
+                    "Avatar: The Way of Water",
+                    "Avataro Sentai Donbrothers",
+                ],
+                "overview": [""] * 5,
+                "genres": ["Science Fiction"] * 5,
+                "popularity": [30.47, 4.63, 210.38, 27.04, 4.76],
+                "vote_count": [33849, 46, 2774, 14019, 13],
+            }
+        )
+
+        results = r.search_movies("Avatar", limit=4)
+
+        assert [item["id"] for item in results[:3]] == [19995, 83533, 76600]
+        assert 1096978 not in [item["id"] for item in results[:3]]
+        assert 1132450 not in [item["id"] for item in results[:3]]
+
+    def test_search_normalizes_title_punctuation(self):
+        """Search should match user punctuation to catalog punctuation variants."""
+        import backend.recommender as rec
+
+        r = rec.Recommender()
+        r._movies = pd.DataFrame(
+            {
+                "id": [10681, 22192],
+                "title": ["WALL-E", "The Jonsson Gang Turns Up Again"],
+                "overview": ["Robot love story", "Gang comedy"],
+                "genres": ["Animation, Science Fiction", "Comedy"],
+                "popularity": [28.0, 1.0],
+                "vote_count": [19000, 100],
+            }
+        )
+
+        hyphen_results = r.search_movies("WALL-E", limit=1)
+        space_results = r.search_movies("wall e", limit=1)
+
+        assert hyphen_results[0]["id"] == 10681
+        assert space_results[0]["id"] == 10681
+
+    def test_quality_gate_drops_low_rated_recommendation_drift(self):
+        """MMR should not rescue weak low-rated candidates when enough strong matches exist."""
+        import backend.recommender as rec
+
+        r = rec.Recommender()
+        query = {"title": "Avatar", "genres": "Science Fiction, Action, Adventure"}
+        candidates = [
+            {
+                "id": 1,
+                "title": "Strong Sci-Fi Match",
+                "genres": "Science Fiction, Adventure",
+                "vote_average": 7.8,
+                "vote_count": 5000,
+                "retrieval_signals": {"semantic_twin": 0.7},
+            },
+            {
+                "id": 2,
+                "title": "Low Rated Drift",
+                "genres": "Action, Adventure, Fantasy",
+                "vote_average": 4.6,
+                "vote_count": 4000,
+                "retrieval_signals": {"semantic_twin": 0.65},
+            },
+            {
+                "id": 3,
+                "title": "Another Sci-Fi Match",
+                "genres": "Science Fiction, Action",
+                "vote_average": 6.8,
+                "vote_count": 900,
+                "retrieval_signals": {"semantic_twin": 0.64},
+            },
+        ]
+
+        gated = r._quality_gate_item_recommendations(candidates, query, n=2)
+
+        assert [item["title"] for item in gated] == ["Strong Sci-Fi Match", "Another Sci-Fi Match"]
+
     def test_recommend_by_id(self, mock_recommender, monkeypatch):
         """recommend_by_id returns similar movies."""
         import backend.recommender as rec

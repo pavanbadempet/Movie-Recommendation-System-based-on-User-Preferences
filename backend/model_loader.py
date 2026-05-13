@@ -10,6 +10,8 @@ from pathlib import Path
 import urllib.request
 import shutil
 
+import numpy as np
+
 logger = logging.getLogger(__name__)
 
 # Model hosting configuration
@@ -159,6 +161,24 @@ def _load_manifest_checksums(models_dir: Path) -> dict[str, dict]:
     return manifest.get("artifact_checksums") or {}
 
 
+def _load_manifest_contract(models_dir: Path) -> dict[str, object]:
+    manifest_path = models_dir / "pipeline_manifest.json"
+    if not manifest_path.exists():
+        return {}
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.warning("Could not parse pipeline manifest %s: %s", manifest_path, exc)
+        return {}
+
+    contract = dict(manifest.get("serving_contract") or {})
+    quality = manifest.get("quality") or {}
+    for key in ("movie_rows", "embedding_rows", "faiss_index_size", "movie_id_map_rows", "movie_id_sha256"):
+        if contract.get(key) is None and quality.get(key) is not None:
+            contract[key] = quality.get(key)
+    return contract
+
+
 def _manifest_entry_matches(file_path: Path, manifest_entry: dict | None) -> bool:
     """Return true when the local artifact matches the manifest size/checksum."""
     if not manifest_entry or not file_path.exists() or not file_path.is_file():
@@ -168,6 +188,84 @@ def _manifest_entry_matches(file_path: Path, manifest_entry: dict | None) -> boo
         return False
     expected_hash = manifest_entry.get("sha256")
     if expected_hash and expected_hash != file_sha256(file_path):
+        return False
+    return True
+
+
+def _manifest_contract_matches(file_path: Path, filename: str, manifest_contract: dict[str, object]) -> tuple[bool, str | None]:
+    """Validate local artifact row counts against the serving contract when available."""
+    if not manifest_contract:
+        return True, None
+
+    try:
+        if filename == "movie_ids.npy":
+            expected_rows = manifest_contract.get("movie_id_map_rows") or manifest_contract.get("movie_rows")
+            movie_ids = np.load(file_path, mmap_mode="r")
+            actual_rows = int(len(movie_ids))
+            if expected_rows is not None and actual_rows != int(expected_rows):
+                return False, f"pipeline manifest movie_id_map_rows ({expected_rows}) != local rows ({actual_rows})"
+            expected_hash = manifest_contract.get("movie_id_sha256")
+            if expected_hash:
+                actual_hash = hashlib.sha256(np.asarray(movie_ids, dtype=np.int64).astype("<i8", copy=False).tobytes()).hexdigest()
+                if actual_hash != expected_hash:
+                    return False, "pipeline manifest movie_id_sha256 does not match local movie_ids.npy"
+            return True, None
+
+        if filename == "sbert_embeddings.npy":
+            expected_rows = manifest_contract.get("embedding_rows")
+            if expected_rows is None:
+                return True, None
+            vectors = np.load(file_path, mmap_mode="r")
+            actual_rows = int(vectors.shape[0]) if len(vectors.shape) >= 1 else 0
+            if actual_rows != int(expected_rows):
+                return False, f"pipeline manifest embedding_rows ({expected_rows}) != local rows ({actual_rows})"
+            return True, None
+
+        if filename == "faiss.index":
+            expected_rows = manifest_contract.get("faiss_index_size")
+            if expected_rows is None:
+                return True, None
+            import faiss
+
+            index = faiss.read_index(str(file_path))
+            actual_rows = int(index.ntotal)
+            if actual_rows != int(expected_rows):
+                return False, f"pipeline manifest faiss_index_size ({expected_rows}) != local rows ({actual_rows})"
+            return True, None
+    except Exception as exc:
+        return False, f"could not validate {filename} against the pipeline manifest: {exc}"
+
+    return True, None
+
+
+def _env_truthy(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _minimum_valid_size(filename: str) -> int:
+    if filename.endswith(".json"):
+        return 1
+    if filename.endswith(".npy"):
+        return 64
+    return 1000
+
+
+def _local_artifact_is_valid(file_path: Path, filename: str) -> bool:
+    """Detect usable local artifacts without rejecting tiny but valid test fixtures."""
+    if not file_path.exists() or not file_path.is_file():
+        return False
+    if file_path.stat().st_size < _minimum_valid_size(filename):
+        return False
+
+    try:
+        with file_path.open("rb") as handle:
+            header = handle.read(128)
+    except OSError:
+        return False
+
+    if header.startswith(b"version https://git-lfs"):
+        return False
+    if filename.endswith(".npy") and not header.startswith(b"\x93NUMPY"):
         return False
     return True
 
@@ -185,19 +283,25 @@ def ensure_model_files(models_dir: Path, selected_files: set[str] | list[str] | 
         force_refresh
         or os.getenv("NOVA_REFRESH_PIPELINE_MANIFEST", "").strip().lower() in {"1", "true", "yes", "on"}
     )
+    downloads_disabled = _env_truthy("NOVA_DISABLE_MODEL_DOWNLOADS")
     selected = set(selected_files) if selected_files is not None else None
 
     if selected is None or "pipeline_manifest.json" in selected:
         manifest_config = MODEL_FILES.get("pipeline_manifest.json", {})
         manifest_path = (models_dir / manifest_config.get("dest", "pipeline_manifest.json")).resolve()
         if not manifest_path.exists() or refresh_manifest:
-            results["pipeline_manifest.json"] = download_file(
-                manifest_config.get("url"),
-                manifest_path,
-                required=bool(manifest_config.get("required", False)),
-            )
+            if downloads_disabled:
+                logger.info("Skipping pipeline_manifest.json download because NOVA_DISABLE_MODEL_DOWNLOADS is set.")
+                results["pipeline_manifest.json"] = False
+            else:
+                results["pipeline_manifest.json"] = download_file(
+                    manifest_config.get("url"),
+                    manifest_path,
+                    required=bool(manifest_config.get("required", False)),
+                )
 
     manifest_checksums = _load_manifest_checksums(models_dir)
+    manifest_contract = _load_manifest_contract(models_dir)
     
     for filename, config in MODEL_FILES.items():
         if selected is not None and filename not in selected:
@@ -220,25 +324,33 @@ def ensure_model_files(models_dir: Path, selected_files: set[str] | list[str] | 
             required = True
             file_path = models_dir / filename
 
-        min_valid_size = 1 if filename.endswith(".json") else 1000
+        local_valid = _local_artifact_is_valid(file_path, filename)
             
         manifest_entry = manifest_checksums.get(filename)
         manifest_mismatch = False
-        if file_path.exists() and file_path.stat().st_size >= min_valid_size and manifest_entry:
-            if _manifest_entry_matches(file_path, manifest_entry) and not force_refresh:
-                logger.info("%s matches pipeline manifest (%sMB)", filename, file_path.stat().st_size // (1024 * 1024))
-                results[filename] = True
-                continue
-            logger.info("%s exists but does not match pipeline manifest; re-downloading.", filename)
-            manifest_mismatch = True
+        if local_valid and manifest_entry:
+            if _manifest_entry_matches(file_path, manifest_entry):
+                if not force_refresh:
+                    logger.info("%s matches pipeline manifest (%sMB)", filename, file_path.stat().st_size // (1024 * 1024))
+                    results[filename] = True
+                    continue
+            else:
+                logger.info("%s exists but does not match pipeline manifest; re-downloading.", filename)
+                manifest_mismatch = True
+
+        contract_mismatch = False
+        contract_matches, contract_reason = _manifest_contract_matches(file_path, filename, manifest_contract) if local_valid else (True, None)
+        if local_valid and not manifest_mismatch and not contract_matches:
+            logger.info("%s exists but violates the pipeline manifest contract; re-downloading. Reason: %s", filename, contract_reason)
+            contract_mismatch = True
 
         # Skip if file already exists and is valid
-        if file_path.exists() and file_path.stat().st_size >= min_valid_size and not force_refresh and not manifest_mismatch:
+        if local_valid and not force_refresh and not manifest_mismatch and not contract_mismatch:
             logger.info(f"{filename} already exists ({file_path.stat().st_size // (1024*1024)}MB)")
             results[filename] = True
             continue
 
-        if file_path.exists() and file_path.stat().st_size >= min_valid_size and force_refresh:
+        if local_valid and force_refresh and not manifest_mismatch and not contract_mismatch:
             # Check if remote file has changed (size-based cache invalidation)
             if url:
                 try:
@@ -262,14 +374,20 @@ def ensure_model_files(models_dir: Path, selected_files: set[str] | list[str] | 
                 results[filename] = True
                 continue
         
+        if downloads_disabled:
+            log_fn = logger.warning if required else logger.info
+            log_fn("Skipping %s download because NOVA_DISABLE_MODEL_DOWNLOADS is set.", filename)
+            results[filename] = False
+            continue
+
         # Try to download if URL is configured
         if url:
             results[filename] = download_file(url, file_path, required=required)
         else:
             # No URL configured, check if file exists locally
             if file_path.exists():
-                # Might be an LFS pointer file - check size
-                if file_path.stat().st_size < min_valid_size:
+                # Might be an LFS pointer file or malformed artifact.
+                if not _local_artifact_is_valid(file_path, filename):
                     logger.warning(f"⚠ {filename} appears to be an LFS pointer. Configure {filename.upper().replace('.', '_')}_URL in environment.")
                     results[filename] = False
                 else:
@@ -299,6 +417,9 @@ def default_artifacts_for_serving_profile() -> set[str]:
     if profile in {"lite", "light", "low-memory", "metadata"} or low_memory or (profile == "auto" and render_like):
         return {
             "movies_transformed.parquet",
+            "semantic_twins.parquet",
+            "semantic_twin_summary.json",
+            "movie_ids.npy",
             "pipeline_manifest.json",
             "nova_ranker.joblib",
             "nova_ranker.joblib.metadata.json",

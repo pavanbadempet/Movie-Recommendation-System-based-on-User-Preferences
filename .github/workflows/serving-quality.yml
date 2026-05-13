@@ -1,0 +1,104 @@
+name: Serving Quality Gate
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Sync to Hugging Face Hub"]
+    types:
+      - completed
+  schedule:
+    # Run after the daily refresh window so serving regressions are visible.
+    - cron: '30 8 * * *'
+
+env:
+  PYTHON_VERSION: '3.11'
+  NOVA_SERVING_URL: https://pavanbadempet-movie-rec-api.hf.space
+  NOVA_RENDER_GATEWAY_URL: https://movie-recs-api-5qvy.onrender.com
+
+concurrency:
+  group: serving-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  live-serving-quality:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Determine app revision wait target
+        id: app_revision
+        shell: bash
+        run: |
+          if git rev-parse HEAD^ >/dev/null 2>&1; then
+            changed_files="$(git diff --name-only HEAD^ HEAD)"
+          else
+            changed_files="$(git ls-files)"
+          fi
+
+          expected_app_commit=""
+          if echo "$changed_files" | grep -E '^(backend/|etl/|data/evaluation/|Dockerfile|requirements\.txt|streamlit_app\.py|render\.yaml|REVISION)$' >/dev/null; then
+            expected_app_commit="$GITHUB_SHA"
+          fi
+          echo "expected_app_commit=$expected_app_commit" >> "$GITHUB_OUTPUT"
+
+      - name: Evaluate live serving quality
+        env:
+          EXPECTED_APP_COMMIT: ${{ steps.app_revision.outputs.expected_app_commit }}
+        run: |
+          expected_args=()
+          if [ -n "$EXPECTED_APP_COMMIT" ]; then
+            expected_args+=(--expected-app-commit "$EXPECTED_APP_COMMIT")
+          fi
+          python scripts/evaluate_live_serving.py \
+            --base-url "$NOVA_SERVING_URL" \
+            --output reports/live_serving_quality.json \
+            --timeout 240 \
+            --retries 40 \
+            --retry-delay-seconds 30 \
+            "${expected_args[@]}" \
+            --k 10 \
+            --min-search-top1-hit-rate 0.98 \
+            --min-search-hit-rate 1.0 \
+            --min-recommendation-benchmark-pass-rate 0.80 \
+            --min-recommendation-benchmark-hit-rate 0.90 \
+            --max-recommendation-benchmark-bad-case-rate 0.0 \
+            --max-bad-match-rate 0.05 \
+            --min-hit-rate 0.95 \
+            --min-mrr 0.35 \
+            --min-ndcg 0.25 \
+            --min-explanation-coverage 0.90 \
+            --fail-on-threshold
+
+      - name: Evaluate Render gateway quality
+        run: |
+          python scripts/evaluate_live_serving.py \
+            --base-url "$NOVA_RENDER_GATEWAY_URL" \
+            --output reports/render_gateway_quality.json \
+            --timeout 60 \
+            --retries 20 \
+            --retry-delay-seconds 30 \
+            --k 10 \
+            --skip-search-benchmark \
+            --skip-recommendation-benchmark \
+            --skip-semantic-benchmark \
+            --allow-degraded-artifact-health \
+            --fail-on-threshold
+
+      - name: Upload quality report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-serving-quality
+          path: |
+            reports/live_serving_quality.json
+            reports/render_gateway_quality.json
+          if-no-files-found: ignore
