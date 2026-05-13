@@ -117,7 +117,7 @@ if not ALLOWED_ORIGINS:
     ]
 ALLOWED_ORIGIN_REGEX = os.getenv(
     "ALLOWED_ORIGIN_REGEX",
-    r"https://.*\.(vercel\.app|pages\.dev|netlify\.app)",
+    r"https://([a-zA-Z0-9-]+\.)+(vercel\.app|pages\.dev|netlify\.app|github\.io)",
 )
 
 app.add_middleware(
