@@ -8,6 +8,7 @@ def _args(
     skip_semantic_benchmark: bool = False,
     allow_degraded_artifact_health: bool = False,
     skip_search_benchmark: bool = True,
+    skip_recommendation_benchmark: bool = False,
     search_benchmark_path=None,
 ) -> Namespace:
     return Namespace(
@@ -38,6 +39,10 @@ def _args(
         ),
         min_required_recommendation_hits=2,
         blocked_recommendation_titles="Small Soldiers,Supergirl,Barbarella,The Last Airbender",
+        min_recommendation_benchmark_pass_rate=0.80,
+        min_recommendation_benchmark_hit_rate=0.90,
+        max_recommendation_benchmark_bad_case_rate=0.0,
+        skip_recommendation_benchmark=skip_recommendation_benchmark,
         max_bad_match_rate=0.05,
         min_hit_rate=0.95,
         min_mrr=0.35,
@@ -80,6 +85,19 @@ def _healthy_payload(path: str):
                 "top1_hit_rate": 1.0,
                 "hit_rate_at_k": 1.0,
                 "blocked_hit_case_rate": 0.0,
+            },
+        }
+    if path.startswith("/v1/evaluation/recommendation-benchmark?"):
+        return {
+            "status": "ok",
+            "case_count": 1,
+            "evaluated_case_count": 1,
+            "metrics": {
+                "case_pass_rate": 1.0,
+                "good_hit_case_rate": 1.0,
+                "bad_case_rate_at_k": 0.0,
+                "mrr_at_k": 0.9,
+                "ndcg_at_k": 0.8,
             },
         }
     raise AssertionError(f"Unexpected path: {path}")
@@ -129,6 +147,39 @@ def test_live_serving_gate_rejects_bad_recommendation_drift(monkeypatch):
     assert report["status"] == "failed"
     assert any("required semantic hits" in failure for failure in report["failures"])
     assert any("blocked drift titles" in failure for failure in report["failures"])
+
+
+def test_live_serving_gate_rejects_recommendation_benchmark_regression(monkeypatch):
+    def fake_get_json(base_url, path, timeout):
+        if path.startswith("/v1/recommendations/id/19995?"):
+            return {
+                "recommendations": [
+                    {"title": "Avatar: The Way of Water"},
+                    {"title": "The Abyss"},
+                    {"title": "Pacific Rim"},
+                    {"title": "Dune"},
+                    {"title": "Prometheus"},
+                ]
+            }
+        if path.startswith("/v1/evaluation/recommendation-benchmark?"):
+            return {
+                "status": "needs_attention",
+                "evaluated_case_count": 35,
+                "metrics": {
+                    "case_pass_rate": 0.51,
+                    "good_hit_case_rate": 0.82,
+                    "bad_case_rate_at_k": 0.14,
+                },
+            }
+        return _healthy_payload(path)
+
+    monkeypatch.setattr(live, "_get_json", fake_get_json)
+
+    report = live.evaluate_live_serving(_args())
+
+    assert report["status"] == "failed"
+    assert any("recommendation_benchmark_case_pass_rate" in failure for failure in report["failures"])
+    assert any("recommendation_benchmark_bad_case_rate_at_k" in failure for failure in report["failures"])
 
 
 def test_live_serving_gate_rejects_search_title_regression(monkeypatch):
@@ -247,6 +298,32 @@ def test_live_serving_gate_can_skip_semantic_benchmark_for_lite_gateway(monkeypa
     assert report["status"] == "ok"
     assert report["semantic_benchmark"]["status"] == "skipped"
     assert not any(path.startswith("/v1/evaluation/semantic-benchmark") for path in seen_paths)
+
+
+def test_live_serving_gate_can_skip_recommendation_benchmark_for_lite_gateway(monkeypatch):
+    seen_paths = []
+
+    def fake_get_json(base_url, path, timeout):
+        seen_paths.append(path)
+        if path.startswith("/v1/recommendations/id/19995?"):
+            return {
+                "recommendations": [
+                    {"title": "Avatar: The Way of Water"},
+                    {"title": "The Abyss"},
+                    {"title": "Pacific Rim"},
+                    {"title": "Dune"},
+                    {"title": "Prometheus"},
+                ]
+            }
+        return _healthy_payload(path)
+
+    monkeypatch.setattr(live, "_get_json", fake_get_json)
+
+    report = live.evaluate_live_serving(_args(skip_recommendation_benchmark=True))
+
+    assert report["status"] == "ok"
+    assert report["recommendation_benchmark"]["status"] == "skipped"
+    assert not any(path.startswith("/v1/evaluation/recommendation-benchmark") for path in seen_paths)
 
 
 def test_live_serving_gate_can_allow_degraded_artifacts_for_gateway(monkeypatch):
