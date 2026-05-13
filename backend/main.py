@@ -106,7 +106,6 @@ def app_metadata() -> dict[str, str | None]:
         "RENDER_GIT_COMMIT",
         "SOURCE_VERSION",
         "GITHUB_SHA",
-        "COMMIT_SHA",
     ):
         value = os.getenv(env_name, "").strip()
         if value:
@@ -122,6 +121,11 @@ def app_metadata() -> dict[str, str | None]:
             if value:
                 commit = value
                 source = "REVISION"
+    if not commit:
+        value = os.getenv("COMMIT_SHA", "").strip()
+        if value:
+            commit = value
+            source = "COMMIT_SHA"
     return {
         "version": APP_VERSION,
         "commit": commit[:12] if commit else None,
