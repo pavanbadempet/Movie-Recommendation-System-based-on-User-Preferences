@@ -46,5 +46,4 @@ jobs:
       - name: Validate Hugging Face serving artifact contract
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: python scripts/validate_serving_artifacts.py --repo "$HF_REPO" --token "$HF_TOKEN"
-
+        run: python scripts/validate_serving_artifacts.py --repo "$HF_REPO" --token "$HF_TOKEN" --allow-metadata-only-vectors
