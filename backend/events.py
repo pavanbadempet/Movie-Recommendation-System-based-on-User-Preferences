@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import re
 import uuid
@@ -33,6 +34,7 @@ ALLOWED_EVENT_TYPES = {
     "search",
     "click",
     "rating",
+    "recommendation_request",
     "recommendation_impression",
 }
 
@@ -105,6 +107,32 @@ def _coerce_float(value: Any, field_name: str) -> float:
         raise ValueError(f"{field_name} must be numeric") from exc
 
 
+def _json_safe(value: Any) -> Any:
+    """Convert common runtime values into JSON-safe metadata."""
+    if value is None or isinstance(value, str | bool | int):
+        return value
+    if isinstance(value, float):
+        if math.isnan(value) or math.isinf(value):
+            return None
+        return value
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, set):
+        return sorted((_json_safe(item) for item in value), key=str)
+    if hasattr(value, "item"):
+        try:
+            return _json_safe(value.item())
+        except Exception:
+            pass
+    return str(value)
+
+
 def normalize_event(event: dict[str, Any]) -> dict[str, Any]:
     """Validate and normalize a raw behavior event before persistence."""
     event_type = str(event.get("event_type", "")).strip().lower()
@@ -150,7 +178,7 @@ def normalize_event(event: dict[str, Any]) -> dict[str, Any]:
     if metadata is not None:
         if not isinstance(metadata, dict):
             raise ValueError("metadata must be an object")
-        normalized["metadata"] = metadata
+        normalized["metadata"] = _json_safe(metadata)
 
     return normalized
 
@@ -427,6 +455,9 @@ def aggregate_behavior_features(
         if event_type == "search" and query_text:
             search_counts[str(query_text).strip().lower()] += 1
 
+        if event_type == "recommendation_request":
+            continue
+
         movie_id = event.get("source_content_id") or event.get("movie_id") or event.get("content_id")
         if movie_id is None:
             continue
@@ -501,6 +532,81 @@ def aggregate_behavior_features(
     }
 
 
+def summarize_recommendation_events(
+    event_path: str | Path | None = None,
+    limit: int = 20,
+) -> dict[str, Any]:
+    """Summarize request/impression events for serving-quality analytics."""
+    storage = event_storage_status(event_path)
+    request_ids: set[str] = set()
+    request_count = 0
+    impression_count = 0
+    click_count = 0
+    stage_counts: Counter[str] = Counter()
+    rank_counts: Counter[str] = Counter()
+    seed_counts: Counter[str] = Counter()
+    recommendation_counts: Counter[str] = Counter()
+    request_impressions: Counter[str] = Counter()
+
+    for event in iter_events(event_path):
+        event_type = str(event.get("event_type", "")).lower()
+        request_id = str(event.get("request_id") or "")
+        metadata = event.get("metadata") if isinstance(event.get("metadata"), dict) else {}
+
+        if event_type == "recommendation_request":
+            request_count += 1
+            if request_id:
+                request_ids.add(request_id)
+            query_movie = metadata.get("query_movie") if isinstance(metadata.get("query_movie"), dict) else {}
+            seed_id = query_movie.get("id") or event.get("movie_id")
+            if seed_id is not None:
+                seed_counts[str(seed_id)] += 1
+
+        elif event_type == "recommendation_impression":
+            impression_count += 1
+            if request_id:
+                request_ids.add(request_id)
+                request_impressions[request_id] += 1
+            movie_id = event.get("movie_id") or metadata.get("movie_id")
+            if movie_id is not None:
+                recommendation_counts[str(movie_id)] += 1
+            stage = metadata.get("retrieval_stage")
+            if stage:
+                stage_counts[str(stage)] += 1
+            rank = metadata.get("rank")
+            if rank is not None:
+                rank_counts[str(rank)] += 1
+
+        elif event_type == "click" and request_id:
+            click_count += 1
+
+    distinct_request_count = len(request_ids)
+    denominator = distinct_request_count or request_count or 1
+    return {
+        "generated_at": utc_now(),
+        "event_store": storage["event_store"],
+        "durable": storage["durable"],
+        "event_table": storage["event_table"],
+        "event_log_path": str(get_events_path(event_path)),
+        "request_count": request_count,
+        "distinct_request_count": distinct_request_count,
+        "impression_count": impression_count,
+        "click_count": click_count,
+        "click_through_rate": round(click_count / max(impression_count, 1), 4),
+        "avg_impressions_per_request": round(impression_count / denominator, 4),
+        "retrieval_stage_counts": dict(stage_counts.most_common(max(limit, 0))),
+        "rank_position_counts": dict(rank_counts.most_common(max(limit, 0))),
+        "top_seed_movies": [
+            {"movie_id": movie_id, "request_count": count}
+            for movie_id, count in seed_counts.most_common(max(limit, 0))
+        ],
+        "top_recommended_movies": [
+            {"movie_id": movie_id, "impression_count": count}
+            for movie_id, count in recommendation_counts.most_common(max(limit, 0))
+        ],
+    }
+
+
 def build_user_behavior_profile(
     user_id: str,
     event_path: str | Path | None = None,
@@ -525,6 +631,8 @@ def build_user_behavior_profile(
         event_type = str(event.get("event_type", "")).lower()
         if event_type == "search" and event.get("query_text"):
             query_counts[str(event["query_text"]).strip().lower()] += 1
+            continue
+        if event_type == "recommendation_request":
             continue
 
         movie_id = event.get("movie_id") or event.get("source_content_id")
