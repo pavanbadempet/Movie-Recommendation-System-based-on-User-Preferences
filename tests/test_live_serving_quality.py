@@ -1,0 +1,99 @@
+from argparse import Namespace
+
+from scripts import evaluate_live_serving as live
+
+
+def _args() -> Namespace:
+    return Namespace(
+        base_url="https://example.test",
+        timeout=1,
+        retries=1,
+        retry_delay_seconds=0,
+        k=10,
+        search_query="Avatar",
+        search_limit=5,
+        min_search_results=1,
+        expected_search_title="Avatar",
+        recommendation_smoke_movie_id=19995,
+        recommendation_smoke_k=10,
+        min_recommendation_results=5,
+        required_recommendation_titles=(
+            "Avatar: The Way of Water,Avatar: Fire and Ash,The Abyss,Pacific Rim,Dune"
+        ),
+        min_required_recommendation_hits=2,
+        blocked_recommendation_titles="Small Soldiers,Supergirl,Barbarella,The Last Airbender",
+        max_bad_match_rate=0.05,
+        min_hit_rate=0.95,
+        min_mrr=0.35,
+        min_ndcg=0.25,
+        min_explanation_coverage=0.90,
+        fail_on_threshold=True,
+    )
+
+
+def _healthy_payload(path: str):
+    if path == "/health":
+        return {"status": "healthy", "movie_count": 75253}
+    if path == "/v1/artifacts/health":
+        return {"status": "ready"}
+    if path.startswith("/v1/search?"):
+        return [{"id": 19995, "title": "Avatar"}]
+    if path.startswith("/v1/evaluation/semantic-benchmark?"):
+        return {
+            "status": "ok",
+            "metrics": {
+                "bad_match_rate_at_k": 0.0,
+                "hit_rate_at_k": 1.0,
+                "mrr_at_k": 0.9,
+                "ndcg_at_k": 0.6,
+                "explanation_coverage": 1.0,
+            },
+        }
+    raise AssertionError(f"Unexpected path: {path}")
+
+
+def test_live_serving_gate_accepts_good_recommendation_smoke(monkeypatch):
+    def fake_get_json(base_url, path, timeout):
+        if path.startswith("/v1/recommendations/id/19995?"):
+            return {
+                "recommendations": [
+                    {"title": "Avatar: The Way of Water"},
+                    {"title": "The Abyss"},
+                    {"title": "Pacific Rim"},
+                    {"title": "Dune"},
+                    {"title": "Prometheus"},
+                ]
+            }
+        return _healthy_payload(path)
+
+    monkeypatch.setattr(live, "_get_json", fake_get_json)
+
+    report = live.evaluate_live_serving(_args())
+
+    assert report["status"] == "ok"
+    assert report["recommendation_smoke_summary"]["required_hit_count"] == 4
+    assert report["recommendation_smoke_summary"]["blocked_hits"] == []
+
+
+def test_live_serving_gate_rejects_bad_recommendation_drift(monkeypatch):
+    def fake_get_json(base_url, path, timeout):
+        if path.startswith("/v1/recommendations/id/19995?"):
+            return {
+                "recommendations": [
+                    {"title": "Small Soldiers"},
+                    {"title": "Supergirl"},
+                    {"title": "Barbarella"},
+                    {"title": "Mystery Men"},
+                    {"title": "Kids Next Door: Operation Z.E.R.O."},
+                ]
+            }
+        return _healthy_payload(path)
+
+    monkeypatch.setattr(live, "_get_json", fake_get_json)
+
+    report = live.evaluate_live_serving(_args())
+
+    assert report["status"] == "failed"
+    assert any("required semantic hits" in failure for failure in report["failures"])
+    assert any("blocked drift titles" in failure for failure in report["failures"])
+
