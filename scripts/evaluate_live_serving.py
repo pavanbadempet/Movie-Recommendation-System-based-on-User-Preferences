@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 
-def _get_json(base_url: str, path: str, timeout: int) -> dict[str, Any]:
+def _get_json(base_url: str, path: str, timeout: int) -> Any:
     url = urllib.parse.urljoin(base_url.rstrip("/") + "/", path.lstrip("/"))
     request = urllib.request.Request(url, headers={"User-Agent": "nova-serving-quality-gate"})
     with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -38,11 +38,14 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
             "failures": [],
             "health": {},
             "artifact_health": {},
+            "search_smoke": [],
             "semantic_benchmark": {},
         }
         try:
             report["health"] = _get_json(args.base_url, "/health", args.timeout)
             report["artifact_health"] = _get_json(args.base_url, "/v1/artifacts/health", args.timeout)
+            search_params = urllib.parse.urlencode({"q": args.search_query, "limit": args.search_limit})
+            report["search_smoke"] = _get_json(args.base_url, f"/v1/search?{search_params}", args.timeout)
             report["semantic_benchmark"] = _get_json(
                 args.base_url,
                 f"/v1/evaluation/semantic-benchmark?k={args.k}",
@@ -62,6 +65,23 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
         artifact_status = report["artifact_health"].get("status")
         if artifact_status != "ready":
             _threshold_failure(f"/v1/artifacts/health status is {artifact_status}", report)
+
+        search_results = report.get("search_smoke")
+        if not isinstance(search_results, list):
+            _threshold_failure("/v1/search did not return a list", report)
+        elif len(search_results) < args.min_search_results:
+            _threshold_failure(
+                f"/v1/search returned {len(search_results)} results, below {args.min_search_results}",
+                report,
+            )
+        elif args.expected_search_title:
+            first_title = str((search_results[0] or {}).get("title") or "").lower()
+            expected_title = args.expected_search_title.lower()
+            if expected_title not in first_title:
+                _threshold_failure(
+                    f"/v1/search first result {first_title!r} does not contain {expected_title!r}",
+                    report,
+                )
 
         benchmark = report["semantic_benchmark"]
         if benchmark.get("status") not in {"ok", "needs_attention"}:
@@ -102,6 +122,10 @@ def main() -> None:
     parser.add_argument("--retries", type=int, default=12)
     parser.add_argument("--retry-delay-seconds", type=int, default=30)
     parser.add_argument("--k", type=int, default=10)
+    parser.add_argument("--search-query", default="Avatar")
+    parser.add_argument("--search-limit", type=int, default=5)
+    parser.add_argument("--min-search-results", type=int, default=1)
+    parser.add_argument("--expected-search-title", default="Avatar")
     parser.add_argument("--max-bad-match-rate", type=float, default=0.05)
     parser.add_argument("--min-hit-rate", type=float, default=0.95)
     parser.add_argument("--min-mrr", type=float, default=0.35)
@@ -120,6 +144,12 @@ def main() -> None:
         "failures": report.get("failures"),
         "artifact_status": (report.get("artifact_health") or {}).get("status"),
         "movie_count": (report.get("health") or {}).get("movie_count"),
+        "search_result_count": len(report.get("search_smoke") or []) if isinstance(report.get("search_smoke"), list) else None,
+        "search_first_title": (
+            (report.get("search_smoke") or [{}])[0].get("title")
+            if isinstance(report.get("search_smoke"), list) and report.get("search_smoke")
+            else None
+        ),
         "hit_rate_at_k": benchmark_metrics.get("hit_rate_at_k"),
         "mrr_at_k": benchmark_metrics.get("mrr_at_k"),
         "ndcg_at_k": benchmark_metrics.get("ndcg_at_k"),
