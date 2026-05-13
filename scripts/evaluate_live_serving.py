@@ -8,11 +8,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from backend.search_benchmark import DEFAULT_SEARCH_BENCHMARK_PATH, evaluate_search_benchmark
 
@@ -60,6 +65,13 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
             report["search_smoke"] = _get_json(args.base_url, f"/v1/search?{search_params}", args.timeout)
             if args.skip_search_benchmark:
                 report["search_benchmark"] = {"status": "skipped", "reason": "disabled by live gate"}
+            elif args.search_benchmark_mode == "endpoint":
+                benchmark_params = urllib.parse.urlencode({"k": args.search_benchmark_k})
+                report["search_benchmark"] = _get_json(
+                    args.base_url,
+                    f"/v1/evaluation/search-benchmark?{benchmark_params}",
+                    args.timeout,
+                )
             else:
                 report["search_benchmark"] = evaluate_search_benchmark(
                     lambda query, limit: _get_json(
@@ -267,6 +279,7 @@ def main() -> None:
     parser.add_argument("--min-required-search-hits", type=int, default=2)
     parser.add_argument("--search-benchmark-path", type=Path, default=DEFAULT_SEARCH_BENCHMARK_PATH)
     parser.add_argument("--search-benchmark-k", type=int, default=5)
+    parser.add_argument("--search-benchmark-mode", choices=["endpoint", "client"], default="endpoint")
     parser.add_argument("--min-search-top1-hit-rate", type=float, default=0.98)
     parser.add_argument("--min-search-hit-rate", type=float, default=1.0)
     parser.add_argument("--max-search-blocked-hit-case-rate", type=float, default=0.0)
