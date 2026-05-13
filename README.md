@@ -29,7 +29,7 @@ The current demo vertical is movies using TMDB/Kaggle data, but the architecture
 - Captures product events such as views, clicks, searches, ratings, and recommendation impressions.
 - Provides FastAPI endpoints for search, recommendations, events, and behavior features.
 - Protects product APIs with optional tenant API keys while keeping the public demo free.
-- Measures recommendation artifact quality with label-free coverage, vector, diversity, and genre-consistency checks.
+- Measures recommendation artifact quality with label-free coverage checks plus human-labeled search, semantic, and item-to-item benchmark gates.
 - Includes a Streamlit Nova Console for API context, usage, AI quality, event testing, and integration snippets.
 - Onboards customer catalogs through CSV preview, column mapping, quality profiling, and raw upload manifests.
 - Publishes model/artifact outputs through Hugging Face for lightweight serving on Render and Streamlit.
@@ -91,12 +91,14 @@ Core Delta tables include:
 - `backend/` - FastAPI serving, recommendation endpoints, event capture.
 - `backend/auth.py` - optional API-key tenant context for product/customer mode.
 - `backend/evaluation.py` - free-tier-safe recommendation quality metrics.
+- `backend/search_benchmark.py`, `backend/semantic_benchmark.py`, and `backend/recommendation_benchmark.py` - human-labeled serving quality gates.
 - `backend/catalogs.py` - customer CSV preview, quality profiling, and local upload manifests.
 - `backend/recommender.py` - hybrid AI search, dense item recommendations, reranking, behavior-aware personalization.
 - `backend/ranker.py` and `backend/ranker_training.py` - learned ranker artifact loading, training, and offline metrics.
 - `etl/pyspark_etl.py` - canonical PySpark batch pipeline.
 - `etl/delta_lakehouse.py` - Delta schemas, table contracts, time travel, CDF, audit helpers.
 - `etl/streaming_events.py` - Kafka to Delta Structured Streaming ingestion for behavior events.
+- `data/evaluation/` - benchmark labels for search relevance, semantic similarity, and recommendation product quality.
 - `notebooks/kaggle_etl_pipeline.py` - hosted Kaggle execution path for daily artifact refresh.
 - `airflow/dags/` - orchestration examples for mature deployments.
 - `docs/PRODUCT_DATA_PLATFORM_BLUEPRINT.md` - product and data platform architecture.
