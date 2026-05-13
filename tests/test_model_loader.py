@@ -48,3 +48,58 @@ def test_low_memory_profile_still_downloads_serving_metadata(monkeypatch):
     assert "movie_ids.npy" in selected
     assert "sbert_embeddings.npy" not in selected
     assert "faiss.index" not in selected
+
+
+def test_ensure_model_files_redownloads_vectors_when_manifest_rows_do_not_match(tmp_path, monkeypatch):
+    """Stale vector files must be refreshed when the manifest contract disagrees."""
+    import backend.model_loader as loader
+
+    np.save(tmp_path / "sbert_embeddings.npy", np.ones((2, 4), dtype=np.float32))
+    (tmp_path / "pipeline_manifest.json").write_text(
+        """
+        {
+          "serving_contract": {
+            "embedding_rows": 3
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    calls = []
+    monkeypatch.delenv("NOVA_DISABLE_MODEL_DOWNLOADS", raising=False)
+    monkeypatch.setattr(loader, "download_file", lambda *args, **kwargs: calls.append(args) or True)
+
+    result = loader.ensure_model_files(tmp_path, selected_files={"sbert_embeddings.npy"})
+
+    assert result["sbert_embeddings.npy"] is True
+    assert len(calls) == 1
+
+
+def test_ensure_model_files_redownloads_faiss_when_manifest_rows_do_not_match(tmp_path, monkeypatch):
+    """Stale FAISS indices must be refreshed when the manifest contract disagrees."""
+    import faiss
+    import backend.model_loader as loader
+
+    index = faiss.IndexFlatIP(4)
+    index.add(np.ones((2, 4), dtype=np.float32))
+    faiss.write_index(index, str(tmp_path / "faiss.index"))
+    (tmp_path / "pipeline_manifest.json").write_text(
+        """
+        {
+          "serving_contract": {
+            "faiss_index_size": 3
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    calls = []
+    monkeypatch.delenv("NOVA_DISABLE_MODEL_DOWNLOADS", raising=False)
+    monkeypatch.setattr(loader, "download_file", lambda *args, **kwargs: calls.append(args) or True)
+
+    result = loader.ensure_model_files(tmp_path, selected_files={"faiss.index"})
+
+    assert result["faiss.index"] is True
+    assert len(calls) == 1
