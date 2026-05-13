@@ -1,0 +1,50 @@
+name: Backfill Serving Artifacts
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/backfill-serving-artifacts.yml'
+      - 'scripts/backfill_serving_metadata_artifacts.py'
+      - 'scripts/validate_serving_artifacts.py'
+      - 'etl/semantic_artifacts.py'
+      - 'backend/semantic_twin.py'
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.11'
+  HF_REPO: pavanbadempet/movie-recs-models
+
+jobs:
+  backfill-serving-artifacts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install numpy pandas pyarrow huggingface_hub
+
+      - name: Backfill missing serving metadata artifacts
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python scripts/backfill_serving_metadata_artifacts.py \
+            --repo "$HF_REPO" \
+            --token "$HF_TOKEN" \
+            --upload-to-hf
+
+      - name: Validate Hugging Face serving artifact contract
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python scripts/validate_serving_artifacts.py --repo "$HF_REPO" --token "$HF_TOKEN"
+
