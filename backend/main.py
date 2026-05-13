@@ -5,6 +5,8 @@ Provides REST API endpoints for movie search and recommendations.
 import asyncio
 import logging
 import os
+import uuid
+from collections import Counter
 from contextlib import asynccontextmanager
 from typing import Literal, Optional
 from urllib.parse import quote
@@ -17,7 +19,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from backend.events import append_event, aggregate_behavior_features, build_user_behavior_profile, event_storage_status, get_events_path
+from backend.events import append_event, aggregate_behavior_features, build_user_behavior_profile, event_storage_status, get_events_path, summarize_recommendation_events
 from backend.evaluation import evaluate_recommendation_quality
 from backend.experiments import assign_experiment, attach_experiment, summarize_experiment_metrics
 from backend.auth import TenantContext, enforce_payload_context, resolve_tenant_context
@@ -180,12 +182,14 @@ class HealthResponse(BaseModel):
 
 class RecommendationResponse(BaseModel):
     """Recommendation response."""
+    request_id: Optional[str] = None
     query_movie: Movie
     recommendations: list[Movie]
 
 
 class EnrichedRecommendationResponse(BaseModel):
     """Enriched recommendation response with TMDB data."""
+    request_id: Optional[str] = None
     query_movie: Movie
     recommendations: list[EnrichedMovie]
 
@@ -197,6 +201,7 @@ class EventRequest(BaseModel):
         "search",
         "click",
         "rating",
+        "recommendation_request",
         "recommendation_impression",
     ]
     tenant_id: Optional[str] = None
@@ -264,6 +269,133 @@ def get_rec() -> Recommender:
         logger.info("Loading recommender on first request...")
         _recommender = get_recommender()
     return _recommender
+
+
+def _event_logging_enabled() -> bool:
+    """Return whether recommendation serving should emit analytics events."""
+    value = os.getenv("NOVA_RECOMMENDATION_EVENT_LOGGING", "true").strip().lower()
+    return value not in {"0", "false", "no", "off"}
+
+
+def _safe_float(value: object) -> float | None:
+    try:
+        if value is None:
+            return None
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number != number or number in {float("inf"), float("-inf")}:
+        return None
+    return round(number, 6)
+
+
+def _serving_lineage(rec: Recommender | None) -> dict:
+    """Return compact model/artifact lineage for recommendation events."""
+    if rec is None:
+        return {"serving_path": "remote_gateway"}
+
+    artifact_status = dict(getattr(rec, "_artifact_status", {}) or {})
+    manifest = dict(getattr(rec, "_artifact_manifest", {}) or {})
+    ranker = getattr(rec, "_learned_ranker", None)
+    ranker_metadata = dict(getattr(ranker, "metadata", {}) or {}) if ranker is not None else {}
+    return {
+        "serving_path": "local",
+        "manifest_run_id": artifact_status.get("manifest_run_id") or manifest.get("run_id"),
+        "manifest_run_date": artifact_status.get("manifest_run_date") or manifest.get("run_date"),
+        "vector_artifacts_ready": artifact_status.get("vector_artifacts_ready"),
+        "movie_count": artifact_status.get("movie_count"),
+        "vector_count": artifact_status.get("vector_count"),
+        "faiss_index_count": artifact_status.get("faiss_index_count"),
+        "ranker_available": ranker is not None,
+        "ranker_training_mode": ranker_metadata.get("training_mode"),
+        "ranker_promoted_at": ranker_metadata.get("promoted_at"),
+    }
+
+
+def _candidate_event_summary(candidate: dict, rank: int) -> dict:
+    """Return the event-safe summary for one ranked recommendation."""
+    return {
+        "rank": rank,
+        "movie_id": candidate.get("id"),
+        "title": candidate.get("title"),
+        "retrieval_stage": candidate.get("retrieval_stage"),
+        "similarity_score": _safe_float(candidate.get("similarity_score")),
+        "ranker_score": _safe_float(candidate.get("ranker_score")),
+        "retrieval_signals": candidate.get("retrieval_signals") or {},
+    }
+
+
+def record_recommendation_events(
+    *,
+    endpoint: str,
+    context: TenantContext,
+    query_movie: dict,
+    recommendations: list[dict],
+    rec: Recommender | None,
+    request_id: str | None = None,
+    user_id: str | None = None,
+    session_id: str | None = None,
+) -> str:
+    """Persist request and impression events for offline analysis and training labels."""
+    resolved_request_id = request_id or str(uuid.uuid4())
+    if not _event_logging_enabled():
+        return resolved_request_id
+
+    try:
+        lineage = _serving_lineage(rec)
+        ranked_candidates = [
+            _candidate_event_summary(candidate, rank)
+            for rank, candidate in enumerate(recommendations, start=1)
+        ]
+        stage_counts = Counter(
+            str(candidate.get("retrieval_stage") or "unknown")
+            for candidate in recommendations
+        )
+        common_payload = {
+            "tenant_id": context.tenant_id,
+            "catalog_id": context.catalog_id,
+            "user_id": user_id,
+            "session_id": session_id,
+            "request_id": resolved_request_id,
+            "source": "recommendation_api",
+        }
+        append_event(
+            {
+                **common_payload,
+                "event_type": "recommendation_request",
+                "movie_id": query_movie.get("id"),
+                "metadata": {
+                    "endpoint": endpoint,
+                    "query_movie": {
+                        "id": query_movie.get("id"),
+                        "title": query_movie.get("title"),
+                    },
+                    "requested_count": len(recommendations),
+                    "candidate_ids": [candidate.get("movie_id") for candidate in ranked_candidates],
+                    "retrieval_stage_counts": dict(stage_counts),
+                    "lineage": lineage,
+                },
+            }
+        )
+        for candidate in ranked_candidates:
+            append_event(
+                {
+                    **common_payload,
+                    "event_type": "recommendation_impression",
+                    "movie_id": candidate.get("movie_id"),
+                    "metadata": {
+                        "endpoint": endpoint,
+                        "seed_movie_id": query_movie.get("id"),
+                        "seed_title": query_movie.get("title"),
+                        "lineage": lineage,
+                        **candidate,
+                    },
+                }
+            )
+    except Exception as exc:
+        logger.warning("Recommendation event logging skipped: %s", exc)
+
+    return resolved_request_id
 
 
 async def remote_payload_or_raise(
@@ -848,20 +980,51 @@ async def get_behavior_features(
     return aggregate_behavior_features(limit=limit)
 
 
+@app.get("/v1/events/recommendation-analytics")
+async def recommendation_event_analytics(
+    limit: int = Query(default=20, ge=1, le=100, description="Maximum rows per analytics section"),
+    context: TenantContext = Depends(resolve_tenant_context),
+):
+    """Return request/impression analytics from the recommendation event ledger."""
+    record_usage(
+        "events.recommendation_analytics",
+        context.tenant_id,
+        context.catalog_id,
+        plan=context.plan,
+        authenticated=context.authenticated,
+    )
+    return summarize_recommendation_events(limit=limit)
+
+
 @app.get("/v1/recommendations/id/{movie_id}", response_model=RecommendationResponse)
 @app.get("/recommend/id/{movie_id}", response_model=RecommendationResponse)
 async def recommend_by_id(
     movie_id: int,
     n: int = Query(default=10, le=50, description="Number of recommendations"),
+    request_id: Optional[str] = Query(default=None, description="Optional client-generated request id"),
+    user_id: Optional[str] = Query(default=None, description="Optional user id for analytics attribution"),
+    session_id: Optional[str] = Query(default=None, description="Optional session id for analytics attribution"),
     context: TenantContext = Depends(resolve_tenant_context),
 ):
     """Get recommendations for a movie by TMDB ID."""
     remote_payload = await remote_payload_or_raise(
         f"/v1/recommendations/id/{movie_id}",
-        params={"n": n},
+        params={"n": n, "request_id": request_id, "user_id": user_id, "session_id": session_id},
         context=context,
     )
     if remote_payload is not None:
+        if isinstance(remote_payload, dict):
+            request_id = record_recommendation_events(
+                endpoint="recommendations.id.remote",
+                context=context,
+                query_movie=remote_payload.get("query_movie") or {"id": movie_id},
+                recommendations=list(remote_payload.get("recommendations") or []),
+                rec=None,
+                request_id=request_id,
+                user_id=user_id,
+                session_id=session_id,
+            )
+            remote_payload.setdefault("request_id", request_id)
         record_usage(
             "recommendations.id.remote",
             context.tenant_id,
@@ -880,6 +1043,16 @@ async def recommend_by_id(
     
     # Get recommendations
     recommendations = rec.recommend_by_id(movie_id, n=n)
+    request_id = record_recommendation_events(
+        endpoint="recommendations.id",
+        context=context,
+        query_movie=query_movie,
+        recommendations=recommendations,
+        rec=rec,
+        request_id=request_id,
+        user_id=user_id,
+        session_id=session_id,
+    )
     record_usage(
         "recommendations.id",
         context.tenant_id,
@@ -889,6 +1062,7 @@ async def recommend_by_id(
     )
     
     return RecommendationResponse(
+        request_id=request_id,
         query_movie=query_movie,
         recommendations=recommendations,
     )
@@ -899,15 +1073,30 @@ async def recommend_by_id(
 async def recommend_by_id_enriched(
     movie_id: int,
     n: int = Query(default=10, le=50, description="Number of recommendations"),
+    request_id: Optional[str] = Query(default=None, description="Optional client-generated request id"),
+    user_id: Optional[str] = Query(default=None, description="Optional user id for analytics attribution"),
+    session_id: Optional[str] = Query(default=None, description="Optional session id for analytics attribution"),
     context: TenantContext = Depends(resolve_tenant_context),
 ):
     """Get recommendations with FULL TMDB data (trailers, cast, etc) - PARALLEL FETCH."""
     remote_payload = await remote_payload_or_raise(
         f"/v1/recommendations/id/{movie_id}/enriched",
-        params={"n": n},
+        params={"n": n, "request_id": request_id, "user_id": user_id, "session_id": session_id},
         context=context,
     )
     if remote_payload is not None:
+        if isinstance(remote_payload, dict):
+            request_id = record_recommendation_events(
+                endpoint="recommendations.id.enriched.remote",
+                context=context,
+                query_movie=remote_payload.get("query_movie") or {"id": movie_id},
+                recommendations=list(remote_payload.get("recommendations") or []),
+                rec=None,
+                request_id=request_id,
+                user_id=user_id,
+                session_id=session_id,
+            )
+            remote_payload.setdefault("request_id", request_id)
         record_usage(
             "recommendations.id.enriched.remote",
             context.tenant_id,
@@ -926,6 +1115,16 @@ async def recommend_by_id_enriched(
     
     # Get recommendations
     recommendations = rec.recommend_by_id(movie_id, n=n)
+    request_id = record_recommendation_events(
+        endpoint="recommendations.id.enriched",
+        context=context,
+        query_movie=query_movie,
+        recommendations=recommendations,
+        rec=rec,
+        request_id=request_id,
+        user_id=user_id,
+        session_id=session_id,
+    )
     record_usage(
         "recommendations.id.enriched",
         context.tenant_id,
@@ -938,6 +1137,7 @@ async def recommend_by_id_enriched(
     enriched = await asyncio.gather(*[enrich_movie(m) for m in recommendations])
     
     return EnrichedRecommendationResponse(
+        request_id=request_id,
         query_movie=query_movie,
         recommendations=enriched,
     )
@@ -948,15 +1148,30 @@ async def recommend_by_id_enriched(
 async def recommend_by_title(
     title: str,
     n: int = Query(default=10, le=50, description="Number of recommendations"),
+    request_id: Optional[str] = Query(default=None, description="Optional client-generated request id"),
+    user_id: Optional[str] = Query(default=None, description="Optional user id for analytics attribution"),
+    session_id: Optional[str] = Query(default=None, description="Optional session id for analytics attribution"),
     context: TenantContext = Depends(resolve_tenant_context),
 ):
     """Get recommendations for a movie by title."""
     remote_payload = await remote_payload_or_raise(
         f"/v1/recommendations/title/{quote(title, safe='')}",
-        params={"n": n},
+        params={"n": n, "request_id": request_id, "user_id": user_id, "session_id": session_id},
         context=context,
     )
     if remote_payload is not None:
+        if isinstance(remote_payload, dict):
+            request_id = record_recommendation_events(
+                endpoint="recommendations.title.remote",
+                context=context,
+                query_movie=remote_payload.get("query_movie") or {"title": title},
+                recommendations=list(remote_payload.get("recommendations") or []),
+                rec=None,
+                request_id=request_id,
+                user_id=user_id,
+                session_id=session_id,
+            )
+            remote_payload.setdefault("request_id", request_id)
         record_usage(
             "recommendations.title.remote",
             context.tenant_id,
@@ -977,6 +1192,16 @@ async def recommend_by_title(
     
     # Get recommendations
     recommendations = rec.recommend_by_title(title, n=n)
+    request_id = record_recommendation_events(
+        endpoint="recommendations.title",
+        context=context,
+        query_movie=query_movie,
+        recommendations=recommendations,
+        rec=rec,
+        request_id=request_id,
+        user_id=user_id,
+        session_id=session_id,
+    )
     record_usage(
         "recommendations.title",
         context.tenant_id,
@@ -986,6 +1211,7 @@ async def recommend_by_title(
     )
     
     return RecommendationResponse(
+        request_id=request_id,
         query_movie=query_movie,
         recommendations=recommendations,
     )
@@ -997,6 +1223,8 @@ async def recommend_for_user(
     n: int = Query(default=10, le=50, description="Number of recommendations"),
     limit: Optional[int] = Query(default=None, ge=1, le=50, description="Alias for number of recommendations"),
     top_k: Optional[int] = Query(default=None, ge=1, le=50, description="Alias for number of recommendations"),
+    request_id: Optional[str] = Query(default=None, description="Optional client-generated request id"),
+    session_id: Optional[str] = Query(default=None, description="Optional session id for analytics attribution"),
     context: TenantContext = Depends(resolve_tenant_context),
 ):
     """Personalize recommendations from a user's recent implicit feedback events."""
@@ -1006,6 +1234,19 @@ async def recommend_for_user(
     assignment = assign_experiment(subject_id=user_id)
     results = rec.recommend_for_user_profile(profile, n=result_limit)
     results = attach_experiment(results, assignment)
+    record_recommendation_events(
+        endpoint="recommendations.user",
+        context=context,
+        query_movie={
+            "id": profile["seed_movie_ids"][0] if profile.get("seed_movie_ids") else None,
+            "title": f"user:{user_id}",
+        },
+        recommendations=results,
+        rec=rec,
+        request_id=request_id,
+        user_id=user_id,
+        session_id=session_id,
+    )
     record_usage(
         "recommendations.user",
         context.tenant_id,
