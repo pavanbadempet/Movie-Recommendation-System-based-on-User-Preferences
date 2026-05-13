@@ -646,6 +646,36 @@ class Recommender:
             logger.warning("Learned ranker skipped: %s", exc)
             return candidates
 
+    def _quality_gate_item_recommendations(
+        self,
+        candidates: list[dict[str, Any]],
+        query_movie: dict[str, Any],
+        n: int,
+    ) -> list[dict[str, Any]]:
+        """Drop obvious low-quality or genre-drift candidates when enough alternatives exist."""
+        if len(candidates) <= n:
+            return candidates
+
+        query_genres = self._genre_set(query_movie)
+        gated: list[dict[str, Any]] = []
+        for candidate in candidates:
+            rating = float(candidate.get("vote_average") or 0.0)
+            votes = float(candidate.get("vote_count") or 0.0)
+            candidate_genres = self._genre_set(candidate)
+            shared_genres = query_genres & candidate_genres
+            signals = candidate.get("retrieval_signals") or {}
+            semantic_score = float(signals.get("semantic_twin") or 0.0)
+
+            if votes >= 500 and 0 < rating < 5.5:
+                continue
+            if "science fiction" in query_genres and "science fiction" not in candidate_genres:
+                if len(shared_genres) < 2 and semantic_score < 0.62:
+                    continue
+
+            gated.append(candidate)
+
+        return gated if len(gated) >= n else candidates
+
     def _learned_ranker_enabled(self) -> bool:
         """Return whether the learned ranker has enough signal to influence serving."""
         value = os.getenv("NOVA_ENABLE_LEARNED_RANKER", "auto").strip().lower()
@@ -1137,7 +1167,8 @@ class Recommender:
             results.append(movie)
 
         results.sort(key=lambda item: float(item.get("similarity_score") or 0), reverse=True)
-        return self._apply_learned_ranker(results)[:n]
+        results = self._apply_learned_ranker(results)
+        return self._quality_gate_item_recommendations(results, query_movie, n)[:n]
     
     def recommend_by_index(self, movie_idx: int, n: int = 10) -> list[dict]:
         """
@@ -1330,6 +1361,7 @@ class Recommender:
         # Sort by boosted score
         results.sort(key=lambda x: x["similarity_score"], reverse=True)
         results = self._apply_learned_ranker(results)
+        results = self._quality_gate_item_recommendations(results, query_movie, n)
         llm_window = int(os.getenv("NOVA_LLM_RERANK_CANDIDATES", "12"))
         top_candidates = results[: max(1, min(20, llm_window))]
         
