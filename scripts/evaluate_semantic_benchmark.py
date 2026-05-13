@@ -8,10 +8,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import tempfile
 from pathlib import Path
 
 import pandas as pd
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from backend.recommender import Recommender
 from backend.semantic_benchmark import DEFAULT_BENCHMARK_PATH, evaluate_semantic_benchmark
@@ -58,6 +63,9 @@ def main() -> None:
     parser.add_argument("--hf-token")
     parser.add_argument("--max-bad-match-rate", type=float, default=0.25)
     parser.add_argument("--min-good-recall", type=float, default=0.0)
+    parser.add_argument("--min-hit-rate", type=float, default=0.0)
+    parser.add_argument("--min-mrr", type=float, default=0.0)
+    parser.add_argument("--min-ndcg", type=float, default=0.0)
     parser.add_argument("--fail-on-threshold", action="store_true")
     args = parser.parse_args()
 
@@ -85,6 +93,9 @@ def main() -> None:
         "status": report.get("status"),
         "evaluated_case_count": report.get("evaluated_case_count"),
         "good_recall_at_k": metrics.get("good_recall_at_k"),
+        "hit_rate_at_k": metrics.get("hit_rate_at_k"),
+        "mrr_at_k": metrics.get("mrr_at_k"),
+        "ndcg_at_k": metrics.get("ndcg_at_k"),
         "bad_match_rate_at_k": metrics.get("bad_match_rate_at_k"),
         "output": str(args.output),
     }, indent=2, sort_keys=True))
@@ -92,10 +103,19 @@ def main() -> None:
     if args.fail_on_threshold:
         bad_rate = float(metrics.get("bad_match_rate_at_k") or 0.0)
         good_recall = float(metrics.get("good_recall_at_k") or 0.0)
+        hit_rate = float(metrics.get("hit_rate_at_k") or 0.0)
+        mrr = float(metrics.get("mrr_at_k") or 0.0)
+        ndcg = float(metrics.get("ndcg_at_k") or 0.0)
         if bad_rate > args.max_bad_match_rate:
             raise SystemExit(f"bad_match_rate_at_k {bad_rate} exceeds {args.max_bad_match_rate}")
         if good_recall < args.min_good_recall:
             raise SystemExit(f"good_recall_at_k {good_recall} below {args.min_good_recall}")
+        if hit_rate < args.min_hit_rate:
+            raise SystemExit(f"hit_rate_at_k {hit_rate} below {args.min_hit_rate}")
+        if mrr < args.min_mrr:
+            raise SystemExit(f"mrr_at_k {mrr} below {args.min_mrr}")
+        if ndcg < args.min_ndcg:
+            raise SystemExit(f"ndcg_at_k {ndcg} below {args.min_ndcg}")
 
 
 if __name__ == "__main__":

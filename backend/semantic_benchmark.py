@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -95,6 +96,13 @@ def evaluate_semantic_benchmark(
     total_good_hits = 0
     total_bad_hits = 0
     total_good_labels = 0
+    reciprocal_ranks = []
+    ndcg_scores = []
+    good_hit_cases = 0
+    bad_hit_cases = 0
+    explanation_hits = 0
+    stage_counts: dict[str, int] = {}
+    total_results = 0
 
     for case in cases:
         seed_movie = _find_seed_movie(recommender, case)
@@ -109,11 +117,31 @@ def evaluate_semantic_benchmark(
 
         good_hits = []
         bad_hits = []
-        for rec in top_recommendations:
+        first_good_rank = None
+        dcg = 0.0
+        for rank, rec in enumerate(top_recommendations, start=1):
+            total_results += 1
+            if rec.get("explanation") or rec.get("explanation_text"):
+                explanation_hits += 1
+            stage = str(rec.get("retrieval_stage") or "unknown")
+            stage_counts[stage] = stage_counts.get(stage, 0) + 1
+
             if any(_matches_item(rec, item) for item in good_items):
-                good_hits.append({"id": rec.get("id"), "title": rec.get("title")})
+                good_hits.append({"id": rec.get("id"), "title": rec.get("title"), "rank": rank})
+                if first_good_rank is None:
+                    first_good_rank = rank
+                dcg += 1.0 / math.log2(rank + 1)
             if any(_matches_item(rec, item) for item in bad_items):
-                bad_hits.append({"id": rec.get("id"), "title": rec.get("title")})
+                bad_hits.append({"id": rec.get("id"), "title": rec.get("title"), "rank": rank})
+
+        if good_hits:
+            good_hit_cases += 1
+        if bad_hits:
+            bad_hit_cases += 1
+        reciprocal_ranks.append(0.0 if first_good_rank is None else 1.0 / first_good_rank)
+        ideal_hits = min(len(good_items), k)
+        ideal_dcg = sum(1.0 / math.log2(rank + 1) for rank in range(1, ideal_hits + 1))
+        ndcg_scores.append(0.0 if ideal_dcg <= 0 else dcg / ideal_dcg)
 
         total_good_hits += len(good_hits)
         total_bad_hits += len(bad_hits)
@@ -133,6 +161,7 @@ def evaluate_semantic_benchmark(
                         "id": rec.get("id"),
                         "title": rec.get("title"),
                         "score": rec.get("similarity_score"),
+                        "retrieval_stage": rec.get("retrieval_stage"),
                         "explanation": rec.get("explanation"),
                     }
                     for rec in top_recommendations[:5]
@@ -143,8 +172,13 @@ def evaluate_semantic_benchmark(
     evaluated_count = len(evaluated)
     bad_rate = total_bad_hits / max(evaluated_count * k, 1)
     good_recall = total_good_hits / max(total_good_labels, 1)
+    precision = total_good_hits / max(evaluated_count * k, 1)
+    hit_rate = good_hit_cases / max(evaluated_count, 1)
+    bad_case_rate = bad_hit_cases / max(evaluated_count, 1)
     status = "ok" if evaluated_count else "unavailable"
     if evaluated_count and bad_rate > 0.15:
+        status = "needs_attention"
+    if evaluated_count and hit_rate < 0.5:
         status = "needs_attention"
 
     return {
@@ -156,9 +190,16 @@ def evaluate_semantic_benchmark(
         "k": k,
         "metrics": {
             "good_recall_at_k": round(good_recall, 4),
+            "precision_at_k": round(precision, 4),
+            "hit_rate_at_k": round(hit_rate, 4),
+            "mrr_at_k": round(sum(reciprocal_ranks) / max(len(reciprocal_ranks), 1), 4),
+            "ndcg_at_k": round(sum(ndcg_scores) / max(len(ndcg_scores), 1), 4),
             "bad_match_rate_at_k": round(bad_rate, 4),
+            "bad_case_rate_at_k": round(bad_case_rate, 4),
             "good_hit_count": total_good_hits,
             "bad_hit_count": total_bad_hits,
+            "stage_distribution": dict(sorted(stage_counts.items())),
+            "explanation_coverage": round(explanation_hits / max(total_results, 1), 4),
         },
         "cases": evaluated,
         "skipped": skipped,
