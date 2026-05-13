@@ -104,7 +104,6 @@ def app_metadata() -> dict[str, str | None]:
     for env_name in (
         "NOVA_APP_COMMIT",
         "RENDER_GIT_COMMIT",
-        "SOURCE_VERSION",
         "GITHUB_SHA",
     ):
         value = os.getenv(env_name, "").strip()
@@ -122,10 +121,12 @@ def app_metadata() -> dict[str, str | None]:
                 commit = value
                 source = "REVISION"
     if not commit:
-        value = os.getenv("COMMIT_SHA", "").strip()
-        if value:
-            commit = value
-            source = "COMMIT_SHA"
+        for env_name in ("SOURCE_VERSION", "COMMIT_SHA"):
+            value = os.getenv(env_name, "").strip()
+            if value:
+                commit = value
+                source = env_name
+                break
     return {
         "version": APP_VERSION,
         "commit": commit[:12] if commit else None,

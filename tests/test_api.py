@@ -116,6 +116,7 @@ class TestHealthEndpoint:
         monkeypatch.delenv("RENDER_GIT_COMMIT", raising=False)
         monkeypatch.delenv("SOURCE_VERSION", raising=False)
         monkeypatch.delenv("GITHUB_SHA", raising=False)
+        monkeypatch.setenv("SOURCE_VERSION", "hostabcdef1234567890")
         monkeypatch.setenv("COMMIT_SHA", "spaceabcdef1234567890")
 
         metadata = main.app_metadata()
