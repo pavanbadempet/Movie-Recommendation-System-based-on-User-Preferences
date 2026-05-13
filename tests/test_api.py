@@ -94,6 +94,17 @@ class TestHealthEndpoint:
         data = resp.json()
         assert data["status"] == "healthy"
         assert data["movie_count"] == 3
+        assert data["app_version"] == "2.0.0"
+
+    def test_health_includes_app_commit_when_available(self, mock_artifacts, monkeypatch):
+        monkeypatch.setenv("NOVA_APP_COMMIT", "abcdef1234567890")
+
+        from backend.main import app
+        client = TestClient(app)
+        resp = client.get("/health")
+
+        assert resp.status_code == 200
+        assert resp.json()["app_commit"] == "abcdef123456"
 
     def test_health_without_recommender_load_reports_catalog_count(self, mock_artifacts, monkeypatch):
         monkeypatch.setenv("NOVA_HEALTH_LOAD_RECOMMENDER", "false")
@@ -144,6 +155,7 @@ class TestPlatformEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "ready"
+        assert data["app"]["version"] == "2.0.0"
         assert "personalization_v2" in data["capabilities"]
         assert "event_store" in data
 
