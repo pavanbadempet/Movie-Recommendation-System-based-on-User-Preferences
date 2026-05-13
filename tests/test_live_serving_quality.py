@@ -14,6 +14,8 @@ def _args(skip_semantic_benchmark: bool = False, allow_degraded_artifact_health:
         search_limit=5,
         min_search_results=1,
         expected_search_title="Avatar",
+        required_search_titles="Avatar: Fire and Ash,Avatar: The Way of Water",
+        min_required_search_hits=2,
         recommendation_smoke_movie_id=19995,
         recommendation_smoke_k=10,
         min_recommendation_results=5,
@@ -39,7 +41,11 @@ def _healthy_payload(path: str):
     if path == "/v1/artifacts/health":
         return {"status": "ready"}
     if path.startswith("/v1/search?"):
-        return [{"id": 19995, "title": "Avatar"}]
+        return [
+            {"id": 19995, "title": "Avatar"},
+            {"id": 83533, "title": "Avatar: Fire and Ash"},
+            {"id": 76600, "title": "Avatar: The Way of Water"},
+        ]
     if path.startswith("/v1/evaluation/semantic-benchmark?"):
         return {
             "status": "ok",
@@ -98,6 +104,34 @@ def test_live_serving_gate_rejects_bad_recommendation_drift(monkeypatch):
     assert report["status"] == "failed"
     assert any("required semantic hits" in failure for failure in report["failures"])
     assert any("blocked drift titles" in failure for failure in report["failures"])
+
+
+def test_live_serving_gate_rejects_search_title_regression(monkeypatch):
+    def fake_get_json(base_url, path, timeout):
+        if path.startswith("/v1/search?"):
+            return [
+                {"id": 19995, "title": "Avatar"},
+                {"id": 1096978, "title": "Avatar"},
+                {"id": 282908, "title": "Avatar"},
+            ]
+        if path.startswith("/v1/recommendations/id/19995?"):
+            return {
+                "recommendations": [
+                    {"title": "Avatar: The Way of Water"},
+                    {"title": "The Abyss"},
+                    {"title": "Pacific Rim"},
+                    {"title": "Dune"},
+                    {"title": "Prometheus"},
+                ]
+            }
+        return _healthy_payload(path)
+
+    monkeypatch.setattr(live, "_get_json", fake_get_json)
+
+    report = live.evaluate_live_serving(_args())
+
+    assert report["status"] == "failed"
+    assert any("/v1/search found 0 required title hits" in failure for failure in report["failures"])
 
 
 def test_live_serving_gate_can_skip_semantic_benchmark_for_lite_gateway(monkeypatch):
