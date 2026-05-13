@@ -32,8 +32,9 @@ import {
   pingApi,
   platformStatus,
   searchMovies,
+  semanticBenchmark,
 } from "./api";
-import type { ArtifactHealth, Movie, MovieTitle, PlatformStatus } from "./types";
+import type { ArtifactHealth, Movie, MovieTitle, PlatformStatus, SemanticBenchmark } from "./types";
 import "./styles.css";
 
 const imageBase = import.meta.env.VITE_TMDB_IMAGE_BASE || "https://image.tmdb.org/t/p/w500";
@@ -235,6 +236,23 @@ function checkValue(value: unknown): string {
   return String(value);
 }
 
+function percentValue(value?: number | null): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "N/A";
+  return `${Math.round(value * 100)}%`;
+}
+
+function decimalValue(value?: number | null): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "N/A";
+  return value.toFixed(3);
+}
+
+function qualityLabel(report: SemanticBenchmark | null): string {
+  if (!report) return "Pending";
+  if (report.status === "unavailable") return "Unavailable";
+  const hitRate = report.metrics?.hit_rate_at_k;
+  return typeof hitRate === "number" ? `${Math.round(hitRate * 100)}% hit` : report.status;
+}
+
 function DiagnosticsPanel({ health }: { health: ArtifactHealth | null }) {
   const checks = health?.checks || {};
   const rows = [
@@ -259,6 +277,34 @@ function DiagnosticsPanel({ health }: { health: ArtifactHealth | null }) {
         ))}
       </div>
       {health?.run_date && <div className="quiet-line">Snapshot {health.run_date}</div>}
+    </div>
+  );
+}
+
+function QualityPanel({ report }: { report: SemanticBenchmark | null }) {
+  const metrics = report?.metrics || {};
+  const rows = [
+    ["Hit rate", percentValue(metrics.hit_rate_at_k)],
+    ["MRR", decimalValue(metrics.mrr_at_k)],
+    ["NDCG", decimalValue(metrics.ndcg_at_k)],
+    ["Bad matches", percentValue(metrics.bad_match_rate_at_k)],
+    ["Explanations", percentValue(metrics.explanation_coverage)],
+  ];
+  return (
+    <div className={`quality-panel ${report?.status || "pending"}`}>
+      <div className="section-mini-title">
+        <span>Serving quality</span>
+        <small>{report?.status || "Pending"}</small>
+      </div>
+      <div className="diagnostic-rows">
+        {rows.map(([label, value]) => (
+          <div className="diagnostic-row" key={label}>
+            <span>{label}</span>
+            <strong>{value}</strong>
+          </div>
+        ))}
+      </div>
+      {report?.evaluated_case_count ? <div className="quiet-line">{report.evaluated_case_count} benchmark cases</div> : null}
     </div>
   );
 }
@@ -455,6 +501,7 @@ function App() {
   const [lastUpdated, setLastUpdated] = React.useState("");
   const [platform, setPlatform] = React.useState<PlatformStatus | null>(null);
   const [artifactReport, setArtifactReport] = React.useState<ArtifactHealth | null>(null);
+  const [qualityReport, setQualityReport] = React.useState<SemanticBenchmark | null>(null);
   const [recentMovies, setRecentMovies] = React.useState<Movie[]>(() => loadRecentMovies());
   const bootstrapped = React.useRef(false);
   const loadedPlatform = React.useRef(false);
@@ -520,9 +567,10 @@ function App() {
     if (catalogState !== "ready" || loadedPlatform.current) return;
     loadedPlatform.current = true;
     const timer = window.setTimeout(() => {
-      void Promise.allSettled([platformStatus(), artifactHealth()]).then((results) => {
+      void Promise.allSettled([platformStatus(), artifactHealth(), semanticBenchmark(10)]).then((results) => {
         const platformResult = results[0];
         const artifactResult = results[1];
+        const qualityResult = results[2];
         if (platformResult.status === "fulfilled") {
           setBackend(platformResult.value.baseUrl);
           setPlatform(platformResult.value.data);
@@ -531,7 +579,11 @@ function App() {
           setBackend(artifactResult.value.baseUrl);
           setArtifactReport(artifactResult.value.data);
         }
-        if (platformResult.status === "rejected" && artifactResult.status === "rejected") {
+        if (qualityResult.status === "fulfilled") {
+          setBackend(qualityResult.value.baseUrl);
+          setQualityReport(qualityResult.value.data);
+        }
+        if (platformResult.status === "rejected" && artifactResult.status === "rejected" && qualityResult.status === "rejected") {
           loadedPlatform.current = false;
         }
       });
@@ -646,6 +698,7 @@ function App() {
         <MetricTile icon={<Database size={18} />} label="Catalog" value={catalogValue ? catalogValue.toLocaleString() : "Loading"} />
         <MetricTile icon={<Server size={18} />} label="Service" value={serviceLabel(backend)} />
         <MetricTile icon={<BarChart3 size={18} />} label="Ranking" value={rankerValue} />
+        <MetricTile icon={<Gauge size={18} />} label="Quality" value={qualityLabel(qualityReport)} />
         <MetricTile icon={<Activity size={18} />} label="Artifacts" value={healthLabel(artifactReport)} />
       </section>
 
@@ -703,6 +756,7 @@ function App() {
           </div>
 
           <DiagnosticsPanel health={artifactReport} />
+          <QualityPanel report={qualityReport} />
 
           {mode === "title" ? (
             <div className="title-browser">

@@ -1,4 +1,4 @@
-import type { ApiRoot, ArtifactHealth, BackendResult, Movie, MovieTitle, PlatformStatus, RecommendationResponse } from "./types";
+import type { ApiRoot, ArtifactHealth, BackendResult, Movie, MovieTitle, PlatformStatus, RecommendationResponse, SemanticBenchmark } from "./types";
 
 const DEFAULT_BACKENDS = [
   "https://movie-recs-api-5qvy.onrender.com",
@@ -95,6 +95,10 @@ export async function platformStatus(): Promise<BackendResult<PlatformStatus>> {
 
 export async function artifactHealth(): Promise<BackendResult<ArtifactHealth>> {
   return apiGet<ArtifactHealth>("/v1/artifacts/health", {}, 15000);
+}
+
+export async function semanticBenchmark(k = 10): Promise<BackendResult<SemanticBenchmark>> {
+  return apiGet<SemanticBenchmark>("/v1/evaluation/semantic-benchmark", { k }, 45000);
 }
 
 export async function loadTitles(limit = 5000): Promise<BackendResult<MovieTitle[]>> {
