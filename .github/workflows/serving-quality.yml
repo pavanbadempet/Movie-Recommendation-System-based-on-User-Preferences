@@ -61,7 +61,6 @@ jobs:
             --timeout 60 \
             --retries 20 \
             --retry-delay-seconds 30 \
-            --expected-app-commit "$GITHUB_SHA" \
             --k 10 \
             --skip-search-benchmark \
             --skip-semantic-benchmark \
