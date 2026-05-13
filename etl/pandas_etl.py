@@ -596,6 +596,26 @@ def persist_time_travel_snapshot(
     )
 
 
+def persist_movie_scd_snapshot(
+    df: pd.DataFrame,
+    run_id: str,
+    run_date: str,
+) -> dict | None:
+    """Persist the Gold movie SCD Type 2 dimension for catalog history."""
+    table_root = _local_artifact_dir("gold_data", "gold_data")
+    if table_root is None:
+        return None
+
+    from etl.lakehouse import write_movie_scd_snapshot
+
+    return write_movie_scd_snapshot(
+        incoming_df=df,
+        base_path=table_root,
+        run_id=run_id,
+        run_date=run_date,
+    )
+
+
 def assert_batch_invariants(
     df: pd.DataFrame | None,
     vectors: np.ndarray | None = None,
@@ -766,10 +786,12 @@ def run_pipeline(
     logger.info("STARTING PANDAS ETL PIPELINE")
     
     try:
+        curated_df = None
         # 1. Ingest
         if not skip_ingest:
             with PipelineStage("INGEST"):
                 df, quality_metrics, raw_df = ingest(raw_data_path, return_quality=True, return_raw=True)
+                curated_df = df.copy()
                 metrics["quality"] = quality_metrics
                 metrics["raw_rows"] = quality_metrics["total_rows"]
                 metrics["ingested_rows"] = len(df)
@@ -811,6 +833,18 @@ def run_pipeline(
             gold_snapshot = persist_time_travel_snapshot(df, "gold_data", "movies_features", run_id, run_date)
             if gold_snapshot is not None:
                 metrics["time_travel_artifacts"]["movies_features"] = gold_snapshot
+
+            scd_input_df = curated_df if curated_df is not None else df
+            scd_snapshot = persist_movie_scd_snapshot(scd_input_df, run_id, run_date)
+            if scd_snapshot is not None:
+                metrics["time_travel_artifacts"]["dim_movie_scd"] = scd_snapshot["manifest"]
+                metrics["quality_gates"]["dim_movie_scd"] = {
+                    "stage": "dim_movie_scd",
+                    "source_rows": int(len(scd_input_df)),
+                    "current_rows": scd_snapshot["current_rows"],
+                    "total_versions": scd_snapshot["total_versions"],
+                    "effective_ts": scd_snapshot["effective_ts"],
+                }
 
             semantic_artifacts = write_semantic_artifacts(
                 df,
