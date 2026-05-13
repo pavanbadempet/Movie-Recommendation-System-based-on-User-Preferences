@@ -14,6 +14,10 @@ env:
   PYTHON_VERSION: '3.11'
   NOVA_SERVING_URL: https://pavanbadempet-movie-rec-api.hf.space
 
+concurrency:
+  group: serving-quality-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   live-serving-quality:
     runs-on: ubuntu-latest
