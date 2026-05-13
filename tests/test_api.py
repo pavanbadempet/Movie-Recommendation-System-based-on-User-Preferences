@@ -106,6 +106,23 @@ class TestHealthEndpoint:
         assert resp.status_code == 200
         assert resp.json()["app_commit"] == "abcdef123456"
 
+    def test_app_metadata_prefers_revision_file_over_host_commit(self, tmp_path, monkeypatch):
+        import backend.main as main
+
+        revision_path = tmp_path / "REVISION"
+        revision_path.write_text("sourceabcdef1234567890", encoding="utf-8")
+        monkeypatch.setattr(main, "REVISION_FILE", revision_path)
+        monkeypatch.delenv("NOVA_APP_COMMIT", raising=False)
+        monkeypatch.delenv("RENDER_GIT_COMMIT", raising=False)
+        monkeypatch.delenv("SOURCE_VERSION", raising=False)
+        monkeypatch.delenv("GITHUB_SHA", raising=False)
+        monkeypatch.setenv("COMMIT_SHA", "spaceabcdef1234567890")
+
+        metadata = main.app_metadata()
+
+        assert metadata["commit"] == "sourceabcdef"
+        assert metadata["source"] == "REVISION"
+
     def test_health_without_recommender_load_reports_catalog_count(self, mock_artifacts, monkeypatch):
         monkeypatch.setenv("NOVA_HEALTH_LOAD_RECOMMENDER", "false")
 
