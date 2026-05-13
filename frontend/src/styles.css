@@ -174,7 +174,7 @@ input:focus-visible {
 
 .metrics-strip {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   padding: 18px 0 4px;
 }
@@ -450,7 +450,8 @@ input:focus-visible {
   background: rgba(255, 255, 255, 0.085);
 }
 
-.diagnostics-panel {
+.diagnostics-panel,
+.quality-panel {
   display: grid;
   gap: 10px;
   margin-top: 14px;
@@ -460,11 +461,13 @@ input:focus-visible {
   background: rgba(255, 255, 255, 0.04);
 }
 
-.diagnostics-panel.ready {
+.diagnostics-panel.ready,
+.quality-panel.ok {
   border-color: rgba(94, 234, 212, 0.22);
 }
 
-.diagnostics-panel.degraded {
+.diagnostics-panel.degraded,
+.quality-panel.needs_attention {
   border-color: rgba(251, 191, 36, 0.24);
 }
 
@@ -877,7 +880,7 @@ input:focus-visible {
   }
 
   .metrics-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
