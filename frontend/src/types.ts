@@ -85,6 +85,28 @@ export type ArtifactHealth = {
   errors?: string[];
 };
 
+export type SemanticBenchmark = {
+  generated_at?: string;
+  status: "ok" | "needs_attention" | "unavailable" | string;
+  case_count?: number;
+  evaluated_case_count?: number;
+  k?: number;
+  reason?: string;
+  metrics?: {
+    good_recall_at_k?: number;
+    precision_at_k?: number;
+    hit_rate_at_k?: number;
+    mrr_at_k?: number;
+    ndcg_at_k?: number;
+    bad_match_rate_at_k?: number;
+    bad_case_rate_at_k?: number;
+    explanation_coverage?: number;
+    good_hit_count?: number;
+    bad_hit_count?: number;
+    stage_distribution?: Record<string, number>;
+  };
+};
+
 export type BackendResult<T> = {
   data: T;
   baseUrl: string;
