@@ -177,6 +177,24 @@ NOVA_EXPERIMENT_VARIANTS=control:50,personalized_v2:50
 
 Use `/v1/experiments/assignment` for deterministic variant assignment and `/v1/experiments/metrics` for impression, click, and rating outcomes from behavior events.
 
+## Deployment Artifact Reload
+
+The scheduled artifact refresh can update the deployed backend without waiting for a cold start.
+
+Set the same secret value in both places:
+
+- Render environment variable: `NOVA_ADMIN_TOKEN`
+- GitHub Actions repository secret: `NOVA_ADMIN_TOKEN`
+
+If the backend URL changes, also set `NOVA_RENDER_API_URL` as a GitHub Actions secret. After the Kaggle/Hugging Face artifact workflow succeeds, GitHub Actions calls:
+
+```bash
+POST /v1/artifacts/reload?force_download=true&load=true
+X-Nova-Admin-Token: <NOVA_ADMIN_TOKEN>
+```
+
+This refreshes the pipeline manifest, downloads changed serving artifacts, validates artifact health, and swaps the in-memory recommender instance.
+
 ## Commercial Direction
 
 Nova can become a product for smaller media/catalog companies before it can serve huge enterprises. The believable first customers are teams that have content but do not have recommendation infrastructure:
