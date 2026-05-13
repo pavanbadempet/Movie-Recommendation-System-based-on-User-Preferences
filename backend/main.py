@@ -3,15 +3,17 @@ FastAPI backend for the Movie Recommendation System.
 Provides REST API endpoints for movie search and recommendations.
 """
 import asyncio
+import gc
 import logging
 import os
 import uuid
 from collections import Counter
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from typing import Literal, Optional
 from urllib.parse import quote
 
 import httpx
+import sentry_sdk
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -22,9 +24,10 @@ from slowapi.errors import RateLimitExceeded
 from backend.events import append_event, aggregate_behavior_features, build_user_behavior_profile, event_storage_status, get_events_path, summarize_recommendation_events
 from backend.evaluation import evaluate_recommendation_quality
 from backend.experiments import assign_experiment, attach_experiment, summarize_experiment_metrics
-from backend.auth import TenantContext, enforce_payload_context, resolve_tenant_context
+from backend.auth import TenantContext, enforce_payload_context, resolve_admin_token, resolve_tenant_context
 from backend.artifact_health import evaluate_artifact_health
 from backend.catalogs import profile_catalog_csv, persist_catalog_upload
+from backend.chat import generate_chat_response
 from backend.recommender import get_recommender, Recommender
 from backend.remote_recommender import remote_get_json
 from backend.semantic_benchmark import evaluate_semantic_benchmark
@@ -34,8 +37,6 @@ from backend.usage import record_usage, summarize_usage
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Sentry (Error Monitoring)
-import sentry_sdk
 SENTRY_DSN = os.getenv("SENTRY_DSN")
 if SENTRY_DSN:
     try:
@@ -269,6 +270,67 @@ def get_rec() -> Recommender:
         logger.info("Loading recommender on first request...")
         _recommender = get_recommender()
     return _recommender
+
+
+@contextmanager
+def _temporary_env(overrides: dict[str, str | None]):
+    """Temporarily override environment variables for one operation."""
+    previous = {name: os.environ.get(name) for name in overrides}
+    try:
+        for name, value in overrides.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+        yield
+    finally:
+        for name, value in previous.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+
+def _artifact_refresh_env(force_download: bool) -> dict[str, str]:
+    """Return model-loader env overrides for artifact reload operations."""
+    overrides = {"NOVA_REFRESH_PIPELINE_MANIFEST": "1"}
+    if force_download:
+        overrides["FORCE_MODEL_REFRESH"] = "1"
+    return overrides
+
+
+def _reload_local_recommender(force_download: bool) -> Recommender:
+    """Load a fresh recommender and atomically publish it to both singletons."""
+    global _recommender
+
+    from backend import recommender as recommender_module
+
+    previous_main_recommender = _recommender
+    previous_module_recommender = recommender_module._recommender
+    try:
+        with _temporary_env(_artifact_refresh_env(force_download)):
+            fresh_recommender = recommender_module.Recommender().load()
+    except Exception:
+        _recommender = previous_main_recommender
+        recommender_module._recommender = previous_module_recommender
+        raise
+
+    _recommender = fresh_recommender
+    recommender_module._recommender = fresh_recommender
+    gc.collect()
+    return fresh_recommender
+
+
+def _refresh_artifact_files(force_download: bool) -> dict[str, bool]:
+    """Refresh serving artifact files without rebuilding the in-memory recommender."""
+    from backend import recommender as recommender_module
+    from backend.model_loader import default_artifacts_for_serving_profile, ensure_model_files
+
+    with _temporary_env(_artifact_refresh_env(force_download)):
+        return ensure_model_files(
+            recommender_module.MODELS_DIR,
+            selected_files=default_artifacts_for_serving_profile(),
+        )
 
 
 def _event_logging_enabled() -> bool:
@@ -648,6 +710,63 @@ async def artifact_health_report(
         authenticated=context.authenticated,
     )
     return report
+
+
+@app.post("/v1/artifacts/reload")
+async def artifact_reload(
+    force_download: bool = Query(default=True),
+    load: bool = Query(default=True),
+    _admin_token: None = Depends(resolve_admin_token),
+):
+    """
+    Refresh local serving artifacts and optionally rebuild the loaded recommender.
+
+    This is for deployment automation after the daily artifact pipeline uploads a
+    new manifest. It is deliberately admin-token protected and separate from
+    customer-facing API keys.
+    """
+    from backend import recommender as recommender_module
+
+    try:
+        if load:
+            rec = _reload_local_recommender(force_download=force_download)
+            download_results = None
+            lineage = _serving_lineage(rec)
+        else:
+            download_results = _refresh_artifact_files(force_download=force_download)
+            lineage = _serving_lineage(_recommender)
+
+        report = evaluate_artifact_health(
+            models_dir=recommender_module.MODELS_DIR,
+            data_dir=recommender_module.DATA_DIR,
+        )
+        record_usage(
+            "artifacts.reload",
+            tenant_id="admin",
+            catalog_id="serving",
+            plan="internal",
+            authenticated=True,
+            status=str(report.get("status") or "unknown"),
+        )
+        return {
+            "status": "reloaded" if load else "refreshed",
+            "force_download": force_download,
+            "loaded": load,
+            "download_results": download_results,
+            "artifact_health": report,
+            "lineage": lineage,
+        }
+    except Exception as exc:
+        logger.exception("Artifact reload failed")
+        record_usage(
+            "artifacts.reload",
+            tenant_id="admin",
+            catalog_id="serving",
+            plan="internal",
+            authenticated=True,
+            status="error",
+        )
+        raise HTTPException(status_code=503, detail=f"Artifact reload failed: {exc}") from exc
 
 
 @app.get("/v1/ranker/status")
@@ -1256,9 +1375,6 @@ async def recommend_for_user(
     )
     return results
 
-
-# ===== CHATBOT (RAG) =====
-from backend.chat import generate_chat_response
 
 class ChatMessage(BaseModel):
     role: str
