@@ -105,6 +105,8 @@ def test_full_system_flow(monkeypatch):
         assert metrics["time_travel_artifacts"]["movies_raw"]["row_count"] == 3
         assert metrics["time_travel_artifacts"]["movies_curated"]["row_count"] == 3
         assert metrics["time_travel_artifacts"]["movies_features"]["row_count"] == 3
+        assert metrics["time_travel_artifacts"]["dim_movie_scd"]["row_count"] == 3
+        assert metrics["quality_gates"]["dim_movie_scd"]["current_rows"] == 3
         
         # 3. Verify Artifacts
         assert (processed_dir / "movies_transformed.parquet").exists()
@@ -133,11 +135,15 @@ def test_full_system_flow(monkeypatch):
         assert manifest["stage_artifacts"]["gold"]["exists"] is True
         assert manifest["quality_gates"]["serving"]["index_size"] == 3
         assert manifest["time_travel_artifacts"]["movies_features"]["row_count"] == 3
+        assert manifest["time_travel_artifacts"]["dim_movie_scd"]["row_count"] == 3
 
         from etl.lakehouse import load_table_version
 
         gold_snapshot = load_table_version(gold_dir, "movies_features", as_of_date="2026-05-02")
         assert len(gold_snapshot) == 3
+
+        scd_snapshot = load_table_version(gold_dir, "dim_movie_scd", as_of_date="2026-05-02")
+        assert len(scd_snapshot) == 3
         
         # 4. Update Recommender to use these paths and Test
         import backend.recommender
