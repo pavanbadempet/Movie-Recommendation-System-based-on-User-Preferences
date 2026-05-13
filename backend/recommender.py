@@ -977,18 +977,21 @@ class Recommender:
         if len(matches) == 0:
             return []
             
-        # Heuristic Scoring (The "Secret Sauce")
-        # I tweaked these weights based on trial and error.
-        # - Exact Match (+50): If you type "Avatar", you want "Avatar".
-        # - Starts With (+20): "Ava..." should still show "Avatar".
-        # - Popularity (*2.0): Hits usually beat indie films in search intent.
-        
         matches["relevance"] = 0.0
         
         # Title Factors
         m_title = text_column("title").loc[matches.index].str.lower()
+        exact_title = m_title == q_lower
+        starts_with_boundary = (
+            exact_title
+            | m_title.str.startswith(f"{q_lower} ", na=False)
+            | m_title.str.startswith(f"{q_lower}:", na=False)
+            | m_title.str.startswith(f"{q_lower}-", na=False)
+        )
+        starts_with_prefix = m_title.str.startswith(q_lower, na=False) & ~starts_with_boundary
         matches.loc[m_title == q_lower, "relevance"] += 50.0
-        matches.loc[m_title.str.startswith(q_lower), "relevance"] += 20.0
+        matches.loc[starts_with_boundary, "relevance"] += 20.0
+        matches.loc[starts_with_prefix, "relevance"] += 8.0
         matches.loc[m_title.str.contains(q_lower, regex=False), "relevance"] += 10.0
         
         # Other Factors
@@ -996,9 +999,26 @@ class Recommender:
         matches.loc[mask_genre[matches.index], "relevance"] += 5.0
         matches.loc[mask_overview[matches.index], "relevance"] += 3.0
         
-        # Popularity Boost
+        # Ranking intent: exact title should find the canonical title first, but
+        # weak duplicate-title records should not bury major franchise entries.
         popularity = numeric_column("popularity").loc[matches.index].clip(lower=0)
+        vote_count = numeric_column("vote_count").loc[matches.index].clip(lower=0)
         matches["relevance"] += np.log1p(popularity) * 2.0
+        matches["relevance"] += np.log1p(vote_count) * 0.8
+
+        strong_exact_exists = bool((exact_title & ((vote_count >= 500) | (popularity >= 20))).any())
+        if strong_exact_exists:
+            weak_exact_duplicate = exact_title & (vote_count < 100) & (popularity < 15)
+            matches.loc[weak_exact_duplicate, "relevance"] -= 55.0
+
+        franchise_continuation = (
+            (
+                m_title.str.startswith(f"{q_lower}: ", na=False)
+                | m_title.str.startswith(f"{q_lower} - ", na=False)
+            )
+            & ((vote_count >= 250) | (popularity >= 20))
+        )
+        matches.loc[franchise_continuation, "relevance"] += 16.0
         
         # Sort by relevance
         matches = matches.sort_values("relevance", ascending=False).head(limit)
