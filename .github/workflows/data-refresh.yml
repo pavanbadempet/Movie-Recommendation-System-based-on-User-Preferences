@@ -25,6 +25,10 @@ on:
 env:
   PYTHON_VERSION: '3.11'
 
+concurrency:
+  group: daily-data-refresh-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   trigger-kaggle-notebook:
     runs-on: ubuntu-latest
