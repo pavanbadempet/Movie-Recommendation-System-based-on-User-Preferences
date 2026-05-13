@@ -357,6 +357,28 @@ class TestRecommender:
         assert 1096978 not in [item["id"] for item in results[:3]]
         assert 1132450 not in [item["id"] for item in results[:3]]
 
+    def test_search_normalizes_title_punctuation(self):
+        """Search should match user punctuation to catalog punctuation variants."""
+        import backend.recommender as rec
+
+        r = rec.Recommender()
+        r._movies = pd.DataFrame(
+            {
+                "id": [10681, 22192],
+                "title": ["WALL-E", "The Jonsson Gang Turns Up Again"],
+                "overview": ["Robot love story", "Gang comedy"],
+                "genres": ["Animation, Science Fiction", "Comedy"],
+                "popularity": [28.0, 1.0],
+                "vote_count": [19000, 100],
+            }
+        )
+
+        hyphen_results = r.search_movies("WALL-E", limit=1)
+        space_results = r.search_movies("wall e", limit=1)
+
+        assert hyphen_results[0]["id"] == 10681
+        assert space_results[0]["id"] == 10681
+
     def test_quality_gate_drops_low_rated_recommendation_drift(self):
         """MMR should not rescue weak low-rated candidates when enough strong matches exist."""
         import backend.recommender as rec
