@@ -33,3 +33,18 @@ def test_ensure_model_files_can_disable_external_downloads(tmp_path, monkeypatch
 
     assert result["movie_ids.npy"] is False
 
+
+def test_low_memory_profile_still_downloads_serving_metadata(monkeypatch):
+    """Lite hosts still need small alignment and semantic health artifacts."""
+    import backend.model_loader as loader
+
+    monkeypatch.setenv("NOVA_SERVING_PROFILE", "lite")
+
+    selected = loader.default_artifacts_for_serving_profile()
+
+    assert "movies_transformed.parquet" in selected
+    assert "semantic_twins.parquet" in selected
+    assert "semantic_twin_summary.json" in selected
+    assert "movie_ids.npy" in selected
+    assert "sbert_embeddings.npy" not in selected
+    assert "faiss.index" not in selected

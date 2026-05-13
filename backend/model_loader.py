@@ -342,6 +342,9 @@ def default_artifacts_for_serving_profile() -> set[str]:
     if profile in {"lite", "light", "low-memory", "metadata"} or low_memory or (profile == "auto" and render_like):
         return {
             "movies_transformed.parquet",
+            "semantic_twins.parquet",
+            "semantic_twin_summary.json",
+            "movie_ids.npy",
             "pipeline_manifest.json",
             "nova_ranker.joblib",
             "nova_ranker.joblib.metadata.json",
