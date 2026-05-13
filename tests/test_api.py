@@ -175,6 +175,7 @@ class TestPlatformEndpoint:
         assert data["status"] == "ready"
         assert data["app"]["version"] == "2.0.0"
         assert "personalization_v2" in data["capabilities"]
+        assert "recommendation_benchmark" in data["capabilities"]
         assert "event_store" in data
 
 
@@ -340,6 +341,18 @@ class TestSearchEndpoint:
         assert "case_count" in data
         assert "top1_hit_rate" in data["metrics"]
 
+    def test_recommendation_benchmark_endpoint_is_available(self, mock_artifacts):
+        from backend.main import app
+        client = TestClient(app)
+
+        resp = client.get("/v1/evaluation/recommendation-benchmark", params={"k": 3})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "status" in data
+        assert "case_count" in data
+        assert "case_pass_rate" in data["metrics"]
+
     def test_semantic_benchmark_async_cache_returns_warming(self, mock_artifacts, monkeypatch):
         monkeypatch.setenv("NOVA_ASYNC_EVALUATION_CACHE", "true")
 
@@ -351,6 +364,23 @@ class TestSearchEndpoint:
 
         client = TestClient(app)
         resp = client.get("/v1/evaluation/semantic-benchmark", params={"k": 3})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "warming"
+        assert data["k"] == 3
+
+    def test_recommendation_benchmark_async_cache_returns_warming(self, mock_artifacts, monkeypatch):
+        monkeypatch.setenv("NOVA_ASYNC_EVALUATION_CACHE", "true")
+
+        import backend.main as main
+        from backend.main import app
+
+        main._recommendation_benchmark_cache.clear()
+        monkeypatch.setattr(main, "_start_background_recommendation_benchmark", lambda k: None)
+
+        client = TestClient(app)
+        resp = client.get("/v1/evaluation/recommendation-benchmark", params={"k": 3})
 
         assert resp.status_code == 200
         data = resp.json()

@@ -1,7 +1,7 @@
 """Evaluate the deployed Nova serving API.
 
-This is a production smoke gate: it checks the live service health, artifact
-alignment, and human-labeled semantic benchmark metrics.
+This is a production smoke gate: it checks live service health, artifact
+alignment, and human-labeled search/recommendation/semantic benchmark metrics.
 """
 
 from __future__ import annotations
@@ -56,6 +56,7 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
             "search_smoke": [],
             "search_benchmark": {},
             "recommendation_smoke": {},
+            "recommendation_benchmark": {},
             "semantic_benchmark": {},
         }
         try:
@@ -88,6 +89,14 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
                 f"/v1/recommendations/id/{args.recommendation_smoke_movie_id}?{recommendation_params}",
                 args.timeout,
             )
+            if args.skip_recommendation_benchmark:
+                report["recommendation_benchmark"] = {"status": "skipped", "reason": "disabled by live gate"}
+            else:
+                report["recommendation_benchmark"] = _get_json(
+                    args.base_url,
+                    f"/v1/evaluation/recommendation-benchmark?k={args.k}",
+                    args.timeout,
+                )
             if args.skip_semantic_benchmark:
                 report["semantic_benchmark"] = {"status": "skipped", "reason": "disabled by live gate"}
             else:
@@ -230,6 +239,38 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
                 report,
             )
 
+        recommendation_benchmark = report.get("recommendation_benchmark") or {}
+        if not args.skip_recommendation_benchmark:
+            if recommendation_benchmark.get("status") not in {"ok", "needs_attention"}:
+                _threshold_failure(
+                    "recommendation benchmark unavailable: "
+                    f"{recommendation_benchmark.get('reason') or recommendation_benchmark.get('status')}",
+                    report,
+                )
+            recommendation_metrics = recommendation_benchmark.get("metrics") or {}
+            recommendation_checks = {
+                "recommendation_benchmark_case_pass_rate": (
+                    float(recommendation_metrics.get("case_pass_rate") or 0.0),
+                    ">=",
+                    args.min_recommendation_benchmark_pass_rate,
+                ),
+                "recommendation_benchmark_good_hit_case_rate": (
+                    float(recommendation_metrics.get("good_hit_case_rate") or 0.0),
+                    ">=",
+                    args.min_recommendation_benchmark_hit_rate,
+                ),
+                "recommendation_benchmark_bad_case_rate_at_k": (
+                    float(recommendation_metrics.get("bad_case_rate_at_k") or 0.0),
+                    "<=",
+                    args.max_recommendation_benchmark_bad_case_rate,
+                ),
+            }
+            for name, (actual, op, expected) in recommendation_checks.items():
+                if op == "<=" and actual > expected:
+                    _threshold_failure(f"{name} {actual} exceeds {expected}", report)
+                if op == ">=" and actual < expected:
+                    _threshold_failure(f"{name} {actual} below {expected}", report)
+
         benchmark = report["semantic_benchmark"]
         if not args.skip_semantic_benchmark:
             if benchmark.get("status") not in {"ok", "needs_attention"}:
@@ -303,6 +344,10 @@ def main() -> None:
             "Justice League: The Flashpoint Paradox"
         ),
     )
+    parser.add_argument("--min-recommendation-benchmark-pass-rate", type=float, default=0.80)
+    parser.add_argument("--min-recommendation-benchmark-hit-rate", type=float, default=0.90)
+    parser.add_argument("--max-recommendation-benchmark-bad-case-rate", type=float, default=0.0)
+    parser.add_argument("--skip-recommendation-benchmark", action="store_true")
     parser.add_argument("--max-bad-match-rate", type=float, default=0.05)
     parser.add_argument("--min-hit-rate", type=float, default=0.95)
     parser.add_argument("--min-mrr", type=float, default=0.35)
@@ -319,6 +364,7 @@ def main() -> None:
 
     benchmark_metrics = (report.get("semantic_benchmark") or {}).get("metrics") or {}
     search_benchmark_metrics = (report.get("search_benchmark") or {}).get("metrics") or {}
+    recommendation_benchmark_metrics = (report.get("recommendation_benchmark") or {}).get("metrics") or {}
     summary = {
         "status": report.get("status"),
         "failures": report.get("failures"),
@@ -340,6 +386,12 @@ def main() -> None:
         "recommendation_result_count": (report.get("recommendation_smoke_summary") or {}).get("result_count"),
         "recommendation_required_hit_count": (report.get("recommendation_smoke_summary") or {}).get("required_hit_count"),
         "recommendation_blocked_hits": (report.get("recommendation_smoke_summary") or {}).get("blocked_hits"),
+        "recommendation_benchmark_case_count": (report.get("recommendation_benchmark") or {}).get("evaluated_case_count"),
+        "recommendation_benchmark_case_pass_rate": recommendation_benchmark_metrics.get("case_pass_rate"),
+        "recommendation_benchmark_good_hit_case_rate": recommendation_benchmark_metrics.get("good_hit_case_rate"),
+        "recommendation_benchmark_bad_case_rate_at_k": recommendation_benchmark_metrics.get("bad_case_rate_at_k"),
+        "recommendation_benchmark_mrr_at_k": recommendation_benchmark_metrics.get("mrr_at_k"),
+        "recommendation_benchmark_ndcg_at_k": recommendation_benchmark_metrics.get("ndcg_at_k"),
         "hit_rate_at_k": benchmark_metrics.get("hit_rate_at_k"),
         "mrr_at_k": benchmark_metrics.get("mrr_at_k"),
         "ndcg_at_k": benchmark_metrics.get("ndcg_at_k"),
