@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import os
+import sys
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,6 +20,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from huggingface_hub import HfApi, hf_hub_download
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from etl.semantic_artifacts import write_semantic_artifacts
 
@@ -183,4 +188,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
