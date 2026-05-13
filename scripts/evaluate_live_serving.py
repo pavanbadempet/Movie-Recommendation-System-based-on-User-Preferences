@@ -103,6 +103,20 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
                     f"/v1/search first result {first_title!r} does not contain {expected_title!r}",
                     report,
                 )
+        if isinstance(search_results, list):
+            search_titles = [_canonical_title((item or {}).get("title")) for item in search_results if isinstance(item, dict)]
+            required_search_titles = {_canonical_title(title) for title in _parse_title_csv(args.required_search_titles)}
+            required_search_hits = sorted({title for title in search_titles if title in required_search_titles})
+            report["search_smoke_summary"] = {
+                "required_hit_count": len(required_search_hits),
+                "required_hits": required_search_hits,
+            }
+            if len(required_search_hits) < args.min_required_search_hits:
+                _threshold_failure(
+                    f"/v1/search found {len(required_search_hits)} required title hits, "
+                    f"below {args.min_required_search_hits}",
+                    report,
+                )
 
         recommendation_payload = report.get("recommendation_smoke")
         if not isinstance(recommendation_payload, dict):
@@ -191,6 +205,8 @@ def main() -> None:
     parser.add_argument("--search-limit", type=int, default=5)
     parser.add_argument("--min-search-results", type=int, default=1)
     parser.add_argument("--expected-search-title", default="Avatar")
+    parser.add_argument("--required-search-titles", default="Avatar: Fire and Ash,Avatar: The Way of Water")
+    parser.add_argument("--min-required-search-hits", type=int, default=2)
     parser.add_argument("--recommendation-smoke-movie-id", type=int, default=19995)
     parser.add_argument("--recommendation-smoke-k", type=int, default=10)
     parser.add_argument("--min-recommendation-results", type=int, default=5)
@@ -238,6 +254,7 @@ def main() -> None:
             if isinstance(report.get("search_smoke"), list) and report.get("search_smoke")
             else None
         ),
+        "search_required_hit_count": (report.get("search_smoke_summary") or {}).get("required_hit_count"),
         "recommendation_result_count": (report.get("recommendation_smoke_summary") or {}).get("result_count"),
         "recommendation_required_hit_count": (report.get("recommendation_smoke_summary") or {}).get("required_hit_count"),
         "recommendation_blocked_hits": (report.get("recommendation_smoke_summary") or {}).get("blocked_hits"),
