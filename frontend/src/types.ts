@@ -31,6 +31,7 @@ export type MovieTitle = {
 };
 
 export type RecommendationResponse = {
+  request_id?: string | null;
   query_movie: Movie;
   recommendations: Movie[];
 };

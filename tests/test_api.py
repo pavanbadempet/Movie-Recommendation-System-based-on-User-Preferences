@@ -77,6 +77,7 @@ def mock_artifacts(tmp_path, monkeypatch):
     monkeypatch.setattr(rec, "MODELS_DIR", tmp_path)
     monkeypatch.setattr(rec, "DATA_DIR", tmp_path)
     monkeypatch.setenv("NOVA_USAGE_PATH", str(tmp_path / "api_usage.jsonl"))
+    monkeypatch.setenv("EVENT_LOG_PATH", str(tmp_path / "events.jsonl"))
     monkeypatch.delenv("NOVA_API_KEYS", raising=False)
     
     # Reset singleton
@@ -386,9 +387,54 @@ class TestRecommendEndpoints:
         resp = client.get("/recommend/id/100", params={"n": 2})
         assert resp.status_code == 200
         data = resp.json()
+        assert data["request_id"]
         assert "query_movie" in data
         assert "recommendations" in data
         assert data["query_movie"]["id"] == 100
+
+    def test_recommend_by_id_writes_request_and_impression_events(self, tmp_path, monkeypatch, mock_artifacts):
+        event_path = tmp_path / "recommendation_events.jsonl"
+        monkeypatch.setenv("EVENT_LOG_PATH", str(event_path))
+
+        from backend.events import iter_events
+        from backend.main import app
+
+        client = TestClient(app)
+        resp = client.get(
+            "/v1/recommendations/id/100",
+            params={
+                "n": 2,
+                "request_id": "req-test-1",
+                "user_id": "user-1",
+                "session_id": "session-1",
+            },
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["request_id"] == "req-test-1"
+
+        events = list(iter_events(event_path))
+        assert [event["event_type"] for event in events].count("recommendation_request") == 1
+        assert [event["event_type"] for event in events].count("recommendation_impression") == 2
+        request_event = next(event for event in events if event["event_type"] == "recommendation_request")
+        assert request_event["request_id"] == "req-test-1"
+        assert request_event["user_id"] == "user-1"
+        assert request_event["session_id"] == "session-1"
+        assert request_event["metadata"]["endpoint"] == "recommendations.id"
+        assert request_event["metadata"]["query_movie"]["id"] == 100
+        assert request_event["metadata"]["candidate_ids"]
+
+        impression_events = [event for event in events if event["event_type"] == "recommendation_impression"]
+        assert [event["metadata"]["rank"] for event in impression_events] == [1, 2]
+        assert all(event["metadata"]["retrieval_stage"] for event in impression_events)
+
+        analytics_resp = client.get("/v1/events/recommendation-analytics")
+        assert analytics_resp.status_code == 200
+        analytics = analytics_resp.json()
+        assert analytics["request_count"] == 1
+        assert analytics["impression_count"] == 2
+        assert analytics["top_seed_movies"][0]["movie_id"] == "100"
 
     def test_recommend_by_id_not_found(self, mock_artifacts):
         from backend.main import app
