@@ -894,17 +894,33 @@ class Recommender:
         """
         if not query:
             return []
+        if self._movies is None:
+            return []
             
         q_lower = query.lower().strip()
+
+        def text_column(column: str) -> pd.Series:
+            if column not in self._movies.columns:
+                return pd.Series("", index=self._movies.index, dtype="string")
+            return self._movies[column].fillna("").astype(str)
+
+        def numeric_column(column: str) -> pd.Series:
+            if column not in self._movies.columns:
+                return pd.Series(0.0, index=self._movies.index, dtype="float32")
+            return pd.to_numeric(self._movies[column], errors="coerce").fillna(0.0)
+
+        titles = text_column("title")
+        overviews = text_column("overview")
+        genres = text_column("genres")
         
         # 1. Title Match (Weight: 10)
-        mask_title = self._movies["title"].str.lower().str.contains(q_lower, regex=False, na=False)
+        mask_title = titles.str.lower().str.contains(q_lower, regex=False, na=False)
         
         # 2. Overview Match (Weight: 3) - Allows searching by plot concepts
-        mask_overview = self._movies["overview"].str.lower().str.contains(q_lower, regex=False, na=False)
+        mask_overview = overviews.str.lower().str.contains(q_lower, regex=False, na=False)
         
         # 3. Genre Match (Weight: 5)
-        mask_genre = self._movies["genres"].str.lower().str.contains(q_lower, regex=False, na=False)
+        mask_genre = genres.str.lower().str.contains(q_lower, regex=False, na=False)
         
         # Combine matches
         matches = self._movies[mask_title | mask_overview | mask_genre].copy()
@@ -921,7 +937,7 @@ class Recommender:
         matches["relevance"] = 0.0
         
         # Title Factors
-        m_title = matches["title"].str.lower()
+        m_title = text_column("title").loc[matches.index].str.lower()
         matches.loc[m_title == q_lower, "relevance"] += 50.0
         matches.loc[m_title.str.startswith(q_lower), "relevance"] += 20.0
         matches.loc[m_title.str.contains(q_lower, regex=False), "relevance"] += 10.0
@@ -932,7 +948,8 @@ class Recommender:
         matches.loc[mask_overview[matches.index], "relevance"] += 3.0
         
         # Popularity Boost
-        matches["relevance"] += np.log1p(matches["popularity"]) * 2.0
+        popularity = numeric_column("popularity").loc[matches.index].clip(lower=0)
+        matches["relevance"] += np.log1p(popularity) * 2.0
         
         # Sort by relevance
         matches = matches.sort_values("relevance", ascending=False).head(limit)
