@@ -28,7 +28,7 @@ class Colors:
     BOLD = '\033[1m'
 
 def log(msg, color=Colors.OKBLUE):
-    print(f"{color}{Colors.BOLD}[MANAGER] {msg}{Colors.ENDC}")
+    print(f"{color}{Colors.BOLD}[MANAGER] {msg}{Colors.ENDC}", flush=True)
 
 def run_cmd(cmd, cwd=None, background=False):
     """Run a shell command."""
@@ -76,6 +76,22 @@ def test():
     log("Running Tests...")
     run_cmd(f"{sys.executable} -m pytest tests/ -v")
     log("All tests passed!", Colors.OKGREEN)
+
+def lakehouse(format_type="text", as_of=None, compare_from=None, compare_to=None):
+    """Inspect local medallion snapshots and SCD history."""
+    cmd = f"{sys.executable} scripts/inspect_lakehouse.py --format {format_type}"
+    if as_of:
+        cmd += f' --as-of "{as_of}"'
+    if compare_from:
+        cmd += f' --compare-from "{compare_from}"'
+    if compare_to:
+        cmd += f' --compare-to "{compare_to}"'
+    if format_type == "json":
+        subprocess.check_call(cmd, shell=True)
+        return
+
+    log("Inspecting lakehouse snapshots...")
+    run_cmd(cmd)
 
 def run_app():
     """Run Backend and Frontend concurrently."""
@@ -161,6 +177,12 @@ def main():
     subparsers.add_parser("docker", help="Run with Docker (App + Airflow)")
     subparsers.add_parser("airflow", help="Start Airflow Orchestration (via Docker)")
     subparsers.add_parser("deploy", help="Push changes to Git (Triggers Render/Streamlit)")
+
+    lakehouse_parser = subparsers.add_parser("lakehouse", help="Inspect local medallion snapshots and SCD history")
+    lakehouse_parser.add_argument("--format", choices=("text", "json"), default="text")
+    lakehouse_parser.add_argument("--as-of", dest="as_of")
+    lakehouse_parser.add_argument("--compare-from")
+    lakehouse_parser.add_argument("--compare-to")
     
     args = parser.parse_args()
     
@@ -178,6 +200,13 @@ def main():
         docker_run()
     elif args.command == "deploy":
         deploy()
+    elif args.command == "lakehouse":
+        lakehouse(
+            format_type=args.format,
+            as_of=args.as_of,
+            compare_from=args.compare_from,
+            compare_to=args.compare_to,
+        )
 
 if __name__ == "__main__":
     main()
