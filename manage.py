@@ -93,6 +93,30 @@ def lakehouse(format_type="text", as_of=None, compare_from=None, compare_to=None
     log("Inspecting lakehouse snapshots...")
     run_cmd(cmd)
 
+def rebuild_serving(
+    movies_path="data/processed/movies_transformed.parquet",
+    models_dir="models",
+    processed_dir="data/processed",
+    batch_size=32,
+    upload_to_hf=False,
+    hf_repo="pavanbadempet/movie-recs-models",
+    hf_repo_type="model",
+):
+    """Rebuild aligned vector serving artifacts from the current catalog."""
+    log("Rebuilding serving artifacts...")
+    cmd = (
+        f"{sys.executable} scripts/rebuild_serving_artifacts.py "
+        f'--movies-path "{movies_path}" '
+        f'--models-dir "{models_dir}" '
+        f'--processed-dir "{processed_dir}" '
+        f"--batch-size {batch_size} "
+        f'--hf-repo "{hf_repo}" '
+        f'--hf-repo-type "{hf_repo_type}"'
+    )
+    if upload_to_hf:
+        cmd += " --upload-to-hf"
+    run_cmd(cmd)
+
 def run_app():
     """Run Backend and Frontend concurrently."""
     check_env()
@@ -183,6 +207,15 @@ def main():
     lakehouse_parser.add_argument("--as-of", dest="as_of")
     lakehouse_parser.add_argument("--compare-from")
     lakehouse_parser.add_argument("--compare-to")
+
+    rebuild_serving_parser = subparsers.add_parser("rebuild-serving", help="Rebuild aligned serving artifacts from movies_transformed.parquet")
+    rebuild_serving_parser.add_argument("--movies-path", default="data/processed/movies_transformed.parquet")
+    rebuild_serving_parser.add_argument("--models-dir", default="models")
+    rebuild_serving_parser.add_argument("--processed-dir", default="data/processed")
+    rebuild_serving_parser.add_argument("--batch-size", type=int, default=32)
+    rebuild_serving_parser.add_argument("--upload-to-hf", action="store_true")
+    rebuild_serving_parser.add_argument("--hf-repo", default="pavanbadempet/movie-recs-models")
+    rebuild_serving_parser.add_argument("--hf-repo-type", default="model")
     
     args = parser.parse_args()
     
@@ -206,6 +239,16 @@ def main():
             as_of=args.as_of,
             compare_from=args.compare_from,
             compare_to=args.compare_to,
+        )
+    elif args.command == "rebuild-serving":
+        rebuild_serving(
+            movies_path=args.movies_path,
+            models_dir=args.models_dir,
+            processed_dir=args.processed_dir,
+            batch_size=args.batch_size,
+            upload_to_hf=args.upload_to_hf,
+            hf_repo=args.hf_repo,
+            hf_repo_type=args.hf_repo_type,
         )
 
 if __name__ == "__main__":
