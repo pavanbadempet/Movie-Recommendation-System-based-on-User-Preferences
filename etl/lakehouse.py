@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
@@ -18,7 +19,14 @@ from typing import Any, Iterable
 
 import pandas as pd
 
-from etl.scd import DEFAULT_HIGH_DATE, SCD_CURRENT_COL, SCD_END_COL, SCD_HASH_COL, SCD_START_COL
+from etl.scd import (
+    DEFAULT_HIGH_DATE,
+    SCD_CURRENT_COL,
+    SCD_END_COL,
+    SCD_HASH_COL,
+    SCD_START_COL,
+    apply_scd_type2,
+)
 
 
 @dataclass(frozen=True)
@@ -50,11 +58,11 @@ class TableModel:
 MOVIE_RAW_MODEL = TableModel(
     name="movies_raw",
     layer="bronze",
-    grain="One source TMDB movie row per daily batch run.",
-    primary_key=("id",),
+    grain="One untrusted source TMDB movie row per daily batch run.",
+    primary_key=(),
     partition_columns=("run_date", "run_id"),
     columns=(
-        ColumnSpec("id", "long", nullable=False, description="TMDB movie id."),
+        ColumnSpec("id", "long", nullable=True, description="TMDB movie id, nullable in bronze before quarantine."),
         ColumnSpec("title", "string", nullable=True),
         ColumnSpec("overview", "string", nullable=True),
         ColumnSpec("genres", "string", nullable=True),
@@ -104,6 +112,21 @@ MOVIE_FEATURE_MODEL = TableModel(
     ),
 )
 
+MOVIE_KEY_COLUMNS = ("id",)
+MOVIE_SCD_TRACKED_COLUMNS = (
+    "title",
+    "overview",
+    "genres",
+    "vote_average",
+    "vote_count",
+    "popularity",
+    "release_date",
+    "poster_path",
+    "director",
+    "cast",
+    "original_language",
+)
+
 MOVIE_SCD_MODEL = TableModel(
     name="dim_movie_scd",
     layer="gold",
@@ -119,6 +142,10 @@ MOVIE_SCD_MODEL = TableModel(
         ColumnSpec("vote_count", "double", nullable=True),
         ColumnSpec("popularity", "double", nullable=True),
         ColumnSpec("release_date", "string", nullable=True),
+        ColumnSpec("poster_path", "string", nullable=True),
+        ColumnSpec("director", "string", nullable=True),
+        ColumnSpec("cast", "string", nullable=True),
+        ColumnSpec("original_language", "string", nullable=True),
         ColumnSpec(SCD_HASH_COL, "string", nullable=False),
         ColumnSpec(SCD_START_COL, "timestamp", nullable=False),
         ColumnSpec(SCD_END_COL, "timestamp", nullable=False),
@@ -362,6 +389,127 @@ def load_table_version(
     """Load a versioned parquet table by run_id, as-of date, or latest."""
     manifest = resolve_table_version(base_path, table_name, run_id=run_id, as_of_date=as_of_date)
     return pd.read_parquet(manifest["data_path"])
+
+
+def _effective_ts_from_run(run_id: str, run_date: str | date | datetime) -> str:
+    """Derive a stable effective timestamp without collapsing same-day reruns."""
+    match = re.fullmatch(r"(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z", str(run_id))
+    if match:
+        year, month, day, hour, minute, second = match.groups()
+        return f"{year}-{month}-{day}T{hour}:{minute}:{second}Z"
+    return f"{_normalize_run_date(run_date)}T00:00:00Z"
+
+
+def _prepare_movie_scd_input(incoming_df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize a latest movie snapshot into the SCD dimension grain."""
+    if "id" not in incoming_df.columns:
+        raise ValueError("movie SCD snapshot missing required column: id")
+
+    df = incoming_df.copy()
+    df["id"] = pd.to_numeric(df["id"], errors="coerce")
+    df = df.dropna(subset=["id"]).copy()
+    if df.empty:
+        return pd.DataFrame(columns=[*MOVIE_KEY_COLUMNS, *MOVIE_SCD_TRACKED_COLUMNS])
+
+    df["id"] = df["id"].astype("int64")
+    for column in MOVIE_SCD_TRACKED_COLUMNS:
+        if column not in df.columns:
+            df[column] = pd.NA
+
+    for column in ("title", "overview", "genres", "release_date", "poster_path", "director", "cast", "original_language"):
+        df[column] = df[column].fillna("").astype(str).str.strip()
+
+    for column in ("vote_average", "vote_count", "popularity"):
+        df[column] = pd.to_numeric(df[column], errors="coerce")
+
+    sort_columns = [
+        column
+        for column in ("content_quality_score", "vote_count", "popularity")
+        if column in df.columns
+    ]
+    if sort_columns:
+        df = df.sort_values(sort_columns, ascending=False, na_position="last")
+
+    df = df.drop_duplicates(subset=list(MOVIE_KEY_COLUMNS), keep="first")
+    return df[[*MOVIE_KEY_COLUMNS, *MOVIE_SCD_TRACKED_COLUMNS]].reset_index(drop=True)
+
+
+def build_movie_scd_snapshot(
+    incoming_df: pd.DataFrame,
+    existing_history: pd.DataFrame | None = None,
+    effective_ts: str | datetime | None = None,
+) -> pd.DataFrame:
+    """Build an SCD Type 2 movie dimension from the latest movie snapshot."""
+    effective_ts = effective_ts or utc_now()
+    incoming = _prepare_movie_scd_input(incoming_df)
+    if existing_history is not None and not existing_history.empty:
+        existing_history = existing_history.copy()
+        for column in MOVIE_SCD_TRACKED_COLUMNS:
+            if column not in existing_history.columns:
+                existing_history[column] = pd.NA
+    history = apply_scd_type2(
+        existing=existing_history,
+        incoming=incoming,
+        key_columns=MOVIE_KEY_COLUMNS,
+        tracked_columns=MOVIE_SCD_TRACKED_COLUMNS,
+        effective_ts=effective_ts,
+    )
+
+    ordered_columns = [
+        *MOVIE_KEY_COLUMNS,
+        *MOVIE_SCD_TRACKED_COLUMNS,
+        SCD_HASH_COL,
+        SCD_START_COL,
+        SCD_END_COL,
+        SCD_CURRENT_COL,
+    ]
+    if history.empty:
+        return pd.DataFrame(columns=ordered_columns)
+
+    remaining_columns = [column for column in history.columns if column not in ordered_columns]
+    sort_columns = [column for column in ("id", SCD_START_COL) if column in history.columns]
+    if sort_columns:
+        history = history.sort_values(sort_columns, kind="mergesort")
+    return history[[*ordered_columns, *remaining_columns]].reset_index(drop=True)
+
+
+def write_movie_scd_snapshot(
+    incoming_df: pd.DataFrame,
+    base_path: Path | str,
+    run_id: str,
+    run_date: str | date | datetime,
+    existing_history: pd.DataFrame | None = None,
+    effective_ts: str | datetime | None = None,
+) -> dict[str, Any]:
+    """Update and write the manifest-backed movie SCD Type 2 dimension."""
+    if existing_history is None:
+        try:
+            existing_history = load_table_version(base_path, MOVIE_SCD_MODEL.name)
+        except FileNotFoundError:
+            existing_history = None
+
+    effective_ts = effective_ts or _effective_ts_from_run(run_id, run_date)
+    history = build_movie_scd_snapshot(
+        incoming_df=incoming_df,
+        existing_history=existing_history,
+        effective_ts=effective_ts,
+    )
+    manifest = write_versioned_snapshot(
+        df=history,
+        base_path=base_path,
+        table_name=MOVIE_SCD_MODEL.name,
+        run_id=run_id,
+        run_date=run_date,
+        model=MOVIE_SCD_MODEL,
+    )
+    current_rows = int(history[SCD_CURRENT_COL].astype(bool).sum()) if SCD_CURRENT_COL in history.columns else 0
+    return {
+        "table": MOVIE_SCD_MODEL.name,
+        "effective_ts": str(effective_ts),
+        "current_rows": current_rows,
+        "total_versions": int(len(history)),
+        "manifest": manifest,
+    }
 
 
 def as_of_scd(
