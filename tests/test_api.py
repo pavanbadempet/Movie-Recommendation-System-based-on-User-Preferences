@@ -328,6 +328,18 @@ class TestSearchEndpoint:
         assert "status" in data
         assert "case_count" in data
 
+    def test_search_benchmark_endpoint_is_available(self, mock_artifacts):
+        from backend.main import app
+        client = TestClient(app)
+
+        resp = client.get("/v1/evaluation/search-benchmark", params={"k": 3})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "status" in data
+        assert "case_count" in data
+        assert "top1_hit_rate" in data["metrics"]
+
     def test_semantic_benchmark_async_cache_returns_warming(self, mock_artifacts, monkeypatch):
         monkeypatch.setenv("NOVA_ASYNC_EVALUATION_CACHE", "true")
 

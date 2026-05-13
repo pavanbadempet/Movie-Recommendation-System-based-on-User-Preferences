@@ -1,9 +1,15 @@
 from argparse import Namespace
+import json
 
 from scripts import evaluate_live_serving as live
 
 
-def _args(skip_semantic_benchmark: bool = False, allow_degraded_artifact_health: bool = False) -> Namespace:
+def _args(
+    skip_semantic_benchmark: bool = False,
+    allow_degraded_artifact_health: bool = False,
+    skip_search_benchmark: bool = True,
+    search_benchmark_path=None,
+) -> Namespace:
     return Namespace(
         base_url="https://example.test",
         timeout=1,
@@ -16,6 +22,12 @@ def _args(skip_semantic_benchmark: bool = False, allow_degraded_artifact_health:
         expected_search_title="Avatar",
         required_search_titles="Avatar: Fire and Ash,Avatar: The Way of Water",
         min_required_search_hits=2,
+        search_benchmark_path=search_benchmark_path,
+        search_benchmark_k=5,
+        min_search_top1_hit_rate=0.98,
+        min_search_hit_rate=1.0,
+        max_search_blocked_hit_case_rate=0.0,
+        skip_search_benchmark=skip_search_benchmark,
         recommendation_smoke_movie_id=19995,
         recommendation_smoke_k=10,
         min_recommendation_results=5,
@@ -132,6 +144,46 @@ def test_live_serving_gate_rejects_search_title_regression(monkeypatch):
 
     assert report["status"] == "failed"
     assert any("/v1/search found 0 required title hits" in failure for failure in report["failures"])
+
+
+def test_live_serving_gate_runs_search_benchmark(monkeypatch, tmp_path):
+    benchmark_path = tmp_path / "search_benchmark.json"
+    benchmark_path.write_text(
+        json.dumps(
+            {
+                "cases": [
+                    {
+                        "case_id": "avatar",
+                        "query": "Avatar",
+                        "expected_results": [{"id": 19995, "title": "Avatar"}],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_get_json(base_url, path, timeout):
+        if path.startswith("/v1/recommendations/id/19995?"):
+            return {
+                "recommendations": [
+                    {"title": "Avatar: The Way of Water"},
+                    {"title": "The Abyss"},
+                    {"title": "Pacific Rim"},
+                    {"title": "Dune"},
+                    {"title": "Prometheus"},
+                ]
+            }
+        return _healthy_payload(path)
+
+    monkeypatch.setattr(live, "_get_json", fake_get_json)
+
+    report = live.evaluate_live_serving(
+        _args(skip_search_benchmark=False, search_benchmark_path=benchmark_path)
+    )
+
+    assert report["status"] == "ok"
+    assert report["search_benchmark"]["metrics"]["top1_hit_rate"] == 1.0
 
 
 def test_live_serving_gate_can_skip_semantic_benchmark_for_lite_gateway(monkeypatch):
