@@ -329,6 +329,34 @@ class TestRecommender:
         assert results[0]["title"] == "Avatar"
         assert "relevance" in results[0]
 
+    def test_search_promotes_canonical_franchise_over_weak_duplicate_titles(self):
+        """Exact-title duplicates should not bury high-signal franchise continuations."""
+        import backend.recommender as rec
+
+        r = rec.Recommender()
+        r._movies = pd.DataFrame(
+            {
+                "id": [19995, 1096978, 83533, 76600, 1132450],
+                "title": [
+                    "Avatar",
+                    "Avatar",
+                    "Avatar: Fire and Ash",
+                    "Avatar: The Way of Water",
+                    "Avataro Sentai Donbrothers",
+                ],
+                "overview": [""] * 5,
+                "genres": ["Science Fiction"] * 5,
+                "popularity": [30.47, 4.63, 210.38, 27.04, 4.76],
+                "vote_count": [33849, 46, 2774, 14019, 13],
+            }
+        )
+
+        results = r.search_movies("Avatar", limit=4)
+
+        assert [item["id"] for item in results[:3]] == [19995, 83533, 76600]
+        assert 1096978 not in [item["id"] for item in results[:3]]
+        assert 1132450 not in [item["id"] for item in results[:3]]
+
     def test_quality_gate_drops_low_rated_recommendation_drift(self):
         """MMR should not rescue weak low-rated candidates when enough strong matches exist."""
         import backend.recommender as rec
