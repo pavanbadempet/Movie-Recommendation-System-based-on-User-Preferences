@@ -1,4 +1,15 @@
-import type { ApiRoot, ArtifactHealth, BackendResult, Movie, MovieTitle, PlatformStatus, RecommendationResponse, SemanticBenchmark } from "./types";
+import type {
+  ApiRoot,
+  ArtifactHealth,
+  BackendResult,
+  EventPayload,
+  EventResponse,
+  Movie,
+  MovieTitle,
+  PlatformStatus,
+  RecommendationResponse,
+  SemanticBenchmark,
+} from "./types";
 
 const DEFAULT_BACKENDS = [
   "https://movie-recs-api-5qvy.onrender.com",
@@ -85,6 +96,38 @@ export async function apiGet<T>(
   throw new Error(errors.join(" | ") || "No backend available");
 }
 
+export async function apiPost<T>(path: string, body: unknown, timeoutMs = 15000): Promise<BackendResult<T>> {
+  const errors: string[] = [];
+
+  for (const baseUrl of candidateBackends()) {
+    const timeout = timeoutSignal(timeoutMs);
+    try {
+      const response = await fetch(`${baseUrl}${path}`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        signal: timeout.signal,
+      });
+      if (!response.ok) {
+        errors.push(`${baseUrl}: ${response.status}`);
+        if (response.status < 500) break;
+        continue;
+      }
+      activeBackend = baseUrl;
+      return { data: (await response.json()) as T, baseUrl };
+    } catch (error) {
+      errors.push(`${backendLabel(baseUrl)} ${errorMessage(error)}`);
+    } finally {
+      timeout.cancel();
+    }
+  }
+
+  throw new Error(errors.join(" | ") || "No backend available");
+}
+
 export async function pingApi(): Promise<BackendResult<ApiRoot>> {
   return apiGet<ApiRoot>("/", {}, 8000);
 }
@@ -119,4 +162,8 @@ export async function getMovie(movieId: number): Promise<BackendResult<Movie>> {
 
 export async function getRecommendations(movieId: number, n = 12): Promise<BackendResult<RecommendationResponse>> {
   return apiGet<RecommendationResponse>(`/v1/recommendations/id/${movieId}`, { n }, 45000);
+}
+
+export async function recordEvent(payload: EventPayload): Promise<BackendResult<EventResponse>> {
+  return apiPost<EventResponse>("/v1/events", payload, 8000);
 }
