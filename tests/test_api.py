@@ -256,6 +256,23 @@ class TestSearchEndpoint:
         assert "status" in data
         assert "case_count" in data
 
+    def test_semantic_benchmark_async_cache_returns_warming(self, mock_artifacts, monkeypatch):
+        monkeypatch.setenv("NOVA_ASYNC_EVALUATION_CACHE", "true")
+
+        import backend.main as main
+        from backend.main import app
+
+        main._semantic_benchmark_cache.clear()
+        monkeypatch.setattr(main, "_start_background_semantic_benchmark", lambda k: None)
+
+        client = TestClient(app)
+        resp = client.get("/v1/evaluation/semantic-benchmark", params={"k": 3})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "warming"
+        assert data["k"] == 3
+
     def test_artifact_health_endpoint_reports_alignment(self, mock_artifacts):
         from backend.main import app
         client = TestClient(app)
