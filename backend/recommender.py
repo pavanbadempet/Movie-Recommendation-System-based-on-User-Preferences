@@ -95,6 +95,8 @@ class Recommender:
         self._behavior_features: dict[str, Any] = {}
         self._behavior_features_refreshed_at: datetime | None = None
         self._semantic_twin_cache: dict[int, dict[str, Any]] = {}
+        self._search_text_cache: dict[str, pd.Series] = {}
+        self._search_text_cache_frame_id: int | None = None
         self._low_memory = _low_memory_serving_enabled()
         self._artifact_status: dict[str, Any] = {"vector_artifacts_ready": False}
     
@@ -956,13 +958,22 @@ class Recommender:
             return self._movies[column].fillna("").astype(str)
 
         def normalized_text_column(column: str) -> pd.Series:
-            return (
+            frame_id = id(self._movies)
+            if self._search_text_cache_frame_id != frame_id:
+                self._search_text_cache.clear()
+                self._search_text_cache_frame_id = frame_id
+            cached = self._search_text_cache.get(column)
+            if cached is not None and cached.index.equals(self._movies.index):
+                return cached
+            normalized = (
                 text_column(column)
                 .str.lower()
                 .str.replace(r"[^a-z0-9]+", " ", regex=True)
                 .str.replace(r"\s+", " ", regex=True)
                 .str.strip()
             )
+            self._search_text_cache[column] = normalized
+            return normalized
 
         def numeric_column(column: str) -> pd.Series:
             if column not in self._movies.columns:
