@@ -1539,11 +1539,12 @@ async def recommendation_quality_report(
 async def semantic_benchmark_report(
     context: TenantContext = Depends(resolve_tenant_context),
     k: int = Query(default=10, ge=1, le=50),
+    sync: bool = Query(default=False, description="Compute synchronously instead of returning async cache warming status"),
 ):
     """Return human-labeled semantic benchmark metrics for obvious bad-match detection."""
     remote_payload = await remote_payload_or_raise(
         "/v1/evaluation/semantic-benchmark",
-        params={"k": k},
+        params={"k": k, "sync": sync},
         context=context,
     )
     if remote_payload is not None:
@@ -1559,7 +1560,7 @@ async def semantic_benchmark_report(
     cached_report = _get_cached_semantic_benchmark(k)
     if cached_report is not None:
         report = cached_report
-    elif _env_truthy("NOVA_ASYNC_EVALUATION_CACHE"):
+    elif _env_truthy("NOVA_ASYNC_EVALUATION_CACHE") and not sync:
         _start_background_semantic_benchmark(k)
         report = _warming_semantic_benchmark_report(k)
     else:
@@ -1617,11 +1618,12 @@ async def search_benchmark_report(
 async def recommendation_benchmark_report(
     context: TenantContext = Depends(resolve_tenant_context),
     k: int = Query(default=10, ge=1, le=50),
+    sync: bool = Query(default=False, description="Compute synchronously instead of returning async cache warming status"),
 ):
     """Return human-labeled item-to-item recommendation benchmark metrics."""
     remote_payload = await remote_payload_or_raise(
         "/v1/evaluation/recommendation-benchmark",
-        params={"k": k},
+        params={"k": k, "sync": sync},
         context=context,
     )
     if remote_payload is not None:
@@ -1637,7 +1639,7 @@ async def recommendation_benchmark_report(
     cached_report = _get_cached_recommendation_benchmark(k)
     if cached_report is not None:
         report = cached_report
-    elif _env_truthy("NOVA_ASYNC_EVALUATION_CACHE"):
+    elif _env_truthy("NOVA_ASYNC_EVALUATION_CACHE") and not sync:
         _start_background_recommendation_benchmark(k)
         report = _warming_recommendation_benchmark_report(k)
     else:
