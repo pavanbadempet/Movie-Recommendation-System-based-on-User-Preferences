@@ -1,13 +1,22 @@
 name: Synthetic Monitoring
 
 on:
+  workflow_run:
+    workflows: ["Sync to Hugging Face Hub"]
+    types:
+      - completed
   schedule:
     - cron: "*/30 * * * *"
   workflow_dispatch:
 
+concurrency:
+  group: synthetic-monitoring-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   synthetic-monitoring:
     runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     timeout-minutes: 10
     env:
       NOVA_SERVING_URL: https://pavanbadempet-movie-rec-api.hf.space
