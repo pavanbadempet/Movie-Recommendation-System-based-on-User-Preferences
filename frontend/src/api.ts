@@ -17,8 +17,17 @@ const DEFAULT_BACKENDS = [
   "https://pavanbadempet-movie-rec-api.hf.space",
 ];
 
+function sameOriginBackend(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  const enabledByHost = window.location.hostname.endsWith(".hf.space");
+  const enabledByEnv = import.meta.env.VITE_USE_SAME_ORIGIN_API === "true";
+  if (!enabledByHost && !enabledByEnv) return undefined;
+  return window.location.origin.replace(/\/+$/, "");
+}
+
 const configuredBackends = [
   import.meta.env.VITE_API_URL,
+  sameOriginBackend(),
   import.meta.env.VITE_BACKUP_API_URL,
   ...DEFAULT_BACKENDS,
 ]
