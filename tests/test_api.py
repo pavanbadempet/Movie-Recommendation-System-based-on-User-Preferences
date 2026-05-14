@@ -284,6 +284,15 @@ class TestSearchEndpoint:
         assert resp.status_code == 200
         assert len(resp.json()) == 1
 
+    def test_movie_titles_accepts_full_catalog_limit(self, mock_artifacts):
+        from backend.main import app
+        client = TestClient(app)
+
+        resp = client.get("/movies/titles", params={"limit": 100000})
+
+        assert resp.status_code == 200
+        assert len(resp.json()) >= 1
+
     def test_search_finds_movie(self, mock_artifacts):
         from backend.main import app
         client = TestClient(app)

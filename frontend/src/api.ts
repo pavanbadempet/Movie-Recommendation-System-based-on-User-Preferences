@@ -158,8 +158,8 @@ export async function semanticBenchmark(k = 10): Promise<BackendResult<SemanticB
   return apiGet<SemanticBenchmark>("/v1/evaluation/semantic-benchmark", { k }, 45000);
 }
 
-export async function loadTitles(limit = 5000): Promise<BackendResult<MovieTitle[]>> {
-  return apiGet<MovieTitle[]>("/movies/titles", { limit }, 30000);
+export async function loadTitles(limit = 100000): Promise<BackendResult<MovieTitle[]>> {
+  return apiGet<MovieTitle[]>("/movies/titles", { limit }, 45000);
 }
 
 export async function searchMovies(query: string): Promise<BackendResult<Movie[]>> {
