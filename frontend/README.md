@@ -19,9 +19,13 @@ npm run build
 
 Cloudflare Pages, Vercel, or Netlify can deploy this as a static Vite app.
 
-- Root directory: `frontend`
-- Build command: `npm run build`
-- Output directory: `dist`
+- Recommended Cloudflare setup:
+  - Root directory: `frontend`
+  - Build command: `npm ci && npm run build`
+  - Output directory: `dist`
+- If Cloudflare root directory stays as repository root `/`:
+  - Build command: `cd frontend && npm ci && npm run build`
+  - Output directory: `frontend/dist`
 - Node version: `24` or current LTS
 
 Optional environment variables:

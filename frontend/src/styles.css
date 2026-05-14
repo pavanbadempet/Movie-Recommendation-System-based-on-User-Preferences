@@ -1043,6 +1043,36 @@ input:focus-visible {
   gap: 14px;
 }
 
+.result-context {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.result-context span {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  overflow: hidden;
+  color: #dce3ee;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-context svg {
+  flex: 0 0 auto;
+  color: var(--accent-2);
+}
+
 .recommendation-card {
   min-width: 0;
   overflow: hidden;
@@ -1053,6 +1083,10 @@ input:focus-visible {
     border-color 150ms ease,
     background 150ms ease,
     transform 150ms ease;
+}
+
+.card-media {
+  position: relative;
 }
 
 .recommendation-card:hover {
@@ -1070,6 +1104,25 @@ input:focus-visible {
   text-align: left;
   border: 0;
   background: transparent;
+}
+
+.rank-pill {
+  position: absolute;
+  top: 9px;
+  left: 9px;
+  min-width: 34px;
+  min-height: 28px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 8px;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(8, 10, 15, 0.72);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(12px);
+  font-size: 0.76rem;
+  font-weight: 900;
 }
 
 .recommendation-body {
