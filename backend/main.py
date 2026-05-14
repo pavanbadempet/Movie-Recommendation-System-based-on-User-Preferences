@@ -18,7 +18,7 @@ from urllib.parse import quote
 
 import httpx
 import sentry_sdk
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -2160,6 +2160,7 @@ async def recommendation_diagnostics(
 @app.get("/recommend/id/{movie_id}", response_model=RecommendationResponse)
 async def recommend_by_id(
     movie_id: int,
+    background_tasks: BackgroundTasks,
     n: int = Query(default=10, le=50, description="Number of recommendations"),
     request_id: Optional[str] = Query(default=None, description="Optional client-generated request id"),
     user_id: Optional[str] = Query(default=None, description="Optional user id for analytics attribution"),
@@ -2167,24 +2168,26 @@ async def recommend_by_id(
     context: TenantContext = Depends(resolve_tenant_context),
 ):
     """Get recommendations for a movie by TMDB ID."""
+    resolved_request_id = request_id or str(uuid.uuid4())
     remote_payload = await remote_payload_or_raise(
         f"/v1/recommendations/id/{movie_id}",
-        params={"n": n, "request_id": request_id, "user_id": user_id, "session_id": session_id},
+        params={"n": n, "request_id": resolved_request_id, "user_id": user_id, "session_id": session_id},
         context=context,
     )
     if remote_payload is not None:
         if isinstance(remote_payload, dict):
-            request_id = record_recommendation_events(
+            background_tasks.add_task(
+                record_recommendation_events,
                 endpoint="recommendations.id.remote",
                 context=context,
                 query_movie=remote_payload.get("query_movie") or {"id": movie_id},
                 recommendations=list(remote_payload.get("recommendations") or []),
                 rec=None,
-                request_id=request_id,
+                request_id=resolved_request_id,
                 user_id=user_id,
                 session_id=session_id,
             )
-            remote_payload.setdefault("request_id", request_id)
+            remote_payload.setdefault("request_id", resolved_request_id)
         record_usage(
             "recommendations.id.remote",
             context.tenant_id,
@@ -2202,14 +2205,15 @@ async def recommend_by_id(
         raise HTTPException(status_code=404, detail=f"Movie with ID {movie_id} not found")
     
     # Get recommendations
-    recommendations = rec.recommend_by_id(movie_id, n=n)
-    request_id = record_recommendation_events(
+    recommendations = await run_in_threadpool(lambda: rec.recommend_by_id(movie_id, n=n))
+    background_tasks.add_task(
+        record_recommendation_events,
         endpoint="recommendations.id",
         context=context,
         query_movie=query_movie,
         recommendations=recommendations,
         rec=rec,
-        request_id=request_id,
+        request_id=resolved_request_id,
         user_id=user_id,
         session_id=session_id,
     )
@@ -2222,7 +2226,7 @@ async def recommend_by_id(
     )
     
     return RecommendationResponse(
-        request_id=request_id,
+        request_id=resolved_request_id,
         query_movie=query_movie,
         recommendations=recommendations,
     )
@@ -2232,6 +2236,7 @@ async def recommend_by_id(
 @app.get("/recommend/id/{movie_id}/enriched", response_model=EnrichedRecommendationResponse)
 async def recommend_by_id_enriched(
     movie_id: int,
+    background_tasks: BackgroundTasks,
     n: int = Query(default=10, le=50, description="Number of recommendations"),
     request_id: Optional[str] = Query(default=None, description="Optional client-generated request id"),
     user_id: Optional[str] = Query(default=None, description="Optional user id for analytics attribution"),
@@ -2239,24 +2244,26 @@ async def recommend_by_id_enriched(
     context: TenantContext = Depends(resolve_tenant_context),
 ):
     """Get recommendations with FULL TMDB data (trailers, cast, etc) - PARALLEL FETCH."""
+    resolved_request_id = request_id or str(uuid.uuid4())
     remote_payload = await remote_payload_or_raise(
         f"/v1/recommendations/id/{movie_id}/enriched",
-        params={"n": n, "request_id": request_id, "user_id": user_id, "session_id": session_id},
+        params={"n": n, "request_id": resolved_request_id, "user_id": user_id, "session_id": session_id},
         context=context,
     )
     if remote_payload is not None:
         if isinstance(remote_payload, dict):
-            request_id = record_recommendation_events(
+            background_tasks.add_task(
+                record_recommendation_events,
                 endpoint="recommendations.id.enriched.remote",
                 context=context,
                 query_movie=remote_payload.get("query_movie") or {"id": movie_id},
                 recommendations=list(remote_payload.get("recommendations") or []),
                 rec=None,
-                request_id=request_id,
+                request_id=resolved_request_id,
                 user_id=user_id,
                 session_id=session_id,
             )
-            remote_payload.setdefault("request_id", request_id)
+            remote_payload.setdefault("request_id", resolved_request_id)
         record_usage(
             "recommendations.id.enriched.remote",
             context.tenant_id,
@@ -2274,14 +2281,15 @@ async def recommend_by_id_enriched(
         raise HTTPException(status_code=404, detail=f"Movie with ID {movie_id} not found")
     
     # Get recommendations
-    recommendations = rec.recommend_by_id(movie_id, n=n)
-    request_id = record_recommendation_events(
+    recommendations = await run_in_threadpool(lambda: rec.recommend_by_id(movie_id, n=n))
+    background_tasks.add_task(
+        record_recommendation_events,
         endpoint="recommendations.id.enriched",
         context=context,
         query_movie=query_movie,
         recommendations=recommendations,
         rec=rec,
-        request_id=request_id,
+        request_id=resolved_request_id,
         user_id=user_id,
         session_id=session_id,
     )
@@ -2297,7 +2305,7 @@ async def recommend_by_id_enriched(
     enriched = await asyncio.gather(*[enrich_movie(m) for m in recommendations])
     
     return EnrichedRecommendationResponse(
-        request_id=request_id,
+        request_id=resolved_request_id,
         query_movie=query_movie,
         recommendations=enriched,
     )
@@ -2307,6 +2315,7 @@ async def recommend_by_id_enriched(
 @app.get("/recommend/title/{title}", response_model=RecommendationResponse)
 async def recommend_by_title(
     title: str,
+    background_tasks: BackgroundTasks,
     n: int = Query(default=10, le=50, description="Number of recommendations"),
     request_id: Optional[str] = Query(default=None, description="Optional client-generated request id"),
     user_id: Optional[str] = Query(default=None, description="Optional user id for analytics attribution"),
@@ -2314,24 +2323,26 @@ async def recommend_by_title(
     context: TenantContext = Depends(resolve_tenant_context),
 ):
     """Get recommendations for a movie by title."""
+    resolved_request_id = request_id or str(uuid.uuid4())
     remote_payload = await remote_payload_or_raise(
         f"/v1/recommendations/title/{quote(title, safe='')}",
-        params={"n": n, "request_id": request_id, "user_id": user_id, "session_id": session_id},
+        params={"n": n, "request_id": resolved_request_id, "user_id": user_id, "session_id": session_id},
         context=context,
     )
     if remote_payload is not None:
         if isinstance(remote_payload, dict):
-            request_id = record_recommendation_events(
+            background_tasks.add_task(
+                record_recommendation_events,
                 endpoint="recommendations.title.remote",
                 context=context,
                 query_movie=remote_payload.get("query_movie") or {"title": title},
                 recommendations=list(remote_payload.get("recommendations") or []),
                 rec=None,
-                request_id=request_id,
+                request_id=resolved_request_id,
                 user_id=user_id,
                 session_id=session_id,
             )
-            remote_payload.setdefault("request_id", request_id)
+            remote_payload.setdefault("request_id", resolved_request_id)
         record_usage(
             "recommendations.title.remote",
             context.tenant_id,
@@ -2344,21 +2355,22 @@ async def recommend_by_title(
     rec = get_rec()
     
     # Search for the movie
-    matches = rec.search_movies(title, limit=1)
+    matches = await run_in_threadpool(lambda: rec.search_movies(title, limit=1))
     if not matches:
         raise HTTPException(status_code=404, detail=f"Movie '{title}' not found")
     
     query_movie = matches[0]
     
     # Get recommendations
-    recommendations = rec.recommend_by_title(title, n=n)
-    request_id = record_recommendation_events(
+    recommendations = await run_in_threadpool(lambda: rec.recommend_by_title(title, n=n))
+    background_tasks.add_task(
+        record_recommendation_events,
         endpoint="recommendations.title",
         context=context,
         query_movie=query_movie,
         recommendations=recommendations,
         rec=rec,
-        request_id=request_id,
+        request_id=resolved_request_id,
         user_id=user_id,
         session_id=session_id,
     )
@@ -2371,7 +2383,7 @@ async def recommend_by_title(
     )
     
     return RecommendationResponse(
-        request_id=request_id,
+        request_id=resolved_request_id,
         query_movie=query_movie,
         recommendations=recommendations,
     )
@@ -2380,6 +2392,7 @@ async def recommend_by_title(
 @app.get("/v1/recommendations/user/{user_id}", response_model=list[Movie])
 async def recommend_for_user(
     user_id: str,
+    background_tasks: BackgroundTasks,
     n: int = Query(default=10, le=50, description="Number of recommendations"),
     limit: Optional[int] = Query(default=None, ge=1, le=50, description="Alias for number of recommendations"),
     top_k: Optional[int] = Query(default=None, ge=1, le=50, description="Alias for number of recommendations"),
@@ -2389,26 +2402,28 @@ async def recommend_for_user(
 ):
     """Personalize recommendations from a user's recent implicit feedback events."""
     result_limit = top_k or limit or n
+    resolved_request_id = request_id or str(uuid.uuid4())
     remote_payload = await remote_payload_or_raise(
         f"/v1/recommendations/user/{quote(user_id, safe='')}",
         params={
             "n": n,
             "limit": limit,
             "top_k": top_k,
-            "request_id": request_id,
+            "request_id": resolved_request_id,
             "session_id": session_id,
         },
         context=context,
     )
     if remote_payload is not None:
         if isinstance(remote_payload, list):
-            record_recommendation_events(
+            background_tasks.add_task(
+                record_recommendation_events,
                 endpoint="recommendations.user.remote",
                 context=context,
                 query_movie={"id": None, "title": f"user:{user_id}"},
                 recommendations=remote_payload,
                 rec=None,
-                request_id=request_id,
+                request_id=resolved_request_id,
                 user_id=user_id,
                 session_id=session_id,
             )
@@ -2422,11 +2437,12 @@ async def recommend_for_user(
         return remote_payload
 
     rec = get_rec()
-    profile = build_user_behavior_profile(user_id, limit=12)
+    profile = await run_in_threadpool(lambda: build_user_behavior_profile(user_id, limit=12))
     assignment = assign_experiment(subject_id=user_id)
-    results = rec.recommend_for_user_profile(profile, n=result_limit)
+    results = await run_in_threadpool(lambda: rec.recommend_for_user_profile(profile, n=result_limit))
     results = attach_experiment(results, assignment)
-    record_recommendation_events(
+    background_tasks.add_task(
+        record_recommendation_events,
         endpoint="recommendations.user",
         context=context,
         query_movie={
@@ -2435,7 +2451,7 @@ async def recommend_for_user(
         },
         recommendations=results,
         rec=rec,
-        request_id=request_id,
+        request_id=resolved_request_id,
         user_id=user_id,
         session_id=session_id,
     )
