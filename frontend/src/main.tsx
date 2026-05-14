@@ -52,6 +52,7 @@ import "./styles.css";
 const imageBase = import.meta.env.VITE_TMDB_IMAGE_BASE || "https://image.tmdb.org/t/p/w500";
 const RECENT_STORAGE_KEY = "nova_recent_movies_v2";
 const SESSION_STORAGE_KEY = "nova_session_id_v1";
+const TITLE_CATALOG_LIMIT = 100000;
 
 const starterTitles = ["Avatar", "Inception", "The Dark Knight", "Interstellar"];
 const starterPrompts = [
@@ -762,13 +763,13 @@ function App() {
       setBackend(ping.baseUrl);
       setNotice("Service online. Loading catalog.");
 
-      const result = await loadTitles(5000);
+      const result = await loadTitles(TITLE_CATALOG_LIMIT);
       setTitles(result.data);
       setBackend(result.baseUrl);
       setCatalogState("ready");
       setRetryCount(0);
       setLastUpdated(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
-      setNotice(`${result.data.length.toLocaleString()} titles loaded`);
+      setNotice(`${result.data.length.toLocaleString()} searchable titles loaded`);
     } catch (error) {
       setCatalogState("warming");
       setRetryCount((count) => count + 1);
