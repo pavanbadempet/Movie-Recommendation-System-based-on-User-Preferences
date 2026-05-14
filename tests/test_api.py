@@ -212,6 +212,25 @@ class TestPlatformEndpoint:
         assert components["semantic_benchmark_cache"]["status"] == "warming"
         assert components["recommendation_benchmark_cache"]["status"] == "warming"
 
+    def test_platform_readiness_starts_background_benchmark_warmers(self, mock_artifacts, monkeypatch):
+        monkeypatch.setenv("NOVA_ASYNC_EVALUATION_CACHE", "true")
+
+        import backend.main as main
+        from backend.main import app
+
+        started = []
+        main._semantic_benchmark_cache.clear()
+        main._recommendation_benchmark_cache.clear()
+        monkeypatch.setattr(main, "_start_background_semantic_benchmark", lambda k: started.append(("semantic", k)))
+        monkeypatch.setattr(main, "_start_background_recommendation_benchmark", lambda k: started.append(("recommendation", k)))
+
+        client = TestClient(app)
+        resp = client.get("/v1/platform/readiness", params={"strict": True, "k": 3})
+
+        assert resp.status_code == 200
+        assert ("semantic", 3) in started
+        assert ("recommendation", 3) in started
+
     def test_platform_readiness_can_proxy_to_remote_service(self, mock_artifacts, monkeypatch):
         import backend.main as main
         from backend.main import app

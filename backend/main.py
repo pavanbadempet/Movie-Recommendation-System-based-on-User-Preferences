@@ -895,10 +895,18 @@ def _platform_readiness_report(
         )
     )
 
+    semantic_benchmark_report = _get_cached_semantic_benchmark(k)
+    recommendation_benchmark_report = _get_cached_recommendation_benchmark(k)
+    if _env_truthy("NOVA_ASYNC_EVALUATION_CACHE"):
+        if semantic_benchmark_report is None:
+            _start_background_semantic_benchmark(k)
+        if recommendation_benchmark_report is None:
+            _start_background_recommendation_benchmark(k)
+
     components.append(
         _benchmark_readiness_component(
             name="semantic_benchmark_cache",
-            report=_get_cached_semantic_benchmark(k),
+            report=semantic_benchmark_report,
             required=strict,
             thresholds={
                 "bad_match_rate_at_k": ("<=", 0.05),
@@ -911,7 +919,7 @@ def _platform_readiness_report(
     components.append(
         _benchmark_readiness_component(
             name="recommendation_benchmark_cache",
-            report=_get_cached_recommendation_benchmark(k),
+            report=recommendation_benchmark_report,
             required=strict,
             thresholds={
                 "case_pass_rate": (">=", 0.80),
