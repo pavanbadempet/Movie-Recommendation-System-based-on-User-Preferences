@@ -26,8 +26,8 @@ Cloudflare Pages, Vercel, or Netlify can deploy this as a static Vite app.
 
 Optional environment variables:
 
-- `VITE_API_URL`: primary API gateway, default Render backend
-- `VITE_BACKUP_API_URL`: backup API, default Hugging Face Space
+- `VITE_API_URL`: primary API gateway, default Hugging Face Space
+- `VITE_BACKUP_API_URL`: backup API, default Render gateway
 - `VITE_TMDB_IMAGE_BASE`: poster image base URL
 
 The UI has request-level backend failover, so a sleeping free host should not break the whole app.

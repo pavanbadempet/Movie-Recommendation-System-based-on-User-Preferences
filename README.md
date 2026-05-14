@@ -100,7 +100,6 @@ Core Delta tables include:
 - `backend/remote_recommender.py` - remote vector-service proxy with circuit breaker, local/Upstash response cache, and stale-cache fallback.
 - `backend/recommender.py` - hybrid AI search, dense item recommendations, reranking, behavior-aware personalization.
 - `backend/slo.py` - process-local request SLO tracking for latency/error reporting on free-tier hosts.
-- `/go` - redirect to the healthiest configured UI, currently Streamlit first and React as backup by default.
 - `/go` - redirect to the healthiest configured UI, currently Cloudflare Pages first, same-origin React second, and Streamlit as backup.
 - `/v1/frontends/status` - frontend availability report for Cloudflare Pages, same-origin React, Streamlit, and optional static mirrors.
 - `/v1/platform/readiness` - product-readiness/SLO snapshot across catalog, artifacts, vectors, smoke checks, benchmark cache, ranker, and events.
