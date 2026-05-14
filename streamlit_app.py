@@ -1481,6 +1481,83 @@ elif st.session_state.page == "console":
     )
 
     with overview_tab:
+        st.subheader("Platform Readiness")
+        readiness_action_cols = st.columns([3, 1])
+        with readiness_action_cols[1]:
+            refresh_readiness = st.button(
+                "Refresh Readiness",
+                key="refresh_platform_readiness",
+                use_container_width=True,
+            )
+
+        if refresh_readiness or "platform_readiness" not in st.session_state:
+            st.session_state.platform_readiness = api_get(
+                "/v1/platform/readiness",
+                params={"strict": True, "k": 10},
+                timeout=90,
+            ) or {}
+
+        readiness = st.session_state.get("platform_readiness") or {}
+        components = readiness.get("components") or []
+        readiness_status = str(readiness.get("status") or "unknown")
+        readiness_label = readiness_status.replace("_", " ").title()
+        readiness_summary = readiness.get("summary") or {}
+        app_info = readiness.get("app") or {}
+        app_commit = str(app_info.get("commit") or health.get("app_commit") or "-")
+
+        if not readiness:
+            st.warning("Platform readiness is unavailable from the active backend.")
+        elif readiness_status == "ready":
+            st.success("Platform readiness: ready")
+        elif readiness_status == "degraded":
+            st.warning("Platform readiness: degraded")
+        else:
+            st.error(f"Platform readiness: {readiness_label}")
+
+        r1, r2, r3, r4 = st.columns(4)
+        component_count = int(readiness_summary.get("component_count") or len(components))
+        ok_count = int(readiness_summary.get("ok_count") or 0)
+        required_failures = int(readiness_summary.get("failed_required_count") or 0)
+        r1.metric("Readiness", readiness_label)
+        r2.metric("Components OK", f"{ok_count}/{component_count}" if component_count else "-")
+        r3.metric("Required Failures", required_failures)
+        r4.metric("App Commit", app_commit[:7] if app_commit != "-" else "-")
+
+        if components:
+            component_rows = [
+                {
+                    "component": str(component.get("name") or "").replace("_", " ").title(),
+                    "status": str(component.get("status") or "unknown"),
+                    "required": "Yes" if component.get("required") else "No",
+                    "summary": component.get("summary") or "",
+                }
+                for component in components
+            ]
+            component_df = pd.DataFrame(component_rows)
+            status_counts = component_df["status"].value_counts().reset_index()
+            status_counts.columns = ["status", "components"]
+            fig = px.bar(
+                status_counts,
+                x="status",
+                y="components",
+                color="status",
+                color_discrete_sequence=px.colors.qualitative.Set2,
+            )
+            fig.update_layout(
+                showlegend=False,
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#ffffff"),
+                margin=dict(t=10, b=10, l=10, r=10),
+            )
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            st.dataframe(component_df, use_container_width=True, hide_index=True)
+
+        with st.expander("Raw readiness report"):
+            st.json(readiness)
+
+        st.divider()
+
         left, right = st.columns([1, 1])
         with left:
             st.subheader("API Usage")
