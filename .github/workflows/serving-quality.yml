@@ -68,6 +68,7 @@ jobs:
             --k 10 \
             --min-search-top1-hit-rate 0.98 \
             --min-search-hit-rate 1.0 \
+            --require-diagnostic-benchmark-case \
             --min-recommendation-benchmark-pass-rate 0.80 \
             --min-recommendation-benchmark-hit-rate 0.90 \
             --max-recommendation-benchmark-bad-case-rate 0.0 \
@@ -88,6 +89,7 @@ jobs:
             --retry-delay-seconds 30 \
             --k 10 \
             --skip-search-benchmark \
+            --skip-recommendation-diagnostics \
             --skip-recommendation-benchmark \
             --skip-semantic-benchmark \
             --allow-degraded-artifact-health \
