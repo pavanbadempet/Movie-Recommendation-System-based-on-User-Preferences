@@ -56,6 +56,7 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
             "search_smoke": [],
             "search_benchmark": {},
             "recommendation_smoke": {},
+            "recommendation_diagnostics": {},
             "recommendation_benchmark": {},
             "semantic_benchmark": {},
         }
@@ -89,6 +90,15 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
                 f"/v1/recommendations/id/{args.recommendation_smoke_movie_id}?{recommendation_params}",
                 args.timeout,
             )
+            if args.skip_recommendation_diagnostics:
+                report["recommendation_diagnostics"] = {"status": "skipped", "reason": "disabled by live gate"}
+            else:
+                diagnostics_params = urllib.parse.urlencode({"n": args.recommendation_diagnostics_k})
+                report["recommendation_diagnostics"] = _get_json(
+                    args.base_url,
+                    f"/v1/diagnostics/recommendations/{args.recommendation_smoke_movie_id}?{diagnostics_params}",
+                    args.timeout,
+                )
             if args.skip_recommendation_benchmark:
                 report["recommendation_benchmark"] = {"status": "skipped", "reason": "disabled by live gate"}
             else:
@@ -239,6 +249,34 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
                 report,
             )
 
+        diagnostics_payload = report.get("recommendation_diagnostics") or {}
+        if not args.skip_recommendation_diagnostics:
+            if not isinstance(diagnostics_payload, dict):
+                _threshold_failure("/v1/diagnostics/recommendations did not return an object", report)
+                diagnostics_payload = {}
+            if diagnostics_payload.get("status") != "ok":
+                _threshold_failure(
+                    "recommendation diagnostics unavailable: "
+                    f"{diagnostics_payload.get('reason') or diagnostics_payload.get('status')}",
+                    report,
+                )
+            diagnostic_metrics = diagnostics_payload.get("diagnostics") or {}
+            diagnostic_results = diagnostics_payload.get("recommendations") or []
+            if not isinstance(diagnostic_results, list):
+                _threshold_failure("recommendation diagnostics did not return a recommendations list", report)
+                diagnostic_results = []
+            result_count = int(diagnostic_metrics.get("result_count") or len(diagnostic_results) or 0)
+            if result_count < args.min_recommendation_diagnostic_results:
+                _threshold_failure(
+                    f"recommendation diagnostics returned {result_count} results, "
+                    f"below {args.min_recommendation_diagnostic_results}",
+                    report,
+                )
+            if args.require_diagnostic_benchmark_case and not diagnostic_metrics.get("benchmark_case_available"):
+                _threshold_failure("recommendation diagnostics did not include a labeled benchmark case", report)
+            if diagnostic_metrics.get("benchmark_case_passed") is False:
+                _threshold_failure("recommendation diagnostics benchmark case did not pass", report)
+
         recommendation_benchmark = report.get("recommendation_benchmark") or {}
         if not args.skip_recommendation_benchmark:
             if recommendation_benchmark.get("status") not in {"ok", "needs_attention"}:
@@ -344,6 +382,10 @@ def main() -> None:
             "Justice League: The Flashpoint Paradox"
         ),
     )
+    parser.add_argument("--recommendation-diagnostics-k", type=int, default=5)
+    parser.add_argument("--min-recommendation-diagnostic-results", type=int, default=5)
+    parser.add_argument("--require-diagnostic-benchmark-case", action="store_true")
+    parser.add_argument("--skip-recommendation-diagnostics", action="store_true")
     parser.add_argument("--min-recommendation-benchmark-pass-rate", type=float, default=0.80)
     parser.add_argument("--min-recommendation-benchmark-hit-rate", type=float, default=0.90)
     parser.add_argument("--max-recommendation-benchmark-bad-case-rate", type=float, default=0.0)
@@ -365,6 +407,7 @@ def main() -> None:
     benchmark_metrics = (report.get("semantic_benchmark") or {}).get("metrics") or {}
     search_benchmark_metrics = (report.get("search_benchmark") or {}).get("metrics") or {}
     recommendation_benchmark_metrics = (report.get("recommendation_benchmark") or {}).get("metrics") or {}
+    recommendation_diagnostics_metrics = (report.get("recommendation_diagnostics") or {}).get("diagnostics") or {}
     summary = {
         "status": report.get("status"),
         "failures": report.get("failures"),
@@ -386,6 +429,10 @@ def main() -> None:
         "recommendation_result_count": (report.get("recommendation_smoke_summary") or {}).get("result_count"),
         "recommendation_required_hit_count": (report.get("recommendation_smoke_summary") or {}).get("required_hit_count"),
         "recommendation_blocked_hits": (report.get("recommendation_smoke_summary") or {}).get("blocked_hits"),
+        "recommendation_diagnostics_status": (report.get("recommendation_diagnostics") or {}).get("status"),
+        "recommendation_diagnostics_result_count": recommendation_diagnostics_metrics.get("result_count"),
+        "recommendation_diagnostics_benchmark_case_available": recommendation_diagnostics_metrics.get("benchmark_case_available"),
+        "recommendation_diagnostics_benchmark_case_passed": recommendation_diagnostics_metrics.get("benchmark_case_passed"),
         "recommendation_benchmark_case_count": (report.get("recommendation_benchmark") or {}).get("evaluated_case_count"),
         "recommendation_benchmark_case_pass_rate": recommendation_benchmark_metrics.get("case_pass_rate"),
         "recommendation_benchmark_good_hit_case_rate": recommendation_benchmark_metrics.get("good_hit_case_rate"),
