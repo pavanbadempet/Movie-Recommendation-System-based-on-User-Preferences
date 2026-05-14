@@ -616,6 +616,72 @@ class TestRecommendEndpoints:
         resp = client.get("/recommend/id/999999")
         assert resp.status_code == 404
 
+    def test_recommendation_diagnostics_exposes_ranking_evidence(self, mock_artifacts):
+        from backend.main import app
+        client = TestClient(app)
+
+        resp = client.get("/v1/diagnostics/recommendations/100", params={"n": 2})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert data["query_movie"]["id"] == 100
+        assert data["lineage"]["serving_path"] == "local"
+        assert data["diagnostics"]["result_count"] == 2
+        assert data["diagnostics"]["stage_distribution"]
+        assert len(data["recommendations"]) == 2
+        assert "retrieval_stage" in data["recommendations"][0]
+
+    def test_recommendation_diagnostics_includes_labeled_case_summary(self, mock_artifacts, monkeypatch):
+        import backend.main as main
+        from backend.main import app
+
+        class FakeRec:
+            _artifact_status = {"vector_artifacts_ready": True}
+            _artifact_manifest = {}
+            _learned_ranker = None
+
+            def get_movie_by_id(self, movie_id):
+                if movie_id == 100:
+                    return {"id": 100, "title": "Seed Movie", "genres": "Drama"}
+                return None
+
+            def recommend_by_id(self, movie_id, n=10):
+                return [
+                    {
+                        "id": 200,
+                        "title": "Good Match",
+                        "similarity_score": 0.91,
+                        "retrieval_stage": "vector_semantic_ranked",
+                        "explanation": ["shared themes"],
+                    }
+                ][:n]
+
+        monkeypatch.setattr(main, "get_rec", lambda: FakeRec())
+        monkeypatch.setattr(
+            main,
+            "load_recommendation_benchmark",
+            lambda: [
+                {
+                    "case_id": "seed_case",
+                    "seed": {"id": 100, "title": "Seed Movie"},
+                    "min_good_hits": 1,
+                    "good_matches": [{"id": 200, "title": "Good Match"}],
+                    "bad_matches": [{"id": 300, "title": "Bad Drift"}],
+                }
+            ],
+        )
+
+        client = TestClient(app)
+        resp = client.get("/v1/diagnostics/recommendations/100", params={"n": 1})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["diagnostics"]["benchmark_case_available"] is True
+        assert data["diagnostics"]["benchmark_case_passed"] is True
+        assert data["benchmark_case"]["case_id"] == "seed_case"
+        assert data["benchmark_case"]["good_hit_count"] == 1
+
     def test_recommend_by_title(self, mock_artifacts):
         from backend.main import app
         client = TestClient(app)
