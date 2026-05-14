@@ -62,6 +62,16 @@ services:
         value: 300
       - key: NOVA_RECOMMENDER_STALE_CACHE_TTL_SECONDS
         value: 21600
+      - key: NOVA_SLO_WINDOW_SECONDS
+        value: 3600
+      - key: NOVA_SLO_MIN_REQUESTS
+        value: 5
+      - key: NOVA_SLO_LATENCY_P95_MS
+        value: 2500
+      - key: NOVA_SLO_ERROR_RATE
+        value: 0.03
+      - key: NOVA_SLO_MAX_EVENTS
+        value: 5000
       - key: NOVA_FRONTEND_PRIORITY
         value: streamlit,react
       - key: NOVA_FRONTEND_STREAMLIT_URL

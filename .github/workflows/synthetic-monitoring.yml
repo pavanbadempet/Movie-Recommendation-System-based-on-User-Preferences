@@ -1,0 +1,38 @@
+name: Synthetic Monitoring
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+jobs:
+  synthetic-monitoring:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NOVA_SERVING_URL: https://pavanbadempet-movie-rec-api.hf.space
+      NOVA_RENDER_GATEWAY_URL: https://movie-recs-api-5qvy.onrender.com
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Probe live product paths
+        run: >-
+          python scripts/synthetic_monitor.py
+          --base-url "$NOVA_SERVING_URL"
+          --base-url "$NOVA_RENDER_GATEWAY_URL"
+          --output reports/synthetic_monitor.json
+          --fail-on-error
+
+      - name: Upload monitor report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-monitor-report
+          path: reports/synthetic_monitor.json
+          if-no-files-found: ignore
