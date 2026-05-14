@@ -284,6 +284,11 @@ function decimalValue(value?: number | null): string {
   return value.toFixed(3);
 }
 
+function shortId(value?: string | null): string {
+  if (!value) return "Session";
+  return value.length > 12 ? value.slice(0, 12) : value;
+}
+
 function qualityLabel(report: SemanticBenchmark | null): string {
   if (!report) return "Pending";
   if (report.status === "unavailable") return "Unavailable";
@@ -449,11 +454,13 @@ function MoviePoster({
 
 function RecommendationCard({
   movie,
+  rank,
   onSelect,
   feedback,
   onFeedback,
 }: {
   movie: Movie;
+  rank?: number;
   onSelect: (movie: Movie) => void;
   feedback?: FeedbackValue;
   onFeedback: (movie: Movie, value: FeedbackValue) => void;
@@ -463,7 +470,10 @@ function RecommendationCard({
   const chips = evidenceChips(movie);
   return (
     <article className="recommendation-card">
-      <MoviePoster movie={movie} onSelect={onSelect} />
+      <div className="card-media">
+        <MoviePoster movie={movie} onSelect={onSelect} />
+        {rank ? <span className="rank-pill">#{rank}</span> : null}
+      </div>
       <div className="recommendation-body">
         <div className="card-title-row">
           <strong>{movie.title}</strong>
@@ -516,6 +526,43 @@ function RecommendationCard({
         </div>
       </div>
     </article>
+  );
+}
+
+function ResultContextBar({
+  kind,
+  backend,
+  sourceMovie,
+  requestId,
+  query,
+}: {
+  kind: ResultsKind;
+  backend: string;
+  sourceMovie: Movie | null;
+  requestId: string | null;
+  query: string;
+}) {
+  const sourceLabel =
+    kind === "recommendations"
+      ? sourceMovie?.title || "Selected title"
+      : query.trim() || "Catalog query";
+  return (
+    <div className="result-context" aria-label="Result context">
+      <span>
+        <Film size={14} />
+        {sourceLabel}
+      </span>
+      {kind === "recommendations" && (
+        <span>
+          <Sparkles size={14} />
+          {shortId(requestId)}
+        </span>
+      )}
+      <span>
+        <Server size={14} />
+        {serviceLabel(backend)}
+      </span>
+    </div>
   );
 }
 
@@ -871,17 +918,17 @@ function App() {
     }
   }
 
-  async function runSearch() {
-    const query = activeQuery.trim();
+  async function runSearch(searchMode: SearchMode = mode, queryOverride?: string) {
+    const query = (queryOverride ?? (searchMode === "title" ? titleQuery : semanticQuery)).trim();
     if (!query) return;
 
-    if (mode === "title" && filteredTitles.length > 0) {
+    if (searchMode === "title" && !queryOverride && filteredTitles.length > 0) {
       await chooseTitle(filteredTitles[0]);
       return;
     }
 
     setIsSearching(true);
-    setNotice(mode === "semantic" ? "Searching by intent" : "Searching catalog");
+    setNotice(searchMode === "semantic" ? "Searching by intent" : "Searching catalog");
     setResults([]);
     setResultsKind("search");
     setLastRecommendationRequestId(null);
@@ -892,16 +939,16 @@ function App() {
       event_type: "search",
       query_text: query,
       metadata: {
-        mode,
+        mode: searchMode,
       },
     });
     try {
-      const response = mode === "semantic" ? await aiSearch(query) : await searchMovies(query);
+      const response = searchMode === "semantic" ? await aiSearch(query) : await searchMovies(query);
       const movies = dedupeMovies(response.data);
       setBackend(response.baseUrl);
       setResults(movies);
       if (movies[0]) {
-        selectMovie(movies[0], mode === "semantic" ? "semantic_search" : "title_search");
+        selectMovie(movies[0], searchMode === "semantic" ? "semantic_search" : "title_search");
       } else {
         setSelectedMovie(null);
       }
@@ -949,8 +996,10 @@ function App() {
   }
 
   function applyPromptSeed(prompt: string) {
+    userStarted.current = true;
     setMode("semantic");
     setSemanticQuery(prompt);
+    void runSearch("semantic", prompt);
   }
 
   const catalogValue = platform?.movie_count || titles.length;
@@ -1129,11 +1178,19 @@ function App() {
                 </div>
                 <strong>{results.length} titles</strong>
               </div>
+              <ResultContextBar
+                kind={resultsKind}
+                backend={backend}
+                sourceMovie={recommendationSource || selectedMovie}
+                requestId={lastRecommendationRequestId}
+                query={activeQuery}
+              />
               <div className="poster-grid">
-                {results.map((movie) => (
+                {results.map((movie, index) => (
                   <RecommendationCard
                     key={`${movie.id}-${movie.title}`}
                     movie={movie}
+                    rank={index + 1}
                     onSelect={selectResultMovie}
                     feedback={feedbackByMovieId[movie.id]}
                     onFeedback={recordFeedback}
