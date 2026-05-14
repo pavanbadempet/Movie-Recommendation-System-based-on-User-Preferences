@@ -38,7 +38,7 @@ from backend.catalogs import profile_catalog_csv, persist_catalog_upload
 from backend.chat import generate_chat_response
 from backend.recommender import get_recommender, Recommender
 from backend.ranker import load_ranker
-from backend.remote_recommender import remote_get_json, remote_recommender_status
+from backend.remote_recommender import remote_get_json, remote_recommender_status, remote_recommender_url
 from backend.recommendation_benchmark import (
     evaluate_recommendation_benchmark,
     evaluate_recommendation_case,
@@ -1124,6 +1124,8 @@ async def remote_payload_or_raise(
     """Return remote recommender payload when configured, otherwise None."""
     remote_response = await remote_get_json(path, params=params, context=context)
     if remote_response is None:
+        if _env_truthy("NOVA_REMOTE_RECOMMENDER_REQUIRED") and remote_recommender_url():
+            raise HTTPException(status_code=503, detail="Remote recommender unavailable")
         return None
     if remote_response.status_code >= 400:
         detail = remote_response.payload
