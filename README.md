@@ -29,6 +29,7 @@ The current demo vertical is movies using TMDB/Kaggle data, but the architecture
 - Captures product events such as views, clicks, searches, ratings, and recommendation impressions.
 - Provides FastAPI endpoints for search, recommendations, events, and behavior features.
 - Publishes a single product readiness report across serving, artifacts, quality gates, and telemetry.
+- Tracks live API SLOs for request latency, error rate, artifact health, remote recommender state, and frontend failover.
 - Explains recommendation behavior through per-seed diagnostics for ranking stages, explanations, lineage, and benchmark-case pass/fail.
 - Protects product APIs with optional tenant API keys while keeping the public demo free.
 - Measures recommendation artifact quality with label-free coverage checks plus human-labeled search, semantic, and item-to-item benchmark gates.
@@ -98,9 +99,11 @@ Core Delta tables include:
 - `backend/frontend_failover.py` - Streamlit/React/static frontend health checks and launch routing.
 - `backend/remote_recommender.py` - remote vector-service proxy with circuit breaker, response cache, and stale-cache fallback.
 - `backend/recommender.py` - hybrid AI search, dense item recommendations, reranking, behavior-aware personalization.
+- `backend/slo.py` - process-local request SLO tracking for latency/error reporting on free-tier hosts.
 - `/go` - redirect to the healthiest configured UI, currently Streamlit first and React as backup by default.
 - `/v1/frontends/status` - frontend availability report for Streamlit, same-origin React, and optional static mirrors.
 - `/v1/platform/readiness` - product-readiness/SLO snapshot across catalog, artifacts, vectors, smoke checks, benchmark cache, ranker, and events.
+- `/v1/platform/slo` - lightweight operational SLO report for latency, error rate, artifacts, and serving dependencies.
 - `/v1/diagnostics/recommendations/{movie_id}` - per-seed ranking diagnostics for product debugging and demos.
 - `backend/ranker.py` and `backend/ranker_training.py` - learned ranker artifact loading, training, and offline metrics.
 - `etl/pyspark_etl.py` - canonical PySpark batch pipeline.
@@ -108,6 +111,7 @@ Core Delta tables include:
 - `etl/streaming_events.py` - Kafka to Delta Structured Streaming ingestion for behavior events.
 - `data/evaluation/` - benchmark labels for search relevance, semantic similarity, and recommendation product quality.
 - `notebooks/kaggle_etl_pipeline.py` - hosted Kaggle execution path for daily artifact refresh.
+- `scripts/synthetic_monitor.py` - scheduled live probe for health, UI failover, SLOs, search, and recommendations.
 - `airflow/dags/` - orchestration examples for mature deployments.
 - `docs/PRODUCT_DATA_PLATFORM_BLUEPRINT.md` - product and data platform architecture.
 
@@ -186,6 +190,12 @@ NOVA_EXPERIMENT_VARIANTS=control:50,personalized_v2:50
 ```
 
 Use `/v1/experiments/assignment` for deterministic variant assignment and `/v1/experiments/metrics` for impression, click, and rating outcomes from behavior events.
+
+Run a lightweight live monitor against hosted targets:
+
+```bash
+python scripts/synthetic_monitor.py --base-url https://pavanbadempet-movie-rec-api.hf.space --base-url https://movie-recs-api-5qvy.onrender.com --fail-on-error
+```
 
 ## Deployment Artifact Reload
 
