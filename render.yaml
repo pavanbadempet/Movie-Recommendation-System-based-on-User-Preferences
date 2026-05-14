@@ -62,6 +62,14 @@ services:
         value: 300
       - key: NOVA_RECOMMENDER_STALE_CACHE_TTL_SECONDS
         value: 21600
+      - key: NOVA_RECOMMENDER_DISTRIBUTED_CACHE_ENABLED
+        value: true
+      - key: NOVA_RECOMMENDER_DISTRIBUTED_CACHE_TIMEOUT_SECONDS
+        value: 1.5
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
       - key: NOVA_SLO_WINDOW_SECONDS
         value: 3600
       - key: NOVA_SLO_MIN_REQUESTS
