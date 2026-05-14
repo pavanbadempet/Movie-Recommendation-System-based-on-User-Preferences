@@ -370,6 +370,27 @@ class TestPlatformEndpoint:
         assert resp.status_code == 200
         assert calls
 
+    def test_required_remote_recommender_fails_fast_without_local_fallback(self, mock_artifacts, monkeypatch):
+        import backend.main as main
+        from backend.main import app
+
+        async def fake_remote_get_json(path, params=None, context=None):
+            return None
+
+        def fail_local_load():
+            raise AssertionError("Render gateway should not fall back to local recommendation serving")
+
+        monkeypatch.setenv("NOVA_REMOTE_RECOMMENDER_REQUIRED", "true")
+        monkeypatch.setattr(main, "remote_recommender_url", lambda: "https://remote.example")
+        monkeypatch.setattr(main, "remote_get_json", fake_remote_get_json)
+        monkeypatch.setattr(main, "get_rec", fail_local_load)
+
+        client = TestClient(app)
+        resp = client.get("/v1/recommendations/id/100", params={"n": 2})
+
+        assert resp.status_code == 503
+        assert resp.json()["detail"] == "Remote recommender unavailable"
+
 
 class TestCorsPolicy:
     def test_github_pages_origin_is_allowed_by_default(self, mock_artifacts):
