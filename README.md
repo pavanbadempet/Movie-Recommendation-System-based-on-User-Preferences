@@ -28,6 +28,7 @@ The current demo vertical is movies using TMDB/Kaggle data, but the architecture
 - Creates incremental embedding jobs only for new or changed content.
 - Captures product events such as views, clicks, searches, ratings, and recommendation impressions.
 - Provides FastAPI endpoints for search, recommendations, events, and behavior features.
+- Explains recommendation behavior through per-seed diagnostics for ranking stages, explanations, lineage, and benchmark-case pass/fail.
 - Protects product APIs with optional tenant API keys while keeping the public demo free.
 - Measures recommendation artifact quality with label-free coverage checks plus human-labeled search, semantic, and item-to-item benchmark gates.
 - Includes a Streamlit Nova Console for API context, usage, AI quality, event testing, and integration snippets.
@@ -94,6 +95,7 @@ Core Delta tables include:
 - `backend/search_benchmark.py`, `backend/semantic_benchmark.py`, and `backend/recommendation_benchmark.py` - human-labeled serving quality gates.
 - `backend/catalogs.py` - customer CSV preview, quality profiling, and local upload manifests.
 - `backend/recommender.py` - hybrid AI search, dense item recommendations, reranking, behavior-aware personalization.
+- `/v1/diagnostics/recommendations/{movie_id}` - per-seed ranking diagnostics for product debugging and demos.
 - `backend/ranker.py` and `backend/ranker_training.py` - learned ranker artifact loading, training, and offline metrics.
 - `etl/pyspark_etl.py` - canonical PySpark batch pipeline.
 - `etl/delta_lakehouse.py` - Delta schemas, table contracts, time travel, CDF, audit helpers.

@@ -76,6 +76,106 @@ def load_recommendation_benchmark(path: Path | str | None = None) -> list[dict[s
     return []
 
 
+def find_recommendation_benchmark_case(
+    movie: dict[str, Any],
+    cases: list[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
+    """Return the benchmark case for a seed movie, if one exists."""
+    movie_id = movie.get("id")
+    movie_title = _canonical_title(movie.get("title"))
+    for case in cases if cases is not None else load_recommendation_benchmark():
+        seed = case.get("seed") or {}
+        if isinstance(seed, str):
+            seed = {"title": seed}
+        if seed.get("id") is not None and movie_id is not None:
+            try:
+                if int(seed["id"]) == int(movie_id):
+                    return case
+            except (TypeError, ValueError):
+                pass
+        if movie_title and _canonical_title(seed.get("title")) == movie_title:
+            return case
+    return None
+
+
+def evaluate_recommendation_case(
+    recommendations: list[dict[str, Any]],
+    case: dict[str, Any],
+    k: int = 10,
+    seed_movie: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Evaluate one recommendation list against one labeled benchmark case."""
+    good_items = _case_items(case.get("good_matches") or [])
+    bad_items = _case_items(case.get("bad_matches") or [])
+    min_good_hits = int(case.get("min_good_hits") or (1 if good_items else 0))
+    max_bad_hits = int(case.get("max_bad_hits", 0))
+    top_recommendations = [item for item in recommendations[:k] if isinstance(item, dict)]
+
+    good_hits = []
+    bad_hits = []
+    first_good_rank = None
+    dcg = 0.0
+    explanation_hits = 0
+    stage_counts: dict[str, int] = {}
+    for rank, rec in enumerate(top_recommendations, start=1):
+        if rec.get("explanation") or rec.get("explanation_text"):
+            explanation_hits += 1
+        stage = str(rec.get("retrieval_stage") or "unknown")
+        stage_counts[stage] = stage_counts.get(stage, 0) + 1
+
+        if any(_matches_item(rec, item) for item in good_items):
+            good_hits.append({"id": rec.get("id"), "title": rec.get("title"), "rank": rank})
+            if first_good_rank is None:
+                first_good_rank = rank
+            dcg += 1.0 / math.log2(rank + 1)
+        if any(_matches_item(rec, item) for item in bad_items):
+            bad_hits.append({"id": rec.get("id"), "title": rec.get("title"), "rank": rank})
+
+    ideal_hits = min(len(good_items), k)
+    ideal_dcg = sum(1.0 / math.log2(rank + 1) for rank in range(1, ideal_hits + 1))
+    case_passed = len(good_hits) >= min_good_hits and len(bad_hits) <= max_bad_hits
+    reciprocal_rank = 0.0 if first_good_rank is None else 1.0 / first_good_rank
+    ndcg = 0.0 if ideal_dcg <= 0 else dcg / ideal_dcg
+
+    seed = {"id": seed_movie.get("id"), "title": seed_movie.get("title")} if seed_movie else case.get("seed")
+    return {
+        "case_id": case.get("case_id"),
+        "seed": seed,
+        "intent": case.get("intent"),
+        "k": k,
+        "passed": case_passed,
+        "min_good_hits": min_good_hits,
+        "max_bad_hits": max_bad_hits,
+        "good_label_count": len(good_items),
+        "bad_label_count": len(bad_items),
+        "good_hit_count": len(good_hits),
+        "bad_hit_count": len(bad_hits),
+        "good_hits": good_hits,
+        "bad_hits": bad_hits,
+        "mrr_at_k": round(reciprocal_rank, 4),
+        "ndcg_at_k": round(ndcg, 4),
+        "top_results": [
+            {
+                "id": rec.get("id"),
+                "title": rec.get("title"),
+                "score": rec.get("similarity_score"),
+                "retrieval_stage": rec.get("retrieval_stage"),
+                "explanation": rec.get("explanation"),
+            }
+            for rec in top_recommendations[:5]
+        ],
+        "_aggregate": {
+            "first_good_rank": first_good_rank,
+            "reciprocal_rank": reciprocal_rank,
+            "ndcg": ndcg,
+            "good_label_count": len(good_items),
+            "explanation_hits": explanation_hits,
+            "stage_counts": stage_counts,
+            "result_count": len(top_recommendations),
+        },
+    }
+
+
 def evaluate_recommendation_benchmark(
     recommender: Any,
     benchmark_path: Path | str | None = None,
@@ -112,73 +212,34 @@ def evaluate_recommendation_benchmark(
             skipped.append({"case_id": case.get("case_id"), "reason": "seed item not found"})
             continue
 
-        good_items = _case_items(case.get("good_matches") or [])
-        bad_items = _case_items(case.get("bad_matches") or [])
-        min_good_hits = int(case.get("min_good_hits") or (1 if good_items else 0))
-        max_bad_hits = int(case.get("max_bad_hits", 0))
-
         recommendations = recommender.recommend_by_id(int(seed_movie["id"]), n=max(k, 1))
-        top_recommendations = [item for item in recommendations[:k] if isinstance(item, dict)]
-
-        good_hits = []
-        bad_hits = []
-        first_good_rank = None
-        dcg = 0.0
-        for rank, rec in enumerate(top_recommendations, start=1):
-            total_results += 1
-            if rec.get("explanation") or rec.get("explanation_text"):
-                explanation_hits += 1
-            stage = str(rec.get("retrieval_stage") or "unknown")
-            stage_counts[stage] = stage_counts.get(stage, 0) + 1
-
-            if any(_matches_item(rec, item) for item in good_items):
-                good_hits.append({"id": rec.get("id"), "title": rec.get("title"), "rank": rank})
-                if first_good_rank is None:
-                    first_good_rank = rank
-                dcg += 1.0 / math.log2(rank + 1)
-            if any(_matches_item(rec, item) for item in bad_items):
-                bad_hits.append({"id": rec.get("id"), "title": rec.get("title"), "rank": rank})
-
-        case_passed = len(good_hits) >= min_good_hits and len(bad_hits) <= max_bad_hits
+        case_result = evaluate_recommendation_case(
+            recommendations,
+            case,
+            k=k,
+            seed_movie=seed_movie,
+        )
+        aggregate = case_result.pop("_aggregate")
+        good_hits = case_result["good_hits"]
+        bad_hits = case_result["bad_hits"]
+        case_passed = bool(case_result["passed"])
         if case_passed:
             pass_count += 1
         if good_hits:
             good_hit_cases += 1
         if bad_hits:
             bad_hit_cases += 1
-        reciprocal_ranks.append(0.0 if first_good_rank is None else 1.0 / first_good_rank)
-        ideal_hits = min(len(good_items), k)
-        ideal_dcg = sum(1.0 / math.log2(rank + 1) for rank in range(1, ideal_hits + 1))
-        ndcg_scores.append(0.0 if ideal_dcg <= 0 else dcg / ideal_dcg)
+        reciprocal_ranks.append(float(aggregate["reciprocal_rank"]))
+        ndcg_scores.append(float(aggregate["ndcg"]))
 
         total_good_hits += len(good_hits)
         total_bad_hits += len(bad_hits)
-        total_good_labels += len(good_items)
-        evaluated.append(
-            {
-                "case_id": case.get("case_id"),
-                "seed": {"id": seed_movie.get("id"), "title": seed_movie.get("title")},
-                "intent": case.get("intent"),
-                "k": k,
-                "passed": case_passed,
-                "min_good_hits": min_good_hits,
-                "max_bad_hits": max_bad_hits,
-                "good_hit_count": len(good_hits),
-                "bad_hit_count": len(bad_hits),
-                "good_hits": good_hits,
-                "bad_hits": bad_hits,
-                "top_results": [
-                    {
-                        "id": rec.get("id"),
-                        "title": rec.get("title"),
-                        "score": rec.get("similarity_score"),
-                        "retrieval_stage": rec.get("retrieval_stage"),
-                        "explanation": rec.get("explanation"),
-                    }
-                    for rec in top_recommendations[:5]
-                ],
-            }
-        )
+        total_good_labels += int(aggregate["good_label_count"])
+        explanation_hits += int(aggregate["explanation_hits"])
+        total_results += int(aggregate["result_count"])
+        for stage, count in dict(aggregate["stage_counts"]).items():
+            stage_counts[stage] = stage_counts.get(stage, 0) + int(count)
+        evaluated.append(case_result)
 
     evaluated_count = len(evaluated)
     pass_rate = pass_count / max(evaluated_count, 1)
