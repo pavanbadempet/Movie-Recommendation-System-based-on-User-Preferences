@@ -13,8 +13,8 @@ import type {
 } from "./types";
 
 const DEFAULT_BACKENDS = [
-  "https://movie-recs-api-5qvy.onrender.com",
   "https://pavanbadempet-movie-rec-api.hf.space",
+  "https://movie-recs-api-5qvy.onrender.com",
 ];
 
 function sameOriginBackend(): string | undefined {
