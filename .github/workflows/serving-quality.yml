@@ -23,7 +23,7 @@ jobs:
   live-serving-quality:
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
-    timeout-minutes: 45
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
@@ -61,9 +61,9 @@ jobs:
           python scripts/evaluate_live_serving.py \
             --base-url "$NOVA_SERVING_URL" \
             --output reports/live_serving_quality.json \
-            --timeout 240 \
-            --retries 40 \
-            --retry-delay-seconds 30 \
+            --timeout 120 \
+            --retries 8 \
+            --retry-delay-seconds 20 \
             "${expected_args[@]}" \
             --k 10 \
             --platform-readiness-strict \
@@ -86,9 +86,9 @@ jobs:
           python scripts/evaluate_live_serving.py \
             --base-url "$NOVA_RENDER_GATEWAY_URL" \
             --output reports/render_gateway_quality.json \
-            --timeout 60 \
-            --retries 20 \
-            --retry-delay-seconds 30 \
+            --timeout 30 \
+            --retries 6 \
+            --retry-delay-seconds 20 \
             --k 10 \
             --skip-platform-readiness \
             --skip-search-benchmark \
