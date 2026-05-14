@@ -37,6 +37,7 @@ from backend.artifact_health import evaluate_artifact_health
 from backend.catalogs import profile_catalog_csv, persist_catalog_upload
 from backend.chat import generate_chat_response
 from backend.recommender import get_recommender, Recommender
+from backend.ranker import load_ranker
 from backend.remote_recommender import remote_get_json, remote_recommender_status
 from backend.recommendation_benchmark import (
     evaluate_recommendation_benchmark,
@@ -1752,8 +1753,9 @@ async def ranker_status(
         )
         return remote_payload
 
-    rec = get_rec()
-    ranker = getattr(rec, "_learned_ranker", None)
+    from backend import recommender as recommender_module
+
+    ranker = await run_in_threadpool(lambda: load_ranker(models_dir=recommender_module.MODELS_DIR))
     record_usage(
         "ranker.status",
         context.tenant_id,

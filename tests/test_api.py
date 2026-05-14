@@ -927,8 +927,15 @@ class TestEvaluationEndpoint:
         assert data["vectors"]["index_rows_match_catalog"] is True
         assert data["recommendations"]["available"] is True
 
-    def test_ranker_status_without_artifact(self, mock_artifacts):
+    def test_ranker_status_without_artifact(self, mock_artifacts, monkeypatch):
+        import backend.main as main
         from backend.main import app
+
+        def fail_local_load():
+            raise AssertionError("Ranker status should not load the recommender")
+
+        main._recommender = None
+        monkeypatch.setattr(main, "get_rec", fail_local_load)
         client = TestClient(app)
 
         resp = client.get("/v1/ranker/status")
