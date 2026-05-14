@@ -256,6 +256,35 @@ class TestPlatformEndpoint:
         assert resp.status_code == 200
         assert resp.json()["remote"] is True
 
+    def test_platform_status_can_proxy_to_remote_service(self, mock_artifacts, monkeypatch):
+        import backend.main as main
+        from backend.main import app
+        from backend.remote_recommender import RemoteResponse
+
+        async def fake_remote_get_json(path, params=None, context=None):
+            assert path == "/v1/platform/status"
+            assert params is None
+            return RemoteResponse(
+                status_code=200,
+                payload={"status": "ready", "remote": True, "movie_count": 75247},
+            )
+
+        def fail_local_load():
+            raise AssertionError("Gateway status should proxy to the vector service")
+
+        monkeypatch.setattr(main, "remote_get_json", fake_remote_get_json)
+        monkeypatch.setattr(main, "get_rec", fail_local_load)
+
+        client = TestClient(app)
+        resp = client.get("/v1/platform/status")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["remote"] is True
+        assert data["movie_count"] == 75247
+        assert data["gateway"]["status"] == "ready"
+        assert data["gateway"]["remote_recommender"]["configured"] is False
+
 
 class TestCorsPolicy:
     def test_github_pages_origin_is_allowed_by_default(self, mock_artifacts):
