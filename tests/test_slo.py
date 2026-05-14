@@ -7,6 +7,7 @@ def test_slo_report_detects_latency_or_error_violation(monkeypatch):
     monkeypatch.setenv("NOVA_SLO_MIN_REQUESTS", "2")
     monkeypatch.setenv("NOVA_SLO_LATENCY_P95_MS", "100")
     monkeypatch.setenv("NOVA_SLO_ERROR_RATE", "0.10")
+    monkeypatch.setenv("NOVA_SLO_ROUTE_LATENCY_BUDGETS", "/health:100,/v1/search:100")
     tracker = RequestSloTracker(max_events=10)
     tracker.record(method="GET", path="/health", route="/health", status_code=200, latency_ms=25)
     tracker.record(method="GET", path="/v1/search", route="/v1/search", status_code=500, latency_ms=250)
@@ -25,6 +26,7 @@ def test_slo_report_detects_latency_or_error_violation(monkeypatch):
     assert report["traffic"]["request_count"] == 2
     assert report["slo"]["latency_p95_ms"]["passed"] is False
     assert report["slo"]["error_rate"]["passed"] is False
+    assert report["slo"]["latency_p95_ms"]["route_violations"][0]["route"] == "/v1/search"
 
 
 def test_internal_quality_routes_are_excluded_from_serving_slo(monkeypatch):
