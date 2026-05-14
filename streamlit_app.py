@@ -1481,6 +1481,83 @@ elif st.session_state.page == "console":
     )
 
     with overview_tab:
+        st.subheader("Platform Readiness")
+        readiness_action_cols = st.columns([3, 1])
+        with readiness_action_cols[1]:
+            refresh_readiness = st.button(
+                "Refresh Readiness",
+                key="refresh_platform_readiness",
+                use_container_width=True,
+            )
+
+        if refresh_readiness or "platform_readiness" not in st.session_state:
+            st.session_state.platform_readiness = api_get(
+                "/v1/platform/readiness",
+                params={"strict": True, "k": 10},
+                timeout=90,
+            ) or {}
+
+        readiness = st.session_state.get("platform_readiness") or {}
+        components = readiness.get("components") or []
+        readiness_status = str(readiness.get("status") or "unknown")
+        readiness_label = readiness_status.replace("_", " ").title()
+        readiness_summary = readiness.get("summary") or {}
+        app_info = readiness.get("app") or {}
+        app_commit = str(app_info.get("commit") or health.get("app_commit") or "-")
+
+        if not readiness:
+            st.warning("Platform readiness is unavailable from the active backend.")
+        elif readiness_status == "ready":
+            st.success("Platform readiness: ready")
+        elif readiness_status == "degraded":
+            st.warning("Platform readiness: degraded")
+        else:
+            st.error(f"Platform readiness: {readiness_label}")
+
+        r1, r2, r3, r4 = st.columns(4)
+        component_count = int(readiness_summary.get("component_count") or len(components))
+        ok_count = int(readiness_summary.get("ok_count") or 0)
+        required_failures = int(readiness_summary.get("failed_required_count") or 0)
+        r1.metric("Readiness", readiness_label)
+        r2.metric("Components OK", f"{ok_count}/{component_count}" if component_count else "-")
+        r3.metric("Required Failures", required_failures)
+        r4.metric("App Commit", app_commit[:7] if app_commit != "-" else "-")
+
+        if components:
+            component_rows = [
+                {
+                    "component": str(component.get("name") or "").replace("_", " ").title(),
+                    "status": str(component.get("status") or "unknown"),
+                    "required": "Yes" if component.get("required") else "No",
+                    "summary": component.get("summary") or "",
+                }
+                for component in components
+            ]
+            component_df = pd.DataFrame(component_rows)
+            status_counts = component_df["status"].value_counts().reset_index()
+            status_counts.columns = ["status", "components"]
+            fig = px.bar(
+                status_counts,
+                x="status",
+                y="components",
+                color="status",
+                color_discrete_sequence=px.colors.qualitative.Set2,
+            )
+            fig.update_layout(
+                showlegend=False,
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#ffffff"),
+                margin=dict(t=10, b=10, l=10, r=10),
+            )
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            st.dataframe(component_df, use_container_width=True, hide_index=True)
+
+        with st.expander("Raw readiness report"):
+            st.json(readiness)
+
+        st.divider()
+
         left, right = st.columns([1, 1])
         with left:
             st.subheader("API Usage")
@@ -1644,12 +1721,21 @@ elif st.session_state.page == "console":
         st.subheader("Recommendation Quality")
         sample_size = st.slider("Sample size", min_value=5, max_value=100, value=25, step=5)
         k = st.slider("Neighbors per item", min_value=5, max_value=25, value=10, step=5)
-        if st.button("Run Quality Check", key="run_quality_check", use_container_width=True):
-            st.session_state.quality_report = api_get(
-                "/v1/evaluation/recommendations",
-                params={"sample_size": sample_size, "k": k},
-                timeout=30,
-            )
+        q_action_1, q_action_2 = st.columns(2)
+        with q_action_1:
+            if st.button("Run Quality Check", key="run_quality_check", use_container_width=True):
+                st.session_state.quality_report = api_get(
+                    "/v1/evaluation/recommendations",
+                    params={"sample_size": sample_size, "k": k},
+                    timeout=30,
+                )
+        with q_action_2:
+            if st.button("Run Benchmark Gate", key="run_recommendation_benchmark", use_container_width=True):
+                st.session_state.recommendation_benchmark_report = api_get(
+                    "/v1/evaluation/recommendation-benchmark",
+                    params={"k": k},
+                    timeout=240,
+                )
 
         quality = st.session_state.get("quality_report")
         if quality:
@@ -1688,6 +1774,55 @@ elif st.session_state.page == "console":
                 st.json(quality)
         else:
             st.info("Run a quality check to inspect the current AI artifacts.")
+
+        benchmark = st.session_state.get("recommendation_benchmark_report")
+        if benchmark:
+            b_metrics = benchmark.get("metrics", {})
+            b1, b2, b3, b4 = st.columns(4)
+            b1.metric("Benchmark Status", benchmark.get("status", "-"))
+            b2.metric("Cases", benchmark.get("evaluated_case_count", 0))
+            b3.metric("Pass Rate", b_metrics.get("case_pass_rate", "-"))
+            b4.metric("Bad Case Rate", b_metrics.get("bad_case_rate_at_k", "-"))
+            with st.expander("Raw benchmark report"):
+                st.json(benchmark)
+
+        st.divider()
+        st.subheader("Recommendation Diagnostics")
+        d1, d2 = st.columns([1, 3])
+        with d1:
+            diagnostic_movie_id = st.number_input("Seed movie ID", min_value=1, value=19995, step=1)
+        with d2:
+            if st.button("Inspect Recommendation Path", key="inspect_recommendation_path", use_container_width=True):
+                st.session_state.recommendation_diagnostics = api_get(
+                    f"/v1/diagnostics/recommendations/{int(diagnostic_movie_id)}",
+                    params={"n": k},
+                    timeout=60,
+                )
+
+        diagnostics = st.session_state.get("recommendation_diagnostics")
+        if diagnostics:
+            d_metrics = diagnostics.get("diagnostics", {})
+            d_cols = st.columns(4)
+            d_cols[0].metric("Results", d_metrics.get("result_count", 0))
+            d_cols[1].metric("Explained", d_metrics.get("explanation_coverage", "-"))
+            d_cols[2].metric("Benchmark Case", "Yes" if d_metrics.get("benchmark_case_available") else "No")
+            d_cols[3].metric("Case Passed", d_metrics.get("benchmark_case_passed", "-"))
+
+            rec_rows = []
+            for item in diagnostics.get("recommendations", []):
+                rec_rows.append(
+                    {
+                        "rank": item.get("rank"),
+                        "title": item.get("title"),
+                        "stage": item.get("retrieval_stage"),
+                        "score": item.get("score"),
+                        "explanation": item.get("explanation_text") or ", ".join(item.get("explanation") or []),
+                    }
+                )
+            if rec_rows:
+                st.dataframe(pd.DataFrame(rec_rows), use_container_width=True, hide_index=True)
+            with st.expander("Raw diagnostics report"):
+                st.json(diagnostics)
 
     with events_tab:
         st.subheader("Event Lab")

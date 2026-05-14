@@ -7,7 +7,10 @@ from scripts import evaluate_live_serving as live
 def _args(
     skip_semantic_benchmark: bool = False,
     allow_degraded_artifact_health: bool = False,
+    skip_platform_readiness: bool = False,
+    require_platform_ready: bool = True,
     skip_search_benchmark: bool = True,
+    skip_recommendation_diagnostics: bool = False,
     skip_recommendation_benchmark: bool = False,
     search_benchmark_path=None,
 ) -> Namespace:
@@ -18,6 +21,9 @@ def _args(
         retry_delay_seconds=0,
         expected_app_commit="",
         k=10,
+        platform_readiness_strict=True,
+        require_platform_ready=require_platform_ready,
+        skip_platform_readiness=skip_platform_readiness,
         search_query="Avatar",
         search_limit=5,
         min_search_results=1,
@@ -39,6 +45,10 @@ def _args(
         ),
         min_required_recommendation_hits=2,
         blocked_recommendation_titles="Small Soldiers,Supergirl,Barbarella,The Last Airbender",
+        recommendation_diagnostics_k=5,
+        min_recommendation_diagnostic_results=5,
+        require_diagnostic_benchmark_case=True,
+        skip_recommendation_diagnostics=skip_recommendation_diagnostics,
         min_recommendation_benchmark_pass_rate=0.80,
         min_recommendation_benchmark_hit_rate=0.90,
         max_recommendation_benchmark_bad_case_rate=0.0,
@@ -57,6 +67,16 @@ def _args(
 def _healthy_payload(path: str):
     if path == "/health":
         return {"status": "healthy", "movie_count": 75253, "app_commit": "abcdef123456"}
+    if path.startswith("/v1/platform/readiness?"):
+        return {
+            "status": "ready",
+            "summary": {"component_count": 8},
+            "components": [
+                {"name": "catalog", "status": "ok", "required": True},
+                {"name": "artifact_health", "status": "ok", "required": True},
+                {"name": "recommendation_benchmark_cache", "status": "ok", "required": True},
+            ],
+        }
     if path == "/v1/artifacts/health":
         return {"status": "ready"}
     if path.startswith("/v1/search?"):
@@ -99,6 +119,23 @@ def _healthy_payload(path: str):
                 "mrr_at_k": 0.9,
                 "ndcg_at_k": 0.8,
             },
+        }
+    if path.startswith("/v1/diagnostics/recommendations/19995?"):
+        return {
+            "status": "ok",
+            "diagnostics": {
+                "result_count": 5,
+                "benchmark_case_available": True,
+                "benchmark_case_passed": True,
+                "explanation_coverage": 1.0,
+            },
+            "recommendations": [
+                {"title": "Avatar: The Way of Water", "retrieval_stage": "vector"},
+                {"title": "The Abyss", "retrieval_stage": "vector"},
+                {"title": "Pacific Rim", "retrieval_stage": "vector"},
+                {"title": "Dune", "retrieval_stage": "vector"},
+                {"title": "Prometheus", "retrieval_stage": "vector"},
+            ],
         }
     raise AssertionError(f"Unexpected path: {path}")
 
@@ -149,6 +186,36 @@ def test_live_serving_gate_rejects_bad_recommendation_drift(monkeypatch):
     assert any("blocked drift titles" in failure for failure in report["failures"])
 
 
+def test_live_serving_gate_rejects_degraded_platform_readiness(monkeypatch):
+    def fake_get_json(base_url, path, timeout):
+        if path.startswith("/v1/platform/readiness?"):
+            return {
+                "status": "degraded",
+                "components": [
+                    {"name": "catalog", "status": "ok", "required": True},
+                    {"name": "recommendation_benchmark_cache", "status": "warming", "required": True},
+                ],
+            }
+        if path.startswith("/v1/recommendations/id/19995?"):
+            return {
+                "recommendations": [
+                    {"title": "Avatar: The Way of Water"},
+                    {"title": "The Abyss"},
+                    {"title": "Pacific Rim"},
+                    {"title": "Dune"},
+                    {"title": "Prometheus"},
+                ]
+            }
+        return _healthy_payload(path)
+
+    monkeypatch.setattr(live, "_get_json", fake_get_json)
+
+    report = live.evaluate_live_serving(_args())
+
+    assert report["status"] == "failed"
+    assert any("/v1/platform/readiness is degraded" in failure for failure in report["failures"])
+
+
 def test_live_serving_gate_rejects_recommendation_benchmark_regression(monkeypatch):
     def fake_get_json(base_url, path, timeout):
         if path.startswith("/v1/recommendations/id/19995?"):
@@ -180,6 +247,39 @@ def test_live_serving_gate_rejects_recommendation_benchmark_regression(monkeypat
     assert report["status"] == "failed"
     assert any("recommendation_benchmark_case_pass_rate" in failure for failure in report["failures"])
     assert any("recommendation_benchmark_bad_case_rate_at_k" in failure for failure in report["failures"])
+
+
+def test_live_serving_gate_rejects_recommendation_diagnostics_regression(monkeypatch):
+    def fake_get_json(base_url, path, timeout):
+        if path.startswith("/v1/recommendations/id/19995?"):
+            return {
+                "recommendations": [
+                    {"title": "Avatar: The Way of Water"},
+                    {"title": "The Abyss"},
+                    {"title": "Pacific Rim"},
+                    {"title": "Dune"},
+                    {"title": "Prometheus"},
+                ]
+            }
+        if path.startswith("/v1/diagnostics/recommendations/19995?"):
+            return {
+                "status": "ok",
+                "diagnostics": {
+                    "result_count": 3,
+                    "benchmark_case_available": False,
+                    "benchmark_case_passed": None,
+                },
+                "recommendations": [{"title": "Avatar: The Way of Water"}],
+            }
+        return _healthy_payload(path)
+
+    monkeypatch.setattr(live, "_get_json", fake_get_json)
+
+    report = live.evaluate_live_serving(_args())
+
+    assert report["status"] == "failed"
+    assert any("recommendation diagnostics returned 3 results" in failure for failure in report["failures"])
+    assert any("did not include a labeled benchmark case" in failure for failure in report["failures"])
 
 
 def test_live_serving_gate_rejects_search_title_regression(monkeypatch):
@@ -300,6 +400,32 @@ def test_live_serving_gate_can_skip_semantic_benchmark_for_lite_gateway(monkeypa
     assert not any(path.startswith("/v1/evaluation/semantic-benchmark") for path in seen_paths)
 
 
+def test_live_serving_gate_can_skip_platform_readiness_for_lite_gateway(monkeypatch):
+    seen_paths = []
+
+    def fake_get_json(base_url, path, timeout):
+        seen_paths.append(path)
+        if path.startswith("/v1/recommendations/id/19995?"):
+            return {
+                "recommendations": [
+                    {"title": "Avatar: The Way of Water"},
+                    {"title": "The Abyss"},
+                    {"title": "Pacific Rim"},
+                    {"title": "Dune"},
+                    {"title": "Prometheus"},
+                ]
+            }
+        return _healthy_payload(path)
+
+    monkeypatch.setattr(live, "_get_json", fake_get_json)
+
+    report = live.evaluate_live_serving(_args(skip_platform_readiness=True))
+
+    assert report["status"] == "ok"
+    assert report["platform_readiness"]["status"] == "skipped"
+    assert not any(path.startswith("/v1/platform/readiness") for path in seen_paths)
+
+
 def test_live_serving_gate_can_skip_recommendation_benchmark_for_lite_gateway(monkeypatch):
     seen_paths = []
 
@@ -324,6 +450,32 @@ def test_live_serving_gate_can_skip_recommendation_benchmark_for_lite_gateway(mo
     assert report["status"] == "ok"
     assert report["recommendation_benchmark"]["status"] == "skipped"
     assert not any(path.startswith("/v1/evaluation/recommendation-benchmark") for path in seen_paths)
+
+
+def test_live_serving_gate_can_skip_recommendation_diagnostics_for_lite_gateway(monkeypatch):
+    seen_paths = []
+
+    def fake_get_json(base_url, path, timeout):
+        seen_paths.append(path)
+        if path.startswith("/v1/recommendations/id/19995?"):
+            return {
+                "recommendations": [
+                    {"title": "Avatar: The Way of Water"},
+                    {"title": "The Abyss"},
+                    {"title": "Pacific Rim"},
+                    {"title": "Dune"},
+                    {"title": "Prometheus"},
+                ]
+            }
+        return _healthy_payload(path)
+
+    monkeypatch.setattr(live, "_get_json", fake_get_json)
+
+    report = live.evaluate_live_serving(_args(skip_recommendation_diagnostics=True))
+
+    assert report["status"] == "ok"
+    assert report["recommendation_diagnostics"]["status"] == "skipped"
+    assert not any(path.startswith("/v1/diagnostics/recommendations") for path in seen_paths)
 
 
 def test_live_serving_gate_can_allow_degraded_artifacts_for_gateway(monkeypatch):

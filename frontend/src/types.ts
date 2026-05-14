@@ -96,6 +96,34 @@ export type PlatformStatus = {
   capabilities?: string[];
 };
 
+export type ReadinessComponent = {
+  name: string;
+  status: "ok" | "degraded" | "warming" | "missing" | "failed" | "unavailable" | "not_ready" | string;
+  required: boolean;
+  summary: string;
+  details?: Record<string, unknown>;
+};
+
+export type PlatformReadiness = {
+  status: "ready" | "degraded" | "not_ready" | string;
+  strict: boolean;
+  tenant_id: string;
+  catalog_id: string;
+  generated_at?: string;
+  k?: number;
+  app?: {
+    version?: string | null;
+    commit?: string | null;
+  };
+  summary?: {
+    component_count?: number;
+    ok_count?: number;
+    required_count?: number;
+    failed_required_count?: number;
+  };
+  components?: ReadinessComponent[];
+};
+
 export type ArtifactHealth = {
   generated_at: string;
   status: "ready" | "degraded" | "unavailable" | string;

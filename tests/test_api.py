@@ -178,6 +178,198 @@ class TestPlatformEndpoint:
         assert "recommendation_benchmark" in data["capabilities"]
         assert "event_store" in data
 
+    def test_platform_readiness_reports_component_status(self, mock_artifacts):
+        from backend.main import app
+        client = TestClient(app)
+
+        resp = client.get("/v1/platform/readiness", params={"k": 3})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] in {"ready", "degraded"}
+        assert data["strict"] is False
+        assert data["summary"]["component_count"] >= 6
+        components = {component["name"]: component for component in data["components"]}
+        assert components["catalog"]["status"] == "ok"
+        assert components["artifact_health"]["status"] == "ok"
+        assert components["vector_serving"]["status"] == "ok"
+        assert components["recommendation_smoke"]["status"] == "ok"
+
+    def test_platform_readiness_strict_degrades_when_benchmark_cache_is_missing(self, mock_artifacts):
+        import backend.main as main
+        from backend.main import app
+
+        main._semantic_benchmark_cache.clear()
+        main._recommendation_benchmark_cache.clear()
+
+        client = TestClient(app)
+        resp = client.get("/v1/platform/readiness", params={"strict": True, "k": 3})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "degraded"
+        components = {component["name"]: component for component in data["components"]}
+        assert components["semantic_benchmark_cache"]["status"] == "warming"
+        assert components["recommendation_benchmark_cache"]["status"] == "warming"
+
+    def test_platform_readiness_starts_background_benchmark_warmers(self, mock_artifacts, monkeypatch):
+        monkeypatch.setenv("NOVA_ASYNC_EVALUATION_CACHE", "true")
+
+        import backend.main as main
+        from backend.main import app
+
+        started = []
+        main._semantic_benchmark_cache.clear()
+        main._recommendation_benchmark_cache.clear()
+        monkeypatch.setattr(main, "_start_background_semantic_benchmark", lambda k: started.append(("semantic", k)))
+        monkeypatch.setattr(main, "_start_background_recommendation_benchmark", lambda k: started.append(("recommendation", k)))
+
+        client = TestClient(app)
+        resp = client.get("/v1/platform/readiness", params={"strict": True, "k": 3})
+
+        assert resp.status_code == 200
+        assert ("semantic", 3) in started
+        assert ("recommendation", 3) in started
+
+    def test_platform_readiness_can_proxy_to_remote_service(self, mock_artifacts, monkeypatch):
+        import backend.main as main
+        from backend.main import app
+        from backend.remote_recommender import RemoteResponse
+
+        async def fake_remote_get_json(path, params=None, context=None):
+            assert path == "/v1/platform/readiness"
+            assert params["strict"] is True
+            return RemoteResponse(
+                status_code=200,
+                payload={"status": "ready", "remote": True, "components": []},
+            )
+
+        def fail_local_load():
+            raise AssertionError("Gateway readiness should proxy to the vector service")
+
+        monkeypatch.setattr(main, "remote_get_json", fake_remote_get_json)
+        monkeypatch.setattr(main, "get_rec", fail_local_load)
+
+        client = TestClient(app)
+        resp = client.get("/v1/platform/readiness", params={"strict": True})
+
+        assert resp.status_code == 200
+        assert resp.json()["remote"] is True
+
+    def test_platform_status_can_proxy_to_remote_service(self, mock_artifacts, monkeypatch):
+        import backend.main as main
+        from backend.main import app
+        from backend.remote_recommender import RemoteResponse
+
+        async def fake_remote_get_json(path, params=None, context=None):
+            assert path == "/v1/platform/status"
+            assert params is None
+            return RemoteResponse(
+                status_code=200,
+                payload={"status": "ready", "remote": True, "movie_count": 75247},
+            )
+
+        def fail_local_load():
+            raise AssertionError("Gateway status should proxy to the vector service")
+
+        monkeypatch.setattr(main, "remote_get_json", fake_remote_get_json)
+        monkeypatch.setattr(main, "get_rec", fail_local_load)
+
+        client = TestClient(app)
+        resp = client.get("/v1/platform/status")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["remote"] is True
+        assert data["movie_count"] == 75247
+        assert data["gateway"]["status"] == "ready"
+        assert data["gateway"]["remote_recommender"]["configured"] is False
+
+    @pytest.mark.parametrize(
+        ("request_url", "expected_path", "expected_params", "payload"),
+        [
+            (
+                "/v1/evaluation/recommendations?sample_size=2&k=3",
+                "/v1/evaluation/recommendations",
+                {"sample_size": 2, "k": 3},
+                {"status": "ready", "remote": True},
+            ),
+            (
+                "/v1/evaluation/semantic-benchmark?k=3",
+                "/v1/evaluation/semantic-benchmark",
+                {"k": 3},
+                {"status": "ready", "remote": True},
+            ),
+            (
+                "/v1/ranker/status",
+                "/v1/ranker/status",
+                None,
+                {"available": True, "remote": True},
+            ),
+            (
+                "/v1/semantic-twins/id/100",
+                "/v1/semantic-twins/id/100",
+                None,
+                {"id": 100, "remote": True},
+            ),
+            (
+                "/v1/recommendations/user/setup-test?n=3",
+                "/v1/recommendations/user/setup-test",
+                {"n": 3},
+                [
+                    {
+                        "id": 100,
+                        "title": "Test Movie A",
+                        "overview": "Action thriller",
+                        "genres": "Action",
+                        "vote_average": 7.5,
+                        "vote_count": 1000,
+                        "popularity": 100.0,
+                        "release_date": "2020-01-01",
+                    }
+                ],
+            ),
+        ],
+    )
+    def test_gateway_heavy_endpoints_proxy_to_remote_service(
+        self,
+        mock_artifacts,
+        monkeypatch,
+        request_url,
+        expected_path,
+        expected_params,
+        payload,
+    ):
+        import backend.main as main
+        from backend.main import app
+        from backend.remote_recommender import RemoteResponse
+
+        calls = []
+
+        async def fake_remote_get_json(path, params=None, context=None):
+            calls.append((path, params))
+            assert path == expected_path
+            if expected_params is None:
+                assert params is None
+            else:
+                for key, value in expected_params.items():
+                    assert params[key] == value
+            return RemoteResponse(status_code=200, payload=payload)
+
+        def fail_local_load():
+            raise AssertionError("Gateway endpoint should proxy to the vector service")
+
+        monkeypatch.setattr(main, "remote_get_json", fake_remote_get_json)
+        monkeypatch.setattr(main, "get_rec", fail_local_load)
+        monkeypatch.setattr(main, "record_usage", lambda *args, **kwargs: None)
+        monkeypatch.setattr(main, "record_recommendation_events", lambda *args, **kwargs: "test-request")
+
+        client = TestClient(app)
+        resp = client.get(request_url)
+
+        assert resp.status_code == 200
+        assert calls
+
 
 class TestCorsPolicy:
     def test_github_pages_origin_is_allowed_by_default(self, mock_artifacts):
@@ -205,6 +397,15 @@ class TestSearchEndpoint:
 
         assert resp.status_code == 200
         assert len(resp.json()) == 1
+
+    def test_movie_titles_accepts_full_catalog_limit(self, mock_artifacts):
+        from backend.main import app
+        client = TestClient(app)
+
+        resp = client.get("/movies/titles", params={"limit": 100000})
+
+        assert resp.status_code == 200
+        assert len(resp.json()) >= 1
 
     def test_search_finds_movie(self, mock_artifacts):
         from backend.main import app
@@ -370,6 +571,25 @@ class TestSearchEndpoint:
         assert data["status"] == "warming"
         assert data["k"] == 3
 
+    def test_semantic_benchmark_sync_bypasses_async_warming(self, mock_artifacts, monkeypatch):
+        monkeypatch.setenv("NOVA_ASYNC_EVALUATION_CACHE", "true")
+
+        import backend.main as main
+        from backend.main import app
+
+        main._semantic_benchmark_cache.clear()
+        monkeypatch.setattr(
+            main,
+            "_start_background_semantic_benchmark",
+            lambda k: (_ for _ in ()).throw(AssertionError("sync benchmark should not start async warmer")),
+        )
+
+        client = TestClient(app)
+        resp = client.get("/v1/evaluation/semantic-benchmark", params={"k": 3, "sync": True})
+
+        assert resp.status_code == 200
+        assert resp.json()["status"] != "warming"
+
     def test_recommendation_benchmark_async_cache_returns_warming(self, mock_artifacts, monkeypatch):
         monkeypatch.setenv("NOVA_ASYNC_EVALUATION_CACHE", "true")
 
@@ -386,6 +606,25 @@ class TestSearchEndpoint:
         data = resp.json()
         assert data["status"] == "warming"
         assert data["k"] == 3
+
+    def test_recommendation_benchmark_sync_bypasses_async_warming(self, mock_artifacts, monkeypatch):
+        monkeypatch.setenv("NOVA_ASYNC_EVALUATION_CACHE", "true")
+
+        import backend.main as main
+        from backend.main import app
+
+        main._recommendation_benchmark_cache.clear()
+        monkeypatch.setattr(
+            main,
+            "_start_background_recommendation_benchmark",
+            lambda k: (_ for _ in ()).throw(AssertionError("sync benchmark should not start async warmer")),
+        )
+
+        client = TestClient(app)
+        resp = client.get("/v1/evaluation/recommendation-benchmark", params={"k": 3, "sync": True})
+
+        assert resp.status_code == 200
+        assert resp.json()["status"] != "warming"
 
     def test_artifact_health_endpoint_reports_alignment(self, mock_artifacts):
         from backend.main import app
@@ -616,6 +855,72 @@ class TestRecommendEndpoints:
         resp = client.get("/recommend/id/999999")
         assert resp.status_code == 404
 
+    def test_recommendation_diagnostics_exposes_ranking_evidence(self, mock_artifacts):
+        from backend.main import app
+        client = TestClient(app)
+
+        resp = client.get("/v1/diagnostics/recommendations/100", params={"n": 2})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert data["query_movie"]["id"] == 100
+        assert data["lineage"]["serving_path"] == "local"
+        assert data["diagnostics"]["result_count"] == 2
+        assert data["diagnostics"]["stage_distribution"]
+        assert len(data["recommendations"]) == 2
+        assert "retrieval_stage" in data["recommendations"][0]
+
+    def test_recommendation_diagnostics_includes_labeled_case_summary(self, mock_artifacts, monkeypatch):
+        import backend.main as main
+        from backend.main import app
+
+        class FakeRec:
+            _artifact_status = {"vector_artifacts_ready": True}
+            _artifact_manifest = {}
+            _learned_ranker = None
+
+            def get_movie_by_id(self, movie_id):
+                if movie_id == 100:
+                    return {"id": 100, "title": "Seed Movie", "genres": "Drama"}
+                return None
+
+            def recommend_by_id(self, movie_id, n=10):
+                return [
+                    {
+                        "id": 200,
+                        "title": "Good Match",
+                        "similarity_score": 0.91,
+                        "retrieval_stage": "vector_semantic_ranked",
+                        "explanation": ["shared themes"],
+                    }
+                ][:n]
+
+        monkeypatch.setattr(main, "get_rec", lambda: FakeRec())
+        monkeypatch.setattr(
+            main,
+            "load_recommendation_benchmark",
+            lambda: [
+                {
+                    "case_id": "seed_case",
+                    "seed": {"id": 100, "title": "Seed Movie"},
+                    "min_good_hits": 1,
+                    "good_matches": [{"id": 200, "title": "Good Match"}],
+                    "bad_matches": [{"id": 300, "title": "Bad Drift"}],
+                }
+            ],
+        )
+
+        client = TestClient(app)
+        resp = client.get("/v1/diagnostics/recommendations/100", params={"n": 1})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["diagnostics"]["benchmark_case_available"] is True
+        assert data["diagnostics"]["benchmark_case_passed"] is True
+        assert data["benchmark_case"]["case_id"] == "seed_case"
+        assert data["benchmark_case"]["good_hit_count"] == 1
+
     def test_recommend_by_title(self, mock_artifacts):
         from backend.main import app
         client = TestClient(app)
@@ -660,8 +965,15 @@ class TestEvaluationEndpoint:
         assert data["vectors"]["index_rows_match_catalog"] is True
         assert data["recommendations"]["available"] is True
 
-    def test_ranker_status_without_artifact(self, mock_artifacts):
+    def test_ranker_status_without_artifact(self, mock_artifacts, monkeypatch):
+        import backend.main as main
         from backend.main import app
+
+        def fail_local_load():
+            raise AssertionError("Ranker status should not load the recommender")
+
+        main._recommender = None
+        monkeypatch.setattr(main, "get_rec", fail_local_load)
         client = TestClient(app)
 
         resp = client.get("/v1/ranker/status")

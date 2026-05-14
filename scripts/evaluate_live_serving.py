@@ -19,7 +19,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from backend.search_benchmark import DEFAULT_SEARCH_BENCHMARK_PATH, evaluate_search_benchmark
+from backend.search_benchmark import DEFAULT_SEARCH_BENCHMARK_PATH, evaluate_search_benchmark  # noqa: E402
 
 
 def _parse_title_csv(value: str) -> list[str]:
@@ -52,15 +52,26 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
             "attempt": attempt,
             "failures": [],
             "health": {},
+            "platform_readiness": {},
             "artifact_health": {},
             "search_smoke": [],
             "search_benchmark": {},
             "recommendation_smoke": {},
+            "recommendation_diagnostics": {},
             "recommendation_benchmark": {},
             "semantic_benchmark": {},
         }
         try:
             report["health"] = _get_json(args.base_url, "/health", args.timeout)
+            if args.skip_platform_readiness:
+                report["platform_readiness"] = {"status": "skipped", "reason": "disabled by live gate"}
+            else:
+                readiness_params = urllib.parse.urlencode({"strict": str(args.platform_readiness_strict).lower(), "k": args.k})
+                report["platform_readiness"] = _get_json(
+                    args.base_url,
+                    f"/v1/platform/readiness?{readiness_params}",
+                    args.timeout,
+                )
             report["artifact_health"] = _get_json(args.base_url, "/v1/artifacts/health", args.timeout)
             search_params = urllib.parse.urlencode({"q": args.search_query, "limit": args.search_limit})
             report["search_smoke"] = _get_json(args.base_url, f"/v1/search?{search_params}", args.timeout)
@@ -89,12 +100,21 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
                 f"/v1/recommendations/id/{args.recommendation_smoke_movie_id}?{recommendation_params}",
                 args.timeout,
             )
+            if args.skip_recommendation_diagnostics:
+                report["recommendation_diagnostics"] = {"status": "skipped", "reason": "disabled by live gate"}
+            else:
+                diagnostics_params = urllib.parse.urlencode({"n": args.recommendation_diagnostics_k})
+                report["recommendation_diagnostics"] = _get_json(
+                    args.base_url,
+                    f"/v1/diagnostics/recommendations/{args.recommendation_smoke_movie_id}?{diagnostics_params}",
+                    args.timeout,
+                )
             if args.skip_recommendation_benchmark:
                 report["recommendation_benchmark"] = {"status": "skipped", "reason": "disabled by live gate"}
             else:
                 report["recommendation_benchmark"] = _get_json(
                     args.base_url,
-                    f"/v1/evaluation/recommendation-benchmark?k={args.k}",
+                    f"/v1/evaluation/recommendation-benchmark?k={args.k}&sync=true",
                     args.timeout,
                 )
             if args.skip_semantic_benchmark:
@@ -102,7 +122,7 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
             else:
                 report["semantic_benchmark"] = _get_json(
                     args.base_url,
-                    f"/v1/evaluation/semantic-benchmark?k={args.k}",
+                    f"/v1/evaluation/semantic-benchmark?k={args.k}&sync=true",
                     args.timeout,
                 )
         except Exception as exc:
@@ -115,6 +135,23 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
 
         if report["health"].get("status") != "healthy":
             _threshold_failure(f"/health status is {report['health'].get('status')}", report)
+
+        platform_readiness = report.get("platform_readiness") or {}
+        if not args.skip_platform_readiness:
+            if platform_readiness.get("status") not in {"ready", "degraded"}:
+                _threshold_failure(
+                    f"/v1/platform/readiness status is {platform_readiness.get('status')}",
+                    report,
+                )
+            if args.require_platform_ready and platform_readiness.get("status") != "ready":
+                component_summary = ", ".join(
+                    f"{component.get('name')}={component.get('status')}"
+                    for component in platform_readiness.get("components", [])
+                )
+                _threshold_failure(
+                    f"/v1/platform/readiness is {platform_readiness.get('status')}; {component_summary}",
+                    report,
+                )
 
         expected_commit = str(args.expected_app_commit or "").strip()
         actual_commit = str(report["health"].get("app_commit") or "").strip()
@@ -239,6 +276,34 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
                 report,
             )
 
+        diagnostics_payload = report.get("recommendation_diagnostics") or {}
+        if not args.skip_recommendation_diagnostics:
+            if not isinstance(diagnostics_payload, dict):
+                _threshold_failure("/v1/diagnostics/recommendations did not return an object", report)
+                diagnostics_payload = {}
+            if diagnostics_payload.get("status") != "ok":
+                _threshold_failure(
+                    "recommendation diagnostics unavailable: "
+                    f"{diagnostics_payload.get('reason') or diagnostics_payload.get('status')}",
+                    report,
+                )
+            diagnostic_metrics = diagnostics_payload.get("diagnostics") or {}
+            diagnostic_results = diagnostics_payload.get("recommendations") or []
+            if not isinstance(diagnostic_results, list):
+                _threshold_failure("recommendation diagnostics did not return a recommendations list", report)
+                diagnostic_results = []
+            result_count = int(diagnostic_metrics.get("result_count") or len(diagnostic_results) or 0)
+            if result_count < args.min_recommendation_diagnostic_results:
+                _threshold_failure(
+                    f"recommendation diagnostics returned {result_count} results, "
+                    f"below {args.min_recommendation_diagnostic_results}",
+                    report,
+                )
+            if args.require_diagnostic_benchmark_case and not diagnostic_metrics.get("benchmark_case_available"):
+                _threshold_failure("recommendation diagnostics did not include a labeled benchmark case", report)
+            if diagnostic_metrics.get("benchmark_case_passed") is False:
+                _threshold_failure("recommendation diagnostics benchmark case did not pass", report)
+
         recommendation_benchmark = report.get("recommendation_benchmark") or {}
         if not args.skip_recommendation_benchmark:
             if recommendation_benchmark.get("status") not in {"ok", "needs_attention"}:
@@ -312,6 +377,9 @@ def main() -> None:
     parser.add_argument("--retry-delay-seconds", type=int, default=30)
     parser.add_argument("--expected-app-commit", default="")
     parser.add_argument("--k", type=int, default=10)
+    parser.add_argument("--platform-readiness-strict", action="store_true")
+    parser.add_argument("--require-platform-ready", action="store_true")
+    parser.add_argument("--skip-platform-readiness", action="store_true")
     parser.add_argument("--search-query", default="Avatar")
     parser.add_argument("--search-limit", type=int, default=5)
     parser.add_argument("--min-search-results", type=int, default=1)
@@ -344,6 +412,10 @@ def main() -> None:
             "Justice League: The Flashpoint Paradox"
         ),
     )
+    parser.add_argument("--recommendation-diagnostics-k", type=int, default=5)
+    parser.add_argument("--min-recommendation-diagnostic-results", type=int, default=5)
+    parser.add_argument("--require-diagnostic-benchmark-case", action="store_true")
+    parser.add_argument("--skip-recommendation-diagnostics", action="store_true")
     parser.add_argument("--min-recommendation-benchmark-pass-rate", type=float, default=0.80)
     parser.add_argument("--min-recommendation-benchmark-hit-rate", type=float, default=0.90)
     parser.add_argument("--max-recommendation-benchmark-bad-case-rate", type=float, default=0.0)
@@ -365,9 +437,11 @@ def main() -> None:
     benchmark_metrics = (report.get("semantic_benchmark") or {}).get("metrics") or {}
     search_benchmark_metrics = (report.get("search_benchmark") or {}).get("metrics") or {}
     recommendation_benchmark_metrics = (report.get("recommendation_benchmark") or {}).get("metrics") or {}
+    recommendation_diagnostics_metrics = (report.get("recommendation_diagnostics") or {}).get("diagnostics") or {}
     summary = {
         "status": report.get("status"),
         "failures": report.get("failures"),
+        "platform_readiness_status": (report.get("platform_readiness") or {}).get("status"),
         "artifact_status": (report.get("artifact_health") or {}).get("status"),
         "app_commit": (report.get("health") or {}).get("app_commit"),
         "app_version": (report.get("health") or {}).get("app_version"),
@@ -386,6 +460,10 @@ def main() -> None:
         "recommendation_result_count": (report.get("recommendation_smoke_summary") or {}).get("result_count"),
         "recommendation_required_hit_count": (report.get("recommendation_smoke_summary") or {}).get("required_hit_count"),
         "recommendation_blocked_hits": (report.get("recommendation_smoke_summary") or {}).get("blocked_hits"),
+        "recommendation_diagnostics_status": (report.get("recommendation_diagnostics") or {}).get("status"),
+        "recommendation_diagnostics_result_count": recommendation_diagnostics_metrics.get("result_count"),
+        "recommendation_diagnostics_benchmark_case_available": recommendation_diagnostics_metrics.get("benchmark_case_available"),
+        "recommendation_diagnostics_benchmark_case_passed": recommendation_diagnostics_metrics.get("benchmark_case_passed"),
         "recommendation_benchmark_case_count": (report.get("recommendation_benchmark") or {}).get("evaluated_case_count"),
         "recommendation_benchmark_case_pass_rate": recommendation_benchmark_metrics.get("case_pass_rate"),
         "recommendation_benchmark_good_hit_case_rate": recommendation_benchmark_metrics.get("good_hit_case_rate"),

@@ -6,18 +6,28 @@ import type {
   EventResponse,
   Movie,
   MovieTitle,
+  PlatformReadiness,
   PlatformStatus,
   RecommendationResponse,
   SemanticBenchmark,
 } from "./types";
 
 const DEFAULT_BACKENDS = [
-  "https://movie-recs-api-5qvy.onrender.com",
   "https://pavanbadempet-movie-rec-api.hf.space",
+  "https://movie-recs-api-5qvy.onrender.com",
 ];
+
+function sameOriginBackend(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  const enabledByHost = window.location.hostname.endsWith(".hf.space");
+  const enabledByEnv = import.meta.env.VITE_USE_SAME_ORIGIN_API === "true";
+  if (!enabledByHost && !enabledByEnv) return undefined;
+  return window.location.origin.replace(/\/+$/, "");
+}
 
 const configuredBackends = [
   import.meta.env.VITE_API_URL,
+  sameOriginBackend(),
   import.meta.env.VITE_BACKUP_API_URL,
   ...DEFAULT_BACKENDS,
 ]
@@ -136,6 +146,10 @@ export async function platformStatus(): Promise<BackendResult<PlatformStatus>> {
   return apiGet<PlatformStatus>("/v1/platform/status", {}, 15000);
 }
 
+export async function platformReadiness(strict = true, k = 10): Promise<BackendResult<PlatformReadiness>> {
+  return apiGet<PlatformReadiness>("/v1/platform/readiness", { strict, k }, 90000);
+}
+
 export async function artifactHealth(): Promise<BackendResult<ArtifactHealth>> {
   return apiGet<ArtifactHealth>("/v1/artifacts/health", {}, 15000);
 }
@@ -144,8 +158,8 @@ export async function semanticBenchmark(k = 10): Promise<BackendResult<SemanticB
   return apiGet<SemanticBenchmark>("/v1/evaluation/semantic-benchmark", { k }, 45000);
 }
 
-export async function loadTitles(limit = 5000): Promise<BackendResult<MovieTitle[]>> {
-  return apiGet<MovieTitle[]>("/movies/titles", { limit }, 30000);
+export async function loadTitles(limit = 100000): Promise<BackendResult<MovieTitle[]>> {
+  return apiGet<MovieTitle[]>("/movies/titles", { limit }, 45000);
 }
 
 export async function searchMovies(query: string): Promise<BackendResult<Movie[]>> {

@@ -66,8 +66,11 @@ jobs:
             --retry-delay-seconds 30 \
             "${expected_args[@]}" \
             --k 10 \
+            --platform-readiness-strict \
+            --require-platform-ready \
             --min-search-top1-hit-rate 0.98 \
             --min-search-hit-rate 1.0 \
+            --require-diagnostic-benchmark-case \
             --min-recommendation-benchmark-pass-rate 0.80 \
             --min-recommendation-benchmark-hit-rate 0.90 \
             --max-recommendation-benchmark-bad-case-rate 0.0 \
@@ -87,7 +90,9 @@ jobs:
             --retries 20 \
             --retry-delay-seconds 30 \
             --k 10 \
+            --skip-platform-readiness \
             --skip-search-benchmark \
+            --skip-recommendation-diagnostics \
             --skip-recommendation-benchmark \
             --skip-semantic-benchmark \
             --allow-degraded-artifact-health \

@@ -48,6 +48,56 @@ services:
         value: https://pavanbadempet-movie-rec-api.hf.space
       - key: NOVA_RECOMMENDER_SERVICE_TIMEOUT_SECONDS
         value: 20
+      - key: NOVA_RECOMMENDER_CIRCUIT_FAILURE_THRESHOLD
+        value: 3
+      - key: NOVA_RECOMMENDER_CIRCUIT_OPEN_SECONDS
+        value: 60
+      - key: NOVA_RECOMMENDER_CACHE_ENABLED
+        value: true
+      - key: NOVA_RECOMMENDER_CACHE_READS
+        value: true
+      - key: NOVA_RECOMMENDER_CACHE_MAX_ENTRIES
+        value: 512
+      - key: NOVA_RECOMMENDER_CACHE_TTL_SECONDS
+        value: 300
+      - key: NOVA_RECOMMENDER_STALE_CACHE_TTL_SECONDS
+        value: 21600
+      - key: NOVA_RECOMMENDER_DISTRIBUTED_CACHE_ENABLED
+        value: true
+      - key: NOVA_RECOMMENDER_DISTRIBUTED_CACHE_TIMEOUT_SECONDS
+        value: 1.5
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
+      - key: NOVA_SLO_WINDOW_SECONDS
+        value: 3600
+      - key: NOVA_SLO_MIN_REQUESTS
+        value: 5
+      - key: NOVA_SLO_MIN_ROUTE_REQUESTS
+        value: 20
+      - key: NOVA_SLO_LATENCY_P95_MS
+        value: 2500
+      - key: NOVA_SLO_ERROR_RATE
+        value: 0.03
+      - key: NOVA_SLO_MAX_EVENTS
+        value: 5000
+      - key: NOVA_SLO_EXCLUDED_ROUTE_PREFIXES
+        value: /docs,/redoc,/openapi.json,/favicon.ico,/v1/artifacts,/v1/diagnostics,/v1/evaluation,/v1/platform/readiness
+      - key: NOVA_SLO_ROUTE_LATENCY_BUDGETS
+        value: '/:1000,/health:1000,/v1/frontends/status:3000,/v1/platform/slo:1000,/v1/search:2500,/v1/recommendations/id/{movie_id}:25000'
+      - key: NOVA_FRONTEND_PRIORITY
+        value: github_pages,react,streamlit
+      - key: NOVA_FRONTEND_STREAMLIT_URL
+        value: https://a-movie-recommendation-system.streamlit.app
+      - key: NOVA_FRONTEND_REACT_URL
+        value: /ui/
+      - key: NOVA_FRONTEND_PAGES_URL
+        value: https://movie-recommendation-system-6bm.pages.dev
+      - key: NOVA_FRONTEND_HEALTH_TIMEOUT_SECONDS
+        value: 2.5
+      - key: NOVA_FRONTEND_HEALTH_CACHE_SECONDS
+        value: 30
       - key: TMDB_API_KEY
         sync: false
 
