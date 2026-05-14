@@ -451,7 +451,8 @@ input:focus-visible {
 }
 
 .diagnostics-panel,
-.quality-panel {
+.quality-panel,
+.readiness-panel {
   display: grid;
   gap: 10px;
   margin-top: 14px;
@@ -462,13 +463,134 @@ input:focus-visible {
 }
 
 .diagnostics-panel.ready,
-.quality-panel.ok {
+.quality-panel.ok,
+.readiness-panel.ready {
   border-color: rgba(94, 234, 212, 0.22);
 }
 
 .diagnostics-panel.degraded,
-.quality-panel.needs_attention {
+.quality-panel.needs_attention,
+.readiness-panel.degraded,
+.readiness-panel.warming {
   border-color: rgba(251, 191, 36, 0.24);
+}
+
+.readiness-panel.not_ready,
+.readiness-panel.failed,
+.readiness-panel.unavailable {
+  border-color: rgba(251, 113, 133, 0.34);
+}
+
+.panel-icon-button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  color: #dce3ee;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.panel-icon-button:hover {
+  border-color: rgba(94, 234, 212, 0.28);
+  background: rgba(94, 234, 212, 0.09);
+}
+
+.readiness-headline {
+  display: grid;
+  gap: 2px;
+}
+
+.readiness-headline strong {
+  color: #f8fafc;
+  font-size: 1.12rem;
+}
+
+.readiness-headline span {
+  color: #a6adbb;
+  font-size: 0.84rem;
+}
+
+.readiness-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.readiness-metrics div {
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.readiness-metrics span {
+  display: block;
+  overflow: hidden;
+  color: #a6adbb;
+  font-size: 0.74rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.readiness-metrics strong {
+  display: block;
+  margin-top: 3px;
+  color: #f8fafc;
+  font-size: 1rem;
+}
+
+.component-list {
+  display: grid;
+  gap: 6px;
+}
+
+.component-row {
+  min-height: 30px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.component-row span,
+.component-row strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.component-row span {
+  color: #cfd6e3;
+  text-transform: capitalize;
+}
+
+.component-row strong {
+  color: #f8fafc;
+}
+
+.component-row.ok strong {
+  color: #5eead4;
+}
+
+.component-row.degraded strong,
+.component-row.warming strong,
+.component-row.missing strong {
+  color: #fbbf24;
+}
+
+.component-row.failed strong,
+.component-row.not_ready strong,
+.component-row.unavailable strong {
+  color: #fb7185;
 }
 
 .diagnostic-rows {

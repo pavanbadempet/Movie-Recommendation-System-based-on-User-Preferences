@@ -32,12 +32,21 @@ import {
   getRecommendations,
   loadTitles,
   pingApi,
+  platformReadiness,
   platformStatus,
   recordEvent,
   searchMovies,
   semanticBenchmark,
 } from "./api";
-import type { ArtifactHealth, EventPayload, Movie, MovieTitle, PlatformStatus, SemanticBenchmark } from "./types";
+import type {
+  ArtifactHealth,
+  EventPayload,
+  Movie,
+  MovieTitle,
+  PlatformReadiness,
+  PlatformStatus,
+  SemanticBenchmark,
+} from "./types";
 import "./styles.css";
 
 const imageBase = import.meta.env.VITE_TMDB_IMAGE_BASE || "https://image.tmdb.org/t/p/w500";
@@ -274,6 +283,92 @@ function qualityLabel(report: SemanticBenchmark | null): string {
   if (report.status === "unavailable") return "Unavailable";
   const hitRate = report.metrics?.hit_rate_at_k;
   return typeof hitRate === "number" ? `${Math.round(hitRate * 100)}% hit` : report.status;
+}
+
+function titleCaseStatus(status?: string | null): string {
+  if (!status) return "Pending";
+  return status
+    .replaceAll("_", " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
+}
+
+function readinessLabel(report: PlatformReadiness | null): string {
+  if (!report) return "Pending";
+  return titleCaseStatus(report.status);
+}
+
+function readinessSummaryText(report: PlatformReadiness | null): string {
+  if (!report) return "Waiting for strict readiness";
+  const summary = report.summary || {};
+  const ok = Number(summary.ok_count || 0);
+  const total = Number(summary.component_count || report.components?.length || 0);
+  const failed = Number(summary.failed_required_count || 0);
+  if (report.status === "ready") return `${ok}/${total} checks passing`;
+  if (failed > 0) return `${failed} required check${failed === 1 ? "" : "s"} failing`;
+  return `${ok}/${total} checks passing`;
+}
+
+function ReadinessPanel({
+  report,
+  loading,
+  onRefresh,
+}: {
+  report: PlatformReadiness | null;
+  loading: boolean;
+  onRefresh: () => void;
+}) {
+  const components = report?.components || [];
+  const summary = report?.summary || {};
+  const visibleComponents = [...components]
+    .sort((left, right) => {
+      const leftOk = left.status === "ok" ? 1 : 0;
+      const rightOk = right.status === "ok" ? 1 : 0;
+      if (leftOk !== rightOk) return leftOk - rightOk;
+      if (left.required !== right.required) return left.required ? -1 : 1;
+      return left.name.localeCompare(right.name);
+    })
+    .slice(0, 6);
+
+  return (
+    <div className={`readiness-panel ${report?.status || "pending"}`}>
+      <div className="section-mini-title">
+        <span>Platform readiness</span>
+        <button className="panel-icon-button" type="button" onClick={onRefresh} title="Refresh readiness">
+          <RefreshCw size={14} className={loading ? "spin" : undefined} />
+        </button>
+      </div>
+      <div className="readiness-headline">
+        <strong>{readinessLabel(report)}</strong>
+        <span>{readinessSummaryText(report)}</span>
+      </div>
+      <div className="readiness-metrics">
+        <div>
+          <span>Components</span>
+          <strong>
+            {Number(summary.ok_count || 0)}/{Number(summary.component_count || components.length || 0)}
+          </strong>
+        </div>
+        <div>
+          <span>Required failures</span>
+          <strong>{Number(summary.failed_required_count || 0)}</strong>
+        </div>
+      </div>
+      {visibleComponents.length > 0 && (
+        <div className="component-list">
+          {visibleComponents.map((component) => (
+            <div className={`component-row ${component.status}`} key={component.name}>
+              <span>{component.name.replaceAll("_", " ")}</span>
+              <strong>{titleCaseStatus(component.status)}</strong>
+            </div>
+          ))}
+        </div>
+      )}
+      {report?.app?.commit && <div className="quiet-line">Revision {report.app.commit.slice(0, 7)}</div>}
+    </div>
+  );
 }
 
 function DiagnosticsPanel({ health }: { health: ArtifactHealth | null }) {
@@ -547,8 +642,10 @@ function App() {
   const [loadingRecs, setLoadingRecs] = React.useState(false);
   const [lastUpdated, setLastUpdated] = React.useState("");
   const [platform, setPlatform] = React.useState<PlatformStatus | null>(null);
+  const [readinessReport, setReadinessReport] = React.useState<PlatformReadiness | null>(null);
   const [artifactReport, setArtifactReport] = React.useState<ArtifactHealth | null>(null);
   const [qualityReport, setQualityReport] = React.useState<SemanticBenchmark | null>(null);
+  const [signalsLoading, setSignalsLoading] = React.useState(false);
   const [recentMovies, setRecentMovies] = React.useState<Movie[]>(() => loadRecentMovies());
   const [feedbackByMovieId, setFeedbackByMovieId] = React.useState<Record<number, FeedbackValue>>({});
   const [feedbackNotice, setFeedbackNotice] = React.useState("");
@@ -674,6 +771,36 @@ function App() {
     }
   }
 
+  function loadOperationalSignals() {
+    setSignalsLoading(true);
+
+    const settle = <T,>(request: Promise<{ data: T; baseUrl: string }>, onValue: (data: T, baseUrl: string) => void) =>
+      request
+        .then((response) => {
+          setBackend(response.baseUrl);
+          onValue(response.data, response.baseUrl);
+          return true;
+        })
+        .catch((error) => {
+          console.warn("Operational signal unavailable", error);
+          return false;
+        });
+
+    const requests = [
+      settle(platformStatus(), (data) => setPlatform(data)),
+      settle(platformReadiness(true, 10), (data) => setReadinessReport(data)),
+      settle(artifactHealth(), (data) => setArtifactReport(data)),
+      settle(semanticBenchmark(10), (data) => setQualityReport(data)),
+    ];
+
+    void Promise.all(requests).then((results) => {
+      setSignalsLoading(false);
+      if (results.every((success) => !success)) {
+        loadedPlatform.current = false;
+      }
+    });
+  }
+
   React.useEffect(() => {
     if (bootstrapped.current) return;
     bootstrapped.current = true;
@@ -691,26 +818,7 @@ function App() {
     if (catalogState !== "ready" || loadedPlatform.current) return;
     loadedPlatform.current = true;
     const timer = window.setTimeout(() => {
-      void Promise.allSettled([platformStatus(), artifactHealth(), semanticBenchmark(10)]).then((results) => {
-        const platformResult = results[0];
-        const artifactResult = results[1];
-        const qualityResult = results[2];
-        if (platformResult.status === "fulfilled") {
-          setBackend(platformResult.value.baseUrl);
-          setPlatform(platformResult.value.data);
-        }
-        if (artifactResult.status === "fulfilled") {
-          setBackend(artifactResult.value.baseUrl);
-          setArtifactReport(artifactResult.value.data);
-        }
-        if (qualityResult.status === "fulfilled") {
-          setBackend(qualityResult.value.baseUrl);
-          setQualityReport(qualityResult.value.data);
-        }
-        if (platformResult.status === "rejected" && artifactResult.status === "rejected" && qualityResult.status === "rejected") {
-          loadedPlatform.current = false;
-        }
-      });
+      loadOperationalSignals();
     }, 1000);
     return () => window.clearTimeout(timer);
   }, [catalogState]);
@@ -834,7 +942,15 @@ function App() {
         </div>
         <div className="topbar-actions">
           <StatusBadge state={catalogState} backend={backend} />
-          <button className="icon-button" type="button" onClick={() => void bootstrap(true)} title="Refresh catalog">
+          <button
+            className="icon-button"
+            type="button"
+            onClick={() => {
+              void bootstrap(true);
+              if (catalogState === "ready") loadOperationalSignals();
+            }}
+            title="Refresh catalog and readiness"
+          >
             <RefreshCw size={18} />
           </button>
         </div>
@@ -842,7 +958,7 @@ function App() {
 
       <section className="metrics-strip" aria-label="Platform snapshot">
         <MetricTile icon={<Database size={18} />} label="Catalog" value={catalogValue ? catalogValue.toLocaleString() : "Loading"} />
-        <MetricTile icon={<Server size={18} />} label="Service" value={serviceLabel(backend)} />
+        <MetricTile icon={<Server size={18} />} label="Readiness" value={readinessLabel(readinessReport)} />
         <MetricTile icon={<BarChart3 size={18} />} label="Ranking" value={rankerValue} />
         <MetricTile icon={<Gauge size={18} />} label="Quality" value={qualityLabel(qualityReport)} />
         <MetricTile icon={<Activity size={18} />} label="Artifacts" value={healthLabel(artifactReport)} />
@@ -901,6 +1017,7 @@ function App() {
             )}
           </div>
 
+          <ReadinessPanel report={readinessReport} loading={signalsLoading} onRefresh={loadOperationalSignals} />
           <DiagnosticsPanel health={artifactReport} />
           <QualityPanel report={qualityReport} />
 
