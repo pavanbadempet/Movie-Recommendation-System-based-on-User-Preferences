@@ -72,3 +72,30 @@ def test_synthetic_monitor_rejects_known_recommendation_drift(monkeypatch):
 
     assert report["status"] == "failed"
     assert any("known drift titles" in failure for failure in report["failures"])
+
+
+def test_synthetic_monitor_retries_until_product_paths_recover(monkeypatch):
+    health_calls = {"count": 0}
+
+    def fake_get_json(base_url, path, timeout):
+        if path == "/health":
+            health_calls["count"] += 1
+            if health_calls["count"] == 1:
+                return {"status": "starting"}
+        return _good_payload(path)
+
+    monkeypatch.setattr(monitor, "_get_json", fake_get_json)
+    monkeypatch.setattr(monitor.time, "sleep", lambda seconds: None)
+
+    report = monitor.evaluate_synthetic_monitor(
+        Namespace(
+            base_url=["https://api.example"],
+            timeout=1,
+            skip_recommendations=False,
+            retries=2,
+            retry_delay_seconds=0,
+        )
+    )
+
+    assert report["status"] == "ok"
+    assert report["attempt"] == 2
