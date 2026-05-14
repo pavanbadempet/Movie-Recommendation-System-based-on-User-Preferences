@@ -48,9 +48,19 @@ jobs:
           if echo "$changed_files" | grep -E '^(backend/|etl/|data/evaluation/|Dockerfile|requirements\.txt|streamlit_app\.py|render\.yaml|REVISION)$' >/dev/null; then
             expected_app_commit="$GITHUB_SHA"
           fi
+          run_full_quality="false"
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ -n "$expected_app_commit" ]; then
+            run_full_quality="true"
+          fi
           echo "expected_app_commit=$expected_app_commit" >> "$GITHUB_OUTPUT"
+          echo "run_full_quality=$run_full_quality" >> "$GITHUB_OUTPUT"
+
+      - name: Skip non-serving change
+        if: ${{ steps.app_revision.outputs.run_full_quality != 'true' }}
+        run: echo "No serving-impacting files changed; synthetic monitoring covers the live endpoints for this revision."
 
       - name: Evaluate live serving quality
+        if: ${{ steps.app_revision.outputs.run_full_quality == 'true' }}
         env:
           EXPECTED_APP_COMMIT: ${{ steps.app_revision.outputs.expected_app_commit }}
         run: |
@@ -82,6 +92,7 @@ jobs:
             --fail-on-threshold
 
       - name: Evaluate Render gateway quality
+        if: ${{ steps.app_revision.outputs.run_full_quality == 'true' }}
         run: |
           python scripts/evaluate_live_serving.py \
             --base-url "$NOVA_RENDER_GATEWAY_URL" \
