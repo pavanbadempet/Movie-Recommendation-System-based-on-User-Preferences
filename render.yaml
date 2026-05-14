@@ -48,6 +48,16 @@ services:
         value: https://pavanbadempet-movie-rec-api.hf.space
       - key: NOVA_RECOMMENDER_SERVICE_TIMEOUT_SECONDS
         value: 20
+      - key: NOVA_FRONTEND_PRIORITY
+        value: streamlit,react
+      - key: NOVA_FRONTEND_STREAMLIT_URL
+        value: https://a-movie-recommendation-system.streamlit.app
+      - key: NOVA_FRONTEND_REACT_URL
+        value: /ui/
+      - key: NOVA_FRONTEND_HEALTH_TIMEOUT_SECONDS
+        value: 2.5
+      - key: NOVA_FRONTEND_HEALTH_CACHE_SECONDS
+        value: 30
       - key: TMDB_API_KEY
         sync: false
 
