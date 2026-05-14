@@ -20,6 +20,14 @@ DEFAULT_EXCLUDED_ROUTE_PREFIXES = (
     "/v1/evaluation",
     "/v1/platform/readiness",
 )
+DEFAULT_ROUTE_LATENCY_BUDGETS_MS = {
+    "/": 1000.0,
+    "/health": 1000.0,
+    "/v1/frontends/status": 3000.0,
+    "/v1/platform/slo": 1000.0,
+    "/v1/recommendations/id/{movie_id}": 15000.0,
+    "/v1/search": 2500.0,
+}
 
 
 @dataclass(frozen=True)
@@ -72,6 +80,26 @@ def slo_excluded_route_prefixes() -> tuple[str, ...]:
     if not configured:
         return DEFAULT_EXCLUDED_ROUTE_PREFIXES
     return tuple(prefix.strip() for prefix in configured.split(",") if prefix.strip())
+
+
+def slo_route_latency_budgets() -> dict[str, float]:
+    """Return per-route p95 latency budgets in milliseconds."""
+
+    configured = os.getenv("NOVA_SLO_ROUTE_LATENCY_BUDGETS", "").strip()
+    if not configured:
+        return dict(DEFAULT_ROUTE_LATENCY_BUDGETS_MS)
+
+    budgets: dict[str, float] = {}
+    for item in configured.split(","):
+        route_budget = item.strip()
+        if not route_budget or ":" not in route_budget:
+            continue
+        route, raw_budget = route_budget.rsplit(":", 1)
+        try:
+            budgets[route.strip()] = max(0.0, float(raw_budget.strip()))
+        except ValueError:
+            continue
+    return budgets or dict(DEFAULT_ROUTE_LATENCY_BUDGETS_MS)
 
 
 def should_track_request(*, path: str, route: str) -> bool:
@@ -224,7 +252,25 @@ def build_slo_report(
     summary = tracker.summary(window_seconds=int(thresholds["window_seconds"]))
     request_count = int(summary["request_count"])
     p95_latency = summary["latency_ms"]["p95"]
-    latency_ok = p95_latency is None or p95_latency <= float(thresholds["latency_p95_ms"])
+    route_latency_budgets = slo_route_latency_budgets()
+    default_latency_budget = float(thresholds["latency_p95_ms"])
+    route_latency_violations = []
+    for route_summary in summary["routes"]:
+        route = str(route_summary.get("route") or "")
+        route_p95 = (route_summary.get("latency_ms") or {}).get("p95")
+        route_budget = route_latency_budgets.get(route, default_latency_budget)
+        route_summary["latency_ms"]["budget"] = route_budget
+        route_summary["latency_ms"]["passed"] = route_p95 is None or route_p95 <= route_budget
+        if not route_summary["latency_ms"]["passed"]:
+            route_latency_violations.append(
+                {
+                    "route": route,
+                    "actual": route_p95,
+                    "budget": route_budget,
+                }
+            )
+
+    latency_ok = not route_latency_violations
     error_rate_ok = float(summary["error_rate"]) <= float(thresholds["error_rate"])
     enough_requests = request_count >= int(thresholds["min_requests"])
     dependency_state = _dependency_state(dependencies)
@@ -252,7 +298,9 @@ def build_slo_report(
                 "target": thresholds["latency_p95_ms"],
                 "actual": p95_latency,
                 "passed": latency_ok,
+                "route_violations": route_latency_violations,
             },
+            "route_latency_budgets_ms": route_latency_budgets,
             "error_rate": {
                 "target": thresholds["error_rate"],
                 "actual": summary["error_rate"],
