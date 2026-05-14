@@ -96,9 +96,10 @@ ENV NOVA_SLO_ERROR_RATE=0.03
 ENV NOVA_SLO_MAX_EVENTS=5000
 ENV NOVA_SLO_EXCLUDED_ROUTE_PREFIXES=/docs,/redoc,/openapi.json,/favicon.ico,/v1/artifacts,/v1/diagnostics,/v1/evaluation,/v1/platform/readiness
 ENV NOVA_SLO_ROUTE_LATENCY_BUDGETS=/:1000,/health:1000,/v1/frontends/status:3000,/v1/platform/slo:1000,/v1/search:2500,/v1/recommendations/id/{movie_id}:25000
-ENV NOVA_FRONTEND_PRIORITY=streamlit,react
+ENV NOVA_FRONTEND_PRIORITY=github_pages,react,streamlit
 ENV NOVA_FRONTEND_STREAMLIT_URL=https://a-movie-recommendation-system.streamlit.app
 ENV NOVA_FRONTEND_REACT_URL=/ui/
+ENV NOVA_FRONTEND_PAGES_URL=https://movie-recommendation-system-6bm.pages.dev
 ENV NOVA_FRONTEND_HEALTH_TIMEOUT_SECONDS=2.5
 ENV NOVA_FRONTEND_HEALTH_CACHE_SECONDS=30
 
