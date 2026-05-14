@@ -1345,6 +1345,39 @@ async def platform_status(
     context: TenantContext = Depends(resolve_tenant_context),
 ):
     """Return product-readiness status across serving, data, AI, and experimentation."""
+    remote_payload = await remote_payload_or_raise("/v1/platform/status", context=context)
+    if remote_payload is not None:
+        behavior = await run_in_threadpool(lambda: aggregate_behavior_features(limit=5))
+        assignment = assign_experiment(subject_id=f"{context.tenant_id}:{context.catalog_id}:status")
+        record_usage(
+            "platform.status.remote",
+            context.tenant_id,
+            context.catalog_id,
+            plan=context.plan,
+            authenticated=context.authenticated,
+        )
+        if isinstance(remote_payload, dict):
+            payload = dict(remote_payload)
+            payload["gateway"] = {
+                "status": "ready",
+                "app": app_metadata(),
+                "tenant_id": context.tenant_id,
+                "catalog_id": context.catalog_id,
+                "event_store": {
+                    "mode": behavior.get("event_store"),
+                    "durable": behavior.get("durable"),
+                    "event_table": behavior.get("event_table"),
+                    "total_events": behavior.get("total_events"),
+                },
+                "remote_recommender": remote_recommender_status(),
+                "experimentation": {
+                    "enabled": True,
+                    "default_assignment": assignment,
+                },
+            }
+            return payload
+        return remote_payload
+
     rec = get_rec()
     ranker = getattr(rec, "_learned_ranker", None)
     behavior = aggregate_behavior_features(limit=5)
