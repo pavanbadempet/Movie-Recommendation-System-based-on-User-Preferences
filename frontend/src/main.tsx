@@ -170,7 +170,12 @@ function dedupeMovies(items: Movie[]): Movie[] {
 }
 
 function serviceLabel(url: string): string {
-  return url.includes("hf.space") ? "Backup API" : "Primary API";
+  if (typeof window !== "undefined" && url.replace(/\/+$/, "") === window.location.origin.replace(/\/+$/, "")) {
+    return "Same-origin API";
+  }
+  if (url.includes("hf.space")) return "HF Space API";
+  if (url.includes("onrender.com")) return "Render API";
+  return backendLabel(url);
 }
 
 function loadRecentMovies(): Movie[] {
