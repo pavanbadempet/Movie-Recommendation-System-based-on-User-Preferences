@@ -21,7 +21,26 @@ How to deploy the backend and frontend.
 
 Takes 5-10 min. Copy the URL when done (e.g. `https://movie-recs-api.onrender.com`).
 
-## Frontend (Streamlit Cloud)
+## Frontend (Cloudflare Pages)
+
+Use the React frontend as the primary free static UI.
+
+1. Go to Cloudflare Pages
+2. Connect this repository
+3. Recommended settings:
+   - Root directory: `frontend`
+   - Build command: `npm ci && npm run build`
+   - Build output directory: `dist`
+4. If you keep root directory as `/`, use:
+   - Build command: `cd frontend && npm ci && npm run build`
+   - Build output directory: `frontend/dist`
+5. Add optional build variables only when overriding defaults:
+   - `VITE_API_URL` = primary API gateway
+   - `VITE_BACKUP_API_URL` = backup API gateway
+
+The React frontend performs request-level API failover, so the UI can continue through one sleeping or slow free host.
+
+## Frontend Backup (Streamlit Cloud)
 
 1. Go to share.streamlit.io
 2. New App -> Select your repo
@@ -35,5 +54,6 @@ Takes 5-10 min. Copy the URL when done (e.g. `https://movie-recs-api.onrender.co
 
 ## Verify
 
-- Frontend: `https://<your-app>.streamlit.app`
+- Primary frontend: Cloudflare Pages URL
+- Backup frontend: `https://<your-app>.streamlit.app`
 - Backend docs: `https://<your-api>.onrender.com/docs`
