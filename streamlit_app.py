@@ -1644,12 +1644,21 @@ elif st.session_state.page == "console":
         st.subheader("Recommendation Quality")
         sample_size = st.slider("Sample size", min_value=5, max_value=100, value=25, step=5)
         k = st.slider("Neighbors per item", min_value=5, max_value=25, value=10, step=5)
-        if st.button("Run Quality Check", key="run_quality_check", use_container_width=True):
-            st.session_state.quality_report = api_get(
-                "/v1/evaluation/recommendations",
-                params={"sample_size": sample_size, "k": k},
-                timeout=30,
-            )
+        q_action_1, q_action_2 = st.columns(2)
+        with q_action_1:
+            if st.button("Run Quality Check", key="run_quality_check", use_container_width=True):
+                st.session_state.quality_report = api_get(
+                    "/v1/evaluation/recommendations",
+                    params={"sample_size": sample_size, "k": k},
+                    timeout=30,
+                )
+        with q_action_2:
+            if st.button("Run Benchmark Gate", key="run_recommendation_benchmark", use_container_width=True):
+                st.session_state.recommendation_benchmark_report = api_get(
+                    "/v1/evaluation/recommendation-benchmark",
+                    params={"k": k},
+                    timeout=240,
+                )
 
         quality = st.session_state.get("quality_report")
         if quality:
@@ -1688,6 +1697,55 @@ elif st.session_state.page == "console":
                 st.json(quality)
         else:
             st.info("Run a quality check to inspect the current AI artifacts.")
+
+        benchmark = st.session_state.get("recommendation_benchmark_report")
+        if benchmark:
+            b_metrics = benchmark.get("metrics", {})
+            b1, b2, b3, b4 = st.columns(4)
+            b1.metric("Benchmark Status", benchmark.get("status", "-"))
+            b2.metric("Cases", benchmark.get("evaluated_case_count", 0))
+            b3.metric("Pass Rate", b_metrics.get("case_pass_rate", "-"))
+            b4.metric("Bad Case Rate", b_metrics.get("bad_case_rate_at_k", "-"))
+            with st.expander("Raw benchmark report"):
+                st.json(benchmark)
+
+        st.divider()
+        st.subheader("Recommendation Diagnostics")
+        d1, d2 = st.columns([1, 3])
+        with d1:
+            diagnostic_movie_id = st.number_input("Seed movie ID", min_value=1, value=19995, step=1)
+        with d2:
+            if st.button("Inspect Recommendation Path", key="inspect_recommendation_path", use_container_width=True):
+                st.session_state.recommendation_diagnostics = api_get(
+                    f"/v1/diagnostics/recommendations/{int(diagnostic_movie_id)}",
+                    params={"n": k},
+                    timeout=60,
+                )
+
+        diagnostics = st.session_state.get("recommendation_diagnostics")
+        if diagnostics:
+            d_metrics = diagnostics.get("diagnostics", {})
+            d_cols = st.columns(4)
+            d_cols[0].metric("Results", d_metrics.get("result_count", 0))
+            d_cols[1].metric("Explained", d_metrics.get("explanation_coverage", "-"))
+            d_cols[2].metric("Benchmark Case", "Yes" if d_metrics.get("benchmark_case_available") else "No")
+            d_cols[3].metric("Case Passed", d_metrics.get("benchmark_case_passed", "-"))
+
+            rec_rows = []
+            for item in diagnostics.get("recommendations", []):
+                rec_rows.append(
+                    {
+                        "rank": item.get("rank"),
+                        "title": item.get("title"),
+                        "stage": item.get("retrieval_stage"),
+                        "score": item.get("score"),
+                        "explanation": item.get("explanation_text") or ", ".join(item.get("explanation") or []),
+                    }
+                )
+            if rec_rows:
+                st.dataframe(pd.DataFrame(rec_rows), use_container_width=True, hide_index=True)
+            with st.expander("Raw diagnostics report"):
+                st.json(diagnostics)
 
     with events_tab:
         st.subheader("Event Lab")

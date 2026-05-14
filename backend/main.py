@@ -35,7 +35,12 @@ from backend.catalogs import profile_catalog_csv, persist_catalog_upload
 from backend.chat import generate_chat_response
 from backend.recommender import get_recommender, Recommender
 from backend.remote_recommender import remote_get_json
-from backend.recommendation_benchmark import evaluate_recommendation_benchmark
+from backend.recommendation_benchmark import (
+    evaluate_recommendation_benchmark,
+    evaluate_recommendation_case,
+    find_recommendation_benchmark_case,
+    load_recommendation_benchmark,
+)
 from backend.semantic_benchmark import evaluate_semantic_benchmark
 from backend.search_benchmark import evaluate_search_benchmark
 from backend.usage import record_usage, summarize_usage
@@ -618,6 +623,84 @@ def _candidate_event_summary(candidate: dict, rank: int) -> dict:
         "similarity_score": _safe_float(candidate.get("similarity_score")),
         "ranker_score": _safe_float(candidate.get("ranker_score")),
         "retrieval_signals": candidate.get("retrieval_signals") or {},
+    }
+
+
+def _candidate_diagnostic_summary(candidate: dict, rank: int) -> dict:
+    """Return recommendation evidence that is safe to expose to product/debug clients."""
+    return {
+        "rank": rank,
+        "id": candidate.get("id"),
+        "title": candidate.get("title"),
+        "score": _safe_float(candidate.get("similarity_score")),
+        "ranker_score": _safe_float(candidate.get("ranker_score")),
+        "retrieval_stage": candidate.get("retrieval_stage") or "unknown",
+        "explanation": candidate.get("explanation") or [],
+        "explanation_text": candidate.get("explanation_text"),
+        "retrieval_signals": candidate.get("retrieval_signals") or {},
+    }
+
+
+def _recommendation_diagnostic_report(
+    *,
+    context: TenantContext,
+    rec: Recommender,
+    query_movie: dict,
+    recommendations: list[dict],
+    k: int,
+) -> dict:
+    """Build a compact per-seed report for ranking explainability and support."""
+    diagnostic_items = [
+        _candidate_diagnostic_summary(candidate, rank)
+        for rank, candidate in enumerate(recommendations[:k], start=1)
+    ]
+    stage_counts = Counter(item["retrieval_stage"] for item in diagnostic_items)
+    explained_count = sum(1 for item in diagnostic_items if item.get("explanation") or item.get("explanation_text"))
+    scores = [item["score"] for item in diagnostic_items if item.get("score") is not None]
+
+    benchmark_case = find_recommendation_benchmark_case(
+        query_movie,
+        cases=load_recommendation_benchmark(),
+    )
+    benchmark_summary = None
+    if benchmark_case is not None:
+        benchmark_summary = evaluate_recommendation_case(
+            recommendations,
+            benchmark_case,
+            k=k,
+            seed_movie=query_movie,
+        )
+        benchmark_summary.pop("_aggregate", None)
+
+    return {
+        "status": "ok",
+        "app": app_metadata(),
+        "tenant_id": context.tenant_id,
+        "catalog_id": context.catalog_id,
+        "query_movie": {
+            "id": query_movie.get("id"),
+            "title": query_movie.get("title"),
+            "genres": query_movie.get("genres"),
+            "release_date": query_movie.get("release_date"),
+            "vote_average": query_movie.get("vote_average"),
+            "vote_count": query_movie.get("vote_count"),
+        },
+        "lineage": _serving_lineage(rec),
+        "diagnostics": {
+            "requested_k": k,
+            "result_count": len(diagnostic_items),
+            "stage_distribution": dict(sorted(stage_counts.items())),
+            "explanation_coverage": round(explained_count / max(len(diagnostic_items), 1), 4),
+            "average_similarity_score": (
+                round(sum(scores) / len(scores), 6) if scores else None
+            ),
+            "benchmark_case_available": benchmark_summary is not None,
+            "benchmark_case_passed": (
+                benchmark_summary.get("passed") if benchmark_summary is not None else None
+            ),
+        },
+        "benchmark_case": benchmark_summary,
+        "recommendations": diagnostic_items,
     }
 
 
@@ -1456,6 +1539,51 @@ async def recommendation_event_analytics(
         authenticated=context.authenticated,
     )
     return summarize_recommendation_events(limit=limit)
+
+
+@app.get("/v1/diagnostics/recommendations/{movie_id}")
+async def recommendation_diagnostics(
+    movie_id: int,
+    n: int = Query(default=10, ge=1, le=50, description="Number of recommendations to inspect"),
+    context: TenantContext = Depends(resolve_tenant_context),
+):
+    """Explain the ranking path, lineage, and benchmark status for one seed item."""
+    remote_payload = await remote_payload_or_raise(
+        f"/v1/diagnostics/recommendations/{movie_id}",
+        params={"n": n},
+        context=context,
+    )
+    if remote_payload is not None:
+        record_usage(
+            "diagnostics.recommendations.remote",
+            context.tenant_id,
+            context.catalog_id,
+            plan=context.plan,
+            authenticated=context.authenticated,
+        )
+        return remote_payload
+
+    rec = await run_in_threadpool(get_rec)
+    query_movie = rec.get_movie_by_id(movie_id)
+    if query_movie is None:
+        raise HTTPException(status_code=404, detail=f"Movie with ID {movie_id} not found")
+
+    recommendations = await run_in_threadpool(lambda: rec.recommend_by_id(movie_id, n=n))
+    report = _recommendation_diagnostic_report(
+        context=context,
+        rec=rec,
+        query_movie=query_movie,
+        recommendations=recommendations,
+        k=n,
+    )
+    record_usage(
+        "diagnostics.recommendations",
+        context.tenant_id,
+        context.catalog_id,
+        plan=context.plan,
+        authenticated=context.authenticated,
+    )
+    return report
 
 
 @app.get("/v1/recommendations/id/{movie_id}", response_model=RecommendationResponse)
