@@ -150,6 +150,17 @@ def app_metadata() -> dict[str, str | None]:
     }
 
 
+def public_base_url(request: Request) -> str:
+    """Return the externally visible API base URL behind hosted proxies."""
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
+    forwarded_host = request.headers.get("x-forwarded-host", "").split(",")[0].strip()
+    proto = forwarded_proto or request.url.scheme
+    host = forwarded_host or request.headers.get("host") or request.url.netloc
+    if proto == "http" and host.endswith((".hf.space", ".onrender.com", ".streamlit.app")):
+        proto = "https"
+    return f"{proto}://{host.strip('/')}/"
+
+
 @app.get("/")
 async def root():
     metadata = app_metadata()
@@ -1180,7 +1191,7 @@ async def frontends_status(
     """Return frontend failover status for Streamlit, React, and static mirrors."""
     return await frontend_status_report(
         frontend_dist_dir=FRONTEND_DIST_DIR,
-        base_url=str(request.base_url),
+        base_url=public_base_url(request),
         include_remote=include_remote,
         preferred=preferred,
         app=app_metadata(),
@@ -1197,7 +1208,7 @@ async def launch_frontend(
     """Redirect to the healthiest configured frontend."""
     report = await frontend_status_report(
         frontend_dist_dir=FRONTEND_DIST_DIR,
-        base_url=str(request.base_url),
+        base_url=public_base_url(request),
         include_remote=include_remote,
         preferred=preferred,
         app=app_metadata(),
