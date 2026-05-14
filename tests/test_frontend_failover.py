@@ -47,6 +47,31 @@ def test_frontend_launch_redirects_to_healthy_react_backup(tmp_path, monkeypatch
     assert response.headers["location"] == "http://testserver/ui/"
 
 
+def test_frontend_launch_uses_forwarded_https_for_same_origin_backup(tmp_path, monkeypatch):
+    import backend.main as main
+    import backend.frontend_failover as frontend_failover
+
+    frontend_failover._HEALTH_CACHE.clear()
+    (tmp_path / "index.html").write_text("<html>ok</html>", encoding="utf-8")
+    monkeypatch.setattr(main, "FRONTEND_DIST_DIR", tmp_path)
+    monkeypatch.setenv("NOVA_FRONTEND_STREAMLIT_URL", "https://streamlit.example")
+    monkeypatch.setenv("NOVA_FRONTEND_PRIORITY", "streamlit,react")
+
+    client = TestClient(main.app)
+    response = client.get(
+        "/go",
+        params={"include_remote": "false"},
+        headers={
+            "x-forwarded-proto": "https",
+            "x-forwarded-host": "api.example",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "https://api.example/ui/"
+
+
 def test_frontend_status_honors_healthy_primary_streamlit(tmp_path, monkeypatch):
     import backend.frontend_failover as frontend_failover
 
