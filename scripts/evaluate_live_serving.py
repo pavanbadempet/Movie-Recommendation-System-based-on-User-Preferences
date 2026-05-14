@@ -52,6 +52,7 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
             "attempt": attempt,
             "failures": [],
             "health": {},
+            "platform_readiness": {},
             "artifact_health": {},
             "search_smoke": [],
             "search_benchmark": {},
@@ -62,6 +63,15 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
         }
         try:
             report["health"] = _get_json(args.base_url, "/health", args.timeout)
+            if args.skip_platform_readiness:
+                report["platform_readiness"] = {"status": "skipped", "reason": "disabled by live gate"}
+            else:
+                readiness_params = urllib.parse.urlencode({"strict": str(args.platform_readiness_strict).lower(), "k": args.k})
+                report["platform_readiness"] = _get_json(
+                    args.base_url,
+                    f"/v1/platform/readiness?{readiness_params}",
+                    args.timeout,
+                )
             report["artifact_health"] = _get_json(args.base_url, "/v1/artifacts/health", args.timeout)
             search_params = urllib.parse.urlencode({"q": args.search_query, "limit": args.search_limit})
             report["search_smoke"] = _get_json(args.base_url, f"/v1/search?{search_params}", args.timeout)
@@ -125,6 +135,23 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
 
         if report["health"].get("status") != "healthy":
             _threshold_failure(f"/health status is {report['health'].get('status')}", report)
+
+        platform_readiness = report.get("platform_readiness") or {}
+        if not args.skip_platform_readiness:
+            if platform_readiness.get("status") not in {"ready", "degraded"}:
+                _threshold_failure(
+                    f"/v1/platform/readiness status is {platform_readiness.get('status')}",
+                    report,
+                )
+            if args.require_platform_ready and platform_readiness.get("status") != "ready":
+                component_summary = ", ".join(
+                    f"{component.get('name')}={component.get('status')}"
+                    for component in platform_readiness.get("components", [])
+                )
+                _threshold_failure(
+                    f"/v1/platform/readiness is {platform_readiness.get('status')}; {component_summary}",
+                    report,
+                )
 
         expected_commit = str(args.expected_app_commit or "").strip()
         actual_commit = str(report["health"].get("app_commit") or "").strip()
@@ -350,6 +377,9 @@ def main() -> None:
     parser.add_argument("--retry-delay-seconds", type=int, default=30)
     parser.add_argument("--expected-app-commit", default="")
     parser.add_argument("--k", type=int, default=10)
+    parser.add_argument("--platform-readiness-strict", action="store_true")
+    parser.add_argument("--require-platform-ready", action="store_true")
+    parser.add_argument("--skip-platform-readiness", action="store_true")
     parser.add_argument("--search-query", default="Avatar")
     parser.add_argument("--search-limit", type=int, default=5)
     parser.add_argument("--min-search-results", type=int, default=1)
@@ -411,6 +441,7 @@ def main() -> None:
     summary = {
         "status": report.get("status"),
         "failures": report.get("failures"),
+        "platform_readiness_status": (report.get("platform_readiness") or {}).get("status"),
         "artifact_status": (report.get("artifact_health") or {}).get("status"),
         "app_commit": (report.get("health") or {}).get("app_commit"),
         "app_version": (report.get("health") or {}).get("app_version"),

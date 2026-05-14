@@ -178,6 +178,65 @@ class TestPlatformEndpoint:
         assert "recommendation_benchmark" in data["capabilities"]
         assert "event_store" in data
 
+    def test_platform_readiness_reports_component_status(self, mock_artifacts):
+        from backend.main import app
+        client = TestClient(app)
+
+        resp = client.get("/v1/platform/readiness", params={"k": 3})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] in {"ready", "degraded"}
+        assert data["strict"] is False
+        assert data["summary"]["component_count"] >= 6
+        components = {component["name"]: component for component in data["components"]}
+        assert components["catalog"]["status"] == "ok"
+        assert components["artifact_health"]["status"] == "ok"
+        assert components["vector_serving"]["status"] == "ok"
+        assert components["recommendation_smoke"]["status"] == "ok"
+
+    def test_platform_readiness_strict_degrades_when_benchmark_cache_is_missing(self, mock_artifacts):
+        import backend.main as main
+        from backend.main import app
+
+        main._semantic_benchmark_cache.clear()
+        main._recommendation_benchmark_cache.clear()
+
+        client = TestClient(app)
+        resp = client.get("/v1/platform/readiness", params={"strict": True, "k": 3})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "degraded"
+        components = {component["name"]: component for component in data["components"]}
+        assert components["semantic_benchmark_cache"]["status"] == "warming"
+        assert components["recommendation_benchmark_cache"]["status"] == "warming"
+
+    def test_platform_readiness_can_proxy_to_remote_service(self, mock_artifacts, monkeypatch):
+        import backend.main as main
+        from backend.main import app
+        from backend.remote_recommender import RemoteResponse
+
+        async def fake_remote_get_json(path, params=None, context=None):
+            assert path == "/v1/platform/readiness"
+            assert params["strict"] is True
+            return RemoteResponse(
+                status_code=200,
+                payload={"status": "ready", "remote": True, "components": []},
+            )
+
+        def fail_local_load():
+            raise AssertionError("Gateway readiness should proxy to the vector service")
+
+        monkeypatch.setattr(main, "remote_get_json", fake_remote_get_json)
+        monkeypatch.setattr(main, "get_rec", fail_local_load)
+
+        client = TestClient(app)
+        resp = client.get("/v1/platform/readiness", params={"strict": True})
+
+        assert resp.status_code == 200
+        assert resp.json()["remote"] is True
+
 
 class TestCorsPolicy:
     def test_github_pages_origin_is_allowed_by_default(self, mock_artifacts):
