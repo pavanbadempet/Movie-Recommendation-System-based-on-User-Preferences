@@ -443,7 +443,6 @@ function MoviePoster({
   return (
     <button className="poster-card" type="button" onClick={() => onSelect(movie)} title={movie.title}>
       <img src={posterUrl(movie.poster_path)} alt={movie.title} loading="lazy" />
-      <span>{movie.title}</span>
     </button>
   );
 }
@@ -523,17 +522,22 @@ function RecommendationCard({
 function MovieSpotlight({
   movie,
   loading,
+  hasRecommendations,
   onRecommend,
 }: {
   movie: Movie;
   loading: boolean;
+  hasRecommendations: boolean;
   onRecommend: () => void;
 }) {
   const reasons = movieReasons(movie);
   const semantic = semanticPercent(movie);
   const chips = evidenceChips(movie);
   return (
-    <section className="spotlight">
+    <section
+      className="spotlight"
+      style={{ "--poster-bg": `url(${posterUrl(movie.poster_path)})` } as React.CSSProperties}
+    >
       <div className="poster-column">
         <img className="detail-poster" src={posterUrl(movie.poster_path)} alt={movie.title} />
         <div className="poster-stat">
@@ -587,7 +591,7 @@ function MovieSpotlight({
         <div className="action-row">
           <button className="primary-action" type="button" onClick={onRecommend} disabled={loading}>
             {loading ? <Loader2 size={18} className="spin" /> : <Sparkles size={18} />}
-            Build recommendation set
+            {loading ? "Ranking candidates" : hasRecommendations ? "Refresh ranked set" : "Build recommendation set"}
           </button>
           {movie.trailer_key && (
             <a className="ghost-action" href={`https://www.youtube.com/watch?v=${movie.trailer_key}`} target="_blank" rel="noreferrer">
@@ -613,8 +617,8 @@ function EmptyCanvas({
       <div className="empty-icon">
         <Clapperboard size={44} />
       </div>
-      <h1>Start a recommendation session</h1>
-      <p>Select a known title or search by viewing intent to build a ranked set.</p>
+      <h1>Choose a seed title</h1>
+      <p>Start from a film, mood, or viewing intent to build a ranked set.</p>
       <div className="seed-grid">
         {starterTitles.map((title) => (
           <button type="button" key={title} onClick={() => onTitleSeed(title)}>
@@ -660,6 +664,8 @@ function App() {
   const [sessionId] = React.useState(() => getSessionId());
   const bootstrapped = React.useRef(false);
   const loadedPlatform = React.useRef(false);
+  const autoSeeded = React.useRef(false);
+  const userStarted = React.useRef(false);
 
   const activeQuery = mode === "title" ? titleQuery : semanticQuery;
   const hasTitleQuery = titleQuery.trim().length > 0;
@@ -770,6 +776,14 @@ function App() {
       setRetryCount(0);
       setLastUpdated(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
       setNotice(`${result.data.length.toLocaleString()} searchable titles loaded`);
+      const starter =
+        result.data.find((item) => item.title.startsWith("Avatar (2009)")) ||
+        result.data.find((item) => item.title.toLowerCase().startsWith("avatar")) ||
+        result.data[0];
+      if (!autoSeeded.current && !userStarted.current && !selectedMovie && !titleQuery.trim() && starter) {
+        autoSeeded.current = true;
+        window.setTimeout(() => void chooseTitle(starter, { track: false, autoRecommend: true }), 150);
+      }
     } catch (error) {
       setCatalogState("warming");
       setRetryCount((count) => count + 1);
@@ -829,7 +843,10 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [catalogState]);
 
-  async function chooseTitle(item: MovieTitle) {
+  async function chooseTitle(
+    item: MovieTitle,
+    options: { track?: boolean; autoRecommend?: boolean } = {},
+  ) {
     setIsSelecting(true);
     setTitleQuery(item.title);
     setResults([]);
@@ -842,8 +859,11 @@ function App() {
     try {
       const result = await getMovie(item.id);
       setBackend(result.baseUrl);
-      selectMovie(result.data, "title_search");
+      selectMovie(result.data, "title_search", options.track ?? true);
       setNotice("Title ready");
+      if (options.autoRecommend) {
+        void recommend(result.data);
+      }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Title unavailable");
     } finally {
@@ -975,9 +995,9 @@ function App() {
           <div className="control-heading">
             <div className="eyebrow">
               <BadgeCheck size={15} />
-              Discovery console
+              Discovery
             </div>
-            <h1>Find titles that belong together.</h1>
+            <h1>Find the next title worth watching.</h1>
           </div>
 
           <div className="segmented" role="tablist" aria-label="Search mode">
@@ -999,9 +1019,10 @@ function App() {
             <input
               id={mode === "title" ? "title-search" : "semantic-search"}
               value={activeQuery}
-              onChange={(event) =>
-                mode === "title" ? setTitleQuery(event.target.value) : setSemanticQuery(event.target.value)
-              }
+              onChange={(event) => {
+                userStarted.current = true;
+                mode === "title" ? setTitleQuery(event.target.value) : setSemanticQuery(event.target.value);
+              }}
               onKeyDown={(event) => {
                 if (event.key === "Enter") void runSearch();
               }}
@@ -1023,9 +1044,17 @@ function App() {
             )}
           </div>
 
-          <ReadinessPanel report={readinessReport} loading={signalsLoading} onRefresh={loadOperationalSignals} />
-          <DiagnosticsPanel health={artifactReport} />
-          <QualityPanel report={qualityReport} />
+          <details className="ops-details">
+            <summary>
+              <span>Platform signals</span>
+              <small>{readinessLabel(readinessReport)} readiness</small>
+            </summary>
+            <div className="ops-stack">
+              <ReadinessPanel report={readinessReport} loading={signalsLoading} onRefresh={loadOperationalSignals} />
+              <DiagnosticsPanel health={artifactReport} />
+              <QualityPanel report={qualityReport} />
+            </div>
+          </details>
 
           {mode === "title" ? (
             <div className="title-browser">
@@ -1080,7 +1109,12 @@ function App() {
 
         <section className="result-panel">
           {selectedMovie ? (
-            <MovieSpotlight movie={selectedMovie} loading={loadingRecs} onRecommend={() => void recommend()} />
+            <MovieSpotlight
+              movie={selectedMovie}
+              loading={loadingRecs}
+              hasRecommendations={resultsKind === "recommendations" && results.length > 0}
+              onRecommend={() => void recommend()}
+            />
           ) : (
             <EmptyCanvas onTitleSeed={applyTitleSeed} onPromptSeed={applyPromptSeed} />
           )}
