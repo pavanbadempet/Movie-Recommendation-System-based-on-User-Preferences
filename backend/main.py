@@ -1505,6 +1505,21 @@ async def recommendation_quality_report(
     k: int = Query(default=10, ge=1, le=50),
 ):
     """Return label-free recommendation quality metrics for the current artifacts."""
+    remote_payload = await remote_payload_or_raise(
+        "/v1/evaluation/recommendations",
+        params={"sample_size": sample_size, "k": k},
+        context=context,
+    )
+    if remote_payload is not None:
+        record_usage(
+            "evaluation.recommendations.remote",
+            context.tenant_id,
+            context.catalog_id,
+            plan=context.plan,
+            authenticated=context.authenticated,
+        )
+        return remote_payload
+
     rec = await run_in_threadpool(get_rec)
     report = await run_in_threadpool(
         lambda: evaluate_recommendation_quality(rec, sample_size=sample_size, k=k)
@@ -1525,6 +1540,21 @@ async def semantic_benchmark_report(
     k: int = Query(default=10, ge=1, le=50),
 ):
     """Return human-labeled semantic benchmark metrics for obvious bad-match detection."""
+    remote_payload = await remote_payload_or_raise(
+        "/v1/evaluation/semantic-benchmark",
+        params={"k": k},
+        context=context,
+    )
+    if remote_payload is not None:
+        record_usage(
+            "evaluation.semantic_benchmark.remote",
+            context.tenant_id,
+            context.catalog_id,
+            plan=context.plan,
+            authenticated=context.authenticated,
+        )
+        return remote_payload
+
     cached_report = _get_cached_semantic_benchmark(k)
     if cached_report is not None:
         report = cached_report
@@ -1711,6 +1741,17 @@ async def ranker_status(
     context: TenantContext = Depends(resolve_tenant_context),
 ):
     """Return learned ranker artifact status and metadata."""
+    remote_payload = await remote_payload_or_raise("/v1/ranker/status", context=context)
+    if remote_payload is not None:
+        record_usage(
+            "ranker.status.remote",
+            context.tenant_id,
+            context.catalog_id,
+            plan=context.plan,
+            authenticated=context.authenticated,
+        )
+        return remote_payload
+
     rec = get_rec()
     ranker = getattr(rec, "_learned_ranker", None)
     record_usage(
@@ -1867,6 +1908,20 @@ async def semantic_twin_by_id(
     context: TenantContext = Depends(resolve_tenant_context),
 ):
     """Return the deterministic semantic item twin used for explainable scoring."""
+    remote_payload = await remote_payload_or_raise(
+        f"/v1/semantic-twins/id/{movie_id}",
+        context=context,
+    )
+    if remote_payload is not None:
+        record_usage(
+            "semantic_twins.id.remote",
+            context.tenant_id,
+            context.catalog_id,
+            plan=context.plan,
+            authenticated=context.authenticated,
+        )
+        return remote_payload
+
     rec = get_rec()
     twin = rec.get_semantic_twin_by_id(movie_id)
     if twin is None:
@@ -2329,8 +2384,40 @@ async def recommend_for_user(
     context: TenantContext = Depends(resolve_tenant_context),
 ):
     """Personalize recommendations from a user's recent implicit feedback events."""
-    rec = get_rec()
     result_limit = top_k or limit or n
+    remote_payload = await remote_payload_or_raise(
+        f"/v1/recommendations/user/{quote(user_id, safe='')}",
+        params={
+            "n": n,
+            "limit": limit,
+            "top_k": top_k,
+            "request_id": request_id,
+            "session_id": session_id,
+        },
+        context=context,
+    )
+    if remote_payload is not None:
+        if isinstance(remote_payload, list):
+            record_recommendation_events(
+                endpoint="recommendations.user.remote",
+                context=context,
+                query_movie={"id": None, "title": f"user:{user_id}"},
+                recommendations=remote_payload,
+                rec=None,
+                request_id=request_id,
+                user_id=user_id,
+                session_id=session_id,
+            )
+        record_usage(
+            "recommendations.user.remote",
+            context.tenant_id,
+            context.catalog_id,
+            plan=context.plan,
+            authenticated=context.authenticated,
+        )
+        return remote_payload
+
+    rec = get_rec()
     profile = build_user_behavior_profile(user_id, limit=12)
     assignment = assign_experiment(subject_id=user_id)
     results = rec.recommend_for_user_profile(profile, n=result_limit)

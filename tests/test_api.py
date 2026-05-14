@@ -285,6 +285,91 @@ class TestPlatformEndpoint:
         assert data["gateway"]["status"] == "ready"
         assert data["gateway"]["remote_recommender"]["configured"] is False
 
+    @pytest.mark.parametrize(
+        ("request_url", "expected_path", "expected_params", "payload"),
+        [
+            (
+                "/v1/evaluation/recommendations?sample_size=2&k=3",
+                "/v1/evaluation/recommendations",
+                {"sample_size": 2, "k": 3},
+                {"status": "ready", "remote": True},
+            ),
+            (
+                "/v1/evaluation/semantic-benchmark?k=3",
+                "/v1/evaluation/semantic-benchmark",
+                {"k": 3},
+                {"status": "ready", "remote": True},
+            ),
+            (
+                "/v1/ranker/status",
+                "/v1/ranker/status",
+                None,
+                {"available": True, "remote": True},
+            ),
+            (
+                "/v1/semantic-twins/id/100",
+                "/v1/semantic-twins/id/100",
+                None,
+                {"id": 100, "remote": True},
+            ),
+            (
+                "/v1/recommendations/user/setup-test?n=3",
+                "/v1/recommendations/user/setup-test",
+                {"n": 3},
+                [
+                    {
+                        "id": 100,
+                        "title": "Test Movie A",
+                        "overview": "Action thriller",
+                        "genres": "Action",
+                        "vote_average": 7.5,
+                        "vote_count": 1000,
+                        "popularity": 100.0,
+                        "release_date": "2020-01-01",
+                    }
+                ],
+            ),
+        ],
+    )
+    def test_gateway_heavy_endpoints_proxy_to_remote_service(
+        self,
+        mock_artifacts,
+        monkeypatch,
+        request_url,
+        expected_path,
+        expected_params,
+        payload,
+    ):
+        import backend.main as main
+        from backend.main import app
+        from backend.remote_recommender import RemoteResponse
+
+        calls = []
+
+        async def fake_remote_get_json(path, params=None, context=None):
+            calls.append((path, params))
+            assert path == expected_path
+            if expected_params is None:
+                assert params is None
+            else:
+                for key, value in expected_params.items():
+                    assert params[key] == value
+            return RemoteResponse(status_code=200, payload=payload)
+
+        def fail_local_load():
+            raise AssertionError("Gateway endpoint should proxy to the vector service")
+
+        monkeypatch.setattr(main, "remote_get_json", fake_remote_get_json)
+        monkeypatch.setattr(main, "get_rec", fail_local_load)
+        monkeypatch.setattr(main, "record_usage", lambda *args, **kwargs: None)
+        monkeypatch.setattr(main, "record_recommendation_events", lambda *args, **kwargs: "test-request")
+
+        client = TestClient(app)
+        resp = client.get(request_url)
+
+        assert resp.status_code == 200
+        assert calls
+
 
 class TestCorsPolicy:
     def test_github_pages_origin_is_allowed_by_default(self, mock_artifacts):
