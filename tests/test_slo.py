@@ -27,6 +27,17 @@ def test_slo_report_detects_latency_or_error_violation(monkeypatch):
     assert report["slo"]["error_rate"]["passed"] is False
 
 
+def test_internal_quality_routes_are_excluded_from_serving_slo(monkeypatch):
+    from backend.slo import should_track_request
+
+    monkeypatch.delenv("NOVA_SLO_EXCLUDED_ROUTE_PREFIXES", raising=False)
+
+    assert should_track_request(path="/v1/search", route="/v1/search") is True
+    assert should_track_request(path="/v1/recommendations/id/19995", route="/v1/recommendations/id/{movie_id}") is True
+    assert should_track_request(path="/v1/evaluation/search-benchmark", route="/v1/evaluation/search-benchmark") is False
+    assert should_track_request(path="/v1/platform/readiness", route="/v1/platform/readiness") is False
+
+
 def test_platform_slo_endpoint_is_lightweight(monkeypatch):
     import backend.main as main
 

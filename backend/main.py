@@ -46,7 +46,7 @@ from backend.recommendation_benchmark import (
 )
 from backend.semantic_benchmark import evaluate_semantic_benchmark
 from backend.search_benchmark import evaluate_search_benchmark
-from backend.slo import RequestSloTracker, build_slo_report
+from backend.slo import RequestSloTracker, build_slo_report, should_track_request
 from backend.usage import record_usage, summarize_usage
 
 # Configure logging
@@ -239,13 +239,14 @@ async def request_slo_middleware(request: Request, call_next):
         return response
     finally:
         route = getattr(request.scope.get("route"), "path", None) or request.url.path
-        _slo_tracker.record(
-            method=request.method,
-            path=request.url.path,
-            route=route,
-            status_code=status_code,
-            latency_ms=(time.perf_counter() - started) * 1000,
-        )
+        if should_track_request(path=request.url.path, route=route):
+            _slo_tracker.record(
+                method=request.method,
+                path=request.url.path,
+                route=route,
+                status_code=status_code,
+                latency_ms=(time.perf_counter() - started) * 1000,
+            )
 
 
 # Response models
