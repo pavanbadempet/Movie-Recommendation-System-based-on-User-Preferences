@@ -26,10 +26,12 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from starlette.concurrency import run_in_threadpool
+from starlette.responses import RedirectResponse
 
 from backend.events import append_event, aggregate_behavior_features, build_user_behavior_profile, event_storage_status, get_events_path, summarize_recommendation_events
 from backend.evaluation import evaluate_recommendation_quality
 from backend.experiments import assign_experiment, attach_experiment, summarize_experiment_metrics
+from backend.frontend_failover import configured_frontends, frontend_status_report
 from backend.auth import TenantContext, enforce_payload_context, resolve_admin_token, resolve_tenant_context
 from backend.artifact_health import evaluate_artifact_health
 from backend.catalogs import profile_catalog_csv, persist_catalog_upload
@@ -152,12 +154,26 @@ def app_metadata() -> dict[str, str | None]:
 async def root():
     metadata = app_metadata()
     frontend_available = (FRONTEND_DIST_DIR / "index.html").exists()
+    frontends = configured_frontends(frontend_available=frontend_available)
     return {
         "status": "online",
-        "message": "Welcome to the Movie Recommendation API. Head over to /docs to explore the endpoints!",
+        "message": "Welcome to the Movie Recommendation API. Use /go for the healthiest UI or /docs for endpoints.",
         "version": metadata["version"],
         "app": metadata,
         "ui": "/ui/" if frontend_available else None,
+        "launch_url": "/go",
+        "frontend_status_url": "/v1/frontends/status",
+        "frontends": [
+            {
+                "name": frontend.name,
+                "label": frontend.label,
+                "kind": frontend.kind,
+                "url": frontend.url,
+                "priority": frontend.priority,
+                "local": frontend.local,
+            }
+            for frontend in frontends
+        ],
     }
 
 # Rate limiting (30 requests/minute per IP)
@@ -169,6 +185,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv("ALLOWED_ORIGINS", "").split(",") if origin.strip()]
 if not ALLOWED_ORIGINS:
     ALLOWED_ORIGINS = [
+        "https://a-movie-recommendation-system.streamlit.app",
         "https://movie-recommendation-system.streamlit.app",
         "http://localhost:8501",
         "http://localhost:5173",
@@ -1154,6 +1171,44 @@ async def enrich_movie(movie: dict) -> dict:
 
 # ===== API ENDPOINTS =====
 
+@app.get("/v1/frontends/status")
+async def frontends_status(
+    request: Request,
+    include_remote: bool = Query(default=True, description="Probe remote frontend URLs instead of only local static assets"),
+    preferred: Optional[str] = Query(default=None, description="Preferred frontend name, such as streamlit or react"),
+):
+    """Return frontend failover status for Streamlit, React, and static mirrors."""
+    return await frontend_status_report(
+        frontend_dist_dir=FRONTEND_DIST_DIR,
+        base_url=str(request.base_url),
+        include_remote=include_remote,
+        preferred=preferred,
+        app=app_metadata(),
+    )
+
+
+@app.get("/go")
+@app.get("/v1/frontends/launch")
+async def launch_frontend(
+    request: Request,
+    include_remote: bool = Query(default=True, description="Probe remote frontends before redirecting"),
+    preferred: Optional[str] = Query(default=None, description="Preferred frontend name, such as streamlit or react"),
+):
+    """Redirect to the healthiest configured frontend."""
+    report = await frontend_status_report(
+        frontend_dist_dir=FRONTEND_DIST_DIR,
+        base_url=str(request.base_url),
+        include_remote=include_remote,
+        preferred=preferred,
+        app=app_metadata(),
+    )
+    selected = report.get("selected") or {}
+    launch_url = selected.get("absolute_url")
+    if not launch_url or selected.get("status") == "unavailable":
+        raise HTTPException(status_code=503, detail={"message": "No frontend is currently available", "report": report})
+    return RedirectResponse(str(launch_url), status_code=302)
+
+
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint."""
@@ -1252,6 +1307,7 @@ async def platform_status(
             "personalization_v2",
             "experiment_metrics",
             "durable_event_store",
+            "frontend_failover",
             "daily_artifact_refresh",
         ],
     }

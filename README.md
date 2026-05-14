@@ -95,7 +95,10 @@ Core Delta tables include:
 - `backend/evaluation.py` - free-tier-safe recommendation quality metrics.
 - `backend/search_benchmark.py`, `backend/semantic_benchmark.py`, and `backend/recommendation_benchmark.py` - human-labeled serving quality gates.
 - `backend/catalogs.py` - customer CSV preview, quality profiling, and local upload manifests.
+- `backend/frontend_failover.py` - Streamlit/React/static frontend health checks and launch routing.
 - `backend/recommender.py` - hybrid AI search, dense item recommendations, reranking, behavior-aware personalization.
+- `/go` - redirect to the healthiest configured UI, currently Streamlit first and React as backup by default.
+- `/v1/frontends/status` - frontend availability report for Streamlit, same-origin React, and optional static mirrors.
 - `/v1/platform/readiness` - product-readiness/SLO snapshot across catalog, artifacts, vectors, smoke checks, benchmark cache, ranker, and events.
 - `/v1/diagnostics/recommendations/{movie_id}` - per-seed ranking diagnostics for product debugging and demos.
 - `backend/ranker.py` and `backend/ranker_training.py` - learned ranker artifact loading, training, and offline metrics.
