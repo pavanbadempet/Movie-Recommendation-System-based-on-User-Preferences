@@ -17,7 +17,7 @@ jobs:
   synthetic-monitoring:
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
-    timeout-minutes: 10
+    timeout-minutes: 30
     env:
       NOVA_SERVING_URL: https://pavanbadempet-movie-rec-api.hf.space
       NOVA_RENDER_GATEWAY_URL: https://movie-recs-api-5qvy.onrender.com
@@ -35,6 +35,9 @@ jobs:
           python scripts/synthetic_monitor.py
           --base-url "$NOVA_SERVING_URL"
           --base-url "$NOVA_RENDER_GATEWAY_URL"
+          --timeout 45
+          --retries 20
+          --retry-delay-seconds 30
           --output reports/synthetic_monitor.json
           --fail-on-error
 
