@@ -5,6 +5,7 @@ def test_slo_report_detects_latency_or_error_violation(monkeypatch):
     from backend.slo import RequestSloTracker, build_slo_report
 
     monkeypatch.setenv("NOVA_SLO_MIN_REQUESTS", "2")
+    monkeypatch.setenv("NOVA_SLO_MIN_ROUTE_REQUESTS", "1")
     monkeypatch.setenv("NOVA_SLO_LATENCY_P95_MS", "100")
     monkeypatch.setenv("NOVA_SLO_ERROR_RATE", "0.10")
     monkeypatch.setenv("NOVA_SLO_ROUTE_LATENCY_BUDGETS", "/health:100,/v1/search:100")
@@ -52,6 +53,7 @@ def test_platform_slo_endpoint_is_lightweight(monkeypatch):
         latency_ms=20,
     )
     monkeypatch.setenv("NOVA_SLO_MIN_REQUESTS", "1")
+    monkeypatch.setenv("NOVA_SLO_MIN_ROUTE_REQUESTS", "1")
     monkeypatch.setattr(
         main,
         "evaluate_artifact_health",
