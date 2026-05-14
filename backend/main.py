@@ -46,6 +46,7 @@ from backend.recommendation_benchmark import (
 )
 from backend.semantic_benchmark import evaluate_semantic_benchmark
 from backend.search_benchmark import evaluate_search_benchmark
+from backend.slo import RequestSloTracker, build_slo_report
 from backend.usage import record_usage, summarize_usage
 
 # Configure logging
@@ -86,6 +87,7 @@ _recommendation_benchmark_cache: dict[int, tuple[float, dict]] = {}
 _recommendation_benchmark_threads: dict[int, Thread] = {}
 _recommendation_benchmark_cache_lock = Lock()
 _recommendation_benchmark_compute_lock = Lock()
+_slo_tracker = RequestSloTracker()
 
 
 def _env_truthy(name: str) -> bool:
@@ -223,6 +225,27 @@ if (FRONTEND_DIST_DIR / "index.html").exists():
         name="frontend",
     )
     logger.info("Mounted React frontend at /ui/ from %s", FRONTEND_DIST_DIR)
+
+
+@app.middleware("http")
+async def request_slo_middleware(request: Request, call_next):
+    """Record process-local request latency/error SLO samples."""
+
+    started = time.perf_counter()
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    finally:
+        route = getattr(request.scope.get("route"), "path", None) or request.url.path
+        _slo_tracker.record(
+            method=request.method,
+            path=request.url.path,
+            route=route,
+            status_code=status_code,
+            latency_ms=(time.perf_counter() - started) * 1000,
+        )
 
 
 # Response models
@@ -1195,6 +1218,51 @@ async def frontends_status(
         include_remote=include_remote,
         preferred=preferred,
         app=app_metadata(),
+    )
+
+
+@app.get("/v1/platform/slo")
+async def platform_slo(
+    request: Request,
+    include_frontends: bool = Query(default=False, description="Include frontend failover status in the dependency summary"),
+    include_remote_frontends: bool = Query(default=False, description="Probe remote UI URLs when include_frontends is true"),
+    preferred_frontend: Optional[str] = Query(default=None, description="Preferred frontend name for the dependency check"),
+):
+    """Return lightweight API SLO telemetry plus dependency summaries."""
+    from backend import recommender as recommender_module
+
+    artifact_report = await run_in_threadpool(
+        lambda: evaluate_artifact_health(
+            models_dir=recommender_module.MODELS_DIR,
+            data_dir=recommender_module.DATA_DIR,
+        )
+    )
+    dependencies = {
+        "artifacts": {
+            "status": artifact_report.get("status"),
+            "row_counts": artifact_report.get("row_counts"),
+            "alignment": artifact_report.get("alignment"),
+        },
+        "remote_recommender": remote_recommender_status(),
+    }
+    if include_frontends:
+        dependencies["frontends"] = await frontend_status_report(
+            frontend_dist_dir=FRONTEND_DIST_DIR,
+            base_url=public_base_url(request),
+            include_remote=include_remote_frontends,
+            preferred=preferred_frontend,
+            app=app_metadata(),
+        )
+    else:
+        dependencies["frontends"] = {
+            "status": "skipped",
+            "reason": "Set include_frontends=true to attach frontend failover health.",
+        }
+
+    return build_slo_report(
+        tracker=_slo_tracker,
+        app=app_metadata(),
+        dependencies=dependencies,
     )
 
 
