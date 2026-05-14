@@ -164,21 +164,31 @@ def evaluate_base_url(base_url: str, *, timeout: int, include_recommendations: b
 
 
 def evaluate_synthetic_monitor(args: argparse.Namespace) -> dict[str, Any]:
-    targets = [
-        evaluate_base_url(
-            base_url,
-            timeout=args.timeout,
-            include_recommendations=not args.skip_recommendations,
-        )
-        for base_url in args.base_url
-    ]
-    failures = [failure for target in targets for failure in target["failures"]]
-    return {
-        "status": "failed" if failures else "ok",
-        "generated_at": datetime.now(UTC).isoformat(),
-        "targets": targets,
-        "failures": failures,
-    }
+    retries = max(1, int(getattr(args, "retries", 1)))
+    retry_delay_seconds = max(0.0, float(getattr(args, "retry_delay_seconds", 0)))
+    last_report: dict[str, Any] | None = None
+    for attempt in range(1, retries + 1):
+        targets = [
+            evaluate_base_url(
+                base_url,
+                timeout=args.timeout,
+                include_recommendations=not args.skip_recommendations,
+            )
+            for base_url in args.base_url
+        ]
+        failures = [failure for target in targets for failure in target["failures"]]
+        last_report = {
+            "status": "failed" if failures else "ok",
+            "generated_at": datetime.now(UTC).isoformat(),
+            "attempt": attempt,
+            "max_attempts": retries,
+            "targets": targets,
+            "failures": failures,
+        }
+        if last_report["status"] == "ok" or attempt == retries:
+            return last_report
+        time.sleep(retry_delay_seconds)
+    return last_report or {"status": "failed", "failures": ["monitor did not run"], "targets": []}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -187,6 +197,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout", type=int, default=30)
     parser.add_argument("--output", type=Path, default=Path("reports/synthetic_monitor.json"))
     parser.add_argument("--skip-recommendations", action="store_true", help="Skip the heavier recommendation path.")
+    parser.add_argument("--retries", type=int, default=1)
+    parser.add_argument("--retry-delay-seconds", type=float, default=0)
     parser.add_argument("--fail-on-error", action="store_true")
     return parser
 
