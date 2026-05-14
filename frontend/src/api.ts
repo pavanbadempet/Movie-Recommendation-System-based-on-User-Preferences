@@ -57,6 +57,14 @@ function errorMessage(error: unknown): string {
   return "request failed";
 }
 
+function buildSuffix(path: string, params: Record<string, string | number | boolean | undefined>): string {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined) query.set(key, String(value));
+  });
+  return query.toString() ? `${path}?${query.toString()}` : path;
+}
+
 export function currentBackend(): string {
   return activeBackend;
 }
@@ -75,11 +83,7 @@ export async function apiGet<T>(
   params: Record<string, string | number | boolean | undefined> = {},
   timeoutMs = 15000,
 ): Promise<BackendResult<T>> {
-  const query = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined) query.set(key, String(value));
-  });
-  const suffix = query.toString() ? `${path}?${query.toString()}` : path;
+  const suffix = buildSuffix(path, params);
   const errors: string[] = [];
 
   for (const baseUrl of candidateBackends()) {
@@ -104,6 +108,46 @@ export async function apiGet<T>(
   }
 
   throw new Error(errors.join(" | ") || "No backend available");
+}
+
+export async function apiGetFirstSuccess<T>(
+  path: string,
+  params: Record<string, string | number | boolean | undefined> = {},
+  timeoutMs = 20000,
+): Promise<BackendResult<T>> {
+  const suffix = buildSuffix(path, params);
+  const errors: string[] = [];
+  const controllers: AbortController[] = [];
+  const requests = candidateBackends().map(async (baseUrl) => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+    controllers.push(controller);
+    try {
+      const response = await fetch(`${baseUrl}${suffix}`, {
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        throw new Error(`${response.status}`);
+      }
+      return { data: (await response.json()) as T, baseUrl };
+    } catch (error) {
+      errors.push(`${backendLabel(baseUrl)} ${errorMessage(error)}`);
+      throw error;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  });
+
+  try {
+    const result = await Promise.any(requests);
+    activeBackend = result.baseUrl;
+    return result;
+  } catch {
+    throw new Error(errors.join(" | ") || "No backend available");
+  } finally {
+    controllers.forEach((controller) => controller.abort());
+  }
 }
 
 export async function apiPost<T>(path: string, body: unknown, timeoutMs = 15000): Promise<BackendResult<T>> {
@@ -163,11 +207,11 @@ export async function loadTitles(limit = 100000): Promise<BackendResult<MovieTit
 }
 
 export async function searchMovies(query: string): Promise<BackendResult<Movie[]>> {
-  return apiGet<Movie[]>("/v1/search", { q: query, limit: 40 }, 18000);
+  return apiGetFirstSuccess<Movie[]>("/v1/search", { q: query, limit: 40 }, 18000);
 }
 
 export async function aiSearch(query: string): Promise<BackendResult<Movie[]>> {
-  return apiGet<Movie[]>("/v1/search/ai", { q: query, limit: 40 }, 35000);
+  return apiGetFirstSuccess<Movie[]>("/v1/search/ai", { q: query, limit: 40 }, 25000);
 }
 
 export async function getMovie(movieId: number): Promise<BackendResult<Movie>> {
@@ -175,7 +219,7 @@ export async function getMovie(movieId: number): Promise<BackendResult<Movie>> {
 }
 
 export async function getRecommendations(movieId: number, n = 12): Promise<BackendResult<RecommendationResponse>> {
-  return apiGet<RecommendationResponse>(`/v1/recommendations/id/${movieId}`, { n }, 45000);
+  return apiGetFirstSuccess<RecommendationResponse>(`/v1/recommendations/id/${movieId}`, { n }, 25000);
 }
 
 export async function recordEvent(payload: EventPayload): Promise<BackendResult<EventResponse>> {

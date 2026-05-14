@@ -86,6 +86,7 @@ class Recommender:
         self._vectors: np.ndarray | None = None
         self._artifact_movie_ids: np.ndarray | None = None
         self._artifact_manifest: dict[str, Any] | None = None
+        self._movie_id_to_index: dict[int, int] = {}
         self._content_text: pd.Series | None = None
         self._tfidf_matrix = None
         self._item_tfidf_matrix = None
@@ -188,6 +189,7 @@ class Recommender:
                 # Fallback if some columns don't exist
                 self._movies = pd.read_parquet(movies_path)
             self._optimize_movie_frame()
+            self._rebuild_lookup_maps()
             self._validate_vector_artifacts()
             logger.info(f"Loaded {len(self._movies):,} movies")
         else:
@@ -259,6 +261,24 @@ class Recommender:
         for column in ("quality_bucket", "original_language"):
             if column in self._movies.columns:
                 self._movies[column] = self._movies[column].fillna("").astype("category")
+
+    def _rebuild_lookup_maps(self) -> None:
+        """Build row-position lookup maps for hot recommendation paths."""
+        self._movie_id_to_index = {}
+        if self._movies is None or "id" not in self._movies.columns:
+            return
+
+        ids = pd.to_numeric(self._movies["id"], errors="coerce")
+        for row_position, movie_id in enumerate(ids):
+            if pd.isna(movie_id):
+                continue
+            self._movie_id_to_index.setdefault(int(movie_id), row_position)
+
+    def _index_for_movie_id(self, movie_id: Any) -> int | None:
+        try:
+            return self._movie_id_to_index.get(int(movie_id))
+        except (TypeError, ValueError):
+            return None
 
     @staticmethod
     def _clean_response_value(value: Any) -> Any:
@@ -584,10 +604,10 @@ class Recommender:
 
     def get_semantic_twin_by_id(self, movie_id: int) -> dict[str, Any] | None:
         """Return the semantic item twin for a movie ID."""
-        matches = self._movies[self._movies["id"] == movie_id].index
-        if len(matches) == 0:
+        movie_idx = self._index_for_movie_id(movie_id)
+        if movie_idx is None:
             return None
-        return self._semantic_twin_for_index(int(matches[0]))
+        return self._semantic_twin_for_index(movie_idx)
 
     def _semantic_affinity_for_indices(self, query_idx: int, candidate_idx: int) -> dict[str, Any]:
         """Compare query/candidate semantic twins and return serializable signals."""
@@ -610,26 +630,31 @@ class Recommender:
         selected: list[dict] = []
         remaining = candidates.copy()
         selected.append(remaining.pop(0))
+        vector_cache: dict[int, np.ndarray] = {}
+
+        def candidate_vector(movie: dict) -> np.ndarray | None:
+            row_idx = self._index_for_movie_id(movie.get("id"))
+            if row_idx is None:
+                return None
+            if row_idx not in vector_cache:
+                vector_cache[row_idx] = np.asarray(self._vectors[row_idx], dtype=np.float32)
+            return vector_cache[row_idx]
 
         while remaining and len(selected) < n:
             best_idx = 0
             best_score = -float("inf")
             for idx, candidate in enumerate(remaining):
-                candidate_indices = self._movies[self._movies["id"] == candidate.get("id")].index
-                if len(candidate_indices) == 0:
+                candidate_vec = candidate_vector(candidate)
+                if candidate_vec is None:
                     continue
-                candidate_idx = int(candidate_indices[0])
                 relevance = float(candidate.get("similarity_score") or 0)
 
                 max_similarity = 0.0
                 for chosen in selected:
-                    chosen_indices = self._movies[self._movies["id"] == chosen.get("id")].index
-                    if len(chosen_indices) == 0:
+                    chosen_vec = candidate_vector(chosen)
+                    if chosen_vec is None:
                         continue
-                    chosen_idx = int(chosen_indices[0])
-                    candidate_vector = np.asarray(self._vectors[candidate_idx], dtype=np.float32)
-                    chosen_vector = np.asarray(self._vectors[chosen_idx], dtype=np.float32)
-                    max_similarity = max(max_similarity, float(np.dot(candidate_vector, chosen_vector)))
+                    max_similarity = max(max_similarity, float(np.dot(candidate_vec, chosen_vec)))
 
                 mmr_score = lambda_param * relevance - (1 - lambda_param) * max_similarity
                 if mmr_score > best_score:
@@ -867,10 +892,10 @@ class Recommender:
     
     def get_movie_by_id(self, movie_id: int) -> dict | None:
         """Get movie details by TMDB ID."""
-        matches = self._movies[self._movies["id"] == movie_id]
-        if len(matches) == 0:
+        movie_idx = self._index_for_movie_id(movie_id)
+        if movie_idx is None:
             return None
-        return self._clean_response_record(matches.iloc[0].to_dict())
+        return self.get_movie_by_index(movie_idx)
     
     def get_movie_by_index(self, idx: int) -> dict:
         """Get movie details by DataFrame index."""
@@ -1516,11 +1541,20 @@ Do not write any other text except the JSON object.
         
         λ = 0.7 means 70% relevance, 30% diversity
         """
-        if len(candidates) <= n:
+        if len(candidates) <= n or self._vectors is None:
             return candidates
         
         selected = []
         remaining = candidates.copy()
+        vector_cache: dict[int, np.ndarray] = {}
+
+        def candidate_vector(movie: dict) -> np.ndarray | None:
+            row_idx = self._index_for_movie_id(movie.get("id"))
+            if row_idx is None:
+                return None
+            if row_idx not in vector_cache:
+                vector_cache[row_idx] = np.asarray(self._vectors[row_idx], dtype=np.float32)
+            return vector_cache[row_idx]
         
         # First pick: highest score (most relevant)
         selected.append(remaining.pop(0))
@@ -1530,26 +1564,18 @@ Do not write any other text except the JSON object.
             best_idx = 0
             
             for i, cand in enumerate(remaining):
-                # Get candidate index in original DataFrame
-                cand_matches = self._movies[self._movies["id"] == cand["id"]].index
-                if len(cand_matches) == 0:
+                v_cand = candidate_vector(cand)
+                if v_cand is None:
                     continue
-                cand_idx = cand_matches[0]
                 
                 relevance = cand["similarity_score"]
                 
                 # Calculate max similarity to already selected
                 max_sim_to_selected = 0
                 for sel in selected:
-                    sel_matches = self._movies[self._movies["id"] == sel["id"]].index
-                    if len(sel_matches) == 0:
+                    v_sel = candidate_vector(sel)
+                    if v_sel is None:
                         continue
-                    sel_idx = sel_matches[0]
-                    
-                    # Cosine similarity between candidate and selected
-                    # Cast to float32 for precision/speed (essential if vectors are float16)
-                    v_cand = self._vectors[cand_idx].astype(np.float32)
-                    v_sel = self._vectors[sel_idx].astype(np.float32)
                     sim = float(np.dot(v_cand, v_sel))
                     max_sim_to_selected = max(max_sim_to_selected, sim)
                 
@@ -1575,12 +1601,10 @@ Do not write any other text except the JSON object.
         Returns:
             List of recommended movie dictionaries
         """
-        # Find index of the movie
-        matches = self._movies[self._movies["id"] == movie_id].index
-        if len(matches) == 0:
+        movie_idx = self._index_for_movie_id(movie_id)
+        if movie_idx is None:
             return []
-        
-        movie_idx = matches[0]
+
         return self.recommend_by_index(movie_idx, n)
     
     def recommend_by_title(self, title: str, n: int = 10) -> list[dict]:
