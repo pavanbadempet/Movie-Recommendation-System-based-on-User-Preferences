@@ -48,6 +48,20 @@ services:
         value: https://pavanbadempet-movie-rec-api.hf.space
       - key: NOVA_RECOMMENDER_SERVICE_TIMEOUT_SECONDS
         value: 20
+      - key: NOVA_RECOMMENDER_CIRCUIT_FAILURE_THRESHOLD
+        value: 3
+      - key: NOVA_RECOMMENDER_CIRCUIT_OPEN_SECONDS
+        value: 60
+      - key: NOVA_RECOMMENDER_CACHE_ENABLED
+        value: true
+      - key: NOVA_RECOMMENDER_CACHE_READS
+        value: true
+      - key: NOVA_RECOMMENDER_CACHE_MAX_ENTRIES
+        value: 512
+      - key: NOVA_RECOMMENDER_CACHE_TTL_SECONDS
+        value: 300
+      - key: NOVA_RECOMMENDER_STALE_CACHE_TTL_SECONDS
+        value: 21600
       - key: NOVA_FRONTEND_PRIORITY
         value: streamlit,react
       - key: NOVA_FRONTEND_STREAMLIT_URL
