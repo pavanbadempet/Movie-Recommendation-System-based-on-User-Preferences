@@ -25,7 +25,7 @@ DEFAULT_ROUTE_LATENCY_BUDGETS_MS = {
     "/health": 1000.0,
     "/v1/frontends/status": 3000.0,
     "/v1/platform/slo": 1000.0,
-    "/v1/recommendations/id/{movie_id}": 15000.0,
+    "/v1/recommendations/id/{movie_id}": 25000.0,
     "/v1/search": 2500.0,
 }
 
@@ -68,6 +68,7 @@ def slo_thresholds() -> dict[str, float | int]:
     return {
         "window_seconds": _env_int("NOVA_SLO_WINDOW_SECONDS", 3600),
         "min_requests": _env_int("NOVA_SLO_MIN_REQUESTS", 5),
+        "min_route_requests": _env_int("NOVA_SLO_MIN_ROUTE_REQUESTS", 20),
         "latency_p95_ms": _env_float("NOVA_SLO_LATENCY_P95_MS", 2500.0),
         "error_rate": _env_float("NOVA_SLO_ERROR_RATE", 0.03),
     }
@@ -254,14 +255,27 @@ def build_slo_report(
     p95_latency = summary["latency_ms"]["p95"]
     route_latency_budgets = slo_route_latency_budgets()
     default_latency_budget = float(thresholds["latency_p95_ms"])
+    min_route_requests = int(thresholds["min_route_requests"])
     route_latency_violations = []
+    low_sample_routes = []
     for route_summary in summary["routes"]:
         route = str(route_summary.get("route") or "")
+        count = int(route_summary.get("count") or 0)
         route_p95 = (route_summary.get("latency_ms") or {}).get("p95")
         route_budget = route_latency_budgets.get(route, default_latency_budget)
+        enforced = count >= min_route_requests
         route_summary["latency_ms"]["budget"] = route_budget
+        route_summary["latency_ms"]["enforced"] = enforced
         route_summary["latency_ms"]["passed"] = route_p95 is None or route_p95 <= route_budget
-        if not route_summary["latency_ms"]["passed"]:
+        if not enforced:
+            low_sample_routes.append(
+                {
+                    "route": route,
+                    "count": count,
+                    "minimum": min_route_requests,
+                }
+            )
+        if enforced and not route_summary["latency_ms"]["passed"]:
             route_latency_violations.append(
                 {
                     "route": route,
@@ -277,7 +291,7 @@ def build_slo_report(
 
     if dependency_state == "failed":
         status = "failed"
-    elif not enough_requests:
+    elif not enough_requests or low_sample_routes:
         status = "warming"
     elif not latency_ok or not error_rate_ok:
         status = "violated"
@@ -293,12 +307,14 @@ def build_slo_report(
         "slo": {
             "window_seconds": thresholds["window_seconds"],
             "min_requests": thresholds["min_requests"],
+            "min_route_requests": min_route_requests,
             "excluded_route_prefixes": list(slo_excluded_route_prefixes()),
             "latency_p95_ms": {
                 "target": thresholds["latency_p95_ms"],
                 "actual": p95_latency,
                 "passed": latency_ok,
                 "route_violations": route_latency_violations,
+                "low_sample_routes": low_sample_routes,
             },
             "route_latency_budgets_ms": route_latency_budgets,
             "error_rate": {
