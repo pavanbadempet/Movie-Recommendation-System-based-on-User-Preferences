@@ -101,7 +101,8 @@ Core Delta tables include:
 - `backend/recommender.py` - hybrid AI search, dense item recommendations, reranking, behavior-aware personalization.
 - `backend/slo.py` - process-local request SLO tracking for latency/error reporting on free-tier hosts.
 - `/go` - redirect to the healthiest configured UI, currently Streamlit first and React as backup by default.
-- `/v1/frontends/status` - frontend availability report for Streamlit, same-origin React, and optional static mirrors.
+- `/go` - redirect to the healthiest configured UI, currently Cloudflare Pages first, same-origin React second, and Streamlit as backup.
+- `/v1/frontends/status` - frontend availability report for Cloudflare Pages, same-origin React, Streamlit, and optional static mirrors.
 - `/v1/platform/readiness` - product-readiness/SLO snapshot across catalog, artifacts, vectors, smoke checks, benchmark cache, ranker, and events.
 - `/v1/platform/slo` - lightweight operational SLO report for latency, error rate, artifacts, and serving dependencies.
 - `/v1/diagnostics/recommendations/{movie_id}` - per-seed ranking diagnostics for product debugging and demos.

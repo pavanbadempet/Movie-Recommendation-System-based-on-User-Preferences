@@ -87,11 +87,13 @@ services:
       - key: NOVA_SLO_ROUTE_LATENCY_BUDGETS
         value: '/:1000,/health:1000,/v1/frontends/status:3000,/v1/platform/slo:1000,/v1/search:2500,/v1/recommendations/id/{movie_id}:25000'
       - key: NOVA_FRONTEND_PRIORITY
-        value: streamlit,react
+        value: github_pages,react,streamlit
       - key: NOVA_FRONTEND_STREAMLIT_URL
         value: https://a-movie-recommendation-system.streamlit.app
       - key: NOVA_FRONTEND_REACT_URL
         value: /ui/
+      - key: NOVA_FRONTEND_PAGES_URL
+        value: https://movie-recommendation-system-6bm.pages.dev
       - key: NOVA_FRONTEND_HEALTH_TIMEOUT_SECONDS
         value: 2.5
       - key: NOVA_FRONTEND_HEALTH_CACHE_SECONDS
