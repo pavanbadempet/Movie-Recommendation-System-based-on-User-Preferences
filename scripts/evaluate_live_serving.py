@@ -19,7 +19,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from backend.search_benchmark import DEFAULT_SEARCH_BENCHMARK_PATH, evaluate_search_benchmark
+from backend.search_benchmark import DEFAULT_SEARCH_BENCHMARK_PATH, evaluate_search_benchmark  # noqa: E402
 
 
 def _parse_title_csv(value: str) -> list[str]:
@@ -114,7 +114,7 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
             else:
                 report["recommendation_benchmark"] = _get_json(
                     args.base_url,
-                    f"/v1/evaluation/recommendation-benchmark?k={args.k}",
+                    f"/v1/evaluation/recommendation-benchmark?k={args.k}&sync=true",
                     args.timeout,
                 )
             if args.skip_semantic_benchmark:
@@ -122,7 +122,7 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
             else:
                 report["semantic_benchmark"] = _get_json(
                     args.base_url,
-                    f"/v1/evaluation/semantic-benchmark?k={args.k}",
+                    f"/v1/evaluation/semantic-benchmark?k={args.k}&sync=true",
                     args.timeout,
                 )
         except Exception as exc:
