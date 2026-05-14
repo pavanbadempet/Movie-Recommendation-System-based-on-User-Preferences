@@ -97,7 +97,7 @@ Core Delta tables include:
 - `backend/search_benchmark.py`, `backend/semantic_benchmark.py`, and `backend/recommendation_benchmark.py` - human-labeled serving quality gates.
 - `backend/catalogs.py` - customer CSV preview, quality profiling, and local upload manifests.
 - `backend/frontend_failover.py` - Streamlit/React/static frontend health checks and launch routing.
-- `backend/remote_recommender.py` - remote vector-service proxy with circuit breaker, response cache, and stale-cache fallback.
+- `backend/remote_recommender.py` - remote vector-service proxy with circuit breaker, local/Upstash response cache, and stale-cache fallback.
 - `backend/recommender.py` - hybrid AI search, dense item recommendations, reranking, behavior-aware personalization.
 - `backend/slo.py` - process-local request SLO tracking for latency/error reporting on free-tier hosts.
 - `/go` - redirect to the healthiest configured UI, currently Streamlit first and React as backup by default.
@@ -145,6 +145,16 @@ NOVA_EVENT_TABLE=nova_content_events
 ```
 
 Use `NOVA_EVENT_STORE=dual` during demos when you want local JSONL plus durable Postgres writes. Without a database URL, Nova keeps using local JSONL so the free demo remains easy to run.
+
+Optional free-tier shared response cache for Render/Hugging Face failover:
+
+```bash
+UPSTASH_REDIS_REST_URL=https://your-cache.upstash.io
+UPSTASH_REDIS_REST_TOKEN=your-standard-token
+NOVA_RECOMMENDER_DISTRIBUTED_CACHE_ENABLED=true
+```
+
+This keeps popular search/recommendation responses available across restarts. Without these variables, Nova keeps using the built-in in-memory cache.
 
 Run the canonical Spark/Delta ETL path in an ETL-capable environment:
 
