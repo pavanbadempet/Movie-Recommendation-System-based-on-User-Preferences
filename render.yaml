@@ -66,6 +66,8 @@ services:
         value: 3600
       - key: NOVA_SLO_MIN_REQUESTS
         value: 5
+      - key: NOVA_SLO_MIN_ROUTE_REQUESTS
+        value: 20
       - key: NOVA_SLO_LATENCY_P95_MS
         value: 2500
       - key: NOVA_SLO_ERROR_RATE
@@ -75,7 +77,7 @@ services:
       - key: NOVA_SLO_EXCLUDED_ROUTE_PREFIXES
         value: /docs,/redoc,/openapi.json,/favicon.ico,/v1/artifacts,/v1/diagnostics,/v1/evaluation,/v1/platform/readiness
       - key: NOVA_SLO_ROUTE_LATENCY_BUDGETS
-        value: '/:1000,/health:1000,/v1/frontends/status:3000,/v1/platform/slo:1000,/v1/search:2500,/v1/recommendations/id/{movie_id}:15000'
+        value: '/:1000,/health:1000,/v1/frontends/status:3000,/v1/platform/slo:1000,/v1/search:2500,/v1/recommendations/id/{movie_id}:25000'
       - key: NOVA_FRONTEND_PRIORITY
         value: streamlit,react
       - key: NOVA_FRONTEND_STREAMLIT_URL
