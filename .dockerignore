@@ -1,0 +1,16 @@
+.git
+.github
+.hypothesis
+.pytest_cache
+.ruff_cache
+__pycache__
+**/__pycache__
+*.pyc
+.venv
+.venv_cuda
+frontend/node_modules
+frontend/dist
+frontend/tsconfig.tsbuildinfo
+frontend-vite*.log
+logs
+reports

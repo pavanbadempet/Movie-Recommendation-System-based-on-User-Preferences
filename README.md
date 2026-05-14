@@ -32,7 +32,7 @@ The current demo vertical is movies using TMDB/Kaggle data, but the architecture
 - Explains recommendation behavior through per-seed diagnostics for ranking stages, explanations, lineage, and benchmark-case pass/fail.
 - Protects product APIs with optional tenant API keys while keeping the public demo free.
 - Measures recommendation artifact quality with label-free coverage checks plus human-labeled search, semantic, and item-to-item benchmark gates.
-- Includes a Streamlit Nova Console for API context, usage, AI quality, event testing, and integration snippets.
+- Includes a React product UI served from the same FastAPI/Hugging Face Space at `/ui/`, plus a Streamlit Nova Console for API context, usage, AI quality, event testing, and integration snippets.
 - Onboards customer catalogs through CSV preview, column mapping, quality profiling, and raw upload manifests.
 - Publishes model/artifact outputs through Hugging Face for lightweight serving on Render and Streamlit.
 
@@ -46,7 +46,7 @@ flowchart LR
     D --> E["Embedding jobs for changed content"]
     E --> F["FAISS + model artifacts"]
     F --> G["FastAPI recommendation service"]
-    G --> H["Customer app or Streamlit demo"]
+    G --> H["React UI, customer app, or Streamlit console"]
     H --> I["Behavior events API"]
     I --> J["Kafka / Spark Structured Streaming"]
     J --> K["Gold Delta: content event facts"]
