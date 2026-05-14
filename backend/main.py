@@ -37,7 +37,7 @@ from backend.artifact_health import evaluate_artifact_health
 from backend.catalogs import profile_catalog_csv, persist_catalog_upload
 from backend.chat import generate_chat_response
 from backend.recommender import get_recommender, Recommender
-from backend.remote_recommender import remote_get_json
+from backend.remote_recommender import remote_get_json, remote_recommender_status
 from backend.recommendation_benchmark import (
     evaluate_recommendation_benchmark,
     evaluate_recommendation_case,
@@ -1304,6 +1304,7 @@ async def platform_status(
             "training_mode": (ranker.metadata.get("training_mode") if ranker else None),
             "promotion": (ranker.metadata.get("promotion") if ranker else None),
         },
+        "remote_recommender": remote_recommender_status(),
         "experimentation": {
             "enabled": True,
             "default_assignment": assignment,
@@ -1316,6 +1317,8 @@ async def platform_status(
             "recommendation_benchmark",
             "learned_ranker",
             "personalization_v2",
+            "remote_circuit_breaker",
+            "stale_cache_fallback",
             "experiment_metrics",
             "durable_event_store",
             "frontend_failover",
