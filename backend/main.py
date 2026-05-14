@@ -786,7 +786,6 @@ def _benchmark_readiness_component(
 
 def _combine_readiness_status(components: list[dict], strict: bool) -> str:
     required_components = [component for component in components if component.get("required")]
-    optional_components = [component for component in components if not component.get("required")]
     bad_statuses = {"failed", "unavailable", "not_ready"}
     degraded_statuses = {"degraded", "warming", "missing"}
 
