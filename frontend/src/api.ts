@@ -6,6 +6,7 @@ import type {
   EventResponse,
   Movie,
   MovieTitle,
+  PlatformReadiness,
   PlatformStatus,
   RecommendationResponse,
   SemanticBenchmark,
@@ -134,6 +135,10 @@ export async function pingApi(): Promise<BackendResult<ApiRoot>> {
 
 export async function platformStatus(): Promise<BackendResult<PlatformStatus>> {
   return apiGet<PlatformStatus>("/v1/platform/status", {}, 15000);
+}
+
+export async function platformReadiness(strict = true, k = 10): Promise<BackendResult<PlatformReadiness>> {
+  return apiGet<PlatformReadiness>("/v1/platform/readiness", { strict, k }, 90000);
 }
 
 export async function artifactHealth(): Promise<BackendResult<ArtifactHealth>> {
