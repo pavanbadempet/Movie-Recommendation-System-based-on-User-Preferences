@@ -1,8 +1,20 @@
 # Multi-stage Dockerfile for Movie Recommendation System
-# Stage 1: Build ETL artifacts
-# Stage 2: Lightweight runtime
+# Stage 1: Build React frontend
+# Stage 2: Build ETL artifacts
+# Stage 3: Lightweight runtime
 
-FROM python:3.11-slim as builder
+FROM node:24-slim AS frontend_builder
+
+WORKDIR /frontend
+
+COPY frontend/package*.json ./
+RUN npm ci
+
+COPY frontend/ ./
+ENV VITE_BASE_PATH=/ui/
+RUN npm run build
+
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
@@ -49,6 +61,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application code
 COPY --from=builder /app /app
+COPY --from=frontend_builder /frontend/dist /app/frontend/dist
 
 # Create non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app

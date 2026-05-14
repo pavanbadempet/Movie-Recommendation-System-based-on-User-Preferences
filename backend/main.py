@@ -20,6 +20,7 @@ import httpx
 import sentry_sdk
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -69,6 +70,7 @@ TMDB_KEY = os.getenv("TMDB_API_KEY")
 TMDB_BASE = "https://api.themoviedb.org/3"
 APP_VERSION = "2.0.0"
 REVISION_FILE = Path(__file__).resolve().parent.parent / "REVISION"
+FRONTEND_DIST_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 
 # Async HTTP client (initialized via lifespan)
 http_client: httpx.AsyncClient | None = None
@@ -149,11 +151,13 @@ def app_metadata() -> dict[str, str | None]:
 @app.get("/")
 async def root():
     metadata = app_metadata()
+    frontend_available = (FRONTEND_DIST_DIR / "index.html").exists()
     return {
         "status": "online",
         "message": "Welcome to the Movie Recommendation API. Head over to /docs to explore the endpoints!",
         "version": metadata["version"],
         "app": metadata,
+        "ui": "/ui/" if frontend_available else None,
     }
 
 # Rate limiting (30 requests/minute per IP)
@@ -183,6 +187,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+if (FRONTEND_DIST_DIR / "index.html").exists():
+    app.mount(
+        "/ui",
+        StaticFiles(directory=FRONTEND_DIST_DIR, html=True),
+        name="frontend",
+    )
+    logger.info("Mounted React frontend at /ui/ from %s", FRONTEND_DIST_DIR)
 
 
 # Response models
