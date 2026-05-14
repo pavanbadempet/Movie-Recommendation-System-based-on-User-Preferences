@@ -10,6 +10,17 @@ from datetime import UTC, datetime
 from threading import Lock
 from typing import Any
 
+DEFAULT_EXCLUDED_ROUTE_PREFIXES = (
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+    "/favicon.ico",
+    "/v1/artifacts",
+    "/v1/diagnostics",
+    "/v1/evaluation",
+    "/v1/platform/readiness",
+)
+
 
 @dataclass(frozen=True)
 class RequestSample:
@@ -52,6 +63,24 @@ def slo_thresholds() -> dict[str, float | int]:
         "latency_p95_ms": _env_float("NOVA_SLO_LATENCY_P95_MS", 2500.0),
         "error_rate": _env_float("NOVA_SLO_ERROR_RATE", 0.03),
     }
+
+
+def slo_excluded_route_prefixes() -> tuple[str, ...]:
+    """Return route/path prefixes excluded from user-serving SLO math."""
+
+    configured = os.getenv("NOVA_SLO_EXCLUDED_ROUTE_PREFIXES", "").strip()
+    if not configured:
+        return DEFAULT_EXCLUDED_ROUTE_PREFIXES
+    return tuple(prefix.strip() for prefix in configured.split(",") if prefix.strip())
+
+
+def should_track_request(*, path: str, route: str) -> bool:
+    """Return whether this request belongs in the user-serving SLO window."""
+
+    for prefix in slo_excluded_route_prefixes():
+        if path.startswith(prefix) or route.startswith(prefix):
+            return False
+    return True
 
 
 def _percentile(values: list[float], percentile: float) -> float | None:
@@ -218,6 +247,7 @@ def build_slo_report(
         "slo": {
             "window_seconds": thresholds["window_seconds"],
             "min_requests": thresholds["min_requests"],
+            "excluded_route_prefixes": list(slo_excluded_route_prefixes()),
             "latency_p95_ms": {
                 "target": thresholds["latency_p95_ms"],
                 "actual": p95_latency,
