@@ -876,7 +876,7 @@ class Recommender:
         """Get movie details by DataFrame index."""
         return self._clean_response_record(self._movies.iloc[idx].to_dict())
         
-    def get_all_titles(self, limit: int = 5000) -> list[dict]:
+    def get_all_titles(self, limit: int = 100000) -> list[dict]:
         """
         Return a lightweight list of movie IDs and Titles for autocomplete.
         """
@@ -921,7 +921,7 @@ class Recommender:
         else:
             titles_df = titles_df.sort_values("title")
             
-        # Limit to the top N most popular movies to save bandwidth and browser memory
+        # Limit to the requested catalog slice to control payload size for hosted UIs.
         if limit and limit > 0:
             titles_df = titles_df.head(limit)
         
