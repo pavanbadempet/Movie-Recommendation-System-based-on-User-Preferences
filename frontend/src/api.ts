@@ -183,7 +183,7 @@ export async function apiPost<T>(path: string, body: unknown, timeoutMs = 15000)
 }
 
 export async function pingApi(): Promise<BackendResult<ApiRoot>> {
-  return apiGet<ApiRoot>("/", {}, 8000);
+  return apiGetFirstSuccess<ApiRoot>("/", {}, 8000);
 }
 
 export async function platformStatus(): Promise<BackendResult<PlatformStatus>> {
@@ -203,7 +203,7 @@ export async function semanticBenchmark(k = 10): Promise<BackendResult<SemanticB
 }
 
 export async function loadTitles(limit = 100000): Promise<BackendResult<MovieTitle[]>> {
-  return apiGet<MovieTitle[]>("/movies/titles", { limit }, 45000);
+  return apiGetFirstSuccess<MovieTitle[]>("/movies/titles", { limit }, 30000);
 }
 
 export async function searchMovies(query: string): Promise<BackendResult<Movie[]>> {
@@ -215,7 +215,7 @@ export async function aiSearch(query: string): Promise<BackendResult<Movie[]>> {
 }
 
 export async function getMovie(movieId: number): Promise<BackendResult<Movie>> {
-  return apiGet<Movie>(`/movie/${movieId}`, {}, 15000);
+  return apiGetFirstSuccess<Movie>(`/movie/${movieId}`, {}, 15000);
 }
 
 export async function getRecommendations(movieId: number, n = 12): Promise<BackendResult<RecommendationResponse>> {
