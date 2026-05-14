@@ -7,6 +7,8 @@ from scripts import evaluate_live_serving as live
 def _args(
     skip_semantic_benchmark: bool = False,
     allow_degraded_artifact_health: bool = False,
+    skip_platform_readiness: bool = False,
+    require_platform_ready: bool = True,
     skip_search_benchmark: bool = True,
     skip_recommendation_diagnostics: bool = False,
     skip_recommendation_benchmark: bool = False,
@@ -19,6 +21,9 @@ def _args(
         retry_delay_seconds=0,
         expected_app_commit="",
         k=10,
+        platform_readiness_strict=True,
+        require_platform_ready=require_platform_ready,
+        skip_platform_readiness=skip_platform_readiness,
         search_query="Avatar",
         search_limit=5,
         min_search_results=1,
@@ -62,6 +67,16 @@ def _args(
 def _healthy_payload(path: str):
     if path == "/health":
         return {"status": "healthy", "movie_count": 75253, "app_commit": "abcdef123456"}
+    if path.startswith("/v1/platform/readiness?"):
+        return {
+            "status": "ready",
+            "summary": {"component_count": 8},
+            "components": [
+                {"name": "catalog", "status": "ok", "required": True},
+                {"name": "artifact_health", "status": "ok", "required": True},
+                {"name": "recommendation_benchmark_cache", "status": "ok", "required": True},
+            ],
+        }
     if path == "/v1/artifacts/health":
         return {"status": "ready"}
     if path.startswith("/v1/search?"):
@@ -169,6 +184,36 @@ def test_live_serving_gate_rejects_bad_recommendation_drift(monkeypatch):
     assert report["status"] == "failed"
     assert any("required semantic hits" in failure for failure in report["failures"])
     assert any("blocked drift titles" in failure for failure in report["failures"])
+
+
+def test_live_serving_gate_rejects_degraded_platform_readiness(monkeypatch):
+    def fake_get_json(base_url, path, timeout):
+        if path.startswith("/v1/platform/readiness?"):
+            return {
+                "status": "degraded",
+                "components": [
+                    {"name": "catalog", "status": "ok", "required": True},
+                    {"name": "recommendation_benchmark_cache", "status": "warming", "required": True},
+                ],
+            }
+        if path.startswith("/v1/recommendations/id/19995?"):
+            return {
+                "recommendations": [
+                    {"title": "Avatar: The Way of Water"},
+                    {"title": "The Abyss"},
+                    {"title": "Pacific Rim"},
+                    {"title": "Dune"},
+                    {"title": "Prometheus"},
+                ]
+            }
+        return _healthy_payload(path)
+
+    monkeypatch.setattr(live, "_get_json", fake_get_json)
+
+    report = live.evaluate_live_serving(_args())
+
+    assert report["status"] == "failed"
+    assert any("/v1/platform/readiness is degraded" in failure for failure in report["failures"])
 
 
 def test_live_serving_gate_rejects_recommendation_benchmark_regression(monkeypatch):
@@ -353,6 +398,32 @@ def test_live_serving_gate_can_skip_semantic_benchmark_for_lite_gateway(monkeypa
     assert report["status"] == "ok"
     assert report["semantic_benchmark"]["status"] == "skipped"
     assert not any(path.startswith("/v1/evaluation/semantic-benchmark") for path in seen_paths)
+
+
+def test_live_serving_gate_can_skip_platform_readiness_for_lite_gateway(monkeypatch):
+    seen_paths = []
+
+    def fake_get_json(base_url, path, timeout):
+        seen_paths.append(path)
+        if path.startswith("/v1/recommendations/id/19995?"):
+            return {
+                "recommendations": [
+                    {"title": "Avatar: The Way of Water"},
+                    {"title": "The Abyss"},
+                    {"title": "Pacific Rim"},
+                    {"title": "Dune"},
+                    {"title": "Prometheus"},
+                ]
+            }
+        return _healthy_payload(path)
+
+    monkeypatch.setattr(live, "_get_json", fake_get_json)
+
+    report = live.evaluate_live_serving(_args(skip_platform_readiness=True))
+
+    assert report["status"] == "ok"
+    assert report["platform_readiness"]["status"] == "skipped"
+    assert not any(path.startswith("/v1/platform/readiness") for path in seen_paths)
 
 
 def test_live_serving_gate_can_skip_recommendation_benchmark_for_lite_gateway(monkeypatch):
