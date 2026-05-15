@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 import {
   Activity,
   AlertTriangle,
-  BadgeCheck,
   BarChart3,
   CheckCircle2,
   Clapperboard,
@@ -11,6 +10,7 @@ import {
   Database,
   Film,
   Gauge,
+  House,
   Loader2,
   Play,
   RefreshCw,
@@ -211,16 +211,6 @@ function getSessionId(): string {
   } catch {
     return createSessionId();
   }
-}
-
-function SkeletonRows() {
-  return (
-    <div className="skeleton-list" aria-hidden="true">
-      {Array.from({ length: 7 }).map((_, index) => (
-        <span key={index} />
-      ))}
-    </div>
-  );
 }
 
 function StatusBadge({
@@ -1008,13 +998,25 @@ function App() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div className="brand">
-          <Clapperboard size={30} />
-          <div>
-            <strong>Nova</strong>
-            <span>Recommendation Intelligence</span>
-          </div>
-        </div>
+        <button
+          className="home-button"
+          type="button"
+          onClick={() => {
+            setResults([]);
+            setResultsKind("idle");
+            setSelectedMovie(null);
+            setRecommendationSource(null);
+            setLastRecommendationRequestId(null);
+            setFeedbackByMovieId({});
+            setFeedbackNotice("");
+            setTitleQuery("");
+            setSemanticQuery("");
+            setMode("title");
+          }}
+        >
+          <House size={18} />
+          Home
+        </button>
         <div className="topbar-actions">
           <StatusBadge state={catalogState} backend={backend} />
           <button
@@ -1042,46 +1044,44 @@ function App() {
       <section className="workspace">
         <aside className="control-panel">
           <div className="control-heading">
-            <div className="eyebrow">
-              <BadgeCheck size={15} />
-              Discovery
-            </div>
-            <h1>Find the next title worth watching.</h1>
+            <Search size={54} />
+            <h1>Search & Discover</h1>
           </div>
 
-          <div className="segmented" role="tablist" aria-label="Search mode">
-            <button type="button" className={mode === "title" ? "active" : ""} onClick={() => setMode("title")}>
-              <Film size={16} />
-              Title
-            </button>
-            <button type="button" className={mode === "semantic" ? "active" : ""} onClick={() => setMode("semantic")}>
-              <Sparkles size={16} />
-              Intent
-            </button>
-          </div>
-
-          <label className="field-label" htmlFor={mode === "title" ? "title-search" : "semantic-search"}>
-            {mode === "title" ? "Movie title" : "Viewing intent"}
+          <label className="field-label" htmlFor="title-search">
+            Search by title
           </label>
           <div className="search-box">
-            <Search size={18} />
+            <Film size={18} />
             <input
-              id={mode === "title" ? "title-search" : "semantic-search"}
-              value={activeQuery}
+              id="title-search"
+              value={titleQuery}
               onChange={(event) => {
                 userStarted.current = true;
-                mode === "title" ? setTitleQuery(event.target.value) : setSemanticQuery(event.target.value);
+                setMode("title");
+                setTitleQuery(event.target.value);
               }}
               onKeyDown={(event) => {
-                if (event.key === "Enter") void runSearch();
+                if (event.key === "Enter") void runSearch("title");
               }}
-              placeholder={mode === "title" ? "Avatar, Inception, Dark Knight" : "space opera with alien civilization"}
+              placeholder="Avatar, Inception, Dark Knight"
             />
           </div>
 
-          <button className="secondary-action" type="button" onClick={() => void runSearch()} disabled={isSearching || isSelecting}>
+          {hasTitleQuery && (
+            <div className="title-list streamlit-title-list">
+              {filteredTitles.map((item) => (
+                <button type="button" key={`${item.id}-${item.title}`} onClick={() => void chooseTitle(item)}>
+                  {item.title}
+                </button>
+              ))}
+              {filteredTitles.length === 0 && <span className="quiet-line">No local title match. Try semantic search below.</span>}
+            </div>
+          )}
+
+          <button className="secondary-action" type="button" onClick={() => void runSearch("title")} disabled={isSearching || isSelecting}>
             {isSearching || isSelecting ? <Loader2 size={18} className="spin" /> : <Search size={18} />}
-            {mode === "title" ? "Open best match" : "Search by intent"}
+            Open best match
           </button>
 
           <div className={`notice ${catalogState}`}>
@@ -1092,6 +1092,36 @@ function App() {
               </button>
             )}
           </div>
+
+          <details className="semantic-expander">
+            <summary>
+              <Search size={18} />
+              <span>Search by plot, genre, or description</span>
+            </summary>
+            <div className="semantic-body">
+              <p>Can't find the title? Describe the movie by mood, plot, genre, or viewing intent.</p>
+              <div className="search-box">
+                <Sparkles size={18} />
+                <input
+                  id="semantic-search"
+                  value={semanticQuery}
+                  onChange={(event) => {
+                    userStarted.current = true;
+                    setMode("semantic");
+                    setSemanticQuery(event.target.value);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void runSearch("semantic");
+                  }}
+                  placeholder="time travel heist, alien civilization, romantic comedy in Paris"
+                />
+              </div>
+              <button className="secondary-action" type="button" onClick={() => void runSearch("semantic")} disabled={isSearching || isSelecting}>
+                {isSearching || isSelecting ? <Loader2 size={18} className="spin" /> : <Sparkles size={18} />}
+                Search by intent
+              </button>
+            </div>
+          </details>
 
           <details className="ops-details">
             <summary>
@@ -1105,53 +1135,20 @@ function App() {
             </div>
           </details>
 
-          {mode === "title" ? (
-            <div className="title-browser">
+          {!hasTitleQuery && recentMovies.length > 0 && (
+            <div className="recent-strip">
               <div className="section-mini-title">
-                <span>{hasTitleQuery ? "Matching titles" : recentMovies.length ? "Recent picks" : "Starter titles"}</span>
-                <small>{hasTitleQuery ? `${filteredTitles.length} shown` : "Seed"}</small>
+                <span>Recent picks</span>
+                <small>Seed</small>
               </div>
-              {catalogState !== "ready" && titles.length === 0 && hasTitleQuery ? (
-                <SkeletonRows />
-              ) : hasTitleQuery ? (
-                <div className="title-list">
-                  {filteredTitles.map((item) => (
-                    <button type="button" key={`${item.id}-${item.title}`} onClick={() => void chooseTitle(item)}>
-                      {item.title}
-                    </button>
-                  ))}
-                  {filteredTitles.length === 0 && <span className="quiet-line">No local match. Try opening best match.</span>}
-                </div>
-              ) : recentMovies.length > 0 ? (
-                <div className="recent-list">
-                  {recentMovies.map((movie) => (
-                    <button type="button" key={`${movie.id}-${movie.title}`} onClick={() => selectMovie(movie, "recent_pick")}>
-                      <img src={posterUrl(movie.poster_path)} alt="" loading="lazy" />
-                      <span>{movie.title}</span>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="title-list">
-                  {starterTitles.map((title) => (
-                    <button type="button" key={title} onClick={() => applyTitleSeed(title)}>
-                      {title}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="prompt-bank">
-              <div className="section-mini-title">
-                <span>Strong queries</span>
-                <small>Intent</small>
+              <div className="recent-list">
+                {recentMovies.map((movie) => (
+                  <button type="button" key={`${movie.id}-${movie.title}`} onClick={() => selectMovie(movie, "recent_pick")}>
+                    <img src={posterUrl(movie.poster_path)} alt="" loading="lazy" />
+                    <span>{movie.title}</span>
+                  </button>
+                ))}
               </div>
-              {starterPrompts.map((prompt) => (
-                <button type="button" key={prompt} onClick={() => applyPromptSeed(prompt)}>
-                  {prompt}
-                </button>
-              ))}
             </div>
           )}
         </aside>
