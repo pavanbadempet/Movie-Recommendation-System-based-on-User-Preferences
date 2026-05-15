@@ -1757,10 +1757,203 @@ body {
 }
 
 .rank-pill {
+  display: none;
   top: 8px;
   left: 8px;
   border-radius: 7px;
   background: rgba(0, 0, 0, 0.76);
+}
+
+body.modal-open {
+  overflow: hidden;
+}
+
+.movie-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 34px;
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(5px);
+}
+
+.movie-dialog {
+  position: relative;
+  width: min(980px, calc(100vw - 42px));
+  height: min(600px, calc(100vh - 52px));
+  overflow: hidden;
+  border: 0;
+  border-radius: 16px;
+  background: #000;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.7);
+}
+
+.movie-dialog::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0.18) 42%, rgba(0, 0, 0, 0.08) 100%),
+    linear-gradient(to top, #000 0%, rgba(0, 0, 0, 0.86) 30%, rgba(0, 0, 0, 0.12) 74%, rgba(0, 0, 0, 0.28) 100%);
+}
+
+.dialog-media {
+  position: absolute;
+  inset: -8% 0 0;
+  z-index: 1;
+}
+
+.dialog-media img,
+.dialog-media iframe {
+  width: 100%;
+  height: 110%;
+  border: 0;
+  object-fit: cover;
+  opacity: 0.72;
+  filter: saturate(1.08) contrast(1.04);
+}
+
+.dialog-close {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  z-index: 4;
+  width: 46px;
+  height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.72);
+  cursor: pointer;
+}
+
+.dialog-close:hover {
+  border-color: #e50914;
+  background: rgba(229, 9, 20, 0.82);
+  transform: scale(1.04);
+}
+
+.dialog-content {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  padding: 30px 38px 34px;
+  color: #fff;
+}
+
+.dialog-title-row {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 8px;
+}
+
+.dialog-title-row h2 {
+  max-width: min(720px, calc(100vw - 180px));
+  margin: 0;
+  color: #fff;
+  font-size: clamp(2.1rem, 4vw, 3.5rem);
+  line-height: 0.96;
+  font-weight: 950;
+  text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.95);
+}
+
+.rating-circle {
+  --rating-percent: 0;
+  --rating-color: #21d07a;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at center, #08120c 58%, transparent 60%),
+    conic-gradient(var(--rating-color) calc(var(--rating-percent) * 1%), #204529 0);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.72);
+}
+
+.rating-circle span {
+  color: #fff;
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.dialog-meta {
+  margin-bottom: 11px;
+  color: #e50914;
+  font-size: 0.85rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dialog-overview {
+  max-width: 720px;
+  margin: 0 0 11px;
+  display: -webkit-box;
+  overflow: hidden;
+  color: #ddd;
+  font-size: 0.96rem;
+  line-height: 1.52;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.dialog-explanation {
+  max-width: 760px;
+  margin: 12px 0;
+  padding: 9px 13px;
+  color: #fff;
+  border-left: 3px solid #e50914;
+  border-radius: 4px;
+  background: rgba(229, 9, 20, 0.2);
+  font-size: 0.86rem;
+  line-height: 1.48;
+}
+
+.dialog-credits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  max-width: 760px;
+  color: #aaa;
+  font-size: 0.82rem;
+}
+
+.dialog-credits strong {
+  color: #fff;
+}
+
+.dialog-trailer {
+  width: fit-content;
+  min-height: 38px;
+  margin-top: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  color: #fff;
+  text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.58);
+}
+
+.dialog-trailer:hover {
+  border-color: #e50914;
+  background: rgba(229, 9, 20, 0.72);
 }
 
 @media (max-width: 1100px) {
@@ -1812,5 +2005,32 @@ body {
   .poster-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 14px;
+  }
+
+  .movie-dialog-backdrop {
+    padding: 16px;
+  }
+
+  .movie-dialog {
+    width: calc(100vw - 24px);
+    height: min(620px, calc(100vh - 32px));
+    border-radius: 12px;
+  }
+
+  .dialog-content {
+    padding: 24px 22px 28px;
+  }
+
+  .dialog-title-row {
+    align-items: flex-start;
+  }
+
+  .dialog-title-row h2 {
+    max-width: calc(100vw - 126px);
+    font-size: 2.2rem;
+  }
+
+  .dialog-overview {
+    -webkit-line-clamp: 4;
   }
 }

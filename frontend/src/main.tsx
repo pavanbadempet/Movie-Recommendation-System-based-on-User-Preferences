@@ -67,6 +67,12 @@ function posterUrl(path?: string | null): string {
   return `${imageBase}${path}`;
 }
 
+function backdropUrl(path?: string | null): string {
+  if (!path) return posterUrl(path);
+  if (path.startsWith("http")) return path;
+  return `https://image.tmdb.org/t/p/original${path}`;
+}
+
 function movieYear(movie: Movie): string {
   return movie.release_date?.slice(0, 4) || "TBA";
 }
@@ -74,6 +80,11 @@ function movieYear(movie: Movie): string {
 function movieScore(movie: Movie): string {
   const value = Number(movie.vote_average || 0);
   return value > 0 ? value.toFixed(1) : "NR";
+}
+
+function ratingPercent(movie: Movie): number {
+  const value = Number(movie.vote_average || 0);
+  return Math.max(0, Math.min(100, Math.round(value * 10)));
 }
 
 function formatCount(value?: number | null): string {
@@ -159,6 +170,13 @@ function evidenceChips(movie: Movie): string[] {
     .map((item) => String(item).replaceAll("_", " "))
     .filter(Boolean)
     .slice(0, 4);
+}
+
+function directorLabel(movie: Movie): string {
+  if (movie.director) return movie.director;
+  const reason = movie.explanation?.find((item) => item.toLowerCase().startsWith("same director"));
+  const match = reason?.match(/\(([^)]+)\)/);
+  return match?.[1] || "";
 }
 
 function dedupeMovies(items: Movie[]): Movie[] {
@@ -641,6 +659,110 @@ function MovieSpotlight({
   );
 }
 
+function MovieDialog({ movie, onClose }: { movie: Movie; onClose: () => void }) {
+  const director = directorLabel(movie);
+  const cast = movie.cast || "";
+  const genres = compactGenres(movie.genres);
+  const primaryGenre = genres.split("/")[0]?.trim() || "Catalog";
+  const runtime = movie.runtime ? `${movie.runtime} min` : "";
+  const meta = [movieYear(movie), runtime, primaryGenre].filter(Boolean).join(" • ");
+  const overview = movie.overview || "No overview is available for this title.";
+  const shortOverview = overview.length > 240 ? `${overview.slice(0, 240).replace(/\s+\S*$/, "")}...` : overview;
+  const explanation = movie.explanation_text || movieReasons(movie).join(" | ");
+  const rating = movieScore(movie);
+  const scorePercent = ratingPercent(movie);
+  const ratingColor = Number(movie.vote_average || 0) >= 7 ? "#21d07a" : Number(movie.vote_average || 0) >= 5 ? "#d2d531" : "#db2360";
+
+  React.useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    document.body.classList.add("modal-open");
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.classList.remove("modal-open");
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="movie-dialog-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section className="movie-dialog" role="dialog" aria-modal="true" aria-label={`${movie.title} details`}>
+        <button className="dialog-close" type="button" aria-label="Close movie details" onClick={onClose}>
+          <X size={24} />
+        </button>
+
+        <div className="dialog-media" aria-hidden="true">
+          {movie.trailer_key ? (
+            <iframe
+              title={`${movie.title} trailer`}
+              src={`https://www.youtube.com/embed/${movie.trailer_key}?controls=0&autoplay=1&mute=1&loop=1&playlist=${movie.trailer_key}&modestbranding=1&showinfo=0&rel=0&iv_load_policy=3&disablekb=1`}
+              allow="autoplay; encrypted-media"
+            />
+          ) : (
+            <img src={backdropUrl(movie.poster_path)} alt="" />
+          )}
+        </div>
+
+        <div className="dialog-content">
+          <div className="dialog-title-row">
+            <h2>{movie.title}</h2>
+            <div
+              className="rating-circle"
+              style={
+                {
+                  "--rating-percent": scorePercent,
+                  "--rating-color": ratingColor,
+                } as React.CSSProperties
+              }
+              aria-label={`Rating ${rating} out of 10`}
+            >
+              <span>{rating}</span>
+            </div>
+          </div>
+
+          <div className="dialog-meta">{meta}</div>
+          <p className="dialog-overview">{shortOverview}</p>
+
+          {explanation && (
+            <div className="dialog-explanation">
+              <strong>CineBot Vibe Check:</strong> {explanation}
+            </div>
+          )}
+
+          {(director || cast) && (
+            <div className="dialog-credits">
+              {director && (
+                <span>
+                  Directed by <strong>{director}</strong>
+                </span>
+              )}
+              {cast && (
+                <span>
+                  Cast: <strong>{cast}</strong>
+                </span>
+              )}
+            </div>
+          )}
+
+          {movie.trailer_key && (
+            <a className="dialog-trailer" href={`https://www.youtube.com/watch?v=${movie.trailer_key}`} target="_blank" rel="noreferrer">
+              <Play size={16} />
+              Open trailer
+            </a>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function App() {
   const [titles, setTitles] = React.useState<MovieTitle[]>([]);
   const [titleQuery, setTitleQuery] = React.useState("");
@@ -667,6 +789,7 @@ function App() {
   const [feedbackNotice, setFeedbackNotice] = React.useState("");
   const [lastRecommendationRequestId, setLastRecommendationRequestId] = React.useState<string | null>(null);
   const [recommendationSource, setRecommendationSource] = React.useState<Movie | null>(null);
+  const [dialogMovie, setDialogMovie] = React.useState<Movie | null>(null);
   const [sessionId] = React.useState(() => getSessionId());
   const bootstrapped = React.useRef(false);
   const loadedPlatform = React.useRef(false);
@@ -746,7 +869,8 @@ function App() {
           similarity_score: movie.similarity_score,
         },
       });
-      selectMovie(movie, "recommendation_card");
+      rememberMovie(movie);
+      setDialogMovie(movie);
       return;
     }
     selectMovie(movie, "search_result");
@@ -970,6 +1094,7 @@ function App() {
             setResultsKind("idle");
             setSelectedMovie(null);
             setRecommendationSource(null);
+            setDialogMovie(null);
             setLastRecommendationRequestId(null);
             setFeedbackByMovieId({});
             setFeedbackNotice("");
@@ -1041,6 +1166,7 @@ function App() {
                   setResults([]);
                   setResultsKind("idle");
                   setRecommendationSource(null);
+                  setDialogMovie(null);
                   setLastRecommendationRequestId(null);
                 }}
               >
@@ -1172,6 +1298,7 @@ function App() {
           )}
         </section>
       </section>
+      {dialogMovie && <MovieDialog movie={dialogMovie} onClose={() => setDialogMovie(null)} />}
     </main>
   );
 }
