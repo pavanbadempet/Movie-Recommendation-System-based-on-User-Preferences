@@ -1513,9 +1513,9 @@ body {
 
 .billboard-container {
   display: grid;
-  grid-template-columns: minmax(0, 1.52fr) minmax(280px, 0.8fr);
-  gap: 18px;
-  padding: 16px;
+  grid-template-columns: minmax(0, 1.65fr) minmax(250px, 0.7fr);
+  gap: 16px;
+  padding: 14px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 20px;
   background: linear-gradient(135deg, rgba(26, 26, 46, 0.9), rgba(0, 0, 0, 0.95));
@@ -1544,7 +1544,7 @@ body {
 .billboard-video {
   height: auto;
   min-height: 0;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 21 / 9;
   overflow: hidden;
   padding: 0;
   border: 0;
@@ -1555,10 +1555,11 @@ body {
 
 .billboard-video .trailer-frame iframe {
   position: absolute;
-  inset: 0;
+  top: 50%;
+  left: 50%;
   width: 100%;
-  height: 100%;
-  transform: none;
+  height: 132%;
+  transform: translate(-50%, -50%);
 }
 
 .billboard-video .trailer-frame img {
@@ -1619,16 +1620,16 @@ body {
 }
 
 .billboard-info h2 {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   color: #fff;
-  font-size: 2.25rem;
-  line-height: 0.98;
+  font-size: 1.92rem;
+  line-height: 0.94;
   font-weight: 950;
   text-transform: uppercase;
 }
 
 .bb-meta {
-  margin-bottom: 12px;
+  margin-bottom: 9px;
   color: #ea696f;
   font-size: 0.78rem;
   font-weight: 900;
@@ -1637,18 +1638,18 @@ body {
 }
 
 .billboard-info p {
-  margin: 0 0 15px;
+  margin: 0 0 11px;
   display: -webkit-box;
   overflow: hidden;
   color: #cfd3dc;
-  font-size: 0.88rem;
-  line-height: 1.45;
+  font-size: 0.82rem;
+  line-height: 1.35;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
 }
 
 .bb-credits {
-  display: grid;
+  display: none;
   gap: 4px;
   padding-top: 10px;
   color: #8c92a0;
@@ -1663,8 +1664,8 @@ body {
 
 .bb-details-button {
   width: fit-content;
-  min-height: 42px;
-  margin-top: 16px;
+  min-height: 38px;
+  margin-top: 6px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -1724,7 +1725,7 @@ body {
   }
 
   .billboard-info h2 {
-    font-size: 2.75rem;
+    font-size: 2.28rem;
   }
 }
 
@@ -1735,7 +1736,7 @@ body {
 
   .billboard-video {
     height: auto;
-    aspect-ratio: 16 / 9;
+    aspect-ratio: 21 / 9;
   }
 }
 
@@ -2375,14 +2376,15 @@ body.modal-open {
   .billboard-video {
     height: auto;
     min-height: 0;
-    aspect-ratio: 16 / 9;
+    aspect-ratio: 21 / 9;
   }
 
   .billboard-video .trailer-frame iframe {
-    inset: 0;
+    top: 50%;
+    left: 50%;
     width: 100%;
-    height: 100%;
-    transform: none;
+    height: 132%;
+    transform: translate(-50%, -50%);
   }
 
   .app-shell {
@@ -2448,11 +2450,11 @@ body.modal-open {
   .billboard-video {
     height: auto;
     min-height: 0;
-    aspect-ratio: 16 / 9;
+    aspect-ratio: 21 / 9;
   }
 
   .billboard-info h2 {
-    font-size: 2rem;
+    font-size: 1.8rem;
   }
 
   .trending-strip {
