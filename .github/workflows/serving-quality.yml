@@ -23,7 +23,7 @@ jobs:
   live-serving-quality:
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
-    timeout-minutes: 45
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
@@ -48,9 +48,19 @@ jobs:
           if echo "$changed_files" | grep -E '^(backend/|etl/|data/evaluation/|Dockerfile|requirements\.txt|streamlit_app\.py|render\.yaml|REVISION)$' >/dev/null; then
             expected_app_commit="$GITHUB_SHA"
           fi
+          run_full_quality="false"
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ -n "$expected_app_commit" ]; then
+            run_full_quality="true"
+          fi
           echo "expected_app_commit=$expected_app_commit" >> "$GITHUB_OUTPUT"
+          echo "run_full_quality=$run_full_quality" >> "$GITHUB_OUTPUT"
+
+      - name: Skip non-serving change
+        if: ${{ steps.app_revision.outputs.run_full_quality != 'true' }}
+        run: echo "No serving-impacting files changed; synthetic monitoring covers the live endpoints for this revision."
 
       - name: Evaluate live serving quality
+        if: ${{ steps.app_revision.outputs.run_full_quality == 'true' }}
         env:
           EXPECTED_APP_COMMIT: ${{ steps.app_revision.outputs.expected_app_commit }}
         run: |
@@ -61,9 +71,9 @@ jobs:
           python scripts/evaluate_live_serving.py \
             --base-url "$NOVA_SERVING_URL" \
             --output reports/live_serving_quality.json \
-            --timeout 240 \
-            --retries 40 \
-            --retry-delay-seconds 30 \
+            --timeout 120 \
+            --retries 8 \
+            --retry-delay-seconds 20 \
             "${expected_args[@]}" \
             --k 10 \
             --platform-readiness-strict \
@@ -82,13 +92,14 @@ jobs:
             --fail-on-threshold
 
       - name: Evaluate Render gateway quality
+        if: ${{ steps.app_revision.outputs.run_full_quality == 'true' }}
         run: |
           python scripts/evaluate_live_serving.py \
             --base-url "$NOVA_RENDER_GATEWAY_URL" \
             --output reports/render_gateway_quality.json \
-            --timeout 60 \
-            --retries 20 \
-            --retry-delay-seconds 30 \
+            --timeout 30 \
+            --retries 6 \
+            --retry-delay-seconds 20 \
             --k 10 \
             --skip-platform-readiness \
             --skip-search-benchmark \
