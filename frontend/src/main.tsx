@@ -12,6 +12,7 @@ import {
   Gauge,
   House,
   Loader2,
+  Pause,
   Play,
   RefreshCw,
   Search,
@@ -661,6 +662,48 @@ function MovieSpotlight({
   );
 }
 
+function TrailerFrame({ movie }: { movie: Movie }) {
+  const [playing, setPlaying] = React.useState(true);
+  const iframeRef = React.useRef<HTMLIFrameElement>(null);
+
+  function sendPlayerCommand(command: "playVideo" | "pauseVideo") {
+    iframeRef.current?.contentWindow?.postMessage(
+      JSON.stringify({
+        event: "command",
+        func: command,
+        args: [],
+      }),
+      "*",
+    );
+  }
+
+  function togglePlayback() {
+    const nextPlaying = !playing;
+    sendPlayerCommand(nextPlaying ? "playVideo" : "pauseVideo");
+    setPlaying(nextPlaying);
+  }
+
+  return (
+    <div className="trailer-frame">
+      {movie.trailer_key ? (
+        <iframe
+          ref={iframeRef}
+          title={`${movie.title} trailer preview`}
+          src={`https://www.youtube.com/embed/${movie.trailer_key}?enablejsapi=1&autoplay=1&mute=1&controls=0&disablekb=1&fs=0&modestbranding=1&loop=1&playlist=${movie.trailer_key}&rel=0&iv_load_policy=3&playsinline=1`}
+          allow="autoplay; encrypted-media"
+        />
+      ) : (
+        <img src={backdropUrl(movie.poster_path)} alt="" />
+      )}
+      {movie.trailer_key && (
+        <button className="video-toggle" type="button" onClick={togglePlayback} aria-label={playing ? "Pause trailer" : "Play trailer"}>
+          {playing ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" />}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function MovieDialog({ movie, onClose }: { movie: Movie; onClose: () => void }) {
   const director = directorLabel(movie);
   const cast = movie.cast || "";
@@ -700,16 +743,8 @@ function MovieDialog({ movie, onClose }: { movie: Movie; onClose: () => void }) 
           <X size={24} />
         </button>
 
-        <div className="dialog-media" aria-hidden="true">
-          {movie.trailer_key ? (
-            <iframe
-              title={`${movie.title} trailer`}
-              src={`https://www.youtube.com/embed/${movie.trailer_key}?controls=0&autoplay=1&mute=1&loop=1&playlist=${movie.trailer_key}&modestbranding=1&showinfo=0&rel=0&iv_load_policy=3&disablekb=1`}
-              allow="autoplay; encrypted-media"
-            />
-          ) : (
-            <img src={backdropUrl(movie.poster_path)} alt="" />
-          )}
+        <div className="dialog-media">
+          <TrailerFrame movie={movie} />
         </div>
 
         <div className="dialog-content">
@@ -854,17 +889,9 @@ function HomePage({
           {hero ? (
             <>
               <section className="billboard-container">
-                <button className="billboard-video" type="button" onClick={() => onOpenMovie(hero)} aria-label={`Open ${hero.title} details`}>
-                  {hero.trailer_key ? (
-                    <iframe
-                      title={`${hero.title} trailer preview`}
-                      src={`https://www.youtube.com/embed/${hero.trailer_key}?autoplay=1&mute=1&controls=0&disablekb=1&modestbranding=1&loop=1&playlist=${hero.trailer_key}&rel=0&showinfo=0&iv_load_policy=3`}
-                      allow="autoplay; encrypted-media"
-                    />
-                  ) : (
-                    <img src={backdropUrl(hero.poster_path)} alt="" />
-                  )}
-                </button>
+                <div className="billboard-video">
+                  <TrailerFrame movie={hero} />
+                </div>
                 <div className="billboard-info">
                   <h2>{hero.title}</h2>
                   <div className="bb-meta">{heroMeta}</div>
