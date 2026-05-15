@@ -219,7 +219,7 @@ export async function getMovie(movieId: number): Promise<BackendResult<Movie>> {
 }
 
 export async function getRecommendations(movieId: number, n = 12): Promise<BackendResult<RecommendationResponse>> {
-  return apiGetFirstSuccess<RecommendationResponse>(`/v1/recommendations/id/${movieId}`, { n }, 25000);
+  return apiGetFirstSuccess<RecommendationResponse>(`/v1/recommendations/id/${movieId}`, { n }, 60000);
 }
 
 export async function recordEvent(payload: EventPayload): Promise<BackendResult<EventResponse>> {
