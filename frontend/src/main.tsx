@@ -802,7 +802,8 @@ function App() {
   const hasTitleQuery = titleQuery.trim().length > 0;
   const selectedTitleLabel = selectedMovie ? selectTitleLabel(selectedMovie) : "";
   const isSelectedTitleQuery = Boolean(selectedMovie && titleQuery === selectedTitleLabel);
-  const showTitleSuggestions = titleSelectOpen;
+  const isEditingTitle = Boolean(selectedMovie && hasTitleQuery && !isSelectedTitleQuery);
+  const showTitleSuggestions = titleSelectOpen || (hasTitleQuery && !isSelectedTitleQuery);
   const showNotice = catalogState !== "ready";
 
   const filteredTitles = React.useMemo(() => {
@@ -1243,7 +1244,7 @@ function App() {
             {showTitleSuggestions && (
               <div className="title-list streamlit-title-list">
                 {titles.length === 0 && catalogState !== "ready" && <span className="quiet-line">Loading movie catalog...</span>}
-                {filteredTitles.slice(0, 24).map((item) => (
+                {filteredTitles.slice(0, 12).map((item) => (
                   <button
                     type="button"
                     key={`${item.id}-${item.title}`}
@@ -1328,7 +1329,7 @@ function App() {
         </aside>
 
         <section className="result-panel">
-          {selectedMovie ? (
+          {selectedMovie && !isEditingTitle ? (
             <MovieSpotlight
               movie={selectedMovie}
               loading={loadingRecs}
