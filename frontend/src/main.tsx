@@ -53,7 +53,7 @@ import "./styles.css";
 const imageBase = import.meta.env.VITE_TMDB_IMAGE_BASE || "https://image.tmdb.org/t/p/w500";
 const RECENT_STORAGE_KEY = "nova_recent_movies_v2";
 const SESSION_STORAGE_KEY = "nova_session_id_v1";
-const TITLE_CATALOG_LIMIT = 100000;
+const TITLE_CATALOG_LIMIT = 5000;
 
 type SearchMode = "title" | "semantic";
 type CatalogState = "booting" | "warming" | "ready" | "error";
@@ -790,7 +790,9 @@ function App() {
   const [lastRecommendationRequestId, setLastRecommendationRequestId] = React.useState<string | null>(null);
   const [recommendationSource, setRecommendationSource] = React.useState<Movie | null>(null);
   const [dialogMovie, setDialogMovie] = React.useState<Movie | null>(null);
+  const [titleSelectOpen, setTitleSelectOpen] = React.useState(false);
   const [sessionId] = React.useState(() => getSessionId());
+  const titleSelectRef = React.useRef<HTMLDivElement>(null);
   const bootstrapped = React.useRef(false);
   const loadedPlatform = React.useRef(false);
   const autoSeeded = React.useRef(false);
@@ -800,13 +802,38 @@ function App() {
   const hasTitleQuery = titleQuery.trim().length > 0;
   const selectedTitleLabel = selectedMovie ? selectTitleLabel(selectedMovie) : "";
   const isSelectedTitleQuery = Boolean(selectedMovie && titleQuery === selectedTitleLabel);
-  const showTitleSuggestions = hasTitleQuery && !isSelectedTitleQuery;
+  const showTitleSuggestions = titleSelectOpen;
   const showNotice = catalogState !== "ready";
 
   const filteredTitles = React.useMemo(() => {
     const normalized = titleQuery.trim().toLowerCase();
     if (!normalized) return titles.slice(0, 34);
-    return titles.filter((item) => item.title.toLowerCase().includes(normalized)).slice(0, 34);
+    const scoreTitle = (title: string) => {
+      const value = title.toLowerCase();
+      const cleanValue = value.replace(/^the\s+/, "");
+      const index = Math.min(
+        value.includes(normalized) ? value.indexOf(normalized) : Number.POSITIVE_INFINITY,
+        cleanValue.includes(normalized) ? cleanValue.indexOf(normalized) : Number.POSITIVE_INFINITY,
+      );
+      const prefix = value.startsWith(normalized) || cleanValue.startsWith(normalized) ? 0 : 1;
+      const exact = value === normalized || cleanValue === normalized ? 0 : 1;
+      return { exact, prefix, index, length: value.length, value };
+    };
+
+    return titles
+      .filter((item) => item.title.toLowerCase().replace(/^the\s+/, "").includes(normalized) || item.title.toLowerCase().includes(normalized))
+      .sort((a, b) => {
+        const left = scoreTitle(a.title);
+        const right = scoreTitle(b.title);
+        return (
+          left.exact - right.exact ||
+          left.prefix - right.prefix ||
+          left.index - right.index ||
+          left.length - right.length ||
+          left.value.localeCompare(right.value)
+        );
+      })
+      .slice(0, 34);
   }, [titles, titleQuery]);
 
   const resultHeading =
@@ -997,6 +1024,7 @@ function App() {
       const result = await getMovie(item.id);
       setBackend(result.baseUrl);
       setTitleQuery(selectTitleLabel(result.data));
+      setTitleSelectOpen(false);
       selectMovie(result.data, "title_search", options.track ?? true);
       setNotice("Title ready");
       if (options.autoRecommend) {
@@ -1140,52 +1168,95 @@ function App() {
           <label className="field-label" htmlFor="title-search">
             Search by title
           </label>
-          <div className="search-box title-select-box">
-            <input
-              id="title-search"
-              value={titleQuery}
-              onChange={(event) => {
-                userStarted.current = true;
-                setMode("title");
-                setTitleQuery(event.target.value);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") void runSearch("title");
-              }}
-              placeholder="Avatar, Inception, Dark Knight"
-            />
-            {hasTitleQuery && (
-              <button
-                className="clear-title"
-                type="button"
-                aria-label="Clear selected title"
-                onClick={() => {
+          <div
+            className="title-select"
+            ref={titleSelectRef}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                setTitleSelectOpen(false);
+              }
+            }}
+          >
+            <div className="search-box title-select-box">
+              <input
+                id="title-search"
+                value={titleQuery}
+                onChange={(event) => {
                   userStarted.current = true;
-                  setTitleQuery("");
-                  setSelectedMovie(null);
-                  setResults([]);
-                  setResultsKind("idle");
-                  setRecommendationSource(null);
-                  setDialogMovie(null);
-                  setLastRecommendationRequestId(null);
+                  setMode("title");
+                  setTitleQuery(event.target.value);
+                  setTitleSelectOpen(true);
+                  if (selectedMovie && event.target.value !== selectedTitleLabel) {
+                    setSelectedMovie(null);
+                    setResults([]);
+                    setResultsKind("idle");
+                    setRecommendationSource(null);
+                    setDialogMovie(null);
+                    setLastRecommendationRequestId(null);
+                  }
                 }}
-              >
-                <X size={16} />
-              </button>
-            )}
-            <ChevronDown className="select-chevron" size={19} />
-          </div>
-
-          {showTitleSuggestions && (
-            <div className="title-list streamlit-title-list">
-              {filteredTitles.map((item) => (
-                <button type="button" key={`${item.id}-${item.title}`} onClick={() => void chooseTitle(item)}>
-                  {item.title}
+                onFocus={() => setTitleSelectOpen(true)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    setTitleSelectOpen(false);
+                    return;
+                  }
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    if (filteredTitles[0]) void chooseTitle(filteredTitles[0]);
+                    else void runSearch("title");
+                  }
+                }}
+                placeholder="e.g. Inception, Avatar, The Dark Knight..."
+              />
+              {hasTitleQuery && (
+                <button
+                  className="clear-title"
+                  type="button"
+                  aria-label="Clear selected title"
+                  onClick={() => {
+                    userStarted.current = true;
+                    setTitleQuery("");
+                    setSelectedMovie(null);
+                    setResults([]);
+                    setResultsKind("idle");
+                    setRecommendationSource(null);
+                    setDialogMovie(null);
+                    setLastRecommendationRequestId(null);
+                    setTitleSelectOpen(true);
+                  }}
+                >
+                  <X size={16} />
                 </button>
-              ))}
-              {filteredTitles.length === 0 && <span className="quiet-line">No local title match. Try semantic search below.</span>}
+              )}
+              <button
+                className="select-chevron"
+                type="button"
+                aria-label="Open movie title options"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => setTitleSelectOpen((open) => !open)}
+              >
+                <ChevronDown size={19} />
+              </button>
             </div>
-          )}
+
+            {showTitleSuggestions && (
+              <div className="title-list streamlit-title-list">
+                {titles.length === 0 && catalogState !== "ready" && <span className="quiet-line">Loading movie catalog...</span>}
+                {filteredTitles.slice(0, 24).map((item) => (
+                  <button
+                    type="button"
+                    key={`${item.id}-${item.title}`}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => void chooseTitle(item)}
+                  >
+                    {item.title}
+                  </button>
+                ))}
+                {titles.length > 0 && filteredTitles.length === 0 && <span className="quiet-line">No title match. Try semantic search below.</span>}
+              </div>
+            )}
+          </div>
 
           {showNotice && (
             <div className={`notice ${catalogState}`}>
