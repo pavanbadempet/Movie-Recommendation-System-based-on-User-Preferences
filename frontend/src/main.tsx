@@ -844,6 +844,11 @@ function HomePage({
         .filter(Boolean)
         .join(" | ")
     : "";
+  const heroOverview = hero?.overview
+    ? hero.overview.length > 150
+      ? `${hero.overview.slice(0, 150).replace(/\s+\S*$/, "")}...`
+      : hero.overview
+    : "No overview is available for this title.";
 
   return (
     <main className="home-shell">
@@ -896,7 +901,7 @@ function HomePage({
                 <div className="billboard-info">
                   <h2>{hero.title}</h2>
                   <div className="bb-meta">{heroMeta}</div>
-                  <p>{hero.overview || "No overview is available for this title."}</p>
+                  <p>{heroOverview}</p>
                   <div className="bb-credits">
                     {directorLabel(hero) && (
                       <span>
