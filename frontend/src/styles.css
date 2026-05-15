@@ -1500,15 +1500,19 @@ body {
 
 .title-select-box {
   position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px;
   padding: 0 10px 0 16px;
 }
 
 .title-select-box input {
   padding-right: 4px;
+  grid-column: 1;
 }
 
 .clear-title {
+  grid-column: 2;
   width: 28px;
   height: 28px;
   flex: 0 0 auto;
@@ -1528,6 +1532,7 @@ body {
 }
 
 .select-chevron {
+  grid-column: 3;
   width: 32px;
   height: 32px;
   flex: 0 0 auto;
@@ -1552,19 +1557,29 @@ body {
 }
 
 .streamlit-title-list {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  left: 0;
+  position: static;
   z-index: 50;
-  max-height: 240px;
+  max-height: 320px;
   overflow: auto;
-  margin-top: 0;
+  margin-top: 10px;
   padding: 8px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 10px;
   background: #11111d;
-  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.42);
+}
+
+.streamlit-title-list button {
+  min-height: 42px;
+  color: #fff;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.streamlit-title-list button:hover,
+.streamlit-title-list button:focus-visible {
+  color: #fff;
+  background: rgba(229, 9, 20, 0.26);
 }
 
 .secondary-action,
