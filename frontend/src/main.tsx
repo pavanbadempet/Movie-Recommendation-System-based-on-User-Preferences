@@ -845,8 +845,8 @@ function HomePage({
         .join(" | ")
     : "";
   const heroOverview = hero?.overview
-    ? hero.overview.length > 150
-      ? `${hero.overview.slice(0, 150).replace(/\s+\S*$/, "")}...`
+    ? hero.overview.length > 260
+      ? `${hero.overview.slice(0, 260).replace(/\s+\S*$/, "")}...`
       : hero.overview
     : "No overview is available for this title.";
 
