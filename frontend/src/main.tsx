@@ -54,7 +54,9 @@ const imageBase = import.meta.env.VITE_TMDB_IMAGE_BASE || "https://image.tmdb.or
 const RECENT_STORAGE_KEY = "nova_recent_movies_v2";
 const SESSION_STORAGE_KEY = "nova_session_id_v1";
 const TITLE_CATALOG_LIMIT = 5000;
+const HOME_SEED_MOVIE_ID = 19995;
 
+type AppPage = "home" | "search";
 type SearchMode = "title" | "semantic";
 type CatalogState = "booting" | "warming" | "ready" | "error";
 type ResultsKind = "idle" | "search" | "recommendations";
@@ -665,7 +667,7 @@ function MovieDialog({ movie, onClose }: { movie: Movie; onClose: () => void }) 
   const genres = compactGenres(movie.genres);
   const primaryGenre = genres.split("/")[0]?.trim() || "Catalog";
   const runtime = movie.runtime ? `${movie.runtime} min` : "";
-  const meta = [movieYear(movie), runtime, primaryGenre].filter(Boolean).join(" • ");
+  const meta = [movieYear(movie), runtime, primaryGenre].filter(Boolean).join(" | ");
   const overview = movie.overview || "No overview is available for this title.";
   const shortOverview = overview.length > 240 ? `${overview.slice(0, 240).replace(/\s+\S*$/, "")}...` : overview;
   const explanation = movie.explanation_text || movieReasons(movie).join(" | ");
@@ -763,7 +765,158 @@ function MovieDialog({ movie, onClose }: { movie: Movie; onClose: () => void }) 
   );
 }
 
+function HomeNavCard({
+  icon,
+  title,
+  description,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  onClick: () => void;
+}) {
+  return (
+    <button className="home-nav-card" type="button" onClick={onClick}>
+      <span className="home-nav-icon">{icon}</span>
+      <span>
+        <strong>{title}</strong>
+        <small>{description}</small>
+      </span>
+    </button>
+  );
+}
+
+function HomePage({
+  movies,
+  heroIndex,
+  loading,
+  error,
+  onHeroIndex,
+  onSearch,
+  onOpenMovie,
+}: {
+  movies: Movie[];
+  heroIndex: number;
+  loading: boolean;
+  error: string;
+  onHeroIndex: (index: number) => void;
+  onSearch: () => void;
+  onOpenMovie: (movie: Movie) => void;
+}) {
+  const hero = movies[heroIndex] || movies[0] || null;
+  const heroMeta = hero
+    ? [movieScore(hero) !== "NR" ? `Rating ${movieScore(hero)}` : "", compactGenres(hero.genres), hero.runtime ? `${hero.runtime} min` : ""]
+        .filter(Boolean)
+        .join(" | ")
+    : "";
+
+  return (
+    <main className="home-shell">
+      <section className="home-layout">
+        <div className="home-copy">
+          <h1>
+            Movie Recommendation
+            <br />
+            System
+          </h1>
+          <p>AI-powered curator | Deep search | Semantic analysis</p>
+
+          <div className="home-nav-stack" aria-label="Application navigation">
+            <HomeNavCard
+              icon={<Database size={28} />}
+              title="Recommendation Console"
+              description="Quality, readiness, and platform intelligence"
+              onClick={onSearch}
+            />
+            <HomeNavCard
+              icon={<Search size={28} />}
+              title="Deep Search"
+              description="Find movies by title, plot, genre, or intent"
+              onClick={onSearch}
+            />
+            <HomeNavCard
+              icon={<Sparkles size={28} />}
+              title="CineBot AI"
+              description="AI-assisted discovery powered by catalog context"
+              onClick={onSearch}
+            />
+            <HomeNavCard
+              icon={<Activity size={28} />}
+              title="Real-Time Monitoring"
+              description="Behavior signals, events, and serving health"
+              onClick={onSearch}
+            />
+          </div>
+        </div>
+
+        <div className="home-showcase">
+          {hero ? (
+            <>
+              <section className="billboard-container">
+                <button className="billboard-video" type="button" onClick={() => onOpenMovie(hero)} aria-label={`Open ${hero.title} details`}>
+                  {hero.trailer_key ? (
+                    <iframe
+                      title={`${hero.title} trailer preview`}
+                      src={`https://www.youtube.com/embed/${hero.trailer_key}?autoplay=1&mute=1&controls=0&disablekb=1&modestbranding=1&loop=1&playlist=${hero.trailer_key}&rel=0&showinfo=0&iv_load_policy=3`}
+                      allow="autoplay; encrypted-media"
+                    />
+                  ) : (
+                    <img src={backdropUrl(hero.poster_path)} alt="" />
+                  )}
+                </button>
+                <div className="billboard-info">
+                  <h2>{hero.title}</h2>
+                  <div className="bb-meta">{heroMeta}</div>
+                  <p>{hero.overview || "No overview is available for this title."}</p>
+                  <div className="bb-credits">
+                    {directorLabel(hero) && (
+                      <span>
+                        Directed by <strong>{directorLabel(hero)}</strong>
+                      </span>
+                    )}
+                    {hero.cast && <span>Starring: {hero.cast}</span>}
+                  </div>
+                  <button className="bb-details-button" type="button" onClick={() => onOpenMovie(hero)}>
+                    <Play size={16} />
+                    View details
+                  </button>
+                </div>
+              </section>
+
+              <div className="trending-label">More Trending</div>
+              <div className="trending-strip">
+                {movies.slice(0, 6).map((movie, index) => (
+                  <button
+                    className={index === heroIndex ? "active" : ""}
+                    type="button"
+                    key={`${movie.id}-${movie.title}`}
+                    onClick={() => onHeroIndex(index)}
+                    onDoubleClick={() => onOpenMovie(movie)}
+                    title={movie.title}
+                  >
+                    <img src={posterUrl(movie.poster_path)} alt={movie.title} loading="lazy" />
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <section className="billboard-container empty">
+              <div>
+                <Loader2 className={loading ? "spin" : undefined} size={28} />
+                <h2>{loading ? "Loading trends" : "Trending unavailable"}</h2>
+                <p>{error || "The recommendation service is warming. Open Deep Search while it starts."}</p>
+              </div>
+            </section>
+          )}
+        </div>
+      </section>
+    </main>
+  );
+}
+
 function App() {
+  const [page, setPage] = React.useState<AppPage>("home");
   const [titles, setTitles] = React.useState<MovieTitle[]>([]);
   const [titleQuery, setTitleQuery] = React.useState("");
   const [semanticQuery, setSemanticQuery] = React.useState("");
@@ -791,11 +944,15 @@ function App() {
   const [recommendationSource, setRecommendationSource] = React.useState<Movie | null>(null);
   const [dialogMovie, setDialogMovie] = React.useState<Movie | null>(null);
   const [titleSelectOpen, setTitleSelectOpen] = React.useState(false);
+  const [homeMovies, setHomeMovies] = React.useState<Movie[]>([]);
+  const [homeHeroIndex, setHomeHeroIndex] = React.useState(0);
+  const [homeLoading, setHomeLoading] = React.useState(false);
+  const [homeError, setHomeError] = React.useState("");
   const [sessionId] = React.useState(() => getSessionId());
   const titleSelectRef = React.useRef<HTMLDivElement>(null);
   const bootstrapped = React.useRef(false);
   const loadedPlatform = React.useRef(false);
-  const autoSeeded = React.useRef(false);
+  const loadedHomeShowcase = React.useRef(false);
   const userStarted = React.useRef(false);
 
   const activeQuery = mode === "title" ? titleQuery : semanticQuery;
@@ -865,6 +1022,23 @@ function App() {
     void recordEvent(eventPayload).catch((error) => {
       console.warn("Behavior event was not recorded", error);
     });
+  }
+
+  async function loadHomeShowcase() {
+    setHomeLoading(true);
+    setHomeError("");
+    try {
+      const response = await getRecommendations(HOME_SEED_MOVIE_ID, 8);
+      const movies = dedupeMovies(response.data.recommendations || []).slice(0, 8);
+      setBackend(response.baseUrl);
+      setHomeMovies(movies);
+      setHomeHeroIndex(0);
+      if (movies.length === 0) setHomeError("No trending movies returned yet.");
+    } catch (error) {
+      setHomeError(error instanceof Error ? error.message : "Trending movies unavailable.");
+    } finally {
+      setHomeLoading(false);
+    }
   }
 
   function selectMovie(movie: Movie, source: SelectionSource, track = true) {
@@ -941,14 +1115,6 @@ function App() {
       setRetryCount(0);
       setLastUpdated(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
       setNotice(`${result.data.length.toLocaleString()} searchable titles loaded`);
-      const starter =
-        result.data.find((item) => item.title.startsWith("Avatar (2009)")) ||
-        result.data.find((item) => item.title.toLowerCase().startsWith("avatar")) ||
-        result.data[0];
-      if (!autoSeeded.current && !userStarted.current && !selectedMovie && !titleQuery.trim() && starter) {
-        autoSeeded.current = true;
-        window.setTimeout(() => void chooseTitle(starter, { track: false, autoRecommend: true }), 150);
-      }
     } catch (error) {
       setCatalogState("warming");
       setRetryCount((count) => count + 1);
@@ -990,6 +1156,12 @@ function App() {
     if (bootstrapped.current) return;
     bootstrapped.current = true;
     void bootstrap();
+  }, []);
+
+  React.useEffect(() => {
+    if (loadedHomeShowcase.current) return;
+    loadedHomeShowcase.current = true;
+    void loadHomeShowcase();
   }, []);
 
   React.useEffect(() => {
@@ -1109,8 +1281,37 @@ function App() {
     }
   }
 
+  function openHome() {
+    setPage("home");
+    setDialogMovie(null);
+    setTitleSelectOpen(false);
+  }
+
+  function openSearch() {
+    setPage("search");
+    setDialogMovie(null);
+    setTitleSelectOpen(false);
+  }
+
   const catalogValue = platform?.movie_count || titles.length;
   const rankerValue = platform?.ranker?.available ? "Learned" : "Hybrid";
+
+  if (page === "home") {
+    return (
+      <>
+        <HomePage
+          movies={homeMovies}
+          heroIndex={homeHeroIndex}
+          loading={homeLoading}
+          error={homeError}
+          onHeroIndex={setHomeHeroIndex}
+          onSearch={openSearch}
+          onOpenMovie={setDialogMovie}
+        />
+        {dialogMovie && <MovieDialog movie={dialogMovie} onClose={() => setDialogMovie(null)} />}
+      </>
+    );
+  }
 
   return (
     <main className="app-shell">
@@ -1118,19 +1319,7 @@ function App() {
         <button
           className="home-button"
           type="button"
-          onClick={() => {
-            setResults([]);
-            setResultsKind("idle");
-            setSelectedMovie(null);
-            setRecommendationSource(null);
-            setDialogMovie(null);
-            setLastRecommendationRequestId(null);
-            setFeedbackByMovieId({});
-            setFeedbackNotice("");
-            setTitleQuery("");
-            setSemanticQuery("");
-            setMode("title");
-          }}
+          onClick={openHome}
         >
           <House size={18} />
           Home
