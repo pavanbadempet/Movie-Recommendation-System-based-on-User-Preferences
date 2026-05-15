@@ -1545,8 +1545,8 @@ body {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 180%;
-  height: 100%;
+  width: 260%;
+  height: 138%;
   transform: translate(-50%, -50%);
 }
 
