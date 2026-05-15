@@ -851,7 +851,9 @@ function HomePage({
       <section className="home-layout">
         <div className="home-copy">
           <h1>
-            Movie Recommendation
+            Movie
+            <br />
+            Recommendation
             <br />
             System
           </h1>

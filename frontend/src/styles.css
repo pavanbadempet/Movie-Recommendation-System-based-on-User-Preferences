@@ -1421,7 +1421,7 @@ body {
 .home-copy h1 {
   margin: 0;
   color: #fff;
-  font-size: clamp(3.4rem, 5vw, 5.9rem);
+  font-size: 3rem;
   line-height: 0.92;
   font-weight: 950;
   text-transform: uppercase;
@@ -1502,15 +1502,15 @@ body {
 
 .billboard-container {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(290px, 0.82fr);
-  gap: 20px;
-  padding: 20px;
+  grid-template-columns: minmax(0, 1fr) minmax(270px, 0.72fr);
+  gap: 18px;
+  padding: 16px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 20px;
   background: linear-gradient(135deg, rgba(26, 26, 46, 0.9), rgba(0, 0, 0, 0.95));
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(10px);
-  align-items: center;
+  align-items: stretch;
 }
 
 .billboard-container.empty {
@@ -1531,7 +1531,7 @@ body {
 }
 
 .billboard-video {
-  aspect-ratio: 16 / 9;
+  height: 100%;
   min-height: 0;
   overflow: hidden;
   padding: 0;
@@ -1539,6 +1539,21 @@ body {
   border-radius: 12px;
   background: #000;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+}
+
+.billboard-video .trailer-frame iframe {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 180%;
+  height: 100%;
+  transform: translate(-50%, -50%);
+}
+
+.billboard-video .trailer-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .trailer-frame {
@@ -1561,29 +1576,44 @@ body {
 
 .video-toggle {
   position: absolute;
-  inset: 0;
+  right: 12px;
+  bottom: 12px;
   z-index: 2;
-  display: flex;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   color: #fff;
-  border: 0;
-  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.58);
   cursor: pointer;
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity 150ms ease,
+    transform 150ms ease,
+    background 150ms ease;
+}
+
+.trailer-frame:hover .video-toggle,
+.video-toggle:focus-visible {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .video-toggle svg {
-  width: 62px;
-  height: 62px;
-  padding: 14px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.44);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.42);
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
-.video-toggle:hover svg {
+.video-toggle:hover {
   background: rgba(229, 9, 20, 0.78);
-  transform: scale(1.04);
 }
 
 .billboard-info {
@@ -1596,8 +1626,8 @@ body {
 .billboard-info h2 {
   margin: 0 0 10px;
   color: #fff;
-  font-size: clamp(2rem, 2.9vw, 3.25rem);
-  line-height: 0.95;
+  font-size: 2.35rem;
+  line-height: 0.98;
   font-weight: 950;
   text-transform: uppercase;
 }
@@ -1619,7 +1649,7 @@ body {
   font-size: 0.88rem;
   line-height: 1.45;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 5;
+  -webkit-line-clamp: 4;
 }
 
 .bb-credits {
@@ -1691,6 +1721,16 @@ body {
   aspect-ratio: 2 / 3;
   display: block;
   object-fit: cover;
+}
+
+@media (min-width: 1500px) {
+  .home-copy h1 {
+    font-size: 4rem;
+  }
+
+  .billboard-info h2 {
+    font-size: 3rem;
+  }
 }
 
 .topbar {
@@ -2159,14 +2199,14 @@ body.modal-open {
 }
 
 .dialog-media .video-toggle {
-  inset: 0 auto auto 0;
-  width: 100%;
-  height: 100%;
+  inset: auto 18px 18px auto;
+  width: 42px;
+  height: 42px;
 }
 
 .dialog-media .video-toggle svg {
-  width: 58px;
-  height: 58px;
+  width: 18px;
+  height: 18px;
 }
 
 .dialog-close {
@@ -2328,7 +2368,16 @@ body.modal-open {
   }
 
   .billboard-video {
+    height: auto;
     min-height: 0;
+    aspect-ratio: 16 / 9;
+  }
+
+  .billboard-video .trailer-frame iframe {
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    transform: none;
   }
 
   .app-shell {
@@ -2342,20 +2391,47 @@ body.modal-open {
 
 @media (max-width: 760px) {
   .home-shell {
+    overflow-x: hidden;
     padding: 22px 14px 32px;
   }
 
+  .home-layout,
+  .home-copy,
+  .home-showcase,
+  .home-nav-stack {
+    width: 100%;
+    min-width: 0;
+  }
+
   .home-copy h1 {
-    font-size: 3.05rem;
+    font-size: clamp(1.8rem, 8vw, 2.5rem);
   }
 
   .home-copy p {
+    max-width: 32ch;
     margin-bottom: 22px;
+    line-height: 1.45;
   }
 
   .home-nav-card {
     min-height: 74px;
+    gap: 12px;
     padding: 14px;
+  }
+
+  .home-nav-icon {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+  }
+
+  .home-nav-card strong {
+    font-size: 0.86rem;
+    letter-spacing: 0.05em;
+  }
+
+  .home-nav-card small {
+    font-size: 0.76rem;
   }
 
   .billboard-container {
@@ -2365,7 +2441,9 @@ body.modal-open {
   }
 
   .billboard-video {
+    height: auto;
     min-height: 0;
+    aspect-ratio: 16 / 9;
   }
 
   .billboard-info h2 {
