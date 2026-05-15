@@ -47,6 +47,17 @@ input {
   font: inherit;
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 button,
 a {
   -webkit-tap-highlight-color: transparent;
@@ -1502,7 +1513,7 @@ body {
 
 .billboard-container {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(270px, 0.72fr);
+  grid-template-columns: minmax(0, 1.52fr) minmax(280px, 0.8fr);
   gap: 18px;
   padding: 16px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -1510,7 +1521,7 @@ body {
   background: linear-gradient(135deg, rgba(26, 26, 46, 0.9), rgba(0, 0, 0, 0.95));
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(10px);
-  align-items: stretch;
+  align-items: center;
 }
 
 .billboard-container.empty {
@@ -1531,8 +1542,9 @@ body {
 }
 
 .billboard-video {
-  height: 100%;
+  height: auto;
   min-height: 0;
+  aspect-ratio: 16 / 9;
   overflow: hidden;
   padding: 0;
   border: 0;
@@ -1543,11 +1555,10 @@ body {
 
 .billboard-video .trailer-frame iframe {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 260%;
-  height: 138%;
-  transform: translate(-50%, -50%);
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: none;
 }
 
 .billboard-video .trailer-frame img {
@@ -1576,44 +1587,28 @@ body {
 
 .video-toggle {
   position: absolute;
-  right: 12px;
-  bottom: 12px;
+  inset: 0;
   z-index: 2;
-  width: 40px;
-  height: 40px;
-  display: inline-flex;
+  width: 100%;
+  height: 100%;
+  display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.58);
+  color: transparent;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
   cursor: pointer;
-  opacity: 0;
-  transform: translateY(4px);
-  transition:
-    opacity 150ms ease,
-    transform 150ms ease,
-    background 150ms ease;
+  opacity: 1;
 }
 
-.trailer-frame:hover .video-toggle,
 .video-toggle:focus-visible {
-  opacity: 1;
-  transform: translateY(0);
+  outline: 2px solid rgba(255, 255, 255, 0.68);
+  outline-offset: -4px;
 }
 
 .video-toggle svg {
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.video-toggle:hover {
-  background: rgba(229, 9, 20, 0.78);
+  display: none;
 }
 
 .billboard-info {
@@ -1626,7 +1621,7 @@ body {
 .billboard-info h2 {
   margin: 0 0 10px;
   color: #fff;
-  font-size: 2.35rem;
+  font-size: 2.25rem;
   line-height: 0.98;
   font-weight: 950;
   text-transform: uppercase;
@@ -1649,7 +1644,7 @@ body {
   font-size: 0.88rem;
   line-height: 1.45;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 3;
 }
 
 .bb-credits {
@@ -1729,7 +1724,18 @@ body {
   }
 
   .billboard-info h2 {
-    font-size: 3rem;
+    font-size: 2.75rem;
+  }
+}
+
+@media (max-width: 1320px) {
+  .billboard-container {
+    grid-template-columns: 1fr;
+  }
+
+  .billboard-video {
+    height: auto;
+    aspect-ratio: 16 / 9;
   }
 }
 
@@ -2199,14 +2205,13 @@ body.modal-open {
 }
 
 .dialog-media .video-toggle {
-  inset: auto 18px 18px auto;
-  width: 42px;
-  height: 42px;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .dialog-media .video-toggle svg {
-  width: 18px;
-  height: 18px;
+  display: none;
 }
 
 .dialog-close {
@@ -2404,7 +2409,7 @@ body.modal-open {
   }
 
   .home-copy h1 {
-    font-size: clamp(1.8rem, 8vw, 2.5rem);
+    font-size: clamp(1.8rem, 7.5vw, 2.5rem);
   }
 
   .home-copy p {

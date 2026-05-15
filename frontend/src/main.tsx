@@ -12,7 +12,6 @@ import {
   Gauge,
   House,
   Loader2,
-  Pause,
   Play,
   RefreshCw,
   Search,
@@ -697,7 +696,7 @@ function TrailerFrame({ movie }: { movie: Movie }) {
       )}
       {movie.trailer_key && (
         <button className="video-toggle" type="button" onClick={togglePlayback} aria-label={playing ? "Pause trailer" : "Play trailer"}>
-          {playing ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" />}
+          <span className="visually-hidden">{playing ? "Pause trailer" : "Play trailer"}</span>
         </button>
       )}
     </div>
