@@ -1492,6 +1492,41 @@ body {
   background: #151526;
 }
 
+.title-select-box {
+  position: relative;
+  gap: 8px;
+  padding: 0 10px 0 16px;
+}
+
+.title-select-box input {
+  padding-right: 4px;
+}
+
+.clear-title {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.clear-title:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.select-chevron {
+  flex: 0 0 auto;
+  color: #d1d5db;
+  pointer-events: none;
+}
+
 .search-box:focus-within {
   border-color: rgba(255, 255, 255, 0.5);
   box-shadow: 0 0 0 1px rgba(229, 9, 20, 0.5);
@@ -1579,11 +1614,11 @@ body {
 }
 
 .ops-details {
-  opacity: 0.78;
+  display: none;
 }
 
 .recent-strip {
-  margin-bottom: 22px;
+  display: none;
 }
 
 .result-panel {
@@ -1680,9 +1715,12 @@ body {
 }
 
 .section-title span,
-.section-title strong,
-.result-context {
+.section-title strong {
   color: #aaa;
+}
+
+.result-context {
+  display: none;
 }
 
 .poster-grid {
