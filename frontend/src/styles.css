@@ -1403,6 +1403,262 @@ body {
   padding-top: 58px;
 }
 
+.home-shell {
+  min-height: 100vh;
+  padding: clamp(28px, 5vh, 70px) max(28px, calc((100vw - 1680px) / 2 + 40px));
+  color: #fff;
+  background: radial-gradient(circle at 64% 44%, #1a1a2e 0%, #050507 58%, #000 100%);
+}
+
+.home-layout {
+  min-height: calc(100vh - 110px);
+  display: grid;
+  grid-template-columns: minmax(390px, 0.82fr) minmax(620px, 1.18fr);
+  gap: clamp(32px, 5vw, 72px);
+  align-items: center;
+}
+
+.home-copy h1 {
+  margin: 0;
+  color: #fff;
+  font-size: clamp(3.8rem, 6vw, 7.2rem);
+  line-height: 0.92;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0;
+  background: linear-gradient(to right, #fff, #a5a5a5);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.home-copy p {
+  margin: 18px 0 34px;
+  color: #8d92a0;
+  font-size: 1rem;
+}
+
+.home-nav-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.home-nav-card {
+  width: 100%;
+  min-height: 82px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 20px;
+  color: #fff;
+  text-align: left;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+}
+
+.home-nav-card:hover {
+  border-color: #e50914;
+  background: rgba(229, 9, 20, 0.12);
+  box-shadow: 0 15px 40px rgba(229, 9, 20, 0.22);
+  transform: translateY(-3px);
+}
+
+.home-nav-icon {
+  width: 46px;
+  height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #f4f7ff;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.home-nav-card strong,
+.home-nav-card small {
+  display: block;
+}
+
+.home-nav-card strong {
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.home-nav-card small {
+  margin-top: 4px;
+  color: #9297a6;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.home-showcase {
+  min-width: 0;
+}
+
+.billboard-container {
+  min-height: min(430px, 47vh);
+  display: grid;
+  grid-template-columns: minmax(0, 1.42fr) minmax(300px, 0.86fr);
+  gap: 20px;
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(26, 26, 46, 0.9), rgba(0, 0, 0, 0.95));
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+}
+
+.billboard-container.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.billboard-container.empty h2 {
+  margin: 12px 0 6px;
+}
+
+.billboard-container.empty p {
+  max-width: 420px;
+  margin: 0;
+  color: #a5adbd;
+}
+
+.billboard-video {
+  min-height: 320px;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: #000;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+
+.billboard-video iframe,
+.billboard-video img {
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+  display: block;
+  border: 0;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.billboard-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.billboard-info h2 {
+  margin: 0 0 10px;
+  color: #fff;
+  font-size: clamp(2.2rem, 3.4vw, 4rem);
+  line-height: 0.95;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.bb-meta {
+  margin-bottom: 12px;
+  color: #ea696f;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.billboard-info p {
+  margin: 0 0 15px;
+  display: -webkit-box;
+  overflow: hidden;
+  color: #cfd3dc;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+}
+
+.bb-credits {
+  display: grid;
+  gap: 4px;
+  padding-top: 10px;
+  color: #8c92a0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.bb-credits strong {
+  color: #fff;
+}
+
+.bb-details-button {
+  width: fit-content;
+  min-height: 42px;
+  margin-top: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(229, 9, 20, 0.82);
+}
+
+.bb-details-button:hover {
+  background: #e50914;
+  transform: translateY(-1px);
+}
+
+.trending-label {
+  margin: 18px 0 9px;
+  color: #6f7482;
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.trending-strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.trending-strip button {
+  padding: 0;
+  overflow: hidden;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+.trending-strip button:hover,
+.trending-strip button.active {
+  border-color: #e50914;
+  transform: scale(1.03);
+}
+
+.trending-strip img {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  display: block;
+  object-fit: cover;
+}
+
 .topbar {
   position: static;
   min-height: 52px;
@@ -1632,7 +1888,7 @@ body {
 }
 
 .semantic-expander summary::before {
-  content: "›";
+  content: ">";
   width: 14px;
   flex: 0 0 auto;
   color: #fff;
@@ -2003,6 +2259,29 @@ body.modal-open {
 }
 
 @media (max-width: 1100px) {
+  .home-shell {
+    padding: 30px 24px;
+  }
+
+  .home-layout {
+    min-height: auto;
+    grid-template-columns: 1fr;
+    gap: 34px;
+    align-items: start;
+  }
+
+  .home-copy h1 {
+    font-size: clamp(3.4rem, 10vw, 5.6rem);
+  }
+
+  .billboard-container {
+    grid-template-columns: 1fr;
+  }
+
+  .billboard-video {
+    min-height: 360px;
+  }
+
   .app-shell {
     width: min(100vw - 48px, 960px);
   }
@@ -2013,6 +2292,41 @@ body.modal-open {
 }
 
 @media (max-width: 760px) {
+  .home-shell {
+    padding: 22px 14px 32px;
+  }
+
+  .home-copy h1 {
+    font-size: 3.05rem;
+  }
+
+  .home-copy p {
+    margin-bottom: 22px;
+  }
+
+  .home-nav-card {
+    min-height: 74px;
+    padding: 14px;
+  }
+
+  .billboard-container {
+    min-height: 0;
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .billboard-video {
+    min-height: 230px;
+  }
+
+  .billboard-info h2 {
+    font-size: 2rem;
+  }
+
+  .trending-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .app-shell {
     width: min(100vw - 28px, 720px);
     padding-top: 24px;
