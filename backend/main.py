@@ -2029,6 +2029,27 @@ async def get_movie(movie_id: int):
     return movie
 
 
+@app.get("/movie/{movie_id}/enriched", response_model=EnrichedMovie)
+async def get_movie_enriched(movie_id: int):
+    """Get a movie by TMDB ID with trailer, runtime, director, and cast."""
+    rec = get_rec()
+    movie = rec.get_movie_by_id(movie_id)
+    if movie is None:
+        raise HTTPException(status_code=404, detail=f"Movie with ID {movie_id} not found")
+    if not TMDB_KEY:
+        return {**movie, "trailer_key": None, "runtime": None, "director": None, "cast": None}
+    enriched = await enrich_movie(movie)
+    return enriched
+
+
+@app.get("/movie/{movie_id}/trailer")
+async def get_movie_trailer(movie_id: int):
+    """Get just the YouTube trailer key for a movie from TMDB."""
+    if not TMDB_KEY:
+        return {"trailer_key": None}
+    trailer_key = await fetch_trailer(movie_id)
+    return {"trailer_key": trailer_key}
+
 @app.post("/v1/events", response_model=EventResponse)
 @app.post("/events", response_model=EventResponse)
 async def record_event(
