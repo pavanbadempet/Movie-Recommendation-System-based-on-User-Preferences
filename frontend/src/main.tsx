@@ -847,7 +847,7 @@ function HomePage({
   loading: boolean;
   error: string;
   onHeroIndex: (index: number) => void;
-  onSearch: () => void;
+  onSearch: (mode?: "title" | "semantic") => void;
   onOpenMovie: (movie: Movie) => void;
   recentMovies: Movie[];
   forYouMovies: Movie[];
@@ -887,28 +887,16 @@ function HomePage({
 
           <div className="home-nav-grid" aria-label="Application navigation">
             <HomeNavCard
-              icon={<Database size={22} />}
-              title="Console"
-              description="Platform intelligence"
-              onClick={onSearch}
-            />
-            <HomeNavCard
               icon={<Search size={22} />}
-              title="Deep Search"
+              title="Search Movies"
               description="Title, plot, or genre"
-              onClick={onSearch}
+              onClick={() => onSearch("title")}
             />
             <HomeNavCard
               icon={<Sparkles size={22} />}
-              title="CineBot AI"
-              description="AI discovery"
-              onClick={onSearch}
-            />
-            <HomeNavCard
-              icon={<Activity size={22} />}
-              title="Monitoring"
-              description="Events & health"
-              onClick={onSearch}
+              title="AI Discovery"
+              description="Semantic deep search"
+              onClick={() => onSearch("semantic")}
             />
           </div>
         </div>
@@ -1425,7 +1413,8 @@ function App() {
     setTitleSelectOpen(false);
   }
 
-  function openSearch() {
+  function openSearch(searchMode?: "title" | "semantic") {
+    if (searchMode) setMode(searchMode);
     setPage("search");
     setDialogMovie(null);
     setTitleSelectOpen(false);
