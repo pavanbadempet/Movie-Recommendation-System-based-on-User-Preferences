@@ -1209,6 +1209,82 @@ async def enrich_movie(movie: dict) -> dict:
 
 # ===== API ENDPOINTS =====
 
+
+@app.get("/movies/latest")
+async def get_latest_movies(limit: int = Query(default=8, le=20)):
+    """Fetch latest/trending movies from TMDB, filtered to only those in our trained catalog."""
+    rec = get_rec()
+
+    if not TMDB_KEY or not http_client:
+        # Fallback: return newest movies from local catalog sorted by release_date
+        all_movies = rec.get_all_movies() if hasattr(rec, "get_all_movies") else []
+        sorted_movies = sorted(
+            [m for m in all_movies if m.get("poster_path") and m.get("release_date")],
+            key=lambda m: m.get("release_date", ""), reverse=True,
+        )
+        return sorted_movies[:limit]
+
+    seen_ids: set[int] = set()
+    catalog_matches: list[dict] = []
+
+    endpoints = [
+        f"{TMDB_BASE}/trending/movie/week",
+        f"{TMDB_BASE}/movie/now_playing",
+        f"{TMDB_BASE}/movie/popular",
+    ]
+
+    for url in endpoints:
+        if len(catalog_matches) >= limit:
+            break
+        # Fetch up to 3 pages per endpoint to find enough catalog matches
+        for page in range(1, 4):
+            if len(catalog_matches) >= limit:
+                break
+            try:
+                r = await http_client.get(url, params={"api_key": TMDB_KEY, "language": "en-US", "page": page})
+                data = r.json()
+                for movie in data.get("results", []):
+                    mid = movie.get("id")
+                    if not mid or mid in seen_ids or not movie.get("poster_path"):
+                        continue
+                    seen_ids.add(mid)
+                    # Only include if movie exists in our trained catalog
+                    catalog_movie = rec.get_movie_by_id(mid)
+                    if catalog_movie is not None:
+                        catalog_matches.append(movie)
+            except Exception as e:
+                logger.warning("TMDB latest fetch failed for %s page %d: %s", url, page, e)
+
+    genre_map = {
+        28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy",
+        80: "Crime", 99: "Documentary", 18: "Drama", 10751: "Family",
+        14: "Fantasy", 36: "History", 27: "Horror", 10402: "Music",
+        9648: "Mystery", 10749: "Romance", 878: "Science Fiction",
+        10770: "TV Movie", 53: "Thriller", 10752: "War", 37: "Western",
+    }
+
+    async def enrich_tmdb(m: dict) -> dict | None:
+        try:
+            trailer, credits_data = await asyncio.gather(
+                fetch_trailer(m["id"]), fetch_credits(m["id"]),
+            )
+            gids = m.get("genre_ids", [])
+            genres = ", ".join(genre_map.get(g, "") for g in gids if g in genre_map)
+            return {
+                "id": m["id"], "title": m.get("title", ""),
+                "overview": m.get("overview"), "genres": genres or None,
+                "vote_average": m.get("vote_average"), "vote_count": m.get("vote_count"),
+                "popularity": m.get("popularity"), "release_date": m.get("release_date"),
+                "poster_path": m.get("poster_path"), "trailer_key": trailer,
+                "runtime": None, "director": credits_data.get("director"),
+                "cast": credits_data.get("cast"),
+            }
+        except Exception:
+            return None
+
+    enriched = await asyncio.gather(*(enrich_tmdb(m) for m in catalog_matches[:limit]))
+    return [e for e in enriched if e]
+
 @app.get("/v1/frontends/status")
 async def frontends_status(
     request: Request,
@@ -2028,6 +2104,27 @@ async def get_movie(movie_id: int):
         raise HTTPException(status_code=404, detail=f"Movie with ID {movie_id} not found")
     return movie
 
+
+@app.get("/movie/{movie_id}/enriched", response_model=EnrichedMovie)
+async def get_movie_enriched(movie_id: int):
+    """Get a movie by TMDB ID with trailer, runtime, director, and cast."""
+    rec = get_rec()
+    movie = rec.get_movie_by_id(movie_id)
+    if movie is None:
+        raise HTTPException(status_code=404, detail=f"Movie with ID {movie_id} not found")
+    if not TMDB_KEY:
+        return {**movie, "trailer_key": None, "runtime": None, "director": None, "cast": None}
+    enriched = await enrich_movie(movie)
+    return enriched
+
+
+@app.get("/movie/{movie_id}/trailer")
+async def get_movie_trailer(movie_id: int):
+    """Get just the YouTube trailer key for a movie from TMDB."""
+    if not TMDB_KEY:
+        return {"trailer_key": None}
+    trailer_key = await fetch_trailer(movie_id)
+    return {"trailer_key": trailer_key}
 
 @app.post("/v1/events", response_model=EventResponse)
 @app.post("/events", response_model=EventResponse)
