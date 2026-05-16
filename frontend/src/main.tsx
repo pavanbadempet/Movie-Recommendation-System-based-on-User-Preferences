@@ -687,12 +687,15 @@ function TrailerFrame({ movie }: { movie: Movie }) {
   return (
     <div className="trailer-frame">
       {movie.trailer_key ? (
-        <iframe
-          ref={iframeRef}
-          title={`${movie.title} trailer preview`}
-          src={`https://www.youtube.com/embed/${movie.trailer_key}?enablejsapi=1&autoplay=1&mute=1&controls=0&disablekb=1&fs=0&modestbranding=1&loop=1&playlist=${movie.trailer_key}&rel=0&iv_load_policy=3&playsinline=1`}
-          allow="autoplay; encrypted-media"
-        />
+        <>
+          <iframe
+            ref={iframeRef}
+            title={`${movie.title} trailer preview`}
+            src={`https://www.youtube-nocookie.com/embed/${movie.trailer_key}?enablejsapi=1&autoplay=1&mute=1&controls=0&disablekb=1&fs=0&modestbranding=1&loop=1&playlist=${movie.trailer_key}&rel=0&iv_load_policy=3&playsinline=1&showinfo=0&start=6`}
+            allow="autoplay; encrypted-media"
+          />
+          <div className="trailer-overlay" />
+        </>
       ) : (
         <img src={backdropUrl(movie.poster_path)} alt="" />
       )}
@@ -1152,38 +1155,13 @@ function App() {
   async function loadLatestShowcase() {
     setLatestLoading(true);
     try {
-      const response = await apiGet<Movie[]>("/movies", { limit: 200 });
-      const allMovies = response.data || [];
-      const sorted = [...allMovies]
-        .filter((m) => m.poster_path && m.release_date)
-        .sort((a, b) => {
-          const dateA = a.release_date || "";
-          const dateB = b.release_date || "";
-          if (dateB !== dateA) return dateB.localeCompare(dateA);
-          return (Number(b.popularity) || 0) - (Number(a.popularity) || 0);
-        });
-      const topMovies = dedupeMovies(sorted).slice(0, 8);
-      // Show immediately, then enrich with trailers
-      setLatestMovies(topMovies);
-      setHomeHeroIndex(0);
-
-      // Enrich all movies in parallel for trailer/director/cast
-      const enriched = await Promise.all(
-        topMovies.map(async (movie) => {
-          try {
-            const enrichedResult = await getMovieEnriched(movie.id);
-            const e = enrichedResult.data;
-            return {
-              ...movie,
-              trailer_key: e.trailer_key || movie.trailer_key,
-              runtime: e.runtime || movie.runtime,
-              director: e.director || movie.director,
-              cast: e.cast || movie.cast,
-            } as Movie;
-          } catch { return movie; }
-        }),
-      );
-      setLatestMovies(enriched);
+      // Fetch real latest/trending movies from TMDB via backend
+      const response = await apiGet<Movie[]>("/movies/latest", { limit: 8 });
+      const movies = response.data || [];
+      if (movies.length > 0) {
+        setLatestMovies(dedupeMovies(movies).slice(0, 8));
+        setHomeHeroIndex(0);
+      }
     } catch { /* silent fallback */ }
     finally { setLatestLoading(false); }
   }
