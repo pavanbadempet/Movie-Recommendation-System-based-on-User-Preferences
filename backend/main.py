@@ -1209,6 +1209,65 @@ async def enrich_movie(movie: dict) -> dict:
 
 # ===== API ENDPOINTS =====
 
+
+@app.get("/movies/latest")
+async def get_latest_movies(limit: int = Query(default=8, le=20)):
+    """Fetch latest/trending movies from TMDB with trailers."""
+    if not TMDB_KEY or not http_client:
+        raise HTTPException(status_code=503, detail="TMDB API key not configured")
+
+    seen_ids: set[int] = set()
+    raw_movies: list[dict] = []
+
+    endpoints = [
+        f"{TMDB_BASE}/trending/movie/week",
+        f"{TMDB_BASE}/movie/now_playing",
+    ]
+
+    for url in endpoints:
+        if len(raw_movies) >= limit * 2:
+            break
+        try:
+            r = await http_client.get(url, params={"api_key": TMDB_KEY, "language": "en-US", "page": 1})
+            data = r.json()
+            for movie in data.get("results", []):
+                mid = movie.get("id")
+                if mid and mid not in seen_ids and movie.get("poster_path"):
+                    seen_ids.add(mid)
+                    raw_movies.append(movie)
+        except Exception as e:
+            logger.warning("TMDB latest fetch failed for %s: %s", url, e)
+
+    genre_map = {
+        28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy",
+        80: "Crime", 99: "Documentary", 18: "Drama", 10751: "Family",
+        14: "Fantasy", 36: "History", 27: "Horror", 10402: "Music",
+        9648: "Mystery", 10749: "Romance", 878: "Science Fiction",
+        10770: "TV Movie", 53: "Thriller", 10752: "War", 37: "Western",
+    }
+
+    async def enrich_tmdb(m: dict) -> dict | None:
+        try:
+            trailer, credits_data = await asyncio.gather(
+                fetch_trailer(m["id"]), fetch_credits(m["id"]),
+            )
+            gids = m.get("genre_ids", [])
+            genres = ", ".join(genre_map.get(g, "") for g in gids if g in genre_map)
+            return {
+                "id": m["id"], "title": m.get("title", ""),
+                "overview": m.get("overview"), "genres": genres or None,
+                "vote_average": m.get("vote_average"), "vote_count": m.get("vote_count"),
+                "popularity": m.get("popularity"), "release_date": m.get("release_date"),
+                "poster_path": m.get("poster_path"), "trailer_key": trailer,
+                "runtime": None, "director": credits_data.get("director"),
+                "cast": credits_data.get("cast"),
+            }
+        except Exception:
+            return None
+
+    enriched = await asyncio.gather(*(enrich_tmdb(m) for m in raw_movies[:limit]))
+    return [e for e in enriched if e]
+
 @app.get("/v1/frontends/status")
 async def frontends_status(
     request: Request,
