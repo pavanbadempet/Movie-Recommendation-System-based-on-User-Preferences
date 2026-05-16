@@ -1212,31 +1212,48 @@ async def enrich_movie(movie: dict) -> dict:
 
 @app.get("/movies/latest")
 async def get_latest_movies(limit: int = Query(default=8, le=20)):
-    """Fetch latest/trending movies from TMDB with trailers."""
+    """Fetch latest/trending movies from TMDB, filtered to only those in our trained catalog."""
+    rec = get_rec()
+
     if not TMDB_KEY or not http_client:
-        raise HTTPException(status_code=503, detail="TMDB API key not configured")
+        # Fallback: return newest movies from local catalog sorted by release_date
+        all_movies = rec.get_all_movies() if hasattr(rec, "get_all_movies") else []
+        sorted_movies = sorted(
+            [m for m in all_movies if m.get("poster_path") and m.get("release_date")],
+            key=lambda m: m.get("release_date", ""), reverse=True,
+        )
+        return sorted_movies[:limit]
 
     seen_ids: set[int] = set()
-    raw_movies: list[dict] = []
+    catalog_matches: list[dict] = []
 
     endpoints = [
         f"{TMDB_BASE}/trending/movie/week",
         f"{TMDB_BASE}/movie/now_playing",
+        f"{TMDB_BASE}/movie/popular",
     ]
 
     for url in endpoints:
-        if len(raw_movies) >= limit * 2:
+        if len(catalog_matches) >= limit:
             break
-        try:
-            r = await http_client.get(url, params={"api_key": TMDB_KEY, "language": "en-US", "page": 1})
-            data = r.json()
-            for movie in data.get("results", []):
-                mid = movie.get("id")
-                if mid and mid not in seen_ids and movie.get("poster_path"):
+        # Fetch up to 3 pages per endpoint to find enough catalog matches
+        for page in range(1, 4):
+            if len(catalog_matches) >= limit:
+                break
+            try:
+                r = await http_client.get(url, params={"api_key": TMDB_KEY, "language": "en-US", "page": page})
+                data = r.json()
+                for movie in data.get("results", []):
+                    mid = movie.get("id")
+                    if not mid or mid in seen_ids or not movie.get("poster_path"):
+                        continue
                     seen_ids.add(mid)
-                    raw_movies.append(movie)
-        except Exception as e:
-            logger.warning("TMDB latest fetch failed for %s: %s", url, e)
+                    # Only include if movie exists in our trained catalog
+                    catalog_movie = rec.get_movie_by_id(mid)
+                    if catalog_movie is not None:
+                        catalog_matches.append(movie)
+            except Exception as e:
+                logger.warning("TMDB latest fetch failed for %s page %d: %s", url, page, e)
 
     genre_map = {
         28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy",
@@ -1265,7 +1282,7 @@ async def get_latest_movies(limit: int = Query(default=8, le=20)):
         except Exception:
             return None
 
-    enriched = await asyncio.gather(*(enrich_tmdb(m) for m in raw_movies[:limit]))
+    enriched = await asyncio.gather(*(enrich_tmdb(m) for m in catalog_matches[:limit]))
     return [e for e in enriched if e]
 
 @app.get("/v1/frontends/status")
