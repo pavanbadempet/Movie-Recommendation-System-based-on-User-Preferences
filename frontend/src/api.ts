@@ -218,6 +218,48 @@ export async function getMovie(movieId: number): Promise<BackendResult<Movie>> {
   return apiGetFirstSuccess<Movie>(`/movie/${movieId}`, {}, 15000);
 }
 
+export async function getMovieEnriched(movieId: number): Promise<BackendResult<Movie>> {
+  // 1. Try the dedicated enriched endpoint (available after backend redeploy)
+  try {
+    const result = await apiGet<Movie>(`/movie/${movieId}/enriched`, {}, 10000);
+    if (result.data.trailer_key) return result;
+  } catch { /* endpoint not deployed yet, continue */ }
+
+  // 2. Fetch base movie + TMDB trailer in parallel
+  const [baseResult, trailerKey] = await Promise.all([
+    apiGetFirstSuccess<Movie>(`/movie/${movieId}`, {}, 15000),
+    fetchTmdbTrailer(movieId),
+  ]);
+  if (trailerKey) {
+    baseResult.data = { ...baseResult.data, trailer_key: trailerKey };
+  }
+  return baseResult;
+}
+
+async function fetchTmdbTrailer(movieId: number): Promise<string | null> {
+  // Try fetching trailer from TMDB videos endpoint via the backend proxy
+  try {
+    const result = await apiGet<{ trailer_key?: string | null }>(`/movie/${movieId}/trailer`, {}, 8000);
+    if (result.data.trailer_key) return result.data.trailer_key;
+  } catch { /* no trailer proxy endpoint, try enriched recs */ }
+
+  // Fall back: use enriched recommendations to extract trailer from first rec
+  try {
+    const recResult = await apiGetFirstSuccess<RecommendationResponse>(
+      `/v1/recommendations/id/${movieId}/enriched`, { n: 1 }, 15000,
+    );
+    // The recommendations (not query_movie) have trailer_key from TMDB enrichment
+    const recs = recResult.data.recommendations || [];
+    // We can't get OUR movie's trailer from recs, but query_movie might have it
+    const qm = recResult.data.query_movie;
+    if ((qm as Record<string, unknown>).trailer_key) {
+      return (qm as Record<string, unknown>).trailer_key as string;
+    }
+  } catch { /* no enriched recs available */ }
+
+  return null;
+}
+
 export async function getRecommendations(movieId: number, n = 12): Promise<BackendResult<RecommendationResponse>> {
   try {
     return await apiGetFirstSuccess<RecommendationResponse>(`/v1/recommendations/id/${movieId}/enriched`, { n }, 60000);
