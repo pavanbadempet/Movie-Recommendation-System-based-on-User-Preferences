@@ -1411,6 +1411,7 @@ function App() {
     setPage("home");
     setDialogMovie(null);
     setTitleSelectOpen(false);
+    window.history.pushState({ page: "home" }, "", "/");
   }
 
   function openSearch(searchMode?: "title" | "semantic") {
@@ -1418,7 +1419,43 @@ function App() {
     setPage("search");
     setDialogMovie(null);
     setTitleSelectOpen(false);
+    window.history.pushState({ page: "search", mode: searchMode }, "", searchMode === "semantic" ? "/discover" : "/search");
+    // Auto-expand semantic section and focus the right input after render
+    if (searchMode === "semantic") {
+      setTimeout(() => {
+        const details = document.querySelector(".semantic-expander") as HTMLDetailsElement | null;
+        if (details) details.open = true;
+        const input = document.getElementById("semantic-search") as HTMLInputElement | null;
+        if (input) input.focus();
+      }, 100);
+    } else if (searchMode === "title") {
+      setTimeout(() => {
+        const input = document.getElementById("title-search") as HTMLInputElement | null;
+        if (input) input.focus();
+      }, 100);
+    }
   }
+
+  // Browser back/forward button support
+  React.useEffect(() => {
+    function handlePopState(event: PopStateEvent) {
+      const state = event.state;
+      if (state?.page === "home") {
+        setPage("home");
+        setDialogMovie(null);
+      } else if (state?.page === "search") {
+        if (state.mode) setMode(state.mode);
+        setPage("search");
+        setDialogMovie(null);
+      } else {
+        setPage("home");
+      }
+    }
+    window.addEventListener("popstate", handlePopState);
+    // Set initial history state
+    window.history.replaceState({ page: "home" }, "", "/");
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   const catalogValue = platform?.movie_count || titles.length;
   const rankerValue = platform?.ranker?.available ? "Learned" : "Hybrid";
