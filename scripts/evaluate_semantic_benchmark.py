@@ -48,6 +48,7 @@ def build_offline_recommender(movies_path: Path) -> Recommender:
         "disabled_reason": "offline semantic benchmark uses metadata/sparse fallback",
     }
     rec._optimize_movie_frame()
+    rec._rebuild_lookup_maps()
     return rec
 
 

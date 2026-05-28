@@ -120,16 +120,41 @@ def rebuild_serving(
 def run_app():
     """Run Backend and Frontend concurrently."""
     check_env()
-    
-    log("Starting Backend (Port 8000)...")
-    backend = run_cmd(f"{sys.executable} -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload", background=True)
-    
-    # Wait for backend to start
+
+    log("Starting FastAPI Backend on http://localhost:8000 ...")
+    backend = run_cmd(
+        f"{sys.executable} -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload",
+        background=True,
+    )
+
+    # Give backend a moment to start
     time.sleep(3)
-    
-    log("Starting Frontend (Port 8501)...")
-    frontend = run_cmd(f"{sys.executable} -m streamlit run streamlit_app.py", background=True)
-    
+
+    # Prefer React frontend if node_modules exist, else fall back to Streamlit
+    frontend_dir = Path("frontend")
+    node_modules = frontend_dir / "node_modules"
+
+    if node_modules.exists():
+        log("Starting React Frontend on http://localhost:5173 ...")
+        npm_cmd = "npm.cmd" if platform.system() == "Windows" else "npm"
+        frontend = run_cmd(f"{npm_cmd} run dev", cwd=str(frontend_dir), background=True)
+        log("App running!", Colors.OKGREEN)
+        log("  Backend API : http://localhost:8000", Colors.OKGREEN)
+        log("  Frontend UI : http://localhost:5173", Colors.OKGREEN)
+        log("  API Docs    : http://localhost:8000/docs", Colors.OKGREEN)
+    else:
+        log("React node_modules not found. Run 'cd frontend && npm install' first.", Colors.WARNING)
+        log("Falling back to Streamlit frontend on http://localhost:8501 ...", Colors.WARNING)
+        frontend = run_cmd(
+            f"{sys.executable} -m streamlit run streamlit_app.py",
+            background=True,
+        )
+        log("App running!", Colors.OKGREEN)
+        log("  Backend API : http://localhost:8000", Colors.OKGREEN)
+        log("  Frontend UI : http://localhost:8501", Colors.OKGREEN)
+        log("  API Docs    : http://localhost:8000/docs", Colors.OKGREEN)
+
+    log("Press Ctrl+C to stop all services.", Colors.WARNING)
     try:
         backend.wait()
         frontend.wait()
@@ -191,7 +216,8 @@ def main():
     subparsers = parser.add_subparsers(dest="command", required=True)
     
     subparsers.add_parser("setup", help="Install dependencies")
-    
+    subparsers.add_parser("frontend-install", help="Install React frontend dependencies")
+
     etl_parser = subparsers.add_parser("etl", help="Run ETL pipeline")
     etl_parser.add_argument("--spark", action="store_true", help="Use PySpark instead of Pandas")
     
@@ -221,6 +247,10 @@ def main():
     
     if args.command == "setup":
         setup()
+    elif args.command == "frontend-install":
+        npm_cmd = "npm.cmd" if platform.system() == "Windows" else "npm"
+        run_cmd(f"{npm_cmd} install", cwd="frontend")
+        log("Frontend dependencies installed.", Colors.OKGREEN)
     elif args.command == "etl":
         etl(spark=args.spark)
     elif args.command == "test":

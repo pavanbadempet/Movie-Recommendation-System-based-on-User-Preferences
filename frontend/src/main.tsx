@@ -23,6 +23,8 @@ import {
   TrendingUp,
   WandSparkles,
   X,
+  User,
+  LogOut,
 } from "lucide-react";
 import {
   apiGet,
@@ -33,6 +35,7 @@ import {
   getMovie,
   getMovieEnriched,
   getRecommendations,
+  getUserRecommendations,
   loadTitles,
   pingApi,
   platformReadiness,
@@ -51,6 +54,7 @@ import type {
   SemanticBenchmark,
 } from "./types";
 import "./styles.css";
+import { AuthPage } from "./AuthPage";
 
 const imageBase = import.meta.env.VITE_TMDB_IMAGE_BASE || "https://image.tmdb.org/t/p/w500";
 const RECENT_STORAGE_KEY = "nova_recent_movies_v2";
@@ -58,7 +62,7 @@ const SESSION_STORAGE_KEY = "nova_session_id_v1";
 const TITLE_CATALOG_LIMIT = 5000;
 const HOME_SEED_MOVIE_ID = 19995;
 
-type AppPage = "home" | "search";
+type AppPage = "home" | "search" | "profile";
 type SearchMode = "title" | "semantic";
 type CatalogState = "booting" | "warming" | "ready" | "error";
 type ResultsKind = "idle" | "search" | "recommendations";
@@ -588,6 +592,7 @@ function MovieSpotlight({
   loading: boolean;
   onRecommend: () => void;
 }) {
+  const [likedStatus, setLikedStatus] = React.useState<"none" | "liked" | "disliked">("none");
   const reasons = movieReasons(movie);
   const semantic = semanticPercent(movie);
   const chips = evidenceChips(movie);
@@ -631,6 +636,50 @@ function MovieSpotlight({
           )}
         </div>
         <p>{movie.overview || "No overview is available for this title."}</p>
+        
+        <div className="interaction-panel">
+          <button 
+            className={`interaction-btn ${likedStatus === "liked" ? "active-like" : ""}`}
+            title="Like this movie"
+            onClick={async () => {
+              try {
+                await recordEvent({
+                  user_id: "Pavan",
+                  event_type: "rating",
+                  movie_id: movie.id,
+                  rating: 5.0,
+                  session_id: "test"
+                });
+                setLikedStatus("liked");
+              } catch (e) {
+                console.error("Failed to rate", e);
+              }
+            }}
+          >
+            <ThumbsUp size={16} fill={likedStatus === "liked" ? "currentColor" : "none"} /> Like
+          </button>
+          <button 
+            className={`interaction-btn ${likedStatus === "disliked" ? "active-dislike" : ""}`}
+            title="Dislike this movie" 
+            onClick={async () => {
+              try {
+                await recordEvent({
+                  user_id: "Pavan",
+                  event_type: "rating",
+                  movie_id: movie.id,
+                  rating: 1.0,
+                  session_id: "test"
+                });
+                setLikedStatus("disliked");
+              } catch (e) {
+                console.error("Failed to rate", e);
+              }
+            }}
+          >
+            <ThumbsDown size={16} fill={likedStatus === "disliked" ? "currentColor" : "none"} /> Dislike
+          </button>
+        </div>
+
         {reasons.length > 0 && (
           <div className="reason-panel">
             <strong>Why it matched</strong>
@@ -665,7 +714,19 @@ function MovieSpotlight({
 
 function TrailerFrame({ movie }: { movie: Movie }) {
   const [playing, setPlaying] = React.useState(true);
+  const [trailerKey, setTrailerKey] = React.useState<string | null>(movie.trailer_key || null);
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
+
+  React.useEffect(() => {
+    setTrailerKey(movie.trailer_key || null);
+    if (!movie.trailer_key) {
+      getMovieEnriched(movie.id)
+        .then((res) => {
+          if (res.data.trailer_key) setTrailerKey(res.data.trailer_key);
+        })
+        .catch(() => {});
+    }
+  }, [movie.id, movie.trailer_key]);
 
   function sendPlayerCommand(command: "playVideo" | "pauseVideo") {
     iframeRef.current?.contentWindow?.postMessage(
@@ -686,12 +747,12 @@ function TrailerFrame({ movie }: { movie: Movie }) {
 
   return (
     <div className="trailer-frame">
-      {movie.trailer_key ? (
+      {trailerKey ? (
         <>
           <iframe
             ref={iframeRef}
             title={`${movie.title} trailer preview`}
-            src={`https://www.youtube-nocookie.com/embed/${movie.trailer_key}?enablejsapi=1&autoplay=1&mute=1&controls=0&disablekb=1&fs=0&modestbranding=1&loop=1&playlist=${movie.trailer_key}&rel=0&iv_load_policy=3&playsinline=1&showinfo=0&start=6`}
+            src={`https://www.youtube-nocookie.com/embed/${trailerKey}?enablejsapi=1&autoplay=1&mute=1&controls=0&disablekb=1&fs=0&modestbranding=1&loop=1&playlist=${trailerKey}&rel=0&iv_load_policy=3&playsinline=1&showinfo=0&start=6`}
             allow="autoplay; encrypted-media"
           />
           <div className="trailer-overlay" />
@@ -699,7 +760,7 @@ function TrailerFrame({ movie }: { movie: Movie }) {
       ) : (
         <img src={backdropUrl(movie.poster_path)} alt="" />
       )}
-      {movie.trailer_key && (
+      {trailerKey && (
         <button className="video-toggle" type="button" onClick={togglePlayback} aria-label={playing ? "Pause trailer" : "Play trailer"}>
           <span className="visually-hidden">{playing ? "Pause trailer" : "Play trailer"}</span>
         </button>
@@ -857,7 +918,7 @@ function HomePage({
   homeMode: "foryou" | "latest" | "trending";
   onToggleMode: (mode: "foryou" | "latest" | "trending") => void;
 }) {
-  const hasForYou = recentMovies.length > 0;
+  const hasForYou = recentMovies.length > 0 || forYouMovies.length > 0;
   const activeMovies = homeMode === "foryou" && hasForYou ? forYouMovies : homeMode === "latest" ? latestMovies : movies;
   const hero = activeMovies[heroIndex] || activeMovies[0] || null;
   const isLoading = homeMode === "foryou" ? forYouLoading : homeMode === "latest" ? latestLoading : loading;
@@ -987,6 +1048,8 @@ function HomePage({
 }
 
 function App() {
+  const [token, setToken] = React.useState<string | null>(window.localStorage.getItem("nova_jwt_token"));
+  const [username, setUsername] = React.useState<string | null>(window.localStorage.getItem("nova_username"));
   const [page, setPage] = React.useState<AppPage>("home");
   const [titles, setTitles] = React.useState<MovieTitle[]>([]);
   const [titleQuery, setTitleQuery] = React.useState("");
@@ -1121,13 +1184,21 @@ function App() {
     }
   }
 
-  async function loadForYouShowcase() {
-    const recent = loadRecentMovies();
-    if (recent.length === 0) return;
-    const seedMovie = recent[0];
-    if (!seedMovie.id) return;
+  async function loadForYouShowcase(userId?: string) {
     setForYouLoading(true);
     try {
+      if (userId) {
+        const response = await getUserRecommendations(userId, 8);
+        const movies = dedupeMovies(response.data || []).slice(0, 8);
+        setForYouMovies(movies);
+        setBackend(response.baseUrl);
+        setHomeHeroIndex(0);
+        return;
+      }
+      const recent = loadRecentMovies();
+      if (recent.length === 0) return;
+      const seedMovie = recent[0];
+      if (!seedMovie.id) return;
       const response = await getRecommendations(seedMovie.id, 8);
       const movies = dedupeMovies(response.data.recommendations || []).slice(0, 8);
       setForYouMovies(movies);
@@ -1278,10 +1349,8 @@ function App() {
   }, []);
 
   React.useEffect(() => {
-    if (loadedForYou.current) return;
-    loadedForYou.current = true;
-    void loadForYouShowcase();
-  }, []);
+    void loadForYouShowcase(username || "Guest");
+  }, [username]);
 
   const loadedLatest = React.useRef(false);
   React.useEffect(() => {
@@ -1463,6 +1532,23 @@ function App() {
   if (page === "home") {
     return (
       <>
+        <div style={{ position: "absolute", top: "24px", right: "32px", zIndex: 1000 }}>
+          {username && (
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#e5e7eb", background: "rgba(0,0,0,0.6)", padding: "4px 12px", borderRadius: "20px", border: "1px solid rgba(255,255,255,0.1)", fontSize: "0.85rem", backdropFilter: "blur(10px)" }}>
+              <button onClick={() => setPage("profile")} style={{ background: "transparent", border: "none", color: "white", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", padding: 0 }}>
+                <User size={14} /> Hi, <strong>{username}</strong>
+              </button>
+              <button className="icon-button" onClick={() => {
+                  window.localStorage.removeItem("nova_jwt_token");
+                  window.localStorage.removeItem("nova_username");
+                  setToken(null);
+                  setUsername(null);
+              }} title="Logout" style={{ marginLeft: "4px", opacity: 0.7, background: "transparent", border: "none", color: "white", cursor: "pointer" }}>
+                <LogOut size={14} />
+              </button>
+            </div>
+          )}
+        </div>
         <HomePage
           movies={homeMovies}
           heroIndex={homeHeroIndex}
@@ -1481,6 +1567,56 @@ function App() {
         />
         {dialogMovie && <MovieDialog movie={dialogMovie} onClose={() => setDialogMovie(null)} />}
       </>
+    );
+  }
+
+  if (page === "profile") {
+    if (!token) {
+      return <AuthPage onLogin={(t, u) => { setToken(t); setUsername(u); }} />;
+    }
+
+    const recent = loadRecentMovies();
+    return (
+      <main className="app-shell profile-page">
+        <header className="topbar">
+          <button className="home-button" type="button" onClick={openHome}>
+            <House size={18} /> Home
+          </button>
+          <div className="topbar-actions">
+            {username && (
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#e5e7eb", background: "rgba(255,255,255,0.05)", padding: "4px 12px", borderRadius: "20px", border: "1px solid rgba(255,255,255,0.1)", fontSize: "0.85rem" }}>
+                <User size={14} /> Hi, <strong>{username}</strong>
+                <button className="icon-button" onClick={() => {
+                  window.localStorage.removeItem("nova_jwt_token");
+                  window.localStorage.removeItem("nova_username");
+                  setToken(null);
+                  setUsername(null);
+              }} title="Logout" style={{ marginLeft: "4px", opacity: 0.7 }}>
+                  <LogOut size={14} />
+                </button>
+              </div>
+            )}
+          </div>
+        </header>
+        <section className="search-layout" style={{ padding: "40px 5%", color: "white" }}>
+          <h1 style={{ fontSize: "2rem", marginBottom: "8px" }}>User Profile</h1>
+          <p style={{ opacity: 0.7, marginBottom: "32px" }}>Manage your preferences and view your client-side interaction events.</p>
+          
+          <h2 style={{ fontSize: "1.2rem", marginBottom: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
+            <Database size={18} /> Local Database (Watch History)
+          </h2>
+          {recent.length > 0 ? (
+            <div className="poster-grid">
+              {recent.map(movie => (
+                <MoviePoster key={movie.id} movie={movie} onSelect={setDialogMovie} />
+              ))}
+            </div>
+          ) : (
+            <div style={{ opacity: 0.5, padding: "20px 0" }}>No watched history found.</div>
+          )}
+        </section>
+        {dialogMovie && <MovieDialog movie={dialogMovie} onClose={() => setDialogMovie(null)} />}
+      </main>
     );
   }
 

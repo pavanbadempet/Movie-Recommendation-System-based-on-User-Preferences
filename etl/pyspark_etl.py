@@ -6,6 +6,8 @@ Canonical batch/lakehouse pipeline for the project.
 import hashlib
 import json
 import logging
+import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -60,6 +62,23 @@ DEFAULT_CATALOG_ID = "tmdb-movies"
 DEFAULT_SOURCE_SYSTEM = "tmdb_kaggle"
 
 
+def _configure_windows_hadoop_home() -> None:
+    """Use checked-out winutils binaries for local Windows Spark file writes."""
+    if sys.platform != "win32" or os.getenv("HADOOP_HOME"):
+        return
+
+    hadoop_home = Path(__file__).resolve().parent.parent / ".hadoop"
+    bin_dir = hadoop_home / "bin"
+    if not (bin_dir / "winutils.exe").exists():
+        return
+
+    os.environ["HADOOP_HOME"] = str(hadoop_home)
+    current_path = os.environ.get("PATH", "")
+    path_parts = current_path.split(os.pathsep) if current_path else []
+    if str(bin_dir) not in path_parts:
+        os.environ["PATH"] = os.pathsep.join([str(bin_dir), *path_parts])
+
+
 def _path_join(base_path: Path | str, *parts: str) -> str:
     """Join local/cloud paths without corrupting URI-style paths."""
     if isinstance(base_path, Path):
@@ -85,6 +104,8 @@ def create_spark_session(
     enable_delta: bool = True,
 ):
     """Create a local Spark session with AQE enabled and Delta Lake support."""
+    _configure_windows_hadoop_home()
+
     # MEMORY SAFETY for Machine Learning (SBERT runs off-heap)
     # Prevent Arrow batches from exploding memory during UDF transfer
     builder = SparkSession.builder \
@@ -118,7 +139,7 @@ def create_spark_session(
 def dedupe_latest_movies(df: DataFrame, key_columns: tuple[str, ...] = MOVIE_KEY_COLUMNS) -> DataFrame:
     """Keep one deterministic row per movie key before SCD comparison."""
     order_columns = [
-        expr(f"try_cast({column} as double) desc nulls last")
+        col(column).cast("double").desc_nulls_last()
         for column in ("vote_count", "popularity")
         if column in df.columns
     ]
@@ -209,8 +230,8 @@ def apply_spark_scd_type2(
     should_expire = col("_expire_current").isNotNull() & (col(SCD_CURRENT_COL) == lit(True))
 
     updated_existing_df = existing_marked_df \
-        .withColumn(SCD_CURRENT_COL, when(should_expire, lit(False)).otherwise(col(SCD_CURRENT_COL))) \
         .withColumn(SCD_END_COL, when(should_expire, lit(effective_ts)).otherwise(col(SCD_END_COL))) \
+        .withColumn(SCD_CURRENT_COL, when(should_expire, lit(False)).otherwise(col(SCD_CURRENT_COL))) \
         .drop("_expire_current")
 
     return updated_existing_df.unionByName(inserts_df, allowMissingColumns=True)
@@ -307,11 +328,11 @@ def split_valid_and_quarantined_movies(
 def add_catalog_coverage_features(df: DataFrame) -> DataFrame:
     """Add coverage-first quality features without dropping long-tail movies."""
     result = df
-    title_len = length(coalesce(col("title").cast("string"), lit("")))
-    overview_len = length(coalesce(col("overview").cast("string"), lit("")))
-    genres_len = length(coalesce(col("genres").cast("string"), lit("")))
-    release_len = length(coalesce(col("release_date").cast("string"), lit("")))
-    poster_len = length(coalesce(col("poster_path").cast("string"), lit("")))
+    title_len = length(coalesce(_optional_string(result, "title"), lit("")))
+    overview_len = length(coalesce(_optional_string(result, "overview"), lit("")))
+    genres_len = length(coalesce(_optional_string(result, "genres"), lit("")))
+    release_len = length(coalesce(_optional_string(result, "release_date"), lit("")))
+    poster_len = length(coalesce(_optional_string(result, "poster_path"), lit("")))
     vote_count = expr("coalesce(try_cast(vote_count as double), 0.0)") if "vote_count" in result.columns else lit(0.0)
     vote_average = expr("coalesce(try_cast(vote_average as double), 0.0)") if "vote_average" in result.columns else lit(0.0)
     popularity = expr("coalesce(try_cast(popularity as double), 0.0)") if "popularity" in result.columns else lit(0.0)
@@ -326,8 +347,14 @@ def add_catalog_coverage_features(df: DataFrame) -> DataFrame:
          + when(release_len >= 4, lit(0.10)).otherwise(lit(0.0))
          + when(poster_len > 0, lit(0.05)).otherwise(lit(0.0))),
     )
-    result = result.withColumn("vote_confidence", expr("least(1.0, log1p(coalesce(try_cast(vote_count as double), 0.0)) / 8.0)"))
-    result = result.withColumn("popularity_norm", expr("least(1.0, log1p(coalesce(try_cast(popularity as double), 0.0)) / 8.0)"))
+    if "vote_count" in result.columns:
+        result = result.withColumn("vote_confidence", expr("least(1.0, log1p(coalesce(try_cast(vote_count as double), 0.0)) / 8.0)"))
+    else:
+        result = result.withColumn("vote_confidence", lit(0.0))
+    if "popularity" in result.columns:
+        result = result.withColumn("popularity_norm", expr("least(1.0, log1p(coalesce(try_cast(popularity as double), 0.0)) / 8.0)"))
+    else:
+        result = result.withColumn("popularity_norm", lit(0.0))
     result = result.withColumn(
         "content_quality_score",
         greatest(
@@ -425,7 +452,7 @@ def upsert_movie_scd_dimension(
     else:
         existing_df = load_table_if_exists(spark, dimension_path, sink_format)
         if existing_df is not None:
-            existing_df = spark.createDataFrame(existing_df.collect(), existing_df.schema)
+            existing_df = existing_df.localCheckpoint(eager=True)
         scd_df = apply_spark_scd_type2(
             incoming_df=incoming_df,
             existing_df=existing_df,

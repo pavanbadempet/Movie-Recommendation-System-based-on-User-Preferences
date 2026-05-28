@@ -12,6 +12,13 @@ import shutil
 
 import numpy as np
 
+# Fast JSON for manifest reads
+try:
+    import orjson as _orjson
+    def _jloads(s): return _or_jloads(s)
+except ImportError:
+    def _jloads(s): return _jloads(s)
+
 logger = logging.getLogger(__name__)
 
 # Model hosting configuration
@@ -154,7 +161,7 @@ def _load_manifest_checksums(models_dir: Path) -> dict[str, dict]:
     if not manifest_path.exists():
         return {}
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest = _jloads(manifest_path.read_text(encoding="utf-8"))
     except Exception as exc:
         logger.warning("Could not parse pipeline manifest %s: %s", manifest_path, exc)
         return {}
@@ -166,7 +173,7 @@ def _load_manifest_contract(models_dir: Path) -> dict[str, object]:
     if not manifest_path.exists():
         return {}
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest = _jloads(manifest_path.read_text(encoding="utf-8"))
     except Exception as exc:
         logger.warning("Could not parse pipeline manifest %s: %s", manifest_path, exc)
         return {}

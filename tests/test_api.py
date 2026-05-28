@@ -408,6 +408,21 @@ class TestCorsPolicy:
         assert resp.status_code == 200
         assert resp.headers["access-control-allow-origin"] == "https://pavanbadempet.github.io"
 
+    def test_local_vite_dev_origin_is_allowed_by_default(self, mock_artifacts):
+        from backend.main import app
+        client = TestClient(app)
+
+        resp = client.options(
+            "/v1/search",
+            headers={
+                "Origin": "http://127.0.0.1:5174",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+
+        assert resp.status_code == 200
+        assert resp.headers["access-control-allow-origin"] == "http://127.0.0.1:5174"
+
 
 class TestSearchEndpoint:
     def test_movie_titles_limit_for_readiness_probe(self, mock_artifacts):

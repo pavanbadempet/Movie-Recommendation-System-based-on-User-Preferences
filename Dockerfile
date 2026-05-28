@@ -46,7 +46,7 @@ RUN mkdir -p data/raw logs
 
 # -------------------------------------------
 # Stage 2: Runtime image
-FROM python:3.11-slim as runtime
+FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 

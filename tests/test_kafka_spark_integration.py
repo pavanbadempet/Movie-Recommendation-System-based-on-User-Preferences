@@ -4,6 +4,13 @@ Tests for Kafka and Spark integration in Airflow DAGs.
 
 import pytest
 import os
+import importlib.util
+
+if importlib.util.find_spec("fcntl") is None:
+    pytest.skip(
+        "Airflow DAG tests require a Unix-compatible Airflow runtime.",
+        allow_module_level=True,
+    )
 
 airflow_models = pytest.importorskip(
     "airflow.models",

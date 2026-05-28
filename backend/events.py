@@ -19,6 +19,19 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterator
 
+# Use orjson for faster JSON serialization when available
+try:
+    import orjson as _json_mod
+    def _json_dumps(obj) -> str:
+        return _json_mod.dumps(obj, option=_json_mod.OPT_SORT_KEYS).decode()
+    def _json_loads(s):
+        return _json_mod.loads(s)
+except ImportError:
+    def _json_dumps(obj) -> str:
+        return json.dumps(obj, sort_keys=True, ensure_ascii=True)
+    def _json_loads(s):
+        return json.loads(s)
+
 logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -189,7 +202,7 @@ def _append_event_jsonl(normalized: dict[str, Any], event_path: str | Path | Non
     path.parent.mkdir(parents=True, exist_ok=True)
 
     with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(normalized, sort_keys=True, ensure_ascii=True))
+        fh.write(_json_dumps(normalized))
         fh.write("\n")
 
     return path
@@ -267,8 +280,8 @@ def _append_event_postgres(normalized: dict[str, Any]) -> None:
         raise RuntimeError("NOVA_EVENT_DATABASE_URL or DATABASE_URL is required for Postgres event storage")
 
     table_name = get_event_table_name()
-    metadata = json.dumps(normalized.get("metadata") or {}, ensure_ascii=True)
-    raw_event = json.dumps(normalized, sort_keys=True, ensure_ascii=True)
+    metadata = _json_dumps(normalized.get("metadata") or {})
+    raw_event = _json_dumps(normalized)
     with _connect_postgres(database_url) as conn:
         _ensure_postgres_events_table(conn, table_name)
         with conn.cursor() as cur:
@@ -357,9 +370,12 @@ def _iter_jsonl_events(event_path: str | Path | None = None) -> Iterator[dict[st
                 continue
 
             try:
-                parsed = json.loads(raw_line)
-            except json.JSONDecodeError:
-                logger.warning("Skipping malformed event line %s in %s", line_number, path)
+                parsed = _json_loads(raw_line)
+            except (json.JSONDecodeError, Exception):
+                dlq_path = path.with_suffix('.dlq')
+                with dlq_path.open("a", encoding="utf-8") as dlq:
+                    dlq.write(raw_line + "\n")
+                logger.warning(f"Quarantined malformed event to DLQ ({dlq_path}): line {line_number}")
                 continue
 
             if isinstance(parsed, dict):
@@ -392,8 +408,8 @@ def _iter_postgres_events(limit: int | None = None) -> Iterator[dict[str, Any]]:
                     yield raw_event
                 elif isinstance(raw_event, str):
                     try:
-                        parsed = json.loads(raw_event)
-                    except json.JSONDecodeError:
+                        parsed = _json_loads(raw_event)
+                    except (json.JSONDecodeError, Exception):
                         continue
                     if isinstance(parsed, dict):
                         yield parsed

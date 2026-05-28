@@ -19,11 +19,24 @@ ENV/
 
 # Environment variables
 .env
+frontend/.env
 
 # Data files (too large for git)
 data/raw/*.csv
 data/raw/*.zip
+data/raw/ml-latest-small/
+data/datalake/
+data/events/*.jsonl
+data/events/*.dlq
 data/processed/*.parquet
+data/processed/*_summary.json
+
+# Local runtime state and temporary artifacts
+.hadoop/
+*.sqlite3
+*.sqlite3-*
+benchmark_temp.json
+movies_temp.parquet
 
 # Model artifacts (hosted on HuggingFace, NOT in GitHub)
 # Kaggle generates -> Hugging Face stores -> Render downloads at runtime
@@ -31,6 +44,9 @@ models/*.index
 models/*.npy
 models/*.joblib
 models/*.joblib.metadata.json
+models/*.pth
+models/*.gpickle
+models/onnx/
 models/pipeline_manifest.json
 
 # Keep directory structure

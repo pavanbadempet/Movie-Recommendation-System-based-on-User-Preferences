@@ -97,7 +97,8 @@ def summarize_experiment_metrics(events: Iterable[dict[str, Any]] | None = None)
             "rating_sum": 0.0,
         }
     )
-
+    variant_ratings: dict[str, list[float]] = defaultdict(list)
+    
     for event in events:
         metadata = event.get("metadata") or {}
         if not isinstance(metadata, dict):
@@ -123,7 +124,9 @@ def summarize_experiment_metrics(events: Iterable[dict[str, Any]] | None = None)
         elif event_type == "rating":
             row["ratings"] += 1
             try:
-                row["rating_sum"] += float(event.get("rating") or 0.0)
+                val = float(event.get("rating") or 0.0)
+                row["rating_sum"] += val
+                variant_ratings[key].append(val)
             except (TypeError, ValueError):
                 pass
 
@@ -135,6 +138,30 @@ def summarize_experiment_metrics(events: Iterable[dict[str, Any]] | None = None)
         row = dict(row)
         row["ctr"] = round(clicks / impressions, 6) if impressions else 0.0
         row["avg_rating"] = round(float(row.pop("rating_sum")) / ratings, 4) if ratings else None
+        
+        # Calculate Statistical Significance vs Control if this is a treatment
+        experiment = row["experiment"]
+        variant = row["variant"]
+        key = f"{experiment}:{variant}"
+        control_key = f"{experiment}:control"
+        
+        row["p_value"] = None
+        row["significant"] = False
+        
+        if variant != "control" and control_key in variant_ratings and key in variant_ratings:
+            try:
+                from scipy import stats
+                control_data = variant_ratings[control_key]
+                treatment_data = variant_ratings[key]
+                if len(control_data) > 2 and len(treatment_data) > 2:
+                    t_stat, p_val = stats.ttest_ind(control_data, treatment_data, equal_var=False)
+                    row["p_value"] = round(float(p_val), 4)
+                    row["significant"] = float(p_val) < 0.05
+            except ImportError:
+                # Scipy not installed
+                row["p_value"] = "scipy_missing"
+                pass
+                
         rows.append(row)
 
     rows.sort(key=lambda item: (item["experiment"], item["variant"]))
