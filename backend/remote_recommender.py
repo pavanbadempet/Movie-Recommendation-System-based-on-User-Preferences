@@ -22,6 +22,19 @@ from backend.auth import TenantContext
 
 logger = logging.getLogger(__name__)
 
+# Fast JSON for Redis cache serialization
+try:
+    import orjson as _orjson
+    def _cache_dumps(obj) -> str:
+        return _orjson.dumps(obj).decode()
+    def _cache_loads(s):
+        return _orjson.loads(s)
+except ImportError:
+    def _cache_dumps(obj) -> str:
+        return json.dumps(obj, separators=(",", ":"))
+    def _cache_loads(s):
+        return json.loads(s)
+
 
 @dataclass(frozen=True)
 class RemoteResponse:
@@ -304,7 +317,7 @@ async def _get_distributed_cached_response(cache_key: str, *, allow_stale: bool)
         return None
 
     try:
-        parsed_entry = json.loads(raw_entry)
+        parsed_entry = _cache_loads(raw_entry)
         entry = _CacheEntry(
             created_at=float(parsed_entry["created_at"]),
             status_code=int(parsed_entry["status_code"]),
@@ -357,7 +370,7 @@ async def _store_distributed_cached_response(cache_key: str, status_code: int, p
                 json=[
                     "SET",
                     _distributed_cache_key(cache_key),
-                    json.dumps(entry, separators=(",", ":")),
+                    _cache_dumps(entry),
                     "EX",
                     _stale_cache_ttl_seconds(),
                 ],

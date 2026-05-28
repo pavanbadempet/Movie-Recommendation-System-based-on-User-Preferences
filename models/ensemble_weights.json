@@ -1,0 +1,12 @@
+{
+  "lightgcn": 0.005316676899805747,
+  "quantum": 0.009974914121170632,
+  "sasrec": 0.6585146318541604,
+  "kan": 0.2984937801717566,
+  "hyperbolic": 0.003976354227325031,
+  "diffusion": 0.0237236427257816,
+  "evaluated_at": "2026-05-26T18:29:56Z",
+  "dr_score": 3.917076,
+  "method": "doubly_robust_ips",
+  "num_candidates_evaluated": 200
+}

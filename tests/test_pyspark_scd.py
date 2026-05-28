@@ -6,6 +6,7 @@ serving app can stay lightweight while the ETL path remains testable.
 """
 
 import pytest
+from functools import reduce
 
 
 def test_parse_metadata_name_list_normalizes_kaggle_jsonish_values():
@@ -32,7 +33,36 @@ def spark_session():
 
 
 def _movie_snapshot(spark, rows):
-    return spark.createDataFrame(rows)
+    from pyspark.sql import functions as F
+
+    columns = list(rows[0].keys())
+    for row in rows[1:]:
+        for column in row:
+            if column not in columns:
+                columns.append(column)
+
+    def _column_type(column):
+        values = [row.get(column) for row in rows if row.get(column) is not None]
+        if values and all(isinstance(value, bool) for value in values):
+            return "boolean"
+        if values and all(isinstance(value, int) and not isinstance(value, bool) for value in values):
+            return "bigint"
+        if values and all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in values):
+            return "double"
+        return "string"
+
+    column_types = {column: _column_type(column) for column in columns}
+
+    frames = [
+        spark.range(1).select(
+            *[
+                F.lit(row.get(column)).cast(column_types[column]).alias(column)
+                for column in columns
+            ]
+        )
+        for row in rows
+    ]
+    return reduce(lambda left, right: left.unionByName(right), frames)
 
 
 def test_apply_spark_scd_type2_tracks_changed_and_new_movies(spark_session):

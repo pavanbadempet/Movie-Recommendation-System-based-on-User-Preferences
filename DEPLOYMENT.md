@@ -11,13 +11,11 @@ How to deploy the backend and frontend.
 ## Backend (Render)
 
 1. Go to Render dashboard
-2. New -> Web Service -> Connect your repo
-3. Settings:
-   - Name: `movie-recs-api`
-   - Build: `pip install -r requirements.txt`
-   - Start: `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`
-4. Add env var: `PYTHON_VERSION` = `3.11.0`
-5. Deploy
+2. New -> Blueprint -> Connect your repo and let Render read `render.yaml`
+3. The blueprint uses the root `Dockerfile`, which has access to `requirements.txt`, `backend/`, `frontend/`, `models/`, and `data/processed/`
+4. Keep the default free-plan serving profile as `NOVA_SERVING_PROFILE=lite` and `NOVA_HEALTH_LOAD_RECOMMENDER=false`
+5. Add secret env vars as needed, especially `DATABASE_URL`, `REDIS_URL`, `TMDB_API_KEY`, and `OPENROUTER_API_KEY`
+6. Deploy
 
 Takes 5-10 min. Copy the URL when done (e.g. `https://movie-recs-api.onrender.com`).
 

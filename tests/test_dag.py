@@ -5,6 +5,13 @@ Ensures the DAG loads correctly and has the expected structure.
 import pytest
 from pathlib import Path
 import os
+import importlib.util
+
+if importlib.util.find_spec("fcntl") is None:
+    pytest.skip(
+        "Airflow DAG tests require a Unix-compatible Airflow runtime.",
+        allow_module_level=True,
+    )
 
 airflow_models = pytest.importorskip(
     "airflow.models",

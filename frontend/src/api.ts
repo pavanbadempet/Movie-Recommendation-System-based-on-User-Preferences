@@ -12,31 +12,40 @@ import type {
   SemanticBenchmark,
 } from "./types";
 
-const DEFAULT_BACKENDS = [
-  "https://pavanbadempet-movie-rec-api.hf.space",
-  "https://movie-recs-api-5qvy.onrender.com",
-];
+function normalizeBackend(url: string | undefined): string | undefined {
+  const value = url?.trim().replace(/\/+$/, "");
+  return value || undefined;
+}
+
+function localDevBackend(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  if (["localhost", "127.0.0.1", "::1"].includes(window.location.hostname) && window.location.port !== "8000") {
+    return "http://localhost:8000";
+  }
+  return undefined;
+}
 
 function sameOriginBackend(): string | undefined {
   if (typeof window === "undefined") return undefined;
-  const enabledByHost = window.location.hostname.endsWith(".hf.space");
-  const enabledByEnv = import.meta.env.VITE_USE_SAME_ORIGIN_API === "true";
-  if (!enabledByHost && !enabledByEnv) return undefined;
-  return window.location.origin.replace(/\/+$/, "");
+  if (["localhost", "127.0.0.1", "::1"].includes(window.location.hostname) && window.location.port !== "8000") {
+    return undefined;
+  }
+  return normalizeBackend(window.location.origin);
 }
 
 const configuredBackends = [
   import.meta.env.VITE_API_URL,
-  sameOriginBackend(),
   import.meta.env.VITE_BACKUP_API_URL,
-  ...DEFAULT_BACKENDS,
+  localDevBackend(),
+  sameOriginBackend(),
+  "http://localhost:8000",
 ]
-  .filter(Boolean)
-  .map((url) => String(url).replace(/\/+$/, ""));
+  .map(normalizeBackend)
+  .filter((url): url is string => Boolean(url));
 
 export const API_BASES = Array.from(new Set(configuredBackends));
 
-let activeBackend = API_BASES[0];
+let activeBackend = API_BASES[0] || "http://localhost:8000";
 
 function timeoutSignal(ms: number): { signal: AbortSignal; cancel: () => void } {
   const controller = new AbortController();
@@ -89,8 +98,12 @@ export async function apiGet<T>(
   for (const baseUrl of candidateBackends()) {
     const timeout = timeoutSignal(timeoutMs);
     try {
+      const token = typeof window !== "undefined" ? window.localStorage.getItem("nova_jwt_token") : null;
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      
       const response = await fetch(`${baseUrl}${suffix}`, {
-        headers: { Accept: "application/json" },
+        headers,
         signal: timeout.signal,
       });
       if (!response.ok) {
@@ -123,8 +136,12 @@ export async function apiGetFirstSuccess<T>(
     const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
     controllers.push(controller);
     try {
+      const token = typeof window !== "undefined" ? window.localStorage.getItem("nova_jwt_token") : null;
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      
       const response = await fetch(`${baseUrl}${suffix}`, {
-        headers: { Accept: "application/json" },
+        headers,
         signal: controller.signal,
       });
       if (!response.ok) {
@@ -156,12 +173,16 @@ export async function apiPost<T>(path: string, body: unknown, timeoutMs = 15000)
   for (const baseUrl of candidateBackends()) {
     const timeout = timeoutSignal(timeoutMs);
     try {
-      const response = await fetch(`${baseUrl}${path}`, {
-        method: "POST",
-        headers: {
+      const token = typeof window !== "undefined" ? window.localStorage.getItem("nova_jwt_token") : null;
+      const headers: Record<string, string> = {
           Accept: "application/json",
           "Content-Type": "application/json",
-        },
+      };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      
+      const response = await fetch(`${baseUrl}${path}`, {
+        method: "POST",
+        headers,
         body: JSON.stringify(body),
         signal: timeout.signal,
       });
@@ -262,12 +283,55 @@ async function fetchTmdbTrailer(movieId: number): Promise<string | null> {
 
 export async function getRecommendations(movieId: number, n = 12): Promise<BackendResult<RecommendationResponse>> {
   try {
-    return await apiGetFirstSuccess<RecommendationResponse>(`/v1/recommendations/id/${movieId}/enriched`, { n }, 60000);
+    return await apiGetFirstSuccess<RecommendationResponse>(`/v1/recommendations/id/${movieId}/enriched`, { n, explain: true }, 60000);
   } catch {
-    return apiGetFirstSuccess<RecommendationResponse>(`/v1/recommendations/id/${movieId}`, { n }, 60000);
+    return apiGetFirstSuccess<RecommendationResponse>(`/v1/recommendations/id/${movieId}`, { n, explain: true }, 60000);
   }
+}
+
+export async function getVisualRecommendations(movieId: number, n = 12): Promise<BackendResult<RecommendationResponse>> {
+  return apiGetFirstSuccess<RecommendationResponse>(`/v1/recommendations/visually-similar/${movieId}`, { n, explain: true }, 60000);
+}
+
+export async function getKGRecommendations(movieId: number, n = 12): Promise<BackendResult<RecommendationResponse>> {
+  return apiGetFirstSuccess<RecommendationResponse>(`/v1/recommendations/knowledge-graph/${movieId}`, { n }, 60000);
+}
+
+export async function getUserRecommendations(userId: string, n = 8): Promise<BackendResult<Movie[]>> {
+  return apiGet<Movie[]>(`/v1/recommendations/user/${encodeURIComponent(userId)}`, { n }, 30000);
 }
 
 export async function recordEvent(payload: EventPayload): Promise<BackendResult<EventResponse>> {
   return apiPost<EventResponse>("/v1/events", payload, 8000);
 }
+
+export async function registerUser(username: string): Promise<BackendResult<any>> {
+  return apiPost("/v1/auth/register", { username, password: "password123" }, 8000);
+}
+
+export async function loginUser(username: string): Promise<BackendResult<{access_token: string, token_type: string}>> {
+  const errors: string[] = [];
+  const body = new URLSearchParams();
+  body.append("username", username);
+  body.append("password", "password123");
+
+  for (const baseUrl of candidateBackends()) {
+    try {
+      const response = await fetch(`${baseUrl}/v1/auth/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+      });
+      if (!response.ok) {
+        errors.push(`${baseUrl}: ${response.status}`);
+        continue;
+      }
+      return { data: await response.json(), baseUrl };
+    } catch (error) {
+      errors.push(`${baseUrl} failed`);
+    }
+  }
+  throw new Error(errors.join(" | ") || "Login failed");
+}
+
+export const runAdminTestSuite = async (suite: string) => { const response = await fetch(`${activeBackend}/v1/admin/tests/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ suite }) }); return response.json(); };

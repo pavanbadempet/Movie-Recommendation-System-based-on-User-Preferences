@@ -13,6 +13,12 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+try:
+    import orjson as _orjson
+    def _jloads(s): return _orjson.loads(s)
+except ImportError:
+    def _jloads(s): return json.loads(s)
 import pandas as pd
 
 
@@ -35,7 +41,7 @@ def _read_json(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return _jloads(path.read_text(encoding="utf-8"))
     except Exception as exc:
         return {"_error": str(exc)}
 
