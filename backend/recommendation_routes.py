@@ -42,6 +42,7 @@ class ChatResponse(_BaseModel):
     role: str
     content: str
 
+
 # ---------------------------------------------------------------------------
 # Module-level config (resolved at import time from environment / main.py)
 # ---------------------------------------------------------------------------
@@ -312,6 +313,13 @@ def create_recommendation_router(
     @router.get("/movies/latest")
     async def get_latest_movies(limit: int = Query(default=8, le=20)):
         rec = get_rec()
+        import math
+
+        def _sanitize_float(v):
+            if isinstance(v, float) and math.isnan(v):
+                return None
+            return v
+
         if not _TMDB_KEY or not (_http_client_getter and _http_client_getter()):
             all_movies = rec.get_all_movies() if hasattr(rec, "get_all_movies") else []
             sorted_movies = sorted(
@@ -319,7 +327,10 @@ def create_recommendation_router(
                 key=lambda m: m.get("release_date", ""),
                 reverse=True,
             )
-            return sorted_movies[:limit]
+            return [
+                {k: _sanitize_float(v) for k, v in m.items()}
+                for m in sorted_movies[:limit]
+            ]
 
         seen_ids: set[int] = set()
         catalog_matches: list[dict] = []
@@ -329,24 +340,33 @@ def create_recommendation_router(
             f"{_TMDB_BASE}/movie/popular",
         ]
         http_client = _http_client_getter()
+
+        tasks = []
         for url in endpoints:
+            for page in range(1, 4):
+                tasks.append(http_client.get(url, params={"api_key": _TMDB_KEY, "language": "en-US", "page": page}))
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for r in results:
+            if isinstance(r, Exception):
+                logger.warning("TMDB latest fetch failed: %s", r)
+                continue
+
+            try:
+                data = r.json()
+                for movie in data.get("results", []):
+                    mid = movie.get("id")
+                    if not mid or mid in seen_ids or not movie.get("poster_path"):
+                        continue
+                    seen_ids.add(mid)
+                    if rec.get_movie_by_id(mid) is not None:
+                        catalog_matches.append(movie)
+            except Exception as e:
+                logger.warning("Failed to process TMDB latest fetch result: %s", e)
+
             if len(catalog_matches) >= limit:
                 break
-            for page in range(1, 4):
-                if len(catalog_matches) >= limit:
-                    break
-                try:
-                    r = await http_client.get(url, params={"api_key": _TMDB_KEY, "language": "en-US", "page": page})
-                    data = r.json()
-                    for movie in data.get("results", []):
-                        mid = movie.get("id")
-                        if not mid or mid in seen_ids or not movie.get("poster_path"):
-                            continue
-                        seen_ids.add(mid)
-                        if rec.get_movie_by_id(mid) is not None:
-                            catalog_matches.append(movie)
-                except Exception as e:
-                    logger.warning("TMDB latest fetch failed for %s page %d: %s", url, page, e)
 
         genre_map = {
             28: "Action",
