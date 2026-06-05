@@ -218,81 +218,6 @@ def _candidate_event_summary(candidate: dict, rank: int) -> dict:
 # Private-named wrappers moved from backend/main.py (task 2.2)
 # These preserve the exact call signatures that main.py and routers expect.
 # ---------------------------------------------------------------------------
-import os
-import uuid as _uuid
-from collections import Counter as _Counter
-
-from backend.events import append_event as _append_event
-from backend.recommender_helpers import event_logging_enabled as _event_logging_enabled
-
-
-def record_recommendation_events(
-    *,
-    endpoint: str,
-    context,
-    query_movie: dict,
-    recommendations: list[dict],
-    rec,
-    request_id: str | None = None,
-    user_id: str | None = None,
-    session_id: str | None = None,
-) -> str:
-    """Persist request and impression events for offline analysis and training labels."""
-    resolved_request_id = request_id or str(_uuid.uuid4())
-    if not _event_logging_enabled():
-        return resolved_request_id
-
-    try:
-        lineage = _serving_lineage(rec)
-        ranked_candidates = [
-            _candidate_event_summary(candidate, rank) for rank, candidate in enumerate(recommendations, start=1)
-        ]
-        stage_counts = _Counter(str(candidate.get("retrieval_stage") or "unknown") for candidate in recommendations)
-        common_payload = {
-            "tenant_id": context.tenant_id,
-            "catalog_id": context.catalog_id,
-            "user_id": user_id,
-            "session_id": session_id,
-            "request_id": resolved_request_id,
-            "source": "recommendation_api",
-        }
-        _append_event(
-            {
-                **common_payload,
-                "event_type": "recommendation_request",
-                "movie_id": query_movie.get("id"),
-                "metadata": {
-                    "endpoint": endpoint,
-                    "query_movie": {
-                        "id": query_movie.get("id"),
-                        "title": query_movie.get("title"),
-                    },
-                    "requested_count": len(recommendations),
-                    "candidate_ids": [candidate.get("movie_id") for candidate in ranked_candidates],
-                    "retrieval_stage_counts": dict(stage_counts),
-                    "lineage": lineage,
-                },
-            }
-        )
-        for candidate in ranked_candidates:
-            _append_event(
-                {
-                    **common_payload,
-                    "event_type": "recommendation_impression",
-                    "movie_id": candidate.get("movie_id"),
-                    "metadata": {
-                        "endpoint": endpoint,
-                        "seed_movie_id": query_movie.get("id"),
-                        "seed_title": query_movie.get("title"),
-                        "lineage": lineage,
-                        **candidate,
-                    },
-                }
-            )
-    except Exception as exc:
-        logger.warning("Recommendation event logging skipped: %s", exc)
-
-    return resolved_request_id
 
 
 async def remote_payload_or_raise(
@@ -301,6 +226,8 @@ async def remote_payload_or_raise(
     context=None,
 ) -> object | None:
     """Return remote recommender payload when configured, otherwise None."""
+    import os
+
     from fastapi import HTTPException
 
     from backend.remote_recommender import remote_get_json, remote_recommender_url
