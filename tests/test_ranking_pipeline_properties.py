@@ -2,7 +2,6 @@
 Property-based tests for RankingPipeline invariants.
 # Feature: architecture-design-perfection, Property 4/5/6/7
 """
-import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -90,5 +89,5 @@ def test_ranking_determinism(candidates):
     assert ids1 == ids2, f"Non-deterministic ranking: {ids1} != {ids2}"
     scores1 = [r.ensemble_score for r in result1]
     scores2 = [r.ensemble_score for r in result2]
-    for s1, s2 in zip(scores1, scores2):
+    for s1, s2 in zip(scores1, scores2, strict=False):
         assert abs(s1 - s2) < 1e-9, f"Score mismatch: {s1} != {s2}"
