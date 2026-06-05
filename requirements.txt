@@ -28,7 +28,7 @@ slowapi==0.1.9                # Rate limiting
 # Frontend
 streamlit==1.57.0
 st-clickable-images==0.0.3    # Clickable image grid
-plotly==6.7.0                 # Frontend charts
+plotly==6.8.0                 # Frontend charts
 requests==2.33.1
 
 # Utilities
