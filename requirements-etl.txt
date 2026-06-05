@@ -7,4 +7,4 @@ pyspark>=3.5.0
 delta-spark>=3.2.0
 kafka-python>=2.0.2
 kaggle>=1.6.0
-jupytext>=1.16.0
+jupytext>=1.19.3
