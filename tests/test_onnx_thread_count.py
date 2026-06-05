@@ -43,5 +43,6 @@ def test_onnx_thread_count_binding(n: int) -> None:
     # Because all calls share the same mock_options instance, the last write
     # (and all writes) must equal n.
     assert mock_options.intra_op_num_threads == n, (
-        f"Expected intra_op_num_threads={n}, got {mock_options.intra_op_num_threads}"
+        f"Expected intra_op_num_threads={n}, "
+        f"got {mock_options.intra_op_num_threads}"
     )

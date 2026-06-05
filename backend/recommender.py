@@ -7,9 +7,11 @@ of making recommendations feel personalized.
 from datetime import UTC, datetime
 import gc
 import hashlib
+import json
 import logging
 import os
 from pathlib import Path
+import re
 from threading import Lock
 from typing import Any
 
@@ -17,6 +19,7 @@ import numpy as np
 import pandas as pd
 
 # Import model loader to handle external model downloads
+from backend.model_loader import ensure_model_files
 
 try:
     from backend.serving_tier import resolve_serving_tier as _resolve_serving_tier
@@ -26,8 +29,14 @@ import contextlib
 
 import torch
 
+from backend.diffusion_recommender import LatentDiffusionRecommender
+from backend.feature_store import feature_store
 from backend.knowledge_graph import KnowledgeGraphEngine
-from backend.semantic_twin import build_semantic_twin
+from backend.multimodal_fusion import MultiModalFusionIndex
+from backend.openrouter_client import chat_completion, configured_models, openrouter_api_key
+from backend.query_understanding import intent_score, parse_query_intent
+from backend.ranker import load_ranker
+from backend.semantic_twin import build_semantic_twin, compare_semantic_twins
 
 logger = logging.getLogger(__name__)
 
@@ -35,47 +44,33 @@ logger = logging.getLogger(__name__)
 MODELS_DIR = Path(__file__).parent.parent / "models"
 DATA_DIR = Path(__file__).parent.parent / "data" / "processed"
 
-
 def _env_truthy(name: str) -> bool:
     return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
-
 
 def _render_like_environment() -> bool:
     """Detect constrained PaaS runtimes where the full vector stack can exceed memory."""
     from backend.recommender_core import render_like_environment
-
     return render_like_environment()
-
 
 def _serving_profile() -> str:
     """Resolve the serving profile for this process."""
     from backend.recommender_core import serving_profile
-
     return serving_profile()
-
 
 def _low_memory_serving_enabled() -> bool:
     """Return true when serving should avoid loading heavyweight vector artifacts."""
     from backend.recommender_core import low_memory_serving_enabled
-
     return low_memory_serving_enabled()
 
-
-def _build_rl_state(
-    behavior_profile: dict, als_user_embedding: "np.ndarray | None", state_dim: int = 20
-) -> "torch.Tensor":
+def _build_rl_state(behavior_profile: dict, als_user_embedding: "np.ndarray | None", state_dim: int = 20) -> "torch.Tensor":
     """Build a fixed-length RL state vector from user behavior profile."""
     from backend.recommender_core import build_rl_state
-
     return build_rl_state(behavior_profile, als_user_embedding, state_dim)
-
 
 def safe_float(val, default=0.0):
     """Convert val to float safely, returning default on error or non-finite."""
     from backend.recommender_core import safe_float as _sf
-
     return _sf(val, default)
-
 
 class Recommender:
     """
@@ -149,31 +144,26 @@ class Recommender:
     def _load_vector_artifacts(self) -> None:
         """Load FAISS index, SBERT embeddings, movie ID map, and pipeline manifest."""
         from backend.recommender_core import load_vector_artifacts
-
         load_vector_artifacts(self)
 
     def _load_movie_catalog(self) -> None:
         """Load movie metadata parquet and build lookup maps."""
         from backend.recommender_core import load_movie_catalog
-
         load_movie_catalog(self)
 
     def _load_ranker_and_behavior(self) -> None:
         """Load learned ranker, build sparse index, and warm behavior features."""
         from backend.recommender_core import load_ranker_and_behavior
-
         load_ranker_and_behavior(self)
 
     def _load_optional_models(self) -> None:
         """Load multi-modal index, KG, Two-Tower fine-tune, and RL policy."""
         from backend.recommender_core import load_optional_models
-
         load_optional_models(self)
 
     def _wire_pipelines(self, is_tier3: bool) -> None:
         """Wire RetrievalPipeline, RankingPipeline, and RerankingPipeline."""
         from backend.recommender_core import wire_pipelines
-
         wire_pipelines(self, is_tier3)
 
     @property
@@ -186,21 +176,19 @@ class Recommender:
     def refresh_behavior_features(self, force: bool = False) -> dict:
         """Refresh aggregated behavior features used as a light ranking signal."""
         from backend.recommender_core import refresh_behavior_features
-
         return refresh_behavior_features(self, force)
 
     def _optimize_movie_frame(self) -> None:
         """Reduce the in-memory footprint of the serving catalog."""
         from backend.recommender_core import optimize_movie_frame
-
         optimize_movie_frame(self)
 
     def _rebuild_lookup_maps(self) -> None:
         """Build row-position lookup maps for hot recommendation paths."""
         self._movie_id_to_index = {}
-        if self._movies is None or "id" not in self._movies.columns:
+        if self._movies is None or 'id' not in self._movies.columns:
             return
-        ids = pd.to_numeric(self._movies["id"], errors="coerce")
+        ids = pd.to_numeric(self._movies['id'], errors='coerce')
         for pos, mid in enumerate(ids):
             if not pd.isna(mid):
                 self._movie_id_to_index.setdefault(int(mid), pos)
@@ -231,8 +219,8 @@ class Recommender:
 
     def _disable_vector_artifacts(self, reason: str) -> None:
         """Disable vector serving when artifacts violate row-alignment contracts."""
-        logger.warning("Disabling FAISS/SBERT recommendations: %s", reason)
-        self._artifact_status.update({"vector_artifacts_ready": False, "disabled_reason": reason})
+        logger.warning('Disabling FAISS/SBERT recommendations: %s', reason)
+        self._artifact_status.update({'vector_artifacts_ready': False, 'disabled_reason': reason})
         self._index = None
         self._vectors = None
         gc.collect()
@@ -246,14 +234,14 @@ class Recommender:
     def _expected_manifest_contract(self) -> dict[str, Any]:
         """Extract row-level expectations from the optional pipeline manifest."""
         manifest = self._artifact_manifest or {}
-        contract = manifest.get("serving_contract") or {}
-        quality = manifest.get("quality") or {}
+        contract = manifest.get('serving_contract') or {}
+        quality = manifest.get('quality') or {}
         return {
-            "movie_count": contract.get("movie_rows") or quality.get("serving_rows"),
-            "vector_count": contract.get("embedding_rows") or quality.get("embedding_rows"),
-            "index_count": contract.get("faiss_index_size") or quality.get("faiss_index_size"),
-            "id_map_count": contract.get("movie_id_map_rows") or quality.get("movie_id_map_rows"),
-            "movie_id_sha256": contract.get("movie_id_sha256") or quality.get("movie_id_sha256"),
+            'movie_count': contract.get('movie_rows') or quality.get('serving_rows'),
+            'vector_count': contract.get('embedding_rows') or quality.get('embedding_rows'),
+            'index_count': contract.get('faiss_index_size') or quality.get('faiss_index_size'),
+            'id_map_count': contract.get('movie_id_map_rows') or quality.get('movie_id_map_rows'),
+            'movie_id_sha256': contract.get('movie_id_sha256') or quality.get('movie_id_sha256'),
         }
 
     def _validate_vector_artifacts(self) -> None:
@@ -262,17 +250,15 @@ class Recommender:
             return
         try:
             from backend.artifact_validator import ArtifactValidator
-
-            validator = ArtifactValidator(MODELS_DIR / "pipeline_manifest.json")
+            validator = ArtifactValidator(MODELS_DIR / 'pipeline_manifest.json')
             validator.validate_row_alignment(self._vectors, self._movies)
         except Exception as exc:
-            logger.warning("Vector artifact validation failed: %s; disabling.", exc)
+            logger.warning('Vector artifact validation failed: %s; disabling.', exc)
             self._disable_vector_artifacts(str(exc))
 
     def _build_sparse_retrieval_index(self) -> None:
         """Build a TF-IDF recall index for hybrid search."""
         from backend.recommender_core import build_sparse_retrieval_index
-
         build_sparse_retrieval_index(self)
 
     def _ensure_sparse_retrieval_index(self) -> None:
@@ -283,7 +269,6 @@ class Recommender:
     def _build_item_retrieval_index(self) -> None:
         """Build a plot/genre-focused sparse index for item-to-item recommendations."""
         from backend.recommender_core import build_item_retrieval_index
-
         build_item_retrieval_index(self)
 
     def _ensure_item_retrieval_index(self) -> None:
@@ -329,7 +314,6 @@ class Recommender:
     def _popularity_quality_score(self, movie) -> float:
         """Small bounded business score from popularity and quality."""
         from backend.recommender_core import popularity_quality_score
-
         return popularity_quality_score(movie)
 
     @staticmethod
@@ -367,7 +351,6 @@ class Recommender:
     def _semantic_affinity_for_indices(self, query_idx: int, candidate_idx: int) -> dict:
         """Compare query/candidate semantic twins and return serializable signals."""
         from backend.recommender_core import semantic_affinity_for_indices
-
         return semantic_affinity_for_indices(self, query_idx, candidate_idx)
 
     def _apply_query_mmr(
@@ -398,19 +381,16 @@ class Recommender:
     def _quality_gate_item_recommendations(self, candidates, query_movie, n) -> list:
         """Drop obvious low-quality or genre-drift candidates."""
         from backend.recommender_core import quality_gate_item_recommendations
-
         return quality_gate_item_recommendations(self, candidates, query_movie, n)
 
     def _learned_ranker_enabled(self) -> bool:
         """Return whether the learned ranker has enough signal to influence serving."""
         from backend.recommender_core import learned_ranker_enabled
-
         return learned_ranker_enabled(self)
 
     def _behavior_boost(self, movie_id) -> tuple:
         """Return a bounded score nudge from recent product behavior."""
         from backend.recommender_core import behavior_boost
-
         return behavior_boost(self, movie_id)
 
     @staticmethod
@@ -420,7 +400,7 @@ class Recommender:
         if not event_ts:
             return 0.65
         try:
-            parsed = datetime.fromisoformat(str(event_ts).replace("Z", "+00:00"))
+            parsed = datetime.fromisoformat(str(event_ts).replace('Z', '+00:00'))
             if parsed.tzinfo is None:
                 parsed = parsed.replace(tzinfo=UTC)
             age_days = max(0.0, (datetime.now(UTC) - parsed).total_seconds() / 86400.0)
@@ -431,7 +411,6 @@ class Recommender:
     def _genre_affinity_from_profile(self, profile) -> dict:
         """Build genre affinity weights from positive user events."""
         from backend.recommender_core import genre_affinity_from_profile
-
         return genre_affinity_from_profile(self, profile)
 
     def recommend_for_user_profile(self, profile: dict[str, Any], n: int = 10) -> list[dict[str, Any]]:
@@ -441,8 +420,7 @@ class Recommender:
             liked_vecs = [
                 self._vectors[idx]
                 for event in (profile.get("recent_events") or [])
-                if not event.get("negative")
-                and event.get("movie_id") is not None
+                if not event.get("negative") and event.get("movie_id") is not None
                 and (idx := self._index_for_movie_id(int(event["movie_id"]))) is not None
                 and self._vectors is not None
             ]
@@ -454,7 +432,6 @@ class Recommender:
             final = self._reranking_pipeline.rerank(ranked, constraints={})
             return [self._candidate_to_dict(item) for item in final[:result_limit]]
         from backend.recommender_core import user_profile_fallback
-
         return user_profile_fallback(self, profile, result_limit)
 
     def get_movie_by_id(self, movie_id: int) -> dict | None:
@@ -471,7 +448,6 @@ class Recommender:
     def get_all_titles(self, limit: int = 100000) -> list[dict]:
         """Return lightweight movie ID + title list for autocomplete."""
         from backend.recommender_core import get_all_titles
-
         return get_all_titles(self, limit)
 
     def search_movies(self, query: str, limit: int = 20) -> list[dict]:
@@ -492,13 +468,11 @@ class Recommender:
     def _sparse_search_movies(self, query: str, limit: int = 20) -> list[dict]:
         """TF-IDF + relevance-scoring fallback for search_movies."""
         from backend.recommender_core import sparse_search_movies
-
         return sparse_search_movies(self, query, limit)
 
     def _metadata_recommend_by_index(self, movie_idx: int, n: int = 10) -> list[dict]:
         """Content-based fallback — delegates to recommender_core."""
         from backend.recommender_core import metadata_recommend_by_index
-
         return metadata_recommend_by_index(self, movie_idx, n)
 
     def kg_recommend(self, movie_id: int, n: int = 10) -> list[dict]:
@@ -526,23 +500,17 @@ class Recommender:
     def visual_search(self, movie_id: int, n: int = 10) -> list:
         """Multi-Modal similarity search using Text + Visual (Poster) embeddings."""
         from backend.recommender_core import visual_search
-
         return visual_search(self, movie_id, n)
 
     def _candidate_to_dict(self, item) -> dict:
         """Convert a FinalItem from the pipeline to the response dict shape."""
         from backend.recommender_core import candidate_to_dict
-
         return candidate_to_dict(self, item)
 
     def recommend_by_index(self, movie_idx: int, n: int = 10) -> list[dict]:
         """Get recommendations for a movie by its DataFrame index."""
-        if (
-            self._retrieval_pipeline is None
-            or self._ranking_pipeline is None
-            or self._vectors is None
-            or self._index is None
-        ):
+        if (self._retrieval_pipeline is None or self._ranking_pipeline is None
+                or self._vectors is None or self._index is None):
             return self._metadata_recommend_by_index(movie_idx, n=n)
         try:
             query_vector = self._vectors[movie_idx].reshape(1, -1).astype(np.float32)
@@ -562,7 +530,6 @@ class Recommender:
         if movie_idx is None:
             return []
         import time as _time
-
         if not hasattr(self, "_rec_cache"):
             self._rec_cache: dict = {}
         cached = self._rec_cache.get((movie_id, n))
@@ -578,7 +545,6 @@ class Recommender:
     def recommend_batch(self, movie_ids: list[int], n: int = 10) -> dict[int, list[dict]]:
         """Batch recommendations — delegates to recommender_core."""
         from backend.recommender_core import recommend_batch
-
         return recommend_batch(self, movie_ids, n)
 
     def recommend_by_title(self, title: str, n: int = 10) -> list[dict]:
@@ -609,7 +575,6 @@ class Recommender:
     def _legacy_ai_search(self, query: str, n: int = 10, fetch_k: int = 80) -> list[dict]:
         """Legacy AI search fallback — delegates to recommender_core."""
         from backend.recommender_core import legacy_ai_search
-
         return legacy_ai_search(self, query, n, fetch_k)
 
     def semantic_search(self, query: str, n: int = 10) -> list[dict]:
@@ -626,7 +591,6 @@ def _get_sbert_model():
     global _sbert_model
     if _sbert_model is None:
         from sentence_transformers import SentenceTransformer
-
         _sbert_model = SentenceTransformer("all-mpnet-base-v2")
         logger.info("Loaded SBERT model for semantic search")
     return _sbert_model
@@ -634,8 +598,6 @@ def _get_sbert_model():
 
 _recommender: Recommender | None = None
 _recommender_lock = Lock()
-
-
 def get_recommender() -> Recommender:
     """Get or create the global Recommender instance."""
     global _recommender

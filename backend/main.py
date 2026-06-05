@@ -98,8 +98,6 @@ from backend.online_learner import OnlineLearner
 from backend.platform_readiness import (
     _combine_readiness_status,
     _platform_readiness_report,
-)
-from backend.platform_readiness import (
     platform_readiness_report as _platform_readiness_report_fn,  # noqa: F401 — available for external callers
 )
 from backend.ranker import load_ranker
@@ -476,6 +474,7 @@ from backend.response_models import (
     UsageResponse,
 )
 
+
 # Lazy-load recommender on first request
 _recommender: Recommender | None = None
 
@@ -516,6 +515,7 @@ from backend.recommendation_events import (
 from backend.recommendation_routes import (
     _recommendation_diagnostic_report,
 )
+
 
 # Moved to backend/platform_readiness.py (task 2.1)
 # _combine_readiness_status and _platform_readiness_report are imported above.

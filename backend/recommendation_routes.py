@@ -327,7 +327,10 @@ def create_recommendation_router(
                 key=lambda m: m.get("release_date", ""),
                 reverse=True,
             )
-            return [{k: _sanitize_float(v) for k, v in m.items()} for m in sorted_movies[:limit]]
+            return [
+                {k: _sanitize_float(v) for k, v in m.items()}
+                for m in sorted_movies[:limit]
+            ]
 
         seen_ids: set[int] = set()
         catalog_matches: list[dict] = []
