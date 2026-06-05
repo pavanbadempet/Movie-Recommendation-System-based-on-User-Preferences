@@ -424,6 +424,22 @@ class TestCorsPolicy:
         assert resp.status_code == 200
         assert resp.headers["access-control-allow-origin"] == "https://pavanbadempet.github.io"
 
+    def test_malicious_origin_is_blocked_by_default(self, mock_artifacts):
+        from backend.main import app
+
+        client = TestClient(app)
+
+        resp = client.options(
+            "/v1/search",
+            headers={
+                "Origin": "https://malicious-domain.vercel.app",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+
+        assert resp.status_code == 400
+        assert "access-control-allow-origin" not in resp.headers
+
     def test_local_vite_dev_origin_is_allowed_by_default(self, mock_artifacts):
         from backend.main import app
 

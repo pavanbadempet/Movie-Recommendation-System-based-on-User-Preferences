@@ -2,10 +2,12 @@
 Property-based tests for RetrievalPipeline invariants.
 # Feature: architecture-design-perfection, Property 1/2/3
 """
+import numpy as np
+import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
-import numpy as np
 
+from backend.pipeline_types import CandidateItem
 from backend.retrieval_pipeline import RetrievalConfig, RetrievalPipeline
 
 
