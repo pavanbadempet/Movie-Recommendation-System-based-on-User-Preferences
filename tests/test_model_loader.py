@@ -81,6 +81,7 @@ def test_ensure_model_files_redownloads_vectors_when_manifest_rows_do_not_match(
 def test_ensure_model_files_redownloads_faiss_when_manifest_rows_do_not_match(tmp_path, monkeypatch):
     """Stale FAISS indices must be refreshed when the manifest contract disagrees."""
     import faiss
+
     import backend.model_loader as loader
 
     index = faiss.IndexFlatIP(4)

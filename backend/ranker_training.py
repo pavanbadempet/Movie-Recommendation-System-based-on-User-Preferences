@@ -8,19 +8,20 @@ signals. The artifact is a joblib file that the backend loads opportunistically.
 
 from __future__ import annotations
 
-import json
 from collections import defaultdict
+from collections.abc import Iterable
+import contextlib
 from datetime import UTC, datetime
+import json
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import ndcg_score
 
-from backend.ranker import FEATURE_COLUMNS, candidate_features, save_ranker
-from backend.ranker import load_ranker
+from backend.ranker import FEATURE_COLUMNS, candidate_features, load_ranker, save_ranker
 
 EVENT_WEIGHTS = {
     "recommendation_impression": 0.15,
@@ -34,10 +35,8 @@ def _event_label(event: dict[str, Any]) -> float:
     event_type = str(event.get("event_type") or "").lower()
     label = EVENT_WEIGHTS.get(event_type, 0.0)
     if event_type == "rating" and event.get("rating") is not None:
-        try:
+        with contextlib.suppress(TypeError, ValueError):
             label += max(0.0, min(float(event["rating"]), 5.0)) / 5.0
-        except (TypeError, ValueError):
-            pass
     return label
 
 
@@ -57,7 +56,7 @@ def build_item_feedback(events: Iterable[dict[str, Any]]) -> dict[int, float]:
         return {}
     max_score = max(scores.values())
     if max_score <= 0:
-        return {movie_id: 0.0 for movie_id in scores}
+        return dict.fromkeys(scores, 0.0)
     return {movie_id: round(score / max_score, 6) for movie_id, score in scores.items()}
 
 
@@ -165,9 +164,7 @@ def evaluate_ranker(model: Any, features: pd.DataFrame, labels: pd.Series, k: in
 def baseline_scores(features: pd.DataFrame) -> np.ndarray:
     """Score candidates with Nova's hand-built serving signals."""
     return np.asarray(
-        0.55 * features["base_similarity"]
-        + 0.30 * features["metadata_score"]
-        + 0.15 * features["behavior_score"],
+        0.55 * features["base_similarity"] + 0.30 * features["metadata_score"] + 0.15 * features["behavior_score"],
         dtype=np.float32,
     )
 
@@ -242,7 +239,7 @@ def train_nova_ranker(
     metadata["baseline_evaluation"] = baseline_evaluation
     metadata["feature_importances"] = {
         column: round(float(importance), 6)
-        for column, importance in zip(FEATURE_COLUMNS, getattr(model, "feature_importances_", []))
+        for column, importance in zip(FEATURE_COLUMNS, getattr(model, "feature_importances_", []), strict=False)
     }
     artifact_path = save_ranker(
         model=model,

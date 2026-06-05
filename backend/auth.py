@@ -1,23 +1,47 @@
 """
-Tenant/API-key helpers for the Nova product API.
+Authentication and Authorization Module.
 
-The public demo stays frictionless when NOVA_API_KEYS is empty. When keys are
-configured, the same backend becomes tenant-aware without adding a paid auth
-provider or database dependency.
+Handles JWT User Authentication for UI clients, and API Key verification
+for B2B Multi-Tenant integrations. Ensures strong cryptographic security via PostgreSQL.
+Replaces the legacy environment-variable based API keys.
 """
 
 from __future__ import annotations
 
-import hmac
-import json
 import os
+
+from dotenv import load_dotenv
+
+load_dotenv()
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+import hmac
+import logging
 from typing import Any
 
-from fastapi import Header, HTTPException
+from fastapi import Depends, Header, HTTPException, status
+from fastapi.security import APIKeyHeader, OAuth2PasswordBearer
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from sqlalchemy.orm import Session
+
+from backend.database import APIKey, User, get_db
+
+logger = logging.getLogger(__name__)
+
+# Security Settings
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "").strip()
+if not SECRET_KEY:
+    raise RuntimeError("JWT_SECRET_KEY is required. Set a strong random secret before starting the backend.")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 DEFAULT_TENANT_ID = os.getenv("NOVA_TENANT_ID", "demo-media-co")
 DEFAULT_CATALOG_ID = os.getenv("NOVA_CATALOG_ID", "tmdb-movies")
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/auth/token")
+api_key_header = APIKeyHeader(name="X-Nova-API-Key", auto_error=False)
 
 
 @dataclass(frozen=True)
@@ -31,68 +55,95 @@ class TenantContext:
     api_key_label: str | None = None
 
 
-def _parse_api_keys(raw_value: str | None = None) -> dict[str, dict[str, str]]:
+def _configured_static_api_keys() -> dict[str, TenantContext]:
+    """Parse legacy static API keys from NOVA_API_KEYS.
+
+    Format: key:tenant_id:catalog_id:plan,another-key:tenant:catalog:plan
     """
-    Parse NOVA_API_KEYS.
+    entries: dict[str, TenantContext] = {}
+    raw = os.getenv("NOVA_API_KEYS", "").strip()
+    if not raw:
+        return entries
 
-    Supported formats:
-    - JSON: {"key": {"tenant_id": "acme", "catalog_id": "main", "plan": "free"}}
-    - CSV: key:tenant_id:catalog_id:plan,key2:tenant2:catalog2
-    """
-    raw_value = raw_value if raw_value is not None else os.getenv("NOVA_API_KEYS", "")
-    raw_value = raw_value.strip()
-    if not raw_value:
-        return {}
-
-    if raw_value.startswith("{"):
-        parsed = json.loads(raw_value)
-        result: dict[str, dict[str, str]] = {}
-        for api_key, metadata in parsed.items():
-            if not isinstance(metadata, dict):
-                raise ValueError("Each NOVA_API_KEYS JSON value must be an object")
-            result[str(api_key)] = {
-                "tenant_id": str(metadata.get("tenant_id") or DEFAULT_TENANT_ID),
-                "catalog_id": str(metadata.get("catalog_id") or DEFAULT_CATALOG_ID),
-                "plan": str(metadata.get("plan") or "free"),
-                "label": str(metadata.get("label") or str(api_key)[:8]),
-            }
-        return result
-
-    result = {}
-    for item in raw_value.split(","):
+    for item in raw.split(","):
         parts = [part.strip() for part in item.split(":")]
-        if len(parts) < 3 or not parts[0]:
-            raise ValueError("NOVA_API_KEYS entries must be key:tenant_id:catalog_id[:plan]")
-        api_key, tenant_id, catalog_id = parts[:3]
-        plan = parts[3] if len(parts) >= 4 and parts[3] else "free"
-        result[api_key] = {
-            "tenant_id": tenant_id,
-            "catalog_id": catalog_id,
-            "plan": plan,
-            "label": api_key[:8],
-        }
-    return result
+        if len(parts) < 4 or not parts[0]:
+            logger.warning("Ignoring malformed NOVA_API_KEYS entry.")
+            continue
+        key, tenant_id, catalog_id, plan = parts[:4]
+        entries[key] = TenantContext(
+            tenant_id=tenant_id,
+            catalog_id=catalog_id,
+            plan=plan,
+            authenticated=True,
+            api_key_label="static",
+        )
+    return entries
 
 
-def configured_api_keys() -> dict[str, dict[str, str]]:
-    """Return API-key configuration, failing closed if the env var is malformed."""
+# -----------------------------------------------------------------------------
+# PASSWORD CRYPTOGRAPHY
+# -----------------------------------------------------------------------------
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
+
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
+
+
+# -----------------------------------------------------------------------------
+# JWT TOKENS (B2C / Web UI)
+# -----------------------------------------------------------------------------
+
+
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.now(UTC) + expires_delta
+    else:
+        expire = datetime.now(UTC) + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
+async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """Verifies the JWT and loads the user from PostgreSQL."""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
     try:
-        return _parse_api_keys()
-    except ValueError as exc:
-        raise HTTPException(status_code=500, detail=f"Invalid NOVA_API_KEYS configuration: {exc}") from exc
-    except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=500, detail="Invalid NOVA_API_KEYS JSON") from exc
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    user = db.query(User).filter(User.external_user_id == user_id).first()
+    if user is None:
+        # Token is cryptographically valid but references a user that doesn't
+        # exist in the database. Reject rather than silently create — silent
+        # creation would allow any forged sub claim to gain access.
+        logger.warning("JWT references unknown user_id=%s — rejecting", user_id)
+        raise credentials_exception
+
+    return user
+
+
+# -----------------------------------------------------------------------------
+# B2B MULTI-TENANT API KEYS
+# -----------------------------------------------------------------------------
 
 
 def resolve_admin_token(
     x_nova_admin_token: str | None = Header(default=None, alias="X-Nova-Admin-Token"),
 ) -> None:
-    """
-    Require an out-of-band admin token for operational mutation endpoints.
-
-    This is intentionally separate from customer API keys. Customer keys may be
-    exposed to frontends; this token must stay server-to-server only.
-    """
     expected_token = os.getenv("NOVA_ADMIN_TOKEN", "").strip()
     if not expected_token:
         raise HTTPException(status_code=404, detail="Admin operations are disabled")
@@ -104,15 +155,30 @@ def resolve_tenant_context(
     x_nova_api_key: str | None = Header(default=None, alias="X-Nova-API-Key"),
     x_tenant_id: str | None = Header(default=None, alias="X-Tenant-ID"),
     x_catalog_id: str | None = Header(default=None, alias="X-Catalog-ID"),
+    db: Session = Depends(get_db),
 ) -> TenantContext:
     """
-    Resolve request tenant context.
-
-    If no API keys are configured, headers can provide local demo context. If
-    keys are configured, a valid key is required and wins over headers.
+    Resolve request tenant context directly from PostgreSQL `dim_api_key`
+    using bcrypt validation.
     """
-    api_keys = configured_api_keys()
-    if not api_keys:
+    static_keys = _configured_static_api_keys()
+    if static_keys:
+        if not x_nova_api_key:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing X-Nova-API-Key")
+
+        for expected_key, static_context in static_keys.items():
+            if hmac.compare_digest(expected_key, x_nova_api_key):
+                return TenantContext(
+                    tenant_id=static_context.tenant_id,
+                    catalog_id=x_catalog_id or static_context.catalog_id,
+                    plan=static_context.plan,
+                    authenticated=True,
+                    api_key_label=static_context.api_key_label,
+                )
+
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid X-Nova-API-Key")
+
+    if not x_nova_api_key:
         return TenantContext(
             tenant_id=x_tenant_id or DEFAULT_TENANT_ID,
             catalog_id=x_catalog_id or DEFAULT_CATALOG_ID,
@@ -120,27 +186,37 @@ def resolve_tenant_context(
             authenticated=False,
         )
 
-    if not x_nova_api_key:
-        raise HTTPException(status_code=401, detail="X-Nova-API-Key is required")
+    prefix = x_nova_api_key[:10]
+    potential_keys = db.query(APIKey).filter(APIKey.key_prefix == prefix, ~APIKey.is_revoked).all()
 
-    for configured_key, metadata in api_keys.items():
-        if hmac.compare_digest(configured_key, x_nova_api_key):
-            return TenantContext(
-                tenant_id=metadata["tenant_id"],
-                catalog_id=metadata["catalog_id"],
-                plan=metadata.get("plan", "free"),
-                authenticated=True,
-                api_key_label=metadata.get("label"),
-            )
+    is_valid = False
+    active_tenant = None
 
-    raise HTTPException(status_code=401, detail="Invalid X-Nova-API-Key")
+    for key_record in potential_keys:
+        if verify_password(x_nova_api_key, key_record.api_key_hash):
+            is_valid = True
+            active_tenant = key_record.tenant
+            break
+
+    if not is_valid or not active_tenant:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid X-Nova-API-Key")
+
+    if not active_tenant.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant account suspended.")
+
+    return TenantContext(
+        tenant_id=str(active_tenant.tenant_id),
+        catalog_id=x_catalog_id or DEFAULT_CATALOG_ID,
+        plan=active_tenant.plan_tier,
+        authenticated=True,
+        api_key_label=active_tenant.company_name,
+    )
 
 
 def enforce_payload_context(
     payload: Any,
     context: TenantContext,
 ) -> None:
-    """Prevent one API key from writing events into another tenant/catalog."""
     if not context.authenticated:
         return
     payload_tenant = getattr(payload, "tenant_id", None)

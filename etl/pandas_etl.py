@@ -4,25 +4,26 @@ Consolidated module for ingestion, transformation, and indexing.
 
 Alternative to PySpark ETL for reliable local processing.
 """
+
 import ast
+from datetime import UTC, datetime
 import hashlib
 import json
 import logging
+from pathlib import Path
 import platform
 import re
 import time
 import uuid
-from datetime import UTC, datetime
-from pathlib import Path
 
+import faiss
 import numpy as np
 import pandas as pd
-import faiss
 import pandera.pandas as pa
-from pandera.pandas import Column, Check, DataFrameSchema
+from pandera.pandas import Check, Column, DataFrameSchema
 from sentence_transformers import SentenceTransformer
 
-from etl.config import paths, data_config
+from etl.config import data_config, paths
 from etl.semantic_artifacts import write_semantic_artifacts
 
 logger = logging.getLogger(__name__)
@@ -61,9 +62,9 @@ def load_kaggle_data(file_path: Path | None = None) -> pd.DataFrame:
     """Load the TMDB movies dataset from Kaggle CSV."""
     if file_path is None:
         file_path = paths.raw_data / "TMDB_all_movies.csv"
-    
+
     logger.info(f"Loading data from {file_path}")
-    
+
     if not file_path.exists():
         # Fallback to older filenames if specific one not found
         fallback = paths.raw_data / "TMDB_movie_dataset_v11.csv"
@@ -74,14 +75,14 @@ def load_kaggle_data(file_path: Path | None = None) -> pd.DataFrame:
                 f"Dataset not found at {file_path}. "
                 "Please download from https://www.kaggle.com/datasets/alanvourch/tmdb-movies-daily-updates"
             )
-    
+
     # Load with chunking context if needed, but here simple read
     df = pd.read_csv(
         file_path,
         low_memory=False,
         on_bad_lines="warn",
     )
-    
+
     logger.info(f"Loaded {len(df):,} movies from CSV")
     return df
 
@@ -127,11 +128,31 @@ def run_quality_checks(df: pd.DataFrame) -> dict:
 def add_catalog_coverage_features(df: pd.DataFrame) -> pd.DataFrame:
     """Add coverage-first quality features without dropping long-tail movies."""
     df = df.copy()
-    title_len = df["title"].fillna("").astype(str).str.strip().str.len() if "title" in df.columns else pd.Series(0, index=df.index)
-    overview_len = df["overview"].fillna("").astype(str).str.strip().str.len() if "overview" in df.columns else pd.Series(0, index=df.index)
-    genres_len = df["genres"].fillna("").astype(str).str.strip().str.len() if "genres" in df.columns else pd.Series(0, index=df.index)
-    release_len = df["release_date"].fillna("").astype(str).str.strip().str.len() if "release_date" in df.columns else pd.Series(0, index=df.index)
-    poster_len = df["poster_path"].fillna("").astype(str).str.strip().str.len() if "poster_path" in df.columns else pd.Series(0, index=df.index)
+    title_len = (
+        df["title"].fillna("").astype(str).str.strip().str.len()
+        if "title" in df.columns
+        else pd.Series(0, index=df.index)
+    )
+    overview_len = (
+        df["overview"].fillna("").astype(str).str.strip().str.len()
+        if "overview" in df.columns
+        else pd.Series(0, index=df.index)
+    )
+    genres_len = (
+        df["genres"].fillna("").astype(str).str.strip().str.len()
+        if "genres" in df.columns
+        else pd.Series(0, index=df.index)
+    )
+    release_len = (
+        df["release_date"].fillna("").astype(str).str.strip().str.len()
+        if "release_date" in df.columns
+        else pd.Series(0, index=df.index)
+    )
+    poster_len = (
+        df["poster_path"].fillna("").astype(str).str.strip().str.len()
+        if "poster_path" in df.columns
+        else pd.Series(0, index=df.index)
+    )
 
     def numeric_column(column: str) -> pd.Series:
         if column not in df.columns:
@@ -154,9 +175,7 @@ def add_catalog_coverage_features(df: pd.DataFrame) -> pd.DataFrame:
     vote_confidence = np.minimum(1.0, np.log1p(np.maximum(vote_count, 0)) / 8.0)
     popularity_norm = np.minimum(1.0, np.log1p(np.maximum(popularity, 0)) / 8.0)
     df["content_quality_score"] = (
-        df["metadata_completeness"] * 0.45
-        + (vote_average / 10.0) * vote_confidence * 0.30
-        + popularity_norm * 0.25
+        df["metadata_completeness"] * 0.45 + (vote_average / 10.0) * vote_confidence * 0.30 + popularity_norm * 0.25
     ).clip(lower=0.0, upper=1.0)
     df["quality_bucket"] = np.select(
         [
@@ -187,7 +206,7 @@ def filter_movies(df: pd.DataFrame) -> pd.DataFrame:
     coverage/quality features instead of being hard-filtered away.
     """
     original_count = len(df)
-    
+
     # Remove rows that cannot be addressed or displayed.
     required = [column for column in ("id", "title") if column in df.columns]
     if required:
@@ -202,13 +221,13 @@ def filter_movies(df: pd.DataFrame) -> pd.DataFrame:
         if sort_columns:
             df = df.sort_values(sort_columns, ascending=False, na_position="last")
         df = df.drop_duplicates(subset=["id"], keep="first")
-    
+
     df = add_catalog_coverage_features(df)
-    
+
     # Max limit
     if data_config.max_movies:
         df = df.head(data_config.max_movies)
-    
+
     logger.info(f"Retained {len(df):,}/{original_count:,} movies after identity gates")
     return df.reset_index(drop=True)
 
@@ -225,9 +244,9 @@ def ingest(
     raw_df = df.copy()
     quality_metrics = run_quality_checks(df)
     df = filter_movies(df)
-    
+
     # Save intermediate if needed, but we usually stream in memory in pipeline
-    # save_to_parquet(df) 
+    # save_to_parquet(df)
     if return_quality and return_raw:
         return df, quality_metrics, raw_df
     if return_quality:
@@ -240,6 +259,7 @@ def ingest(
 # ==========================================
 # 2. TRANSFORMATION LOGIC
 # ==========================================
+
 
 def parse_json_column(value: str) -> list[str]:
     """Parse stringified JSON/list column to extract names."""
@@ -269,7 +289,7 @@ def generate_tags(df: pd.DataFrame) -> pd.DataFrame:
     """Generate unified 'tags' column for Semantic Search (Vectorized)."""
     logger.info("Generating tags (Vectorized)...")
     df = df.copy()
-    
+
     # 1. Parse JSON columns (Keep apply here, hard to avoid for complex JSON parsing)
     for col_name in ["genres", "keywords", "production_companies"]:
         target = f"_{col_name}" if col_name != "production_companies" else "_companies"
@@ -284,76 +304,71 @@ def generate_tags(df: pd.DataFrame) -> pd.DataFrame:
     # parquet, which weakened genre overlap and explanations.
     if "_genres" in df.columns:
         df["genres"] = df["_genres"]
-            
+
     # 2. Clean Overview
     df["_overview"] = df["overview"].fillna("").astype(str).apply(clean_text)
-    
+
     # 3. Vectorized Concatenation
     # We build the tags string column-wise using vector operations
     # This is significantly faster than row-wise apply()
-    
+
     # Start with Title
     tags = pd.Series("", index=df.index)
-    title = df['title'].fillna("").astype(str)
+    title = df["title"].fillna("").astype(str)
     tags += "Title: " + title + ". " + title + ". "
-    
+
     # Helper for conditional append
     def add_section(prefix, col_name, suffix="."):
         if col_name not in df.columns:
             return ""
-        
+
         # Get series, fill NaNs
         s = df[col_name].fillna("").astype(str).str.strip()
-        
+
         # Mask for valid content (not empty, not 'nan')
         mask = (s != "") & (s.str.lower() != "nan")
-        
+
         # Vectorized "if condition"
         return np.where(mask, prefix + s + suffix + " ", "")
 
     tags += add_section("Tagline: ", "tagline")
     tags += add_section("Genres: ", "_genres")
-    tags += add_section("Plot: ", "_overview", "") # Overview already has dot handled or we just append
+    tags += add_section("Plot: ", "_overview", "")  # Overview already has dot handled or we just append
     tags += add_section("Directed by ", "director")
     tags += add_section("Written by ", "writers")
-    
+
     # Cast is special (limit to top 10)
     if "cast" in df.columns:
-        s_cast = df['cast'].fillna("").astype(str).str.split(",").str[:10].str.join(", ")
+        s_cast = df["cast"].fillna("").astype(str).str.split(",").str[:10].str.join(", ")
         mask = s_cast != ""
         tags += np.where(mask, "Starring: " + s_cast + ". ", "")
-        
+
     tags += add_section("Produced by ", "_companies")
     tags += add_section("Music by ", "music_composer")
-    
+
     # Safe access for director in final string
-    director = df['director'].fillna("") if 'director' in df.columns else pd.Series("", index=df.index)
+    director = df["director"].fillna("") if "director" in df.columns else pd.Series("", index=df.index)
     tags += "Movie: " + title + " by " + director + "."
-    
+
     # Final cleanup to ensure SBERT friendly format
     df["tags"] = tags.apply(clean_text)
-    
+
     # Cleanup temps
     df = df.drop(columns=[c for c in df.columns if c.startswith("_")], errors="ignore")
     df = df[df["tags"].str.len() > 10]
-    
+
     return df.reset_index(drop=True)
 
 
 def build_sbert_embeddings(tags: pd.Series) -> tuple[SentenceTransformer, np.ndarray]:
     """Build embeddings using sentence-transformers (all-mpnet-base-v2)."""
-    model_name = 'all-mpnet-base-v2'
+    model_name = "all-mpnet-base-v2"
     logger.info(f"Loading SBERT model: {model_name}...")
     model = SentenceTransformer(model_name)
-    
+
     logger.info(f"Encoding {len(tags):,} movies...")
-    embeddings = model.encode(
-        tags.tolist(), 
-        show_progress_bar=True, 
-        batch_size=32,
-        convert_to_numpy=True
-    )
-    
+    embeddings = model.encode(tags.tolist(), show_progress_bar=True, batch_size=32, convert_to_numpy=True)
+
     # Normalize for Cosine Similarity
     embeddings = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
     return model, embeddings
@@ -362,10 +377,10 @@ def build_sbert_embeddings(tags: pd.Series) -> tuple[SentenceTransformer, np.nda
 def transform(df: pd.DataFrame | None = None) -> tuple[pd.DataFrame, np.ndarray]:
     """Main transformation pipeline."""
     logger.info("Starting transformation...")
-    
+
     if df is None:
         # If loading from ingest result
-        # But in unified pipeline we pass df directly. 
+        # But in unified pipeline we pass df directly.
         # If called standalone, try loading:
         if (paths.processed_data / "movies.parquet").exists():
             df = pd.read_parquet(paths.processed_data / "movies.parquet")
@@ -375,12 +390,12 @@ def transform(df: pd.DataFrame | None = None) -> tuple[pd.DataFrame, np.ndarray]
     df = generate_tags(df)
     model, vectors = build_sbert_embeddings(df["tags"])
     movie_ids = movie_id_vector(df)
-    
+
     # Save serving artifacts atomically so failed runs do not corrupt the last good version.
     atomic_save_npy(vectors, paths.models / "sbert_embeddings.npy")
     atomic_save_npy(movie_ids, paths.models / "movie_ids.npy")
     atomic_write_parquet(df, paths.processed_data / "movies_transformed.parquet")
-    
+
     logger.info("Transformation complete")
     return df, vectors
 
@@ -389,18 +404,19 @@ def transform(df: pd.DataFrame | None = None) -> tuple[pd.DataFrame, np.ndarray]
 # 3. INDEXING LOGIC
 # ==========================================
 
+
 def build_faiss_index(vectors: np.ndarray) -> faiss.Index:
     """Build FAISS HNSW index (matches Kaggle pipeline)."""
     n_samples, n_features = vectors.shape
     logger.info(f"Building FAISS HNSW index for {n_samples:,} vectors...")
-    
+
     vectors = np.ascontiguousarray(vectors.astype(np.float32))
-    
+
     # HNSW: best for <1M vectors, no training needed, ~0.95+ recall
     index = faiss.IndexHNSWFlat(n_features, 32, faiss.METRIC_INNER_PRODUCT)
     index.hnsw.efConstruction = 200  # higher = better quality, slower build
     index.hnsw.efSearch = 128  # higher = better recall at search time
-    
+
     index.add(vectors)
     return index
 
@@ -408,17 +424,17 @@ def build_faiss_index(vectors: np.ndarray) -> faiss.Index:
 def build_index(vectors: np.ndarray | None = None) -> faiss.Index:
     """Main indexing pipeline."""
     logger.info("Starting indexing...")
-    
+
     if vectors is None:
         vectors = np.load(paths.models / "sbert_embeddings.npy")
         # Normalize just in case, though transform does it
         norms = np.linalg.norm(vectors, axis=1, keepdims=True)
         norms[norms == 0] = 1
         vectors = vectors / norms
-        
+
     index = build_faiss_index(vectors)
     atomic_write_faiss_index(index, paths.models / "faiss.index")
-    
+
     logger.info("Indexing complete")
     return index
 
@@ -426,6 +442,7 @@ def build_index(vectors: np.ndarray | None = None) -> faiss.Index:
 # ==========================================
 # 4. RUN METADATA AND ARTIFACTS
 # ==========================================
+
 
 def _utc_now() -> datetime:
     return datetime.now(UTC)
@@ -746,14 +763,18 @@ def persist_run_metadata(metrics: dict, manifest: dict, run_id: str) -> dict:
 # 5. ORCHESTRATION
 # ==========================================
 
+
 class PipelineStage:
     """Context manager for timing."""
+
     def __init__(self, name: str):
         self.name = name
+
     def __enter__(self):
         self.start = time.time()
         logger.info(f"--- Starting {self.name} ---")
         return self
+
     def __exit__(self, *args):
         logger.info(f"--- Completed {self.name} in {time.time() - self.start:.2f}s ---")
 
@@ -782,9 +803,9 @@ def run_pipeline(
         "stage_artifacts": {},
         "time_travel_artifacts": {},
     }
-    
+
     logger.info("STARTING PANDAS ETL PIPELINE")
-    
+
     try:
         curated_df = None
         # 1. Ingest
@@ -814,7 +835,7 @@ def run_pipeline(
             # Ideally we'd load raw parquet here if we had it, but we usually transform raw.
             # Simplified: we assume if skipping ingest we want to transform existing parquet?
             # Actually transform() handles loading if df is None.
-            df = None 
+            df = None
 
         # 2. Transform
         with PipelineStage("TRANSFORM"):
@@ -854,7 +875,7 @@ def run_pipeline(
             )
             metrics["quality_gates"]["semantic_twins"] = semantic_artifacts["quality_gate"]
             metrics["semantic_twin_summary"] = semantic_artifacts["summary"]
-        
+
         # 3. Index
         with PipelineStage("INDEX"):
             index = build_index(vectors)
@@ -923,7 +944,7 @@ def run_pipeline(
             metrics["metadata_artifacts"] = persist_run_metadata(metrics, manifest, run_id)
 
         logger.info(f"PIPELINE SUCCESS in {time.time() - start_time:.2f}s")
-        
+
     except Exception as e:
         logger.exception("Pipeline failed")
         metrics["success"] = False
@@ -948,23 +969,22 @@ def run_pipeline(
             }
             metrics["metadata_artifacts"] = persist_run_metadata(metrics, failure_manifest, run_id)
         raise
-        
+
     return metrics
 
 
 if __name__ == "__main__":
     import argparse
-    import sys
-    
+
     logging.basicConfig(level=logging.INFO)
-    
+
     parser = argparse.ArgumentParser(description="Pandas ETL Pipeline")
     parser.add_argument("--data", type=Path, help="Path to raw CSV")
     parser.add_argument("--index-only", action="store_true", help="Run only indexing stage")
     parser.add_argument("--skip-ingest", action="store_true", help="Skip ingestion")
-    
+
     args = parser.parse_args()
-    
+
     if args.index_only:
         # Just run indexing on existing embeddings
         build_index()

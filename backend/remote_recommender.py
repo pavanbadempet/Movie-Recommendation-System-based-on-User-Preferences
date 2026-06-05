@@ -7,12 +7,12 @@ API gateway call that Space first and fall back to local lite serving if needed.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+import hashlib
+import json
 import logging
 import os
 import time
-import hashlib
-import json
-from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlencode
 
@@ -21,6 +21,23 @@ import httpx
 from backend.auth import TenantContext
 
 logger = logging.getLogger(__name__)
+
+# Fast JSON for Redis cache serialization
+try:
+    import orjson as _orjson
+
+    def _cache_dumps(obj) -> str:
+        return _orjson.dumps(obj).decode()
+
+    def _cache_loads(s):
+        return _orjson.loads(s)
+except ImportError:
+
+    def _cache_dumps(obj) -> str:
+        return json.dumps(obj, separators=(",", ":"))
+
+    def _cache_loads(s):
+        return json.loads(s)
 
 
 @dataclass(frozen=True)
@@ -80,10 +97,7 @@ def _env_float(name: str, default: float, minimum: float = 0.0) -> float:
 
 def remote_recommender_url() -> str | None:
     """Return the configured recommender service base URL, if any."""
-    raw_url = (
-        os.getenv("NOVA_RECOMMENDER_SERVICE_URL", "")
-        or os.getenv("NOVA_VECTOR_SERVICE_URL", "")
-    ).strip()
+    raw_url = (os.getenv("NOVA_RECOMMENDER_SERVICE_URL", "") or os.getenv("NOVA_VECTOR_SERVICE_URL", "")).strip()
     if not raw_url:
         return None
     return raw_url.rstrip("/")
@@ -113,9 +127,7 @@ def _circuit_state(base_url: str) -> _CircuitState:
 
 def _circuit_open(base_url: str) -> bool:
     state = _circuit_state(base_url)
-    if state.opened_until <= time.time():
-        return False
-    return True
+    return not state.opened_until <= time.time()
 
 
 def _record_remote_success(base_url: str) -> None:
@@ -177,8 +189,10 @@ def _stale_cache_ttl_seconds() -> int:
 
 
 def _distributed_cache_enabled() -> bool:
-    return _cache_enabled() and _env_bool("NOVA_RECOMMENDER_DISTRIBUTED_CACHE_ENABLED", True) and bool(
-        _upstash_rest_url() and _upstash_rest_token()
+    return (
+        _cache_enabled()
+        and _env_bool("NOVA_RECOMMENDER_DISTRIBUTED_CACHE_ENABLED", True)
+        and bool(_upstash_rest_url() and _upstash_rest_token())
     )
 
 
@@ -188,8 +202,7 @@ def _distributed_cache_timeout_seconds() -> float:
 
 def _upstash_rest_url() -> str | None:
     raw_url = (
-        os.getenv("UPSTASH_REDIS_REST_URL", "")
-        or os.getenv("NOVA_RECOMMENDER_DISTRIBUTED_CACHE_URL", "")
+        os.getenv("UPSTASH_REDIS_REST_URL", "") or os.getenv("NOVA_RECOMMENDER_DISTRIBUTED_CACHE_URL", "")
     ).strip()
     if not raw_url:
         return None
@@ -198,8 +211,7 @@ def _upstash_rest_url() -> str | None:
 
 def _upstash_rest_token() -> str | None:
     return (
-        os.getenv("UPSTASH_REDIS_REST_TOKEN", "")
-        or os.getenv("NOVA_RECOMMENDER_DISTRIBUTED_CACHE_TOKEN", "")
+        os.getenv("UPSTASH_REDIS_REST_TOKEN", "") or os.getenv("NOVA_RECOMMENDER_DISTRIBUTED_CACHE_TOKEN", "")
     ).strip() or None
 
 
@@ -304,7 +316,7 @@ async def _get_distributed_cached_response(cache_key: str, *, allow_stale: bool)
         return None
 
     try:
-        parsed_entry = json.loads(raw_entry)
+        parsed_entry = _cache_loads(raw_entry)
         entry = _CacheEntry(
             created_at=float(parsed_entry["created_at"]),
             status_code=int(parsed_entry["status_code"]),
@@ -357,7 +369,7 @@ async def _store_distributed_cached_response(cache_key: str, status_code: int, p
                 json=[
                     "SET",
                     _distributed_cache_key(cache_key),
-                    json.dumps(entry, separators=(",", ":")),
+                    _cache_dumps(entry),
                     "EX",
                     _stale_cache_ttl_seconds(),
                 ],
@@ -370,7 +382,9 @@ async def _store_distributed_cached_response(cache_key: str, status_code: int, p
 
     if response.status_code != 200 or response_payload.get("error"):
         _distributed_cache_stats["errors"] += 1
-        logger.info("Distributed recommender cache write failed: %s", response_payload.get("error") or response.status_code)
+        logger.info(
+            "Distributed recommender cache write failed: %s", response_payload.get("error") or response.status_code
+        )
         return
     _distributed_cache_stats["writes"] += 1
 

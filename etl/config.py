@@ -2,9 +2,11 @@
 Configuration module for the Movie Recommendation ETL pipeline.
 Centralizes all settings, paths, and environment variables.
 """
+
+from dataclasses import dataclass
 import os
 from pathlib import Path
-from dataclasses import dataclass
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -21,6 +23,7 @@ def _normalize_storage_path(path: Path | str) -> Path | str:
     if path.startswith(CLOUD_PATH_PREFIXES):
         return path.rstrip("/")
     return Path(path)
+
 
 @dataclass
 class Paths:
@@ -79,6 +82,7 @@ class Paths:
             if isinstance(path, Path):
                 path.mkdir(parents=True, exist_ok=True)
 
+
 @dataclass
 class DataConfig:
     """Configuration for data processing."""
@@ -99,6 +103,7 @@ class DataConfig:
     # FAISS index parameters
     faiss_nlist: int = 100  # Number of clusters for IVF index
 
+
 @dataclass
 class APIConfig:
     """Configuration for TMDB API (for poster/video fetching)."""
@@ -106,6 +111,7 @@ class APIConfig:
     api_key: str = os.getenv("TMDB_API_KEY")
     base_url: str = "https://api.themoviedb.org/3"
     image_base_url: str = "https://image.tmdb.org/t/p/w500"
+
 
 # Global configuration instances
 paths = Paths()

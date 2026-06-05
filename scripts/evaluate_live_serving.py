@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 import sys
 import time
+from typing import Any
 import urllib.parse
 import urllib.request
-from pathlib import Path
-from typing import Any
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
@@ -66,7 +66,9 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
             if args.skip_platform_readiness:
                 report["platform_readiness"] = {"status": "skipped", "reason": "disabled by live gate"}
             else:
-                readiness_params = urllib.parse.urlencode({"strict": str(args.platform_readiness_strict).lower(), "k": args.k})
+                readiness_params = urllib.parse.urlencode(
+                    {"strict": str(args.platform_readiness_strict).lower(), "k": args.k}
+                )
                 report["platform_readiness"] = _get_json(
                     args.base_url,
                     f"/v1/platform/readiness?{readiness_params}",
@@ -188,8 +190,12 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
                     report,
                 )
         if isinstance(search_results, list):
-            search_titles = [_canonical_title((item or {}).get("title")) for item in search_results if isinstance(item, dict)]
-            required_search_titles = {_canonical_title(title) for title in _parse_title_csv(args.required_search_titles)}
+            search_titles = [
+                _canonical_title((item or {}).get("title")) for item in search_results if isinstance(item, dict)
+            ]
+            required_search_titles = {
+                _canonical_title(title) for title in _parse_title_csv(args.required_search_titles)
+            }
             required_search_hits = sorted({title for title in search_titles if title in required_search_titles})
             report["search_smoke_summary"] = {
                 "required_hit_count": len(required_search_hits),
@@ -339,15 +345,25 @@ def evaluate_live_serving(args: argparse.Namespace) -> dict[str, Any]:
         benchmark = report["semantic_benchmark"]
         if not args.skip_semantic_benchmark:
             if benchmark.get("status") not in {"ok", "needs_attention"}:
-                _threshold_failure(f"semantic benchmark unavailable: {benchmark.get('reason') or benchmark.get('status')}", report)
+                _threshold_failure(
+                    f"semantic benchmark unavailable: {benchmark.get('reason') or benchmark.get('status')}", report
+                )
 
             metrics = benchmark.get("metrics") or {}
             checks = {
-                "bad_match_rate_at_k": (float(metrics.get("bad_match_rate_at_k") or 0.0), "<=", args.max_bad_match_rate),
+                "bad_match_rate_at_k": (
+                    float(metrics.get("bad_match_rate_at_k") or 0.0),
+                    "<=",
+                    args.max_bad_match_rate,
+                ),
                 "hit_rate_at_k": (float(metrics.get("hit_rate_at_k") or 0.0), ">=", args.min_hit_rate),
                 "mrr_at_k": (float(metrics.get("mrr_at_k") or 0.0), ">=", args.min_mrr),
                 "ndcg_at_k": (float(metrics.get("ndcg_at_k") or 0.0), ">=", args.min_ndcg),
-                "explanation_coverage": (float(metrics.get("explanation_coverage") or 0.0), ">=", args.min_explanation_coverage),
+                "explanation_coverage": (
+                    float(metrics.get("explanation_coverage") or 0.0),
+                    ">=",
+                    args.min_explanation_coverage,
+                ),
             }
             for name, (actual, op, expected) in checks.items():
                 if op == "<=" and actual > expected:
@@ -446,7 +462,9 @@ def main() -> None:
         "app_commit": (report.get("health") or {}).get("app_commit"),
         "app_version": (report.get("health") or {}).get("app_version"),
         "movie_count": (report.get("health") or {}).get("movie_count"),
-        "search_result_count": len(report.get("search_smoke") or []) if isinstance(report.get("search_smoke"), list) else None,
+        "search_result_count": len(report.get("search_smoke") or [])
+        if isinstance(report.get("search_smoke"), list)
+        else None,
         "search_first_title": (
             (report.get("search_smoke") or [{}])[0].get("title")
             if isinstance(report.get("search_smoke"), list) and report.get("search_smoke")
@@ -458,13 +476,21 @@ def main() -> None:
         "search_benchmark_blocked_hit_case_rate": search_benchmark_metrics.get("blocked_hit_case_rate"),
         "search_benchmark_case_count": (report.get("search_benchmark") or {}).get("evaluated_case_count"),
         "recommendation_result_count": (report.get("recommendation_smoke_summary") or {}).get("result_count"),
-        "recommendation_required_hit_count": (report.get("recommendation_smoke_summary") or {}).get("required_hit_count"),
+        "recommendation_required_hit_count": (report.get("recommendation_smoke_summary") or {}).get(
+            "required_hit_count"
+        ),
         "recommendation_blocked_hits": (report.get("recommendation_smoke_summary") or {}).get("blocked_hits"),
         "recommendation_diagnostics_status": (report.get("recommendation_diagnostics") or {}).get("status"),
         "recommendation_diagnostics_result_count": recommendation_diagnostics_metrics.get("result_count"),
-        "recommendation_diagnostics_benchmark_case_available": recommendation_diagnostics_metrics.get("benchmark_case_available"),
-        "recommendation_diagnostics_benchmark_case_passed": recommendation_diagnostics_metrics.get("benchmark_case_passed"),
-        "recommendation_benchmark_case_count": (report.get("recommendation_benchmark") or {}).get("evaluated_case_count"),
+        "recommendation_diagnostics_benchmark_case_available": recommendation_diagnostics_metrics.get(
+            "benchmark_case_available"
+        ),
+        "recommendation_diagnostics_benchmark_case_passed": recommendation_diagnostics_metrics.get(
+            "benchmark_case_passed"
+        ),
+        "recommendation_benchmark_case_count": (report.get("recommendation_benchmark") or {}).get(
+            "evaluated_case_count"
+        ),
         "recommendation_benchmark_case_pass_rate": recommendation_benchmark_metrics.get("case_pass_rate"),
         "recommendation_benchmark_good_hit_case_rate": recommendation_benchmark_metrics.get("good_hit_case_rate"),
         "recommendation_benchmark_bad_case_rate_at_k": recommendation_benchmark_metrics.get("bad_case_rate_at_k"),

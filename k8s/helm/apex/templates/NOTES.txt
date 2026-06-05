@@ -1,0 +1,26 @@
+APEX has been deployed successfully.
+
+1. Get the application URL:
+{{- if .Values.ingress.enabled }}
+  https://{{ .Values.ingress.host }}
+{{- else }}
+  Run the following command to forward the port:
+    kubectl port-forward svc/{{ .Release.Name }}-apex {{ .Values.service.port }}:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+  Then access the API at:
+    http://localhost:{{ .Values.service.port }}
+{{- end }}
+
+2. Verify the deployment is healthy:
+    curl http://<API_URL>/health
+
+3. Browse the interactive API docs:
+    http://<API_URL>/docs
+
+4. Active serving tier: {{ .Values.servingTier }}
+   - tier1: GPU + full 6-model ensemble (50-200ms)
+   - tier2: ONNX CPU inference (200-800ms)
+   - tier3: FAISS + TF-IDF only (800-2000ms)
+
+5. Reload ensemble weights at runtime (requires admin token):
+    curl -X POST http://<API_URL>/v1/admin/reload-ensemble-weights \
+      -H "Authorization: Bearer <NOVA_ADMIN_TOKEN>"

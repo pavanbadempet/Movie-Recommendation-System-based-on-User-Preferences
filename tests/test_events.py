@@ -4,7 +4,15 @@ Tests for behavior event capture and feature aggregation.
 
 import pytest
 
-from backend.events import append_event, aggregate_behavior_features, build_user_behavior_profile, event_storage_status, iter_events, normalize_event, summarize_recommendation_events
+from backend.events import (
+    aggregate_behavior_features,
+    append_event,
+    build_user_behavior_profile,
+    event_storage_status,
+    iter_events,
+    normalize_event,
+    summarize_recommendation_events,
+)
 from backend.recommender import Recommender
 
 

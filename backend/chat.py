@@ -1,7 +1,8 @@
-import os
 import logging
-from .recommender import get_recommender
+import os
+
 from .openrouter_client import chat_completion, configured_models, openrouter_api_key
+from .recommender import get_recommender
 
 logger = logging.getLogger(__name__)
 
@@ -9,6 +10,7 @@ logger = logging.getLogger(__name__)
 OPENROUTER_KEY = openrouter_api_key()
 if not OPENROUTER_KEY:
     logger.warning("OPENROUTER_API_KEY not set. GenAI features will be disabled.")
+
 
 def generate_chat_response(messages: list[dict]) -> dict:
     """
@@ -18,14 +20,17 @@ def generate_chat_response(messages: list[dict]) -> dict:
     3. Feed movies + user query to LLM to generate response.
     """
     if not OPENROUTER_KEY:
-        return {"role": "assistant", "content": "I need an OpenRouter API Key to think! Please set OPENROUTER_API_KEY in .env."}
+        return {
+            "role": "assistant",
+            "content": "I need an OpenRouter API Key to think! Please set OPENROUTER_API_KEY in .env.",
+        }
 
     user_msg = messages[-1]["content"]
-    
+
     # 1. RETRIEVAL (The "R" in RAG)
     # Use semantic search (FAISS + SBERT) for meaning-based retrieval
     recommender = get_recommender()
-    
+
     try:
         # Semantic search encodes query with SBERT model and searches FAISS index
         results = recommender.semantic_search(user_msg, n=5)
@@ -48,7 +53,7 @@ def generate_chat_response(messages: list[dict]) -> dict:
     # System Prompt
     system_prompt = """You are 'CineBot', an expert movie recommender AI.
     Your goal is to help users find great movies based on the provided context matches.
-    
+
     Rules:
     1. ALWAYS use the provided movie context to answer if relevant.
     2. If the context matches the user's vaguely described mood, recommend them.
@@ -56,7 +61,7 @@ def generate_chat_response(messages: list[dict]) -> dict:
     4. If the user asks general questions, answer generally but try to tie it back to movies.
     5. Do not hallucinate movies not in the context unless you are suggesting general classics.
     """
-    
+
     try:
         content = chat_completion(
             messages=[
@@ -71,4 +76,7 @@ def generate_chat_response(messages: list[dict]) -> dict:
         return {"role": "assistant", "content": content}
     except Exception as e:
         logger.error(f"GenAI generation failed: {e}")
-        return {"role": "assistant", "content": "I'm having trouble generating a response right now. Please try again shortly."}
+        return {
+            "role": "assistant",
+            "content": "I'm having trouble generating a response right now. Please try again shortly.",
+        }

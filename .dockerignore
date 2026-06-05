@@ -1,5 +1,8 @@
 .git
 .github
+.env
+frontend/.env
+.hadoop
 .hypothesis
 .pytest_cache
 .ruff_cache
@@ -14,3 +17,10 @@ frontend/tsconfig.tsbuildinfo
 frontend-vite*.log
 logs
 reports
+*.sqlite3
+*.sqlite3-*
+benchmark_temp.json
+movies_temp.parquet
+data/raw
+data/datalake
+data/events

@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-apex
+  labels:
+    app.kubernetes.io/name: apex
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: apex
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: apex
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: apex
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: NOVA_SERVING_TIER
+              value: {{ .Values.servingTier | quote }}
+            - name: NOVA_SERVING_PROFILE
+              value: {{ .Values.servingProfile | quote }}
+            {{- if .Values.secretRefs.jwtSecretKey }}
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: apex-secrets
+                  key: {{ .Values.secretRefs.jwtSecretKey }}
+            {{- end }}
+            {{- if .Values.secretRefs.tmdbApiKey }}
+            - name: TMDB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: apex-secrets
+                  key: {{ .Values.secretRefs.tmdbApiKey }}
+            {{- end }}
+            {{- if .Values.secretRefs.adminToken }}
+            - name: NOVA_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: apex-secrets
+                  key: {{ .Values.secretRefs.adminToken }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

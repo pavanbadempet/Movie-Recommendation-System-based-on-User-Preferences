@@ -30,4 +30,3 @@ def parse_metadata_name_list(value) -> str:
     if isinstance(parsed, dict):
         return str(parsed.get("name") or "").strip()
     return str(parsed).strip()
-

@@ -12,7 +12,17 @@ import argparse
 import logging
 
 from pyspark.sql import DataFrame, SparkSession
-from pyspark.sql.functions import col, coalesce, concat_ws, current_timestamp, from_json, lit, sha2, to_date, to_timestamp
+from pyspark.sql.functions import (
+    coalesce,
+    col,
+    concat_ws,
+    current_timestamp,
+    from_json,
+    lit,
+    sha2,
+    to_date,
+    to_timestamp,
+)
 from pyspark.sql.types import FloatType, StringType, StructField, StructType
 
 from etl.config import paths
@@ -100,23 +110,26 @@ def start_kafka_events_to_delta(
             else str(paths.logs / "checkpoints" / "content_events")
         )
 
-    raw_stream = spark.readStream.format("kafka") \
-        .option("kafka.bootstrap.servers", kafka_bootstrap_servers) \
-        .option("subscribe", topic) \
-        .option("startingOffsets", "latest") \
+    raw_stream = (
+        spark.readStream.format("kafka")
+        .option("kafka.bootstrap.servers", kafka_bootstrap_servers)
+        .option("subscribe", topic)
+        .option("startingOffsets", "latest")
         .load()
+    )
 
     events_df = parse_kafka_event_stream(raw_stream)
     logger.info("Starting Kafka -> Delta event stream: topic=%s output=%s", topic, table.path)
 
-    return events_df.writeStream \
-        .format("delta") \
-        .outputMode("append") \
-        .option("checkpointLocation", checkpoint_location) \
-        .partitionBy(*table.partition_columns) \
-        .queryName("nova_content_event_ingest") \
-        .trigger(processingTime=processing_time) \
+    return (
+        events_df.writeStream.format("delta")
+        .outputMode("append")
+        .option("checkpointLocation", checkpoint_location)
+        .partitionBy(*table.partition_columns)
+        .queryName("nova_content_event_ingest")
+        .trigger(processingTime=processing_time)
         .start(table.path)
+    )
 
 
 def main() -> None:

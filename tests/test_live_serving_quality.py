@@ -40,9 +40,7 @@ def _args(
         recommendation_smoke_movie_id=19995,
         recommendation_smoke_k=10,
         min_recommendation_results=5,
-        required_recommendation_titles=(
-            "Avatar: The Way of Water,Avatar: Fire and Ash,The Abyss,Pacific Rim,Dune"
-        ),
+        required_recommendation_titles=("Avatar: The Way of Water,Avatar: Fire and Ash,The Abyss,Pacific Rim,Dune"),
         min_required_recommendation_hits=2,
         blocked_recommendation_titles="Small Soldiers,Supergirl,Barbarella,The Last Airbender",
         recommendation_diagnostics_k=5,
@@ -342,9 +340,7 @@ def test_live_serving_gate_runs_search_benchmark(monkeypatch, tmp_path):
 
     monkeypatch.setattr(live, "_get_json", fake_get_json)
 
-    report = live.evaluate_live_serving(
-        _args(skip_search_benchmark=False, search_benchmark_path=benchmark_path)
-    )
+    report = live.evaluate_live_serving(_args(skip_search_benchmark=False, search_benchmark_path=benchmark_path))
 
     assert report["status"] == "ok"
     assert report["search_benchmark"]["metrics"]["top1_hit_rate"] == 1.0
@@ -496,9 +492,7 @@ def test_live_serving_gate_can_allow_degraded_artifacts_for_gateway(monkeypatch)
 
     monkeypatch.setattr(live, "_get_json", fake_get_json)
 
-    report = live.evaluate_live_serving(
-        _args(skip_semantic_benchmark=True, allow_degraded_artifact_health=True)
-    )
+    report = live.evaluate_live_serving(_args(skip_semantic_benchmark=True, allow_degraded_artifact_health=True))
 
     assert report["status"] == "ok"
     assert report["artifact_health"]["status"] == "degraded"

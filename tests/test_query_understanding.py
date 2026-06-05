@@ -28,4 +28,3 @@ def test_intent_score_rewards_matching_movie():
 
     assert score > 0
     assert reasons
-

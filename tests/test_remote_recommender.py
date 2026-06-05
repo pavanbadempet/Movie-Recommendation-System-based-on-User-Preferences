@@ -166,9 +166,7 @@ def test_remote_429_uses_stale_cache_instead_of_client_error(monkeypatch):
         async def get(self, *args, **kwargs):
             return FakeResponse(429, {"detail": "rate limited"})
 
-    remote._response_cache[
-        "https://vector.example|/v1/search|q=avatar|||"
-    ] = remote._CacheEntry(
+    remote._response_cache["https://vector.example|/v1/search|q=avatar|||"] = remote._CacheEntry(
         created_at=time.time() - 5,
         status_code=200,
         payload=[{"title": "Avatar"}],

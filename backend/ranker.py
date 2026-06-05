@@ -8,11 +8,11 @@ hand-built hybrid ranker remains the serving path.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import UTC, datetime
 import logging
 import math
 import os
-from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -123,7 +123,7 @@ class NovaRanker:
             normalized = np.ones_like(scores, dtype=np.float32)
 
         reranked = []
-        for candidate, ranker_score in zip(candidates, normalized):
+        for candidate, ranker_score in zip(candidates, normalized, strict=False):
             item = dict(candidate)
             previous_score = _safe_float(item.get("similarity_score"))
             learned_score = float(ranker_score)

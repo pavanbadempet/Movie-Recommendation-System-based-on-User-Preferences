@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>APEX API — Interactive Documentation</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+  <style>
+    body { margin: 0; background: #1a1a2e; }
+    #swagger-ui .topbar { background: #16213e; }
+    #swagger-ui .topbar .download-url-wrapper { display: none; }
+    .custom-header {
+      background: linear-gradient(135deg, #16213e 0%, #0f3460 100%);
+      padding: 20px 40px;
+      color: white;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    .custom-header h1 { margin: 0 0 4px; font-size: 1.6rem; font-weight: 700; }
+    .custom-header p { margin: 0; opacity: 0.75; font-size: 0.9rem; }
+    .custom-header a { color: #e94560; text-decoration: none; }
+    .custom-header a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="custom-header">
+    <h1>APEX Recommendation API</h1>
+    <p>
+      v2.0.0 &nbsp;·&nbsp;
+      52 endpoints &nbsp;·&nbsp;
+      <a href="openapi.json" download>Download OpenAPI JSON</a> &nbsp;·&nbsp;
+      <a href="openapi.yaml" download>Download OpenAPI YAML</a> &nbsp;·&nbsp;
+      <a href="../README.md">README</a>
+    </p>
+  </div>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+  <script>
+    window.onload = () => {
+      SwaggerUIBundle({
+        url: "openapi.json",
+        dom_id: "#swagger-ui",
+        presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+        layout: "StandaloneLayout",
+        deepLinking: true,
+        displayRequestDuration: true,
+        filter: true,
+        tryItOutEnabled: true,
+        defaultModelsExpandDepth: 1,
+        defaultModelExpandDepth: 2,
+        docExpansion: "list",
+        syntaxHighlight: { activate: true, theme: "monokai" },
+      });
+    };
+  </script>
+</body>
+</html>

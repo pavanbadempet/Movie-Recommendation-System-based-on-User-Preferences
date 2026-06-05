@@ -9,13 +9,13 @@ surface quality issues, and persist a raw upload plus manifest locally.
 from __future__ import annotations
 
 import csv
+from datetime import UTC, datetime
 import hashlib
 import io
 import json
 import os
-import re
-from datetime import UTC, datetime
 from pathlib import Path
+import re
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -98,15 +98,9 @@ def profile_catalog_csv(
     mapping = normalize_mapping(column_mapping)
     columns, rows = _read_csv_rows(csv_text, max_rows=max_rows)
 
-    missing_mapped_columns = sorted(
-        {source for source in mapping.values() if source and source not in columns}
-    )
+    missing_mapped_columns = sorted({source for source in mapping.values() if source and source not in columns})
     missing_required_mapped_columns = sorted(
-        {
-            mapping[field]
-            for field in ("title", "description")
-            if mapping.get(field) and mapping[field] not in columns
-        }
+        {mapping[field] for field in ("title", "description") if mapping.get(field) and mapping[field] not in columns}
     )
     seen_source_ids: set[str] = set()
     duplicate_source_ids = 0
