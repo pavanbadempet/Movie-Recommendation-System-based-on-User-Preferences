@@ -470,3 +470,5 @@
 {"authenticated":false,"catalog_id":"tmdb-movies","operation":"search","plan":"demo","status":"ok","tenant_id":"demo-media-co","ts":"2026-05-27T08:08:43Z"}
 {"authenticated":false,"catalog_id":"tmdb-movies","operation":"search","plan":"demo","status":"ok","tenant_id":"demo-media-co","ts":"2026-06-05T12:01:17Z"}
 {"authenticated":false,"catalog_id":"tmdb-movies","operation":"search","plan":"demo","status":"ok","tenant_id":"demo-media-co","ts":"2026-06-05T12:19:18Z"}
+{"authenticated":false,"catalog_id":"tmdb-movies","operation":"search","plan":"demo","status":"ok","tenant_id":"demo-media-co","ts":"2026-06-05T13:32:01Z"}
+{"authenticated":false,"catalog_id":"tmdb-movies","operation":"search","plan":"demo","status":"ok","tenant_id":"demo-media-co","ts":"2026-06-05T13:44:02Z"}
