@@ -1,20 +1,21 @@
 """
 System Integration Test.
 Simulates a complete data pipeline run and verifies API response.
-Run this ensures the components work together: 
+Run this ensures the components work together:
 Ingest -> Transform -> Index -> Recommender API
 """
-import pytest
+
 import json
-import pandas as pd
-import numpy as np
-import tempfile
 from pathlib import Path
 import shutil
-import os
+import tempfile
 
-from etl import pandas_etl
+import numpy as np
+import pandas as pd
+
 from backend.recommender import Recommender
+from etl import pandas_etl
+
 
 def test_full_system_flow(monkeypatch):
     """
@@ -29,7 +30,7 @@ def test_full_system_flow(monkeypatch):
     temp_dir = tempfile.mkdtemp()
     try:
         temp_path = Path(temp_dir)
-        
+
         # Setup mock paths structure
         raw_dir = temp_path / "data" / "raw"
         processed_dir = temp_path / "data" / "processed"
@@ -39,27 +40,28 @@ def test_full_system_flow(monkeypatch):
         quality_dir = temp_path / "data" / "quality"
         manifest_dir = temp_path / "data" / "manifests"
         models_dir = temp_path / "models"
-        
+
         for p in [raw_dir, processed_dir, bronze_dir, silver_dir, gold_dir, quality_dir, manifest_dir, models_dir]:
             p.mkdir(parents=True)
-            
+
         # 1. Create Dummy Data
         csv_path = raw_dir / "TMDB_all_movies.csv"
-        df_raw = pd.DataFrame({
-            "id": [1, 2, 3],
-            "title": ["Matrix", "Inception", "Interstellar"],
-            "overview": ["Red pill blue pill", "Dreams within dreams", "Space travel data"],
-            "vote_count": [1000, 2000, 1500],  # Above 50 threshold
-            "genres": ["[{'name': 'Sci-Fi'}]", "[{'name': 'Sci-Fi'}]", "[{'name': 'Sci-Fi'}]"],
-            "vote_average": [8.7, 8.8, 8.6],
-            "release_date": ["1999-03-31", "2010-07-16", "2014-11-07"],
-            "poster_path": ["/path.jpg", "/path.jpg", "/path.jpg"],
-        })
+        df_raw = pd.DataFrame(
+            {
+                "id": [1, 2, 3],
+                "title": ["Matrix", "Inception", "Interstellar"],
+                "overview": ["Red pill blue pill", "Dreams within dreams", "Space travel data"],
+                "vote_count": [1000, 2000, 1500],  # Above 50 threshold
+                "genres": ["[{'name': 'Sci-Fi'}]", "[{'name': 'Sci-Fi'}]", "[{'name': 'Sci-Fi'}]"],
+                "vote_average": [8.7, 8.8, 8.6],
+                "release_date": ["1999-03-31", "2010-07-16", "2014-11-07"],
+                "poster_path": ["/path.jpg", "/path.jpg", "/path.jpg"],
+            }
+        )
         df_raw.to_csv(csv_path, index=False)
-        
+
         # Mock paths in modules
-        import etl.config
-        
+
         # Monkeypatch Config Paths
         class MockPaths:
             raw_data = raw_dir
@@ -71,7 +73,7 @@ def test_full_system_flow(monkeypatch):
             manifests = manifest_dir
             models = models_dir
             logs = temp_path / "logs"
-            
+
         # Apply mock to modules
         pandas_etl.paths = MockPaths()
 
@@ -87,10 +89,10 @@ def test_full_system_flow(monkeypatch):
                 return vectors
 
         monkeypatch.setattr(pandas_etl, "SentenceTransformer", FakeSentenceTransformer)
-        
+
         # 2. Run ETL Pipeline (Ingest, Transform, Index)
         metrics = pandas_etl.run_pipeline(raw_data_path=csv_path, run_id="test-run", run_date="2026-05-02")
-        
+
         assert metrics["success"] is True
         assert metrics["final_rows"] == 3
         assert metrics["quality"]["total_rows"] == 3
@@ -107,7 +109,7 @@ def test_full_system_flow(monkeypatch):
         assert metrics["time_travel_artifacts"]["movies_features"]["row_count"] == 3
         assert metrics["time_travel_artifacts"]["dim_movie_scd"]["row_count"] == 3
         assert metrics["quality_gates"]["dim_movie_scd"]["current_rows"] == 3
-        
+
         # 3. Verify Artifacts
         assert (processed_dir / "movies_transformed.parquet").exists()
         assert (processed_dir / "semantic_twins.parquet").exists()
@@ -144,23 +146,24 @@ def test_full_system_flow(monkeypatch):
 
         scd_snapshot = load_table_version(gold_dir, "dim_movie_scd", as_of_date="2026-05-02")
         assert len(scd_snapshot) == 3
-        
+
         # 4. Update Recommender to use these paths and Test
         import backend.recommender
+
         backend.recommender.MODELS_DIR = models_dir
         backend.recommender.DATA_DIR = processed_dir
-        
+
         rec = Recommender().load()
         assert len(rec.movies) == 3
-        
+
         # 5. Get Recommendations
         results = rec.recommend_by_title("Matrix", n=2)
         assert len(results) == 2
         # Should recommend Inception or Interstellar (same genre)
         assert results[0]["title"] in ["Inception", "Interstellar"]
-        
+
         print("\n✅ System Flow Verified: ETL -> Artifacts -> Recommender -> Output")
-        
+
     finally:
         # Cleanup with error ignore for Windows file locks
         shutil.rmtree(temp_dir, ignore_errors=True)

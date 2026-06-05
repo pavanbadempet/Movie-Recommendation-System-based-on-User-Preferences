@@ -6,16 +6,15 @@ the backend keeps a small registry and can send users to the healthiest UI.
 
 from __future__ import annotations
 
-import os
-import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
+import os
 from pathlib import Path
+import time
 from typing import Any
 from urllib.parse import urljoin
 
 import httpx
-
 
 DEFAULT_STREAMLIT_URL = "https://a-movie-recommendation-system.streamlit.app"
 DEFAULT_REACT_URL = "/ui/"
@@ -67,13 +66,10 @@ def _priority_names() -> list[str]:
 def configured_frontends(*, frontend_available: bool) -> list[FrontendTarget]:
     """Return frontend registry in preferred failover order."""
     streamlit_url = _normalize_url(
-        os.getenv("NOVA_FRONTEND_STREAMLIT_URL", "")
-        or os.getenv("STREAMLIT_FRONTEND_URL", "")
-        or DEFAULT_STREAMLIT_URL
+        os.getenv("NOVA_FRONTEND_STREAMLIT_URL", "") or os.getenv("STREAMLIT_FRONTEND_URL", "") or DEFAULT_STREAMLIT_URL
     )
     react_url = _normalize_url(
-        os.getenv("NOVA_FRONTEND_REACT_URL", "")
-        or (DEFAULT_REACT_URL if frontend_available else "")
+        os.getenv("NOVA_FRONTEND_REACT_URL", "") or (DEFAULT_REACT_URL if frontend_available else "")
     )
     github_pages_url = _normalize_url(os.getenv("NOVA_FRONTEND_PAGES_URL", ""))
 

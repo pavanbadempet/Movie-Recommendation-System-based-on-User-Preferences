@@ -8,16 +8,36 @@ S3, Delta, or a warehouse table without changing API callers.
 
 from __future__ import annotations
 
+from collections import Counter, defaultdict
+from collections.abc import Iterator
+from datetime import UTC, datetime
 import json
 import logging
 import math
 import os
-import re
-import uuid
-from collections import Counter, defaultdict
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterator
+import re
+from threading import Lock
+from typing import Any
+import uuid
+
+# Use orjson for faster JSON serialization when available
+try:
+    import orjson as _json_mod
+
+    def _json_dumps(obj) -> str:
+        return _json_mod.dumps(obj, option=_json_mod.OPT_SORT_KEYS).decode()
+
+    def _json_loads(s):
+        return _json_mod.loads(s)
+except ImportError:
+
+    def _json_dumps(obj) -> str:
+        return json.dumps(obj, sort_keys=True, ensure_ascii=True)
+
+    def _json_loads(s):
+        return json.loads(s)
+
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +48,21 @@ DEFAULT_CATALOG_ID = os.getenv("NOVA_CATALOG_ID", "tmdb-movies")
 DEFAULT_EVENT_TABLE = "nova_content_events"
 EVENT_STORE_MODES = {"jsonl", "postgres", "dual"}
 _POSTGRES_TABLE_READY: set[str] = set()
+# Lock protecting _POSTGRES_TABLE_READY against concurrent startup races
+_POSTGRES_TABLE_READY_LOCK = Lock()
+# Per-path locks for JSONL append — prevents interleaved writes under concurrency
+_JSONL_FILE_LOCKS: dict[str, Lock] = {}
+_JSONL_FILE_LOCKS_LOCK = Lock()
+
+
+def _get_jsonl_lock(path: Path) -> Lock:
+    """Return (creating if needed) a per-file Lock for the given JSONL path."""
+    key = str(path.resolve())
+    with _JSONL_FILE_LOCKS_LOCK:
+        if key not in _JSONL_FILE_LOCKS:
+            _JSONL_FILE_LOCKS[key] = Lock()
+        return _JSONL_FILE_LOCKS[key]
+
 
 ALLOWED_EVENT_TYPES = {
     "view",
@@ -128,8 +163,8 @@ def _json_safe(value: Any) -> Any:
     if hasattr(value, "item"):
         try:
             return _json_safe(value.item())
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to coerce scalar metadata via item(): %s", exc)
     return str(value)
 
 
@@ -184,12 +219,13 @@ def normalize_event(event: dict[str, Any]) -> dict[str, Any]:
 
 
 def _append_event_jsonl(normalized: dict[str, Any], event_path: str | Path | None = None) -> Path:
-    """Append one normalized event to the JSONL event log."""
+    """Append one normalized event to the JSONL event log (thread-safe)."""
     path = get_events_path(event_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(normalized, sort_keys=True, ensure_ascii=True))
+    file_lock = _get_jsonl_lock(path)
+    with file_lock, path.open("a", encoding="utf-8") as fh:
+        fh.write(_json_dumps(normalized))
         fh.write("\n")
 
     return path
@@ -200,8 +236,7 @@ def _get_psycopg():
         import psycopg
     except ImportError as exc:
         raise RuntimeError(
-            "Postgres event storage requires psycopg. Install requirements.txt or run "
-            "`pip install psycopg[binary]`."
+            "Postgres event storage requires psycopg. Install requirements.txt or run `pip install psycopg[binary]`."
         ) from exc
     return psycopg
 
@@ -213,52 +248,58 @@ def _connect_postgres(database_url: str):
 
 def _ensure_postgres_events_table(conn: Any, table_name: str) -> None:
     cache_key = table_name
+    # Fast path — no lock needed for a read that's already in the set
     if cache_key in _POSTGRES_TABLE_READY:
         return
 
-    index_prefix = table_name[:40]
-    with conn.cursor() as cur:
-        cur.execute(
-            f"""
-            CREATE TABLE IF NOT EXISTS {table_name} (
-                event_id uuid PRIMARY KEY,
-                event_ts timestamptz NOT NULL,
-                tenant_id text NOT NULL,
-                catalog_id text NOT NULL,
-                event_type text NOT NULL,
-                movie_id bigint,
-                content_id text,
-                source_content_id text,
-                user_id text,
-                session_id text,
-                query_text text,
-                rating double precision,
-                request_id text,
-                source text,
-                metadata jsonb NOT NULL DEFAULT '{{}}'::jsonb,
-                raw_event jsonb NOT NULL
+    # Slow path — acquire lock and re-check to prevent duplicate DDL on startup
+    with _POSTGRES_TABLE_READY_LOCK:
+        if cache_key in _POSTGRES_TABLE_READY:
+            return
+
+        index_prefix = table_name[:40]
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS {table_name} (
+                    event_id uuid PRIMARY KEY,
+                    event_ts timestamptz NOT NULL,
+                    tenant_id text NOT NULL,
+                    catalog_id text NOT NULL,
+                    event_type text NOT NULL,
+                    movie_id bigint,
+                    content_id text,
+                    source_content_id text,
+                    user_id text,
+                    session_id text,
+                    query_text text,
+                    rating double precision,
+                    request_id text,
+                    source text,
+                    metadata jsonb NOT NULL DEFAULT '{{}}'::jsonb,
+                    raw_event jsonb NOT NULL
+                )
+                """
             )
-            """
-        )
-        cur.execute(
-            f"""
-            CREATE INDEX IF NOT EXISTS {index_prefix}_tenant_ts_idx
-            ON {table_name} (tenant_id, catalog_id, event_ts DESC)
-            """
-        )
-        cur.execute(
-            f"""
-            CREATE INDEX IF NOT EXISTS {index_prefix}_type_ts_idx
-            ON {table_name} (event_type, event_ts DESC)
-            """
-        )
-        cur.execute(
-            f"""
-            CREATE INDEX IF NOT EXISTS {index_prefix}_user_ts_idx
-            ON {table_name} (user_id, event_ts DESC)
-            """
-        )
-    _POSTGRES_TABLE_READY.add(cache_key)
+            cur.execute(
+                f"""
+                CREATE INDEX IF NOT EXISTS {index_prefix}_tenant_ts_idx
+                ON {table_name} (tenant_id, catalog_id, event_ts DESC)
+                """
+            )
+            cur.execute(
+                f"""
+                CREATE INDEX IF NOT EXISTS {index_prefix}_type_ts_idx
+                ON {table_name} (event_type, event_ts DESC)
+                """
+            )
+            cur.execute(
+                f"""
+                CREATE INDEX IF NOT EXISTS {index_prefix}_user_ts_idx
+                ON {table_name} (user_id, event_ts DESC)
+                """
+            )
+        _POSTGRES_TABLE_READY.add(cache_key)
 
 
 def _append_event_postgres(normalized: dict[str, Any]) -> None:
@@ -267,8 +308,8 @@ def _append_event_postgres(normalized: dict[str, Any]) -> None:
         raise RuntimeError("NOVA_EVENT_DATABASE_URL or DATABASE_URL is required for Postgres event storage")
 
     table_name = get_event_table_name()
-    metadata = json.dumps(normalized.get("metadata") or {}, ensure_ascii=True)
-    raw_event = json.dumps(normalized, sort_keys=True, ensure_ascii=True)
+    metadata = _json_dumps(normalized.get("metadata") or {})
+    raw_event = _json_dumps(normalized)
     with _connect_postgres(database_url) as conn:
         _ensure_postgres_events_table(conn, table_name)
         with conn.cursor() as cur:
@@ -357,9 +398,12 @@ def _iter_jsonl_events(event_path: str | Path | None = None) -> Iterator[dict[st
                 continue
 
             try:
-                parsed = json.loads(raw_line)
-            except json.JSONDecodeError:
-                logger.warning("Skipping malformed event line %s in %s", line_number, path)
+                parsed = _json_loads(raw_line)
+            except (json.JSONDecodeError, Exception):
+                dlq_path = path.with_suffix(".dlq")
+                with dlq_path.open("a", encoding="utf-8") as dlq:
+                    dlq.write(raw_line + "\n")
+                logger.warning(f"Quarantined malformed event to DLQ ({dlq_path}): line {line_number}")
                 continue
 
             if isinstance(parsed, dict):
@@ -392,8 +436,8 @@ def _iter_postgres_events(limit: int | None = None) -> Iterator[dict[str, Any]]:
                     yield raw_event
                 elif isinstance(raw_event, str):
                     try:
-                        parsed = json.loads(raw_event)
-                    except json.JSONDecodeError:
+                        parsed = _json_loads(raw_event)
+                    except (json.JSONDecodeError, Exception):
                         continue
                     if isinstance(parsed, dict):
                         yield parsed
@@ -476,10 +520,13 @@ def aggregate_behavior_features(
         stats["tenant_id"] = str(event.get("tenant_id") or DEFAULT_TENANT_ID)
         stats["catalog_id"] = str(event.get("catalog_id") or DEFAULT_CATALOG_ID)
         stats["event_count"] += 1
-        stats["last_event_ts"] = max(
-            stats["last_event_ts"] or "",
-            str(event.get("event_ts") or ""),
-        ) or None
+        stats["last_event_ts"] = (
+            max(
+                stats["last_event_ts"] or "",
+                str(event.get("event_ts") or ""),
+            )
+            or None
+        )
 
         if event_type == "view":
             stats["views"] += 1
@@ -507,16 +554,11 @@ def aggregate_behavior_features(
     for item in ranked_movies:
         item = dict(item)
         rating_sum = float(item.pop("rating_sum", 0.0))
-        item["avg_rating"] = (
-            round(rating_sum / item["ratings"], 3)
-            if item["ratings"]
-            else None
-        )
+        item["avg_rating"] = round(rating_sum / item["ratings"], 3) if item["ratings"] else None
         trending_movies[str(item["movie_id"])] = item
 
     top_searches = [
-        {"query_text": query_text, "count": count}
-        for query_text, count in search_counts.most_common(max(limit, 0))
+        {"query_text": query_text, "count": count} for query_text, count in search_counts.most_common(max(limit, 0))
     ]
 
     return {
@@ -597,8 +639,7 @@ def summarize_recommendation_events(
         "retrieval_stage_counts": dict(stage_counts.most_common(max(limit, 0))),
         "rank_position_counts": dict(rank_counts.most_common(max(limit, 0))),
         "top_seed_movies": [
-            {"movie_id": movie_id, "request_count": count}
-            for movie_id, count in seed_counts.most_common(max(limit, 0))
+            {"movie_id": movie_id, "request_count": count} for movie_id, count in seed_counts.most_common(max(limit, 0))
         ],
         "top_recommended_movies": [
             {"movie_id": movie_id, "impression_count": count}
@@ -652,8 +693,8 @@ def build_user_behavior_profile(
                 rating_value = max(0.0, min(float(rating), 5.0))
                 weight += rating_value / 5.0
                 is_negative = rating_value <= 2.0
-            except (TypeError, ValueError):
-                pass
+            except (TypeError, ValueError) as exc:
+                logger.debug("Skipping invalid rating in user summary for movie_id=%s: %s", movie_id, exc)
 
         if is_negative:
             negative_movie_ids.append(movie_id)
@@ -690,7 +731,6 @@ def build_user_behavior_profile(
         "negative_movie_ids": sorted(set(negative_movie_ids)),
         "recent_events": weighted_events[:limit],
         "top_searches": [
-            {"query_text": query_text, "count": count}
-            for query_text, count in query_counts.most_common(limit)
+            {"query_text": query_text, "count": count} for query_text, count in query_counts.most_common(limit)
         ],
     }

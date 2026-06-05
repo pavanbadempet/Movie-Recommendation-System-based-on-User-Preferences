@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from pyspark.sql import DataFrame, SparkSession
-from pyspark.sql.functions import col, concat_ws, coalesce, current_timestamp, desc, lit, row_number, sha2, when
+from pyspark.sql.functions import coalesce, col, concat_ws, current_timestamp, desc, lit, row_number, sha2, when
 from pyspark.sql.types import (
     ArrayType,
     BooleanType,
@@ -512,9 +512,11 @@ def require_delta_table() -> Any:
 
 def add_batch_metadata(df: DataFrame, run_date: str, run_id: str) -> DataFrame:
     """Add standard batch lineage columns before writing a Delta table."""
-    return df.withColumn("run_date", lit(run_date)) \
-        .withColumn("run_id", lit(run_id)) \
+    return (
+        df.withColumn("run_date", lit(run_date))
+        .withColumn("run_id", lit(run_id))
         .withColumn("ingestion_ts", current_timestamp())
+    )
 
 
 def _string_column_or_default(df: DataFrame, column_name: str, default: str | None = None):
@@ -857,23 +859,27 @@ def build_embedding_jobs(
             col("tags_hash").alias("previous_tags_hash"),
         )
         joined = current.join(previous, "movie_id", "left")
-        changed = joined.filter(
-            col("previous_tags_hash").isNull() | (col("tags_hash") != col("previous_tags_hash"))
-        ).withColumn(
-            "change_type",
-            when(col("previous_tags_hash").isNull(), lit("new")).otherwise(lit("changed")),
-        ).drop("previous_tags_hash")
+        changed = (
+            joined.filter(col("previous_tags_hash").isNull() | (col("tags_hash") != col("previous_tags_hash")))
+            .withColumn(
+                "change_type",
+                when(col("previous_tags_hash").isNull(), lit("new")).otherwise(lit("changed")),
+            )
+            .drop("previous_tags_hash")
+        )
 
-    return changed.withColumn(
-        "job_id",
-        sha2(concat_ws("||", col("movie_id").cast("string"), col("tags_hash"), lit(run_id), lit(model_name)), 256),
-    ).withColumn("source_run_date", lit(run_date)) \
-        .withColumn("source_run_id", lit(run_id)) \
-        .withColumn("model_name", lit(model_name)) \
-        .withColumn("job_status", lit("pending")) \
-        .withColumn("created_at", current_timestamp()) \
-        .withColumn("completed_at", lit(None).cast(TimestampType())) \
-        .withColumn("error_message", lit(None).cast(StringType())) \
+    return (
+        changed.withColumn(
+            "job_id",
+            sha2(concat_ws("||", col("movie_id").cast("string"), col("tags_hash"), lit(run_id), lit(model_name)), 256),
+        )
+        .withColumn("source_run_date", lit(run_date))
+        .withColumn("source_run_id", lit(run_id))
+        .withColumn("model_name", lit(model_name))
+        .withColumn("job_status", lit("pending"))
+        .withColumn("created_at", current_timestamp())
+        .withColumn("completed_at", lit(None).cast(TimestampType()))
+        .withColumn("error_message", lit(None).cast(StringType()))
         .select(
             "job_id",
             "movie_id",
@@ -889,6 +895,7 @@ def build_embedding_jobs(
             "completed_at",
             "error_message",
         )
+    )
 
 
 def load_previous_features_for_incremental(
@@ -947,15 +954,13 @@ def latest_delta_version(spark: SparkSession, table: DeltaTableModel | str) -> i
 
 def latest_rows_by_key(df: DataFrame, key_columns: tuple[str, ...] = ("id",)) -> DataFrame:
     """Return the latest row per key from an append-only Delta snapshot table."""
-    order_columns = [
-        desc(column)
-        for column in ("run_date", "run_id", "ingestion_ts")
-        if column in df.columns
-    ]
+    order_columns = [desc(column) for column in ("run_date", "run_id", "ingestion_ts") if column in df.columns]
     if not order_columns:
         return df.dropDuplicates(list(key_columns))
 
     window = Window.partitionBy(*[col(column) for column in key_columns]).orderBy(*order_columns)
-    return df.withColumn("_latest_row_number", row_number().over(window)) \
-        .filter(col("_latest_row_number") == 1) \
+    return (
+        df.withColumn("_latest_row_number", row_number().over(window))
+        .filter(col("_latest_row_number") == 1)
         .drop("_latest_row_number")
+    )

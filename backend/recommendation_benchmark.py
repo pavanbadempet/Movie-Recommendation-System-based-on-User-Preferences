@@ -3,11 +3,29 @@
 from __future__ import annotations
 
 import json
-import math
+
+# Fast JSON
+try:
+    import orjson as _orjson
+
+    def _jloads(s):
+        return _orjson.loads(s)
+
+    def _jdumps(obj, **kw) -> str:
+        return _orjson.dumps(obj).decode()
+except ImportError:
+
+    def _jloads(s):
+        return json.loads(s)
+
+    def _jdumps(obj, **kw) -> str:
+        return json.dumps(obj, **kw)
+
+
 from datetime import UTC, datetime
+import math
 from pathlib import Path
 from typing import Any
-
 
 DEFAULT_RECOMMENDATION_BENCHMARK_PATH = (
     Path(__file__).resolve().parent.parent / "data" / "evaluation" / "recommendation_quality_benchmark.json"
@@ -68,7 +86,7 @@ def load_recommendation_benchmark(path: Path | str | None = None) -> list[dict[s
     benchmark_path = Path(path) if path is not None else DEFAULT_RECOMMENDATION_BENCHMARK_PATH
     if not benchmark_path.exists():
         return []
-    payload = json.loads(benchmark_path.read_text(encoding="utf-8"))
+    payload = _jloads(benchmark_path.read_text(encoding="utf-8"))
     if isinstance(payload, dict):
         return list(payload.get("cases") or [])
     if isinstance(payload, list):

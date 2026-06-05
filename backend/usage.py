@@ -8,12 +8,30 @@ loaded into the Delta event fact table.
 
 from __future__ import annotations
 
-import json
-import os
 from collections import Counter
 from datetime import UTC, datetime
+import json
+import os
 from pathlib import Path
 from typing import Any
+
+# Fast JSON for usage log writes
+try:
+    import orjson as _orjson
+
+    def _usage_dumps(obj) -> str:
+        return _orjson.dumps(obj, option=_orjson.OPT_SORT_KEYS).decode()
+
+    def _usage_loads(s):
+        return _orjson.loads(s)
+except ImportError:
+
+    def _usage_dumps(obj) -> str:
+        return json.dumps(obj, sort_keys=True, ensure_ascii=True)
+
+    def _usage_loads(s):
+        return json.loads(s)
+
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_USAGE_PATH = REPO_ROOT / "data" / "events" / "api_usage.jsonl"
@@ -45,7 +63,7 @@ def record_usage(
     path = get_usage_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(record, sort_keys=True, ensure_ascii=True))
+        fh.write(_usage_dumps(record))
         fh.write("\n")
     return record
 
@@ -65,8 +83,8 @@ def summarize_usage(limit: int = 20) -> dict[str, Any]:
                 if not line:
                     continue
                 try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
+                    record = _usage_loads(line)
+                except (json.JSONDecodeError, Exception):
                     continue
                 total += 1
                 operation_counts[str(record.get("operation") or "unknown")] += 1

@@ -1,0 +1,53 @@
+# Default values for the APEX Recommendation API Helm chart.
+# Override any value using --set or a custom values file (-f myvalues.yaml).
+
+# Number of backend pod replicas
+replicaCount: 1
+
+# Container image configuration
+image:
+  repository: ghcr.io/your-username/apex-backend
+  pullPolicy: IfNotPresent
+  # Override with a specific tag (e.g. "2.0.0") for production
+  tag: "latest"
+
+# Kubernetes Service configuration
+service:
+  type: ClusterIP
+  port: 8000
+
+# Ingress configuration — set enabled: true and configure host for external access
+ingress:
+  enabled: false
+  host: apex.example.com
+  # TLS configuration — list of {secretName, hosts} objects
+  tls: []
+
+# Resource requests and limits for the backend container
+resources:
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+  limits:
+    cpu: "2000m"
+    memory: "4Gi"
+
+# APEX serving tier and profile — controls which ML models are loaded
+# tier1: GPU + full 6-model ensemble | tier2: ONNX CPU | tier3: FAISS + TF-IDF only
+servingTier: "tier2"
+servingProfile: "full"
+
+# HorizontalPodAutoscaler configuration
+autoscaling:
+  minReplicas: 1
+  maxReplicas: 10
+  # Target CPU utilization percentage for scaling trigger
+  targetCPUUtilizationPercentage: 70
+
+# Kubernetes Secret key references for sensitive environment variables
+# Set these to the name of the key inside a Kubernetes Secret object
+# Leave empty ("") to skip mounting the secret (use --set or env var instead)
+secretRefs:
+  jwtSecretKey: ""    # Key in a Secret holding the JWT signing secret
+  tmdbApiKey: ""      # Key in a Secret holding the TMDB API key
+  adminToken: ""      # Key in a Secret holding the NOVA_ADMIN_TOKEN

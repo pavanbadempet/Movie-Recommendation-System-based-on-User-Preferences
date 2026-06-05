@@ -3,15 +3,31 @@ PySpark ETL - processes TMDB movie data using Spark.
 
 Canonical batch/lakehouse pipeline for the project.
 """
+
+from datetime import UTC, datetime
 import hashlib
 import json
 import logging
-from datetime import datetime, timezone
+import os
 from pathlib import Path
+import sys
 
-from pyspark.sql import SparkSession
-from pyspark.sql import DataFrame
-from pyspark.sql.functions import col, concat_ws, coalesce, current_timestamp, desc, expr, greatest, length, lit, row_number, sha2, udf, when
+from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql.functions import (
+    coalesce,
+    col,
+    concat_ws,
+    current_timestamp,
+    desc,
+    expr,
+    greatest,
+    length,
+    lit,
+    row_number,
+    sha2,
+    udf,
+    when,
+)
 from pyspark.sql.types import StringType
 from pyspark.sql.window import Window
 
@@ -24,8 +40,8 @@ from etl.delta_lakehouse import (
     load_previous_features_for_incremental,
     movie_features_to_content_features,
     movie_snapshot_to_content_items,
-    write_delta_table,
     write_data_quality_observation,
+    write_delta_table,
     write_embedding_jobs,
     write_pipeline_run,
 )
@@ -60,6 +76,23 @@ DEFAULT_CATALOG_ID = "tmdb-movies"
 DEFAULT_SOURCE_SYSTEM = "tmdb_kaggle"
 
 
+def _configure_windows_hadoop_home() -> None:
+    """Use checked-out winutils binaries for local Windows Spark file writes."""
+    if sys.platform != "win32" or os.getenv("HADOOP_HOME"):
+        return
+
+    hadoop_home = Path(__file__).resolve().parent.parent / ".hadoop"
+    bin_dir = hadoop_home / "bin"
+    if not (bin_dir / "winutils.exe").exists():
+        return
+
+    os.environ["HADOOP_HOME"] = str(hadoop_home)
+    current_path = os.environ.get("PATH", "")
+    path_parts = current_path.split(os.pathsep) if current_path else []
+    if str(bin_dir) not in path_parts:
+        os.environ["PATH"] = os.pathsep.join([str(bin_dir), *path_parts])
+
+
 def _path_join(base_path: Path | str, *parts: str) -> str:
     """Join local/cloud paths without corrupting URI-style paths."""
     if isinstance(base_path, Path):
@@ -85,24 +118,27 @@ def create_spark_session(
     enable_delta: bool = True,
 ):
     """Create a local Spark session with AQE enabled and Delta Lake support."""
+    _configure_windows_hadoop_home()
+
     # MEMORY SAFETY for Machine Learning (SBERT runs off-heap)
     # Prevent Arrow batches from exploding memory during UDF transfer
-    builder = SparkSession.builder \
-        .appName(app_name) \
-        .master(master) \
-        .config("spark.driver.memory", "8g") \
-        .config("spark.executor.memory", "8g") \
-        .config("spark.sql.adaptive.enabled", "true") \
-        .config("spark.sql.adaptive.coalescePartitions.enabled", "true") \
-        .config("spark.sql.adaptive.skewJoin.enabled", "true") \
-        .config("spark.executor.memoryOverhead", "4g") \
-        .config("spark.python.worker.memory", "2g") \
+    builder = (
+        SparkSession.builder.appName(app_name)
+        .master(master)
+        .config("spark.driver.memory", "8g")
+        .config("spark.executor.memory", "8g")
+        .config("spark.sql.adaptive.enabled", "true")
+        .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
+        .config("spark.sql.adaptive.skewJoin.enabled", "true")
+        .config("spark.executor.memoryOverhead", "4g")
+        .config("spark.python.worker.memory", "2g")
         .config("spark.sql.execution.arrow.maxRecordsPerBatch", "1000")
+    )
 
     if enable_delta:
-        builder = builder \
-            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
-            .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+        builder = builder.config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension").config(
+            "spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog"
+        )
         try:
             from delta import configure_spark_with_delta_pip
 
@@ -118,17 +154,17 @@ def create_spark_session(
 def dedupe_latest_movies(df: DataFrame, key_columns: tuple[str, ...] = MOVIE_KEY_COLUMNS) -> DataFrame:
     """Keep one deterministic row per movie key before SCD comparison."""
     order_columns = [
-        expr(f"try_cast({column} as double) desc nulls last")
-        for column in ("vote_count", "popularity")
-        if column in df.columns
+        col(column).cast("double").desc_nulls_last() for column in ("vote_count", "popularity") if column in df.columns
     ]
     if not order_columns:
         order_columns = [desc(key_columns[0])]
 
     window = Window.partitionBy(*[col(column) for column in key_columns]).orderBy(*order_columns)
-    return df.withColumn("_scd_row_number", row_number().over(window)) \
-        .filter(col("_scd_row_number") == 1) \
+    return (
+        df.withColumn("_scd_row_number", row_number().over(window))
+        .filter(col("_scd_row_number") == 1)
         .drop("_scd_row_number")
+    )
 
 
 def add_scd_record_hash(df: DataFrame, tracked_columns: tuple[str, ...]) -> DataFrame:
@@ -170,24 +206,28 @@ def apply_spark_scd_type2(
     high_date: str = SCD_HIGH_DATE,
 ) -> DataFrame:
     """Apply SCD Type 2 semantics to a latest movie snapshot."""
-    effective_ts = effective_ts or datetime.now(timezone.utc).isoformat(timespec="seconds")
+    effective_ts = effective_ts or datetime.now(UTC).isoformat(timespec="seconds")
     missing_keys = [column for column in key_columns if column not in incoming_df.columns]
     if missing_keys:
         raise ValueError(f"Incoming movie snapshot missing key columns: {missing_keys}")
 
-    incoming_versions = add_scd_record_hash(
-        dedupe_latest_movies(incoming_df, key_columns),
-        tracked_columns,
-    ).withColumn(SCD_START_COL, lit(effective_ts)) \
-        .withColumn(SCD_END_COL, lit(high_date)) \
+    incoming_versions = (
+        add_scd_record_hash(
+            dedupe_latest_movies(incoming_df, key_columns),
+            tracked_columns,
+        )
+        .withColumn(SCD_START_COL, lit(effective_ts))
+        .withColumn(SCD_END_COL, lit(high_date))
         .withColumn(SCD_CURRENT_COL, lit(True))
+    )
 
     if existing_df is None:
         return incoming_versions
 
     existing_df = _ensure_scd_columns(existing_df, tracked_columns, effective_ts, high_date)
-    current_df = existing_df.filter(col(SCD_CURRENT_COL) == lit(True)) \
-        .select(*key_columns, col(SCD_HASH_COL).alias("_existing_record_hash"))
+    current_df = existing_df.filter(col(SCD_CURRENT_COL) == lit(True)).select(
+        *key_columns, col(SCD_HASH_COL).alias("_existing_record_hash")
+    )
 
     joined_df = incoming_versions.alias("incoming").join(current_df.alias("current"), list(key_columns), "left")
     changed_or_new_df = joined_df.filter(
@@ -197,9 +237,11 @@ def apply_spark_scd_type2(
     insert_columns = [col(f"incoming.{column}").alias(column) for column in incoming_versions.columns]
     inserts_df = changed_or_new_df.select(*insert_columns)
 
-    keys_to_expire_df = joined_df.filter(
-        col("_existing_record_hash").isNotNull() & (col(SCD_HASH_COL) != col("_existing_record_hash"))
-    ).select(*key_columns).distinct()
+    keys_to_expire_df = (
+        joined_df.filter(col("_existing_record_hash").isNotNull() & (col(SCD_HASH_COL) != col("_existing_record_hash")))
+        .select(*key_columns)
+        .distinct()
+    )
 
     existing_marked_df = existing_df.join(
         keys_to_expire_df.withColumn("_expire_current", lit(True)),
@@ -208,10 +250,11 @@ def apply_spark_scd_type2(
     )
     should_expire = col("_expire_current").isNotNull() & (col(SCD_CURRENT_COL) == lit(True))
 
-    updated_existing_df = existing_marked_df \
-        .withColumn(SCD_CURRENT_COL, when(should_expire, lit(False)).otherwise(col(SCD_CURRENT_COL))) \
-        .withColumn(SCD_END_COL, when(should_expire, lit(effective_ts)).otherwise(col(SCD_END_COL))) \
+    updated_existing_df = (
+        existing_marked_df.withColumn(SCD_END_COL, when(should_expire, lit(effective_ts)).otherwise(col(SCD_END_COL)))
+        .withColumn(SCD_CURRENT_COL, when(should_expire, lit(False)).otherwise(col(SCD_CURRENT_COL)))
         .drop("_expire_current")
+    )
 
     return updated_existing_df.unionByName(inserts_df, allowMissingColumns=True)
 
@@ -229,9 +272,11 @@ def write_table(
         writer = writer.partitionBy(*partition_columns)
 
     if sink_format == "delta":
-        writer = writer.option("delta.autoOptimize.optimizeWrite", "true") \
-            .option("delta.autoOptimize.autoCompact", "true") \
+        writer = (
+            writer.option("delta.autoOptimize.optimizeWrite", "true")
+            .option("delta.autoOptimize.autoCompact", "true")
             .format("delta")
+        )
     else:
         writer = writer.format(sink_format)
 
@@ -307,27 +352,41 @@ def split_valid_and_quarantined_movies(
 def add_catalog_coverage_features(df: DataFrame) -> DataFrame:
     """Add coverage-first quality features without dropping long-tail movies."""
     result = df
-    title_len = length(coalesce(col("title").cast("string"), lit("")))
-    overview_len = length(coalesce(col("overview").cast("string"), lit("")))
-    genres_len = length(coalesce(col("genres").cast("string"), lit("")))
-    release_len = length(coalesce(col("release_date").cast("string"), lit("")))
-    poster_len = length(coalesce(col("poster_path").cast("string"), lit("")))
+    title_len = length(coalesce(_optional_string(result, "title"), lit("")))
+    overview_len = length(coalesce(_optional_string(result, "overview"), lit("")))
+    genres_len = length(coalesce(_optional_string(result, "genres"), lit("")))
+    release_len = length(coalesce(_optional_string(result, "release_date"), lit("")))
+    poster_len = length(coalesce(_optional_string(result, "poster_path"), lit("")))
     vote_count = expr("coalesce(try_cast(vote_count as double), 0.0)") if "vote_count" in result.columns else lit(0.0)
-    vote_average = expr("coalesce(try_cast(vote_average as double), 0.0)") if "vote_average" in result.columns else lit(0.0)
+    vote_average = (
+        expr("coalesce(try_cast(vote_average as double), 0.0)") if "vote_average" in result.columns else lit(0.0)
+    )
     popularity = expr("coalesce(try_cast(popularity as double), 0.0)") if "popularity" in result.columns else lit(0.0)
 
     result = result.withColumn(
         "metadata_completeness",
-        (when(title_len > 0, lit(0.20)).otherwise(lit(0.0))
-         + when(overview_len >= 20, lit(0.25)).otherwise(when(overview_len > 0, lit(0.10)).otherwise(lit(0.0)))
-         + when(genres_len > 0, lit(0.15)).otherwise(lit(0.0))
-         + when(vote_count > 0, lit(0.15)).otherwise(lit(0.0))
-         + when(popularity > 0, lit(0.10)).otherwise(lit(0.0))
-         + when(release_len >= 4, lit(0.10)).otherwise(lit(0.0))
-         + when(poster_len > 0, lit(0.05)).otherwise(lit(0.0))),
+        (
+            when(title_len > 0, lit(0.20)).otherwise(lit(0.0))
+            + when(overview_len >= 20, lit(0.25)).otherwise(when(overview_len > 0, lit(0.10)).otherwise(lit(0.0)))
+            + when(genres_len > 0, lit(0.15)).otherwise(lit(0.0))
+            + when(vote_count > 0, lit(0.15)).otherwise(lit(0.0))
+            + when(popularity > 0, lit(0.10)).otherwise(lit(0.0))
+            + when(release_len >= 4, lit(0.10)).otherwise(lit(0.0))
+            + when(poster_len > 0, lit(0.05)).otherwise(lit(0.0))
+        ),
     )
-    result = result.withColumn("vote_confidence", expr("least(1.0, log1p(coalesce(try_cast(vote_count as double), 0.0)) / 8.0)"))
-    result = result.withColumn("popularity_norm", expr("least(1.0, log1p(coalesce(try_cast(popularity as double), 0.0)) / 8.0)"))
+    if "vote_count" in result.columns:
+        result = result.withColumn(
+            "vote_confidence", expr("least(1.0, log1p(coalesce(try_cast(vote_count as double), 0.0)) / 8.0)")
+        )
+    else:
+        result = result.withColumn("vote_confidence", lit(0.0))
+    if "popularity" in result.columns:
+        result = result.withColumn(
+            "popularity_norm", expr("least(1.0, log1p(coalesce(try_cast(popularity as double), 0.0)) / 8.0)")
+        )
+    else:
+        result = result.withColumn("popularity_norm", lit(0.0))
     result = result.withColumn(
         "content_quality_score",
         greatest(
@@ -345,7 +404,9 @@ def add_catalog_coverage_features(df: DataFrame) -> DataFrame:
         .otherwise(lit("thin_metadata")),
     )
     result = result.withColumn("searchable", title_len > 0)
-    result = result.withColumn("recommendable", (overview_len >= 20) | (genres_len > 0) | (col("metadata_completeness") >= 0.45))
+    result = result.withColumn(
+        "recommendable", (overview_len >= 20) | (genres_len > 0) | (col("metadata_completeness") >= 0.45)
+    )
     if "adult" in result.columns:
         result = result.withColumn(
             "is_adult_content",
@@ -365,19 +426,22 @@ def upsert_movie_scd_dimension(
     sink_format: str = "delta",
 ) -> dict:
     """Build or update the movie SCD Type 2 dimension table."""
-    effective_ts = f"{run_date}T00:00:00Z" if run_date else datetime.now(timezone.utc).isoformat(timespec="seconds")
+    effective_ts = f"{run_date}T00:00:00Z" if run_date else datetime.now(UTC).isoformat(timespec="seconds")
     dimension_path = dimension_path or get_delta_table("gold.dim_movie_scd").path
 
     if sink_format == "delta":
         try:
             from delta.tables import DeltaTable
 
-            incoming_versions = add_scd_record_hash(
-                dedupe_latest_movies(incoming_df, MOVIE_KEY_COLUMNS),
-                MOVIE_SCD_TRACKED_COLUMNS,
-            ).withColumn(SCD_START_COL, lit(effective_ts)) \
-                .withColumn(SCD_END_COL, lit(SCD_HIGH_DATE)) \
+            incoming_versions = (
+                add_scd_record_hash(
+                    dedupe_latest_movies(incoming_df, MOVIE_KEY_COLUMNS),
+                    MOVIE_SCD_TRACKED_COLUMNS,
+                )
+                .withColumn(SCD_START_COL, lit(effective_ts))
+                .withColumn(SCD_END_COL, lit(SCD_HIGH_DATE))
                 .withColumn(SCD_CURRENT_COL, lit(True))
+            )
 
             is_existing_delta = False
             try:
@@ -406,9 +470,12 @@ def upsert_movie_scd_dimension(
                     }
                 ).execute()
 
-                current_df = spark.read.format("delta").load(dimension_path) \
-                    .filter(col(SCD_CURRENT_COL) == lit(True)) \
+                current_df = (
+                    spark.read.format("delta")
+                    .load(dimension_path)
+                    .filter(col(SCD_CURRENT_COL) == lit(True))
                     .select(*MOVIE_KEY_COLUMNS, SCD_HASH_COL)
+                )
                 inserts_df = incoming_versions.join(
                     current_df,
                     list(MOVIE_KEY_COLUMNS) + [SCD_HASH_COL],
@@ -425,7 +492,7 @@ def upsert_movie_scd_dimension(
     else:
         existing_df = load_table_if_exists(spark, dimension_path, sink_format)
         if existing_df is not None:
-            existing_df = spark.createDataFrame(existing_df.collect(), existing_df.schema)
+            existing_df = existing_df.localCheckpoint(eager=True)
         scd_df = apply_spark_scd_type2(
             incoming_df=incoming_df,
             existing_df=existing_df,
@@ -442,6 +509,7 @@ def upsert_movie_scd_dimension(
         "total_versions": int(total_versions),
         "effective_ts": effective_ts,
     }
+
 
 def run_spark_etl(
     input_path: str = None,
@@ -460,19 +528,18 @@ def run_spark_etl(
         sink_format: Output format ('parquet', 'delta', 'snowflake')
     """
     logger.info("Starting Spark ETL...")
-    started_at = datetime.now(timezone.utc)
+    started_at = datetime.now(UTC)
 
     if input_path is None:
         input_path = str(paths.raw_data / "TMDB_all_movies.csv")
-    run_date = run_date or datetime.now(timezone.utc).date().isoformat()
-    run_id = run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    run_date = run_date or datetime.now(UTC).date().isoformat()
+    run_id = run_id or datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
     spark = create_spark_session(enable_delta=(sink_format == "delta"))
 
     # Load data
     logger.info(f"Reading from {input_path}")
-    df = spark.read.option("mode", "DROPMALFORMED") \
-        .csv(input_path, header=True, inferSchema=True)
+    df = spark.read.option("mode", "DROPMALFORMED").csv(input_path, header=True, inferSchema=True)
     raw_df = df
 
     initial_count = df.count()
@@ -490,7 +557,7 @@ def run_spark_etl(
     null_titles = df.filter(col("title").isNull()).count()
     null_rate = null_titles / initial_count
 
-    if null_rate > 0.5: # Hard limit: if >50% movies have no title, source is broken
+    if null_rate > 0.5:  # Hard limit: if >50% movies have no title, source is broken
         logger.error(f"DQ FAILURE: Null title rate {null_rate:.2%} exceeds 50% threshold.")
         spark.stop()
         raise ValueError(f"Data Quality Error: Too many null titles ({null_rate:.2%})")
@@ -514,18 +581,16 @@ def run_spark_etl(
 
     # Create Tags Column (Simple concatenation for now, Spark SQL is fast)
     # Note: We duplicate simple tag generation here for full Spark pipeline
-    df = df.withColumn("tags",
-        expr("concat_ws('. ', title, coalesce(overview, ''), 'Movie')")
-    )
+    df = df.withColumn("tags", expr("concat_ws('. ', title, coalesce(overview, ''), 'Movie')"))
 
     # ---------------------------------------------------------
     # DISTRIBUTED MODEL INFERENCE (The "Pro" Move)
     # ---------------------------------------------------------
     logger.info("Generating Embeddings using Pandas UDF...")
 
+    import pandas as pd
     from pyspark.sql.functions import pandas_udf
     from pyspark.sql.types import ArrayType, FloatType
-    import pandas as pd
     from sentence_transformers import SentenceTransformer
 
     # Broadcast model isn't efficient for large weights, better to load on executors once
@@ -534,20 +599,16 @@ def run_spark_etl(
     @pandas_udf(ArrayType(FloatType()))
     def predict_embeddings(iterator):
         # Load model once per partition/iterator
-        model = SentenceTransformer('all-mpnet-base-v2')
-        model.eval() # Inference mode
+        model = SentenceTransformer("all-mpnet-base-v2")
+        model.eval()  # Inference mode
 
         for series in iterator:
             # Series is a batch of strings
             # Encode batch
-            embeddings = model.encode(
-                series.tolist(),
-                batch_size=32,
-                show_progress_bar=False,
-                convert_to_numpy=True
-            )
+            embeddings = model.encode(series.tolist(), batch_size=32, show_progress_bar=False, convert_to_numpy=True)
             # Normalize
             import numpy as np
+
             norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
             embeddings = embeddings / norms
 
@@ -603,19 +664,22 @@ def run_spark_etl(
         df = df.withColumn("overview", when(col("overview").isNull(), "").otherwise(col("overview")))
 
         # Data Enrichment: Create additional features
-        df = df.withColumn("release_year",
-                          when(col("release_date").isNotNull(),
-                               expr("substring(release_date, 1, 4)")).otherwise(None))
+        df = df.withColumn(
+            "release_year", when(col("release_date").isNotNull(), expr("substring(release_date, 1, 4)")).otherwise(None)
+        )
 
         # Create more sophisticated tags for better recommendations
-        df = df.withColumn("tags",
-            expr("concat_ws('. ', " +
-                 "coalesce(title, ''), " +
-                 "coalesce(overview, ''), " +
-                 "coalesce(genres, ''), " +
-                 "coalesce(cast, ''), " +
-                 "coalesce(director, ''), " +
-                 "'Movie')")
+        df = df.withColumn(
+            "tags",
+            expr(
+                "concat_ws('. ', "
+                + "coalesce(title, ''), "
+                + "coalesce(overview, ''), "
+                + "coalesce(genres, ''), "
+                + "coalesce(cast, ''), "
+                + "coalesce(director, ''), "
+                + "'Movie')"
+            ),
         )
 
         # Data Standardization: trim display text without destroying customer-facing casing.
@@ -678,31 +742,36 @@ def run_spark_etl(
         logger.info("Transforming data to Gold layer")
 
         # Business Logic: Create ML-ready features
-        df = df.withColumn("popularity_score",
-                          coalesce(col("popularity").cast("double"), lit(0.0)) * (coalesce(col("vote_average").cast("double"), lit(0.0)) / 10.0))
+        df = df.withColumn(
+            "popularity_score",
+            coalesce(col("popularity").cast("double"), lit(0.0))
+            * (coalesce(col("vote_average").cast("double"), lit(0.0)) / 10.0),
+        )
 
-        df = df.withColumn("quality_score",
-                          coalesce(col("content_quality_score"), lit(0.0)))
+        df = df.withColumn("quality_score", coalesce(col("content_quality_score"), lit(0.0)))
 
         # Create features for recommendation system
-        df = df.withColumn("is_popular", when(coalesce(col("popularity").cast("double"), lit(0.0)) > 50, 1).otherwise(0))
-        df = df.withColumn("is_high_rated", when(coalesce(col("vote_average").cast("double"), lit(0.0)) >= 7.5, 1).otherwise(0))
+        df = df.withColumn(
+            "is_popular", when(coalesce(col("popularity").cast("double"), lit(0.0)) > 50, 1).otherwise(0)
+        )
+        df = df.withColumn(
+            "is_high_rated", when(coalesce(col("vote_average").cast("double"), lit(0.0)) >= 7.5, 1).otherwise(0)
+        )
         df = df.withColumn("is_recent", when(col("release_year") >= "2015", 1).otherwise(0))
 
         # Create genre features for better recommendations
         if "genres" in df.columns:
             # Extract top 3 genres
-            df = df.withColumn("top_genre",
-                              expr("split(genres, ',')[0]"))
-            df = df.withColumn("second_genre",
-                              expr("case when size(split(genres, ',')) > 1 then split(genres, ',')[1] else null end"))
-            df = df.withColumn("third_genre",
-                              expr("case when size(split(genres, ',')) > 2 then split(genres, ',')[2] else null end"))
+            df = df.withColumn("top_genre", expr("split(genres, ',')[0]"))
+            df = df.withColumn(
+                "second_genre", expr("case when size(split(genres, ',')) > 1 then split(genres, ',')[1] else null end")
+            )
+            df = df.withColumn(
+                "third_genre", expr("case when size(split(genres, ',')) > 2 then split(genres, ',')[2] else null end")
+            )
 
         # Add business metrics
-        df = df.withColumn("engagement_score",
-                          (col("popularity_score") * 0.6) +
-                          (col("quality_score") * 0.4))
+        df = df.withColumn("engagement_score", (col("popularity_score") * 0.6) + (col("quality_score") * 0.4))
 
         return df
 
@@ -747,18 +816,16 @@ def run_spark_etl(
             # SNOWFLAKE INTEGRATION
             # Requires spark-snowflake connector
             writer = df.write.mode(mode)
-            writer \
-                .format("net.snowflake.spark.snowflake") \
-                .options(**{
+            writer.format("net.snowflake.spark.snowflake").options(
+                **{
                     "sfUrl": kwargs.get("sfUrl"),
                     "sfUser": kwargs.get("sfUser"),
                     "sfPassword": kwargs.get("sfPassword"),
                     "sfDatabase": "MOVIE_DB",
                     "sfSchema": "PUBLIC",
-                    "sfWarehouse": "COMPUTE_WH"
-                }) \
-                .option("dbtable", "MOVIES_PROCESSED") \
-                .save()
+                    "sfWarehouse": "COMPUTE_WH",
+                }
+            ).option("dbtable", "MOVIES_PROCESSED").save()
 
         else:
             # DEFAULT: Parquet to Silver layer
@@ -807,9 +874,7 @@ def run_spark_etl(
     # Build Gold feature rows, then identify only new/changed rows for embedding.
     gold_df = transform_to_gold(silver_df)
     previous_features = (
-        load_previous_features_for_incremental(spark, "gold.movies_features")
-        if sink_format == "delta"
-        else None
+        load_previous_features_for_incremental(spark, "gold.movies_features") if sink_format == "delta" else None
     )
     embedding_jobs_df = build_embedding_jobs(
         current_features=gold_df,
@@ -829,17 +894,19 @@ def run_spark_etl(
         )
         logger.info("Embedding job queue written to Delta table: %s", get_delta_table("gold.movie_embedding_jobs").path)
 
-    fresh_vectors_df = add_embeddings(
-        embedding_jobs_df.select(col("movie_id").alias("id"), "tags")
-    ).select("id", col("vector").alias("fresh_vector"))
+    fresh_vectors_df = add_embeddings(embedding_jobs_df.select(col("movie_id").alias("id"), "tags")).select(
+        "id", col("vector").alias("fresh_vector")
+    )
     gold_df = gold_df.join(fresh_vectors_df, "id", "left")
 
     if previous_features is not None and "vector" in previous_features.columns:
-        previous_vectors_df = latest_rows_by_key(previous_features, key_columns=("id",)) \
-            .select("id", col("vector").alias("previous_vector"))
+        previous_vectors_df = latest_rows_by_key(previous_features, key_columns=("id",)).select(
+            "id", col("vector").alias("previous_vector")
+        )
         gold_df = gold_df.join(previous_vectors_df, "id", "left")
-        gold_df = gold_df.withColumn("vector", coalesce(col("fresh_vector"), col("previous_vector"))) \
-            .drop("fresh_vector", "previous_vector")
+        gold_df = gold_df.withColumn("vector", coalesce(col("fresh_vector"), col("previous_vector"))).drop(
+            "fresh_vector", "previous_vector"
+        )
     else:
         gold_df = gold_df.withColumnRenamed("fresh_vector", "vector")
 
@@ -914,7 +981,7 @@ def run_spark_etl(
             pipeline_name="catalog_batch_refresh",
             status="success",
             started_at=started_at,
-            finished_at=datetime.now(timezone.utc),
+            finished_at=datetime.now(UTC),
             input_rows=int(initial_count),
             output_rows=int(final_count),
             embedding_jobs=int(embedding_job_count),
@@ -977,17 +1044,15 @@ def run_spark_etl(
 
         rows = serving_df.select("id", "vector").collect()
 
-        import numpy as np
         import faiss
+        import numpy as np
 
         # COMPRESSION (Precision Engineering):
         # Convert to float16 (Half Precision) to save 50% RAM/Disk/Network
-        movie_ids = np.array([int(r['id']) for r in rows]).astype('int64')
-        vectors = np.array([r['vector'] for r in rows]).astype('float16')
+        movie_ids = np.array([int(r["id"]) for r in rows]).astype("int64")
+        vectors = np.array([r["vector"] for r in rows]).astype("float16")
         if len(movie_ids) != vectors.shape[0]:
-            raise ValueError(
-                f"movie id map rows ({len(movie_ids)}) != vector rows ({vectors.shape[0]})"
-            )
+            raise ValueError(f"movie id map rows ({len(movie_ids)}) != vector rows ({vectors.shape[0]})")
         movie_id_hash = hashlib.sha256(movie_ids.astype("<i8", copy=False).tobytes()).hexdigest()
 
         # Save for Backend
@@ -1002,7 +1067,7 @@ def run_spark_etl(
 
         # Note: FAISS training/adding usually expects float32 input,
         # but stores internally as defined by factory string.
-        vectors_f32 = vectors.astype('float32')
+        vectors_f32 = vectors.astype("float32")
 
         index = faiss.index_factory(d, "SQfp16", faiss.METRIC_INNER_PRODUCT)
         index.train(vectors_f32)
@@ -1046,6 +1111,7 @@ def run_spark_etl(
     spark.stop()
     return final_count
 
+
 if __name__ == "__main__":
     import argparse
     import sys
@@ -1058,7 +1124,9 @@ if __name__ == "__main__":
     parser.add_argument("--sink", type=str, help="Output format (parquet, delta, snowflake)", default="delta")
     parser.add_argument("--tenant-id", type=str, help="Customer/tenant identifier", default=DEFAULT_TENANT_ID)
     parser.add_argument("--catalog-id", type=str, help="Customer catalog identifier", default=DEFAULT_CATALOG_ID)
-    parser.add_argument("--source-system", type=str, help="Upstream catalog source system", default=DEFAULT_SOURCE_SYSTEM)
+    parser.add_argument(
+        "--source-system", type=str, help="Upstream catalog source system", default=DEFAULT_SOURCE_SYSTEM
+    )
     args = parser.parse_args()
 
     run_spark_etl(

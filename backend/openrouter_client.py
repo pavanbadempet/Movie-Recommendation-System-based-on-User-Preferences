@@ -25,11 +25,7 @@ DEFAULT_OPENROUTER_MODELS = [
 
 def configured_models(env_name: str) -> list[str]:
     """Return configured OpenRouter models for a feature."""
-    raw_value = (
-        os.getenv(env_name, "")
-        or os.getenv("OPENROUTER_MODELS", "")
-        or ",".join(DEFAULT_OPENROUTER_MODELS)
-    )
+    raw_value = os.getenv(env_name, "") or os.getenv("OPENROUTER_MODELS", "") or ",".join(DEFAULT_OPENROUTER_MODELS)
     models = [model.strip() for model in raw_value.split(",") if model.strip()]
     return models or DEFAULT_OPENROUTER_MODELS
 

@@ -1,106 +1,56 @@
 services:
   - type: web
-    name: movie-recs-api
-    plan: free
-    region: singapore
-    autoDeploy: true
-    # Updated: 2026-01-29 - Model files now hosted on Hugging Face
+    name: apex-backend
+    env: docker
+    dockerContext: .
+    dockerfilePath: ./Dockerfile
+    # ---------------------------------------------------------------------------
+    # Tier 2 — ONNX CPU ensemble (200–800 ms latency)
+    # Upgrade to "pro" + NOVA_SERVING_TIER=tier1 for GPU inference (50–200 ms)
+    # ---------------------------------------------------------------------------
+    plan: standard
     healthCheckPath: /health
-    buildFilter:
-      paths:
-        - backend/**
-        - requirements.txt
-        - render.yaml
-      ignoredPaths:
-        - streamlit_app.py
-        - docs/**
-        - legacy/**
-        - .github/**
-        - README.md
-    env: python
-    buildCommand: >-
-      python -c "import os, pathlib; sha=os.getenv('RENDER_GIT_COMMIT') or os.getenv('SOURCE_VERSION') or ''; pathlib.Path('REVISION').write_text(sha, encoding='utf-8') if sha else None"
-      && pip install --upgrade pip
-      && pip install -r requirements.txt
-    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.0
+      - key: ENVIRONMENT
+        value: production
+      # Full ensemble — activates Tier 2 (ONNX CPU) on standard plan hardware
       - key: NOVA_SERVING_PROFILE
-        value: lite
+        value: full
+      - key: NOVA_SERVING_TIER
+        value: tier2
+      # Background warmup enabled — model artifacts loaded before first request
       - key: NOVA_HEALTH_LOAD_RECOMMENDER
-        value: false
-      - key: NOVA_TFIDF_MAX_FEATURES
-        value: 12000
-      - key: NOVA_ITEM_TFIDF_MAX_FEATURES
-        value: 18000
-      - key: NOVA_ENABLE_LEARNED_RANKER
-        value: auto
-      - key: NOVA_MIN_RANKER_FEEDBACK_ITEMS
-        value: 100
-      - key: NOVA_ALLOW_LEGACY_ROW_ALIGNED_VECTORS
-        value: false
-      - key: NOVA_REFRESH_PIPELINE_MANIFEST
-        value: true
-      - key: NOVA_ENABLE_LLM_RERANK
-        value: false
-      - key: NOVA_RECOMMENDER_SERVICE_URL
-        value: https://pavanbadempet-movie-rec-api.hf.space
-      - key: NOVA_RECOMMENDER_SERVICE_TIMEOUT_SECONDS
-        value: 6
-      - key: NOVA_REMOTE_RECOMMENDER_REQUIRED
-        value: true
-      - key: NOVA_RECOMMENDER_CIRCUIT_FAILURE_THRESHOLD
-        value: 3
-      - key: NOVA_RECOMMENDER_CIRCUIT_OPEN_SECONDS
-        value: 60
-      - key: NOVA_RECOMMENDER_CACHE_ENABLED
-        value: true
-      - key: NOVA_RECOMMENDER_CACHE_READS
-        value: true
-      - key: NOVA_RECOMMENDER_CACHE_MAX_ENTRIES
-        value: 512
-      - key: NOVA_RECOMMENDER_CACHE_TTL_SECONDS
-        value: 300
-      - key: NOVA_RECOMMENDER_STALE_CACHE_TTL_SECONDS
-        value: 21600
-      - key: NOVA_RECOMMENDER_DISTRIBUTED_CACHE_ENABLED
-        value: true
-      - key: NOVA_RECOMMENDER_DISTRIBUTED_CACHE_TIMEOUT_SECONDS
-        value: 1.5
-      - key: UPSTASH_REDIS_REST_URL
+        value: "true"
+      - key: NOVA_BACKGROUND_RECOMMENDER_WARMUP
+        value: "true"
+      - key: DATABASE_URL
         sync: false
-      - key: UPSTASH_REDIS_REST_TOKEN
+      - key: REDIS_URL
         sync: false
-      - key: NOVA_SLO_WINDOW_SECONDS
-        value: 3600
-      - key: NOVA_SLO_MIN_REQUESTS
-        value: 5
-      - key: NOVA_SLO_MIN_ROUTE_REQUESTS
-        value: 20
-      - key: NOVA_SLO_LATENCY_P95_MS
-        value: 2500
-      - key: NOVA_SLO_ERROR_RATE
-        value: 0.03
-      - key: NOVA_SLO_MAX_EVENTS
-        value: 5000
-      - key: NOVA_SLO_EXCLUDED_ROUTE_PREFIXES
-        value: /docs,/redoc,/openapi.json,/favicon.ico,/v1/artifacts,/v1/diagnostics,/v1/evaluation,/v1/platform/readiness
-      - key: NOVA_SLO_ROUTE_LATENCY_BUDGETS
-        value: '/:1000,/health:1000,/v1/frontends/status:3000,/v1/platform/slo:1000,/v1/search:2500,/v1/recommendations/id/{movie_id}:25000'
-      - key: NOVA_FRONTEND_PRIORITY
-        value: github_pages,react,streamlit
-      - key: NOVA_FRONTEND_STREAMLIT_URL
-        value: https://a-movie-recommendation-system.streamlit.app
-      - key: NOVA_FRONTEND_REACT_URL
-        value: /ui/
-      - key: NOVA_FRONTEND_PAGES_URL
-        value: https://movie-recommendation-system-6bm.pages.dev
-      - key: NOVA_FRONTEND_HEALTH_TIMEOUT_SECONDS
-        value: 2.5
-      - key: NOVA_FRONTEND_HEALTH_CACHE_SECONDS
-        value: 30
-      - key: TMDB_API_KEY
+      # JWT_SECRET_KEY must be set in the Render dashboard — never committed
+      - key: JWT_SECRET_KEY
+        sync: false
+      # NOVA_ADMIN_TOKEN must be set in the Render dashboard — never committed
+      - key: NOVA_ADMIN_TOKEN
+        sync: false
+      # Optional: Stripe keys for billing (set in Render dashboard)
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      # Optional: Sentry for error monitoring (set in Render dashboard)
+      - key: SENTRY_DSN
         sync: false
 
-
+  # ---------------------------------------------------------------------------
+  # Tier 1 example — uncomment and switch plan to "pro" for GPU inference
+  # ---------------------------------------------------------------------------
+  # - type: web
+  #   name: apex-backend-gpu
+  #   env: docker
+  #   plan: pro
+  #   envVars:
+  #     - key: NOVA_SERVING_PROFILE
+  #       value: full
+  #     - key: NOVA_SERVING_TIER
+  #       value: tier1

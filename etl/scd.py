@@ -7,14 +7,14 @@ dimension changes are tracked. This module implements SCD Type 2 in Pandas so
 the behavior is deterministic, unit-testable, and easy to port to PySpark or
 SQL MERGE statements later.
 """
+
 from __future__ import annotations
 
-import hashlib
+from collections.abc import Iterable
 from datetime import datetime
-from typing import Iterable
+import hashlib
 
 import pandas as pd
-
 
 SCD_START_COL = "effective_start_at"
 SCD_END_COL = "effective_end_at"
@@ -120,10 +120,7 @@ def apply_scd_type2(
     incoming_versions = _prepare_new_versions(incoming, tracked_columns, effective_ts, high_date)
     incoming_versions["_scd_key"] = incoming_versions.apply(_key_tuple, axis=1, key_columns=key_columns)
 
-    current_by_key = {
-        row["_scd_key"]: row
-        for _, row in current.iterrows()
-    }
+    current_by_key = {row["_scd_key"]: row for _, row in current.iterrows()}
     rows_to_insert = []
     keys_to_expire = set()
 

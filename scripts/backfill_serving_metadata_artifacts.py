@@ -8,25 +8,24 @@ alignment artifacts are missing.
 from __future__ import annotations
 
 import argparse
+from datetime import UTC, datetime
 import hashlib
 import json
 import os
+from pathlib import Path
 import sys
 import tempfile
-from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
+from huggingface_hub import HfApi, hf_hub_download
 import numpy as np
 import pandas as pd
-from huggingface_hub import HfApi, hf_hub_download
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from etl.semantic_artifacts import write_semantic_artifacts
-
 
 DEFAULT_REPO = "pavanbadempet/movie-recs-models"
 MODEL_NAME = "all-mpnet-base-v2"
