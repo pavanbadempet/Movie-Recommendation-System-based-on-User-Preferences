@@ -66,7 +66,7 @@ jobs:
 
       - name: Upload Pages artifact
         if: steps.pages.outputs.enabled == 'true'
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: frontend/dist
 
