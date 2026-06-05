@@ -274,7 +274,7 @@ export function PricingPage({ onNavigate }: PricingProps) {
           <div className="faq-item">
             <dt>Is my data used to train shared models?</dt>
             <dd>
-              No. Each tenant's data is isolated. APEX uses differential privacy
+              No. Each tenant&apos;s data is isolated. APEX uses differential privacy
               (ε-DP) on embeddings and never shares interaction data across tenants.
             </dd>
           </div>
