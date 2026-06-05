@@ -392,7 +392,7 @@ if not ALLOWED_ORIGINS:
 ALLOWED_ORIGIN_REGEX = os.getenv(
     "ALLOWED_ORIGIN_REGEX",
     (
-        r"https://([a-zA-Z0-9-]+\.)+(vercel\.app|pages\.dev|netlify\.app|github\.io)"
+        r"https://(pavanbadempet\.github\.io)"
         r"|http://(localhost|127\.0\.0\.1):\d+"
     ),
 )
