@@ -2,7 +2,6 @@
 Property-based tests for RerankingPipeline invariants.
 # Feature: architecture-design-perfection, Property 8/9
 """
-import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
