@@ -2,17 +2,17 @@
 Property-based tests for RetrievalPipeline invariants.
 # Feature: architecture-design-perfection, Property 1/2/3
 """
-
+import numpy as np
+import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
-import numpy as np
 
+from backend.pipeline_types import CandidateItem
 from backend.retrieval_pipeline import RetrievalConfig, RetrievalPipeline
 
 
 def _make_mock_faiss(n_items: int):
     """Create a minimal mock FAISS index backed by numpy."""
-
     class MockFaissIndex:
         def __init__(self, n):
             self.ntotal = n
@@ -29,15 +29,12 @@ def _make_mock_faiss(n_items: int):
 
 def _make_mock_movie_df(n_items: int):
     import pandas as pd
-
-    return pd.DataFrame(
-        {
-            "id": list(range(n_items)),
-            "title": [f"Movie {i}" for i in range(n_items)],
-            "overview": ["" for _ in range(n_items)],
-            "genres": ["" for _ in range(n_items)],
-        }
-    )
+    return pd.DataFrame({
+        "id": list(range(n_items)),
+        "title": [f"Movie {i}" for i in range(n_items)],
+        "overview": ["" for _ in range(n_items)],
+        "genres": ["" for _ in range(n_items)],
+    })
 
 
 # Property 1: Retrieval Bounds Guarantee
@@ -95,14 +92,12 @@ def test_retrieval_deduplication_invariant(n):
     n_items = max(n, 10)
 
     # Build a movie_df that uses "movie_id" column (distinct from row index).
-    movie_df = pd.DataFrame(
-        {
-            "movie_id": list(range(n_items)),
-            "title": [f"Movie {i}" for i in range(n_items)],
-            "overview": ["" for _ in range(n_items)],
-            "genres": ["" for _ in range(n_items)],
-        }
-    )
+    movie_df = pd.DataFrame({
+        "movie_id": list(range(n_items)),
+        "title": [f"Movie {i}" for i in range(n_items)],
+        "overview": ["" for _ in range(n_items)],
+        "genres": ["" for _ in range(n_items)],
+    })
 
     # Mock FAISS index that always returns the SAME first min(n, n_items) indices
     # — guarantees overlap with TF-IDF which also returns the same indices.
@@ -153,7 +148,9 @@ def test_retrieval_deduplication_invariant(n):
     result = pipeline.retrieve(query_vector, n=n)
 
     movie_ids = [c.movie_id for c in result]
-    assert len({c.movie_id for c in result}) == len(result), f"Duplicate movie_ids found in result: {movie_ids}"
+    assert len({c.movie_id for c in result}) == len(result), (
+        f"Duplicate movie_ids found in result: {movie_ids}"
+    )
 
 
 # Property 3: Retrieval Source Tagging
@@ -171,13 +168,12 @@ def test_retrieval_source_tagging(n):
     movie_df = _make_mock_movie_df(n_items)
     config = RetrievalConfig(faiss_k=min(n * 2, n_items), tfidf_k=0, kg_k=0, enable_kg=False)
     pipeline = RetrievalPipeline(
-        faiss_index=faiss_idx,
-        tfidf_index=None,
-        kg_engine=None,
-        movie_df=movie_df,
-        config=config,
+        faiss_index=faiss_idx, tfidf_index=None, kg_engine=None,
+        movie_df=movie_df, config=config,
     )
     query_vector = np.random.rand(1, 64).astype(np.float32)
     result = pipeline.retrieve(query_vector, n=n)
     for item in result:
-        assert item.retrieval_source in VALID_SOURCES, f"Invalid retrieval_source: {item.retrieval_source!r}"
+        assert item.retrieval_source in VALID_SOURCES, (
+            f"Invalid retrieval_source: {item.retrieval_source!r}"
+        )

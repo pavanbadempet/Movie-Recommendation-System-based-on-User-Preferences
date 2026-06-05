@@ -2,7 +2,7 @@
 Property-based tests for RankingPipeline invariants.
 # Feature: architecture-design-perfection, Property 4/5/6/7
 """
-
+import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -48,7 +48,9 @@ def test_ranking_set_identity_round_trip(candidates):
     result = pipeline.rank(candidates, user_context={})
     result_ids = {r.movie_id for r in result}
     candidate_ids = {c.movie_id for c in candidates}
-    assert result_ids == candidate_ids, f"movie_id sets differ: result={result_ids}, candidates={candidate_ids}"
+    assert result_ids == candidate_ids, (
+        f"movie_id sets differ: result={result_ids}, candidates={candidate_ids}"
+    )
 
 
 # Property 6: Ranking Ordering Invariant
@@ -67,7 +69,7 @@ def test_ranking_ordering_invariant(candidates):
     scores = [r.ensemble_score + r.ranker_score for r in result]
     for i in range(len(scores) - 1):
         assert scores[i] >= scores[i + 1] - 1e-9, (
-            f"Out-of-order at position {i}: score[{i}]={scores[i]} < score[{i + 1}]={scores[i + 1]}"
+            f"Out-of-order at position {i}: score[{i}]={scores[i]} < score[{i+1}]={scores[i+1]}"
         )
 
 
@@ -88,5 +90,5 @@ def test_ranking_determinism(candidates):
     assert ids1 == ids2, f"Non-deterministic ranking: {ids1} != {ids2}"
     scores1 = [r.ensemble_score for r in result1]
     scores2 = [r.ensemble_score for r in result2]
-    for s1, s2 in zip(scores1, scores2, strict=True):
+    for s1, s2 in zip(scores1, scores2):
         assert abs(s1 - s2) < 1e-9, f"Score mismatch: {s1} != {s2}"

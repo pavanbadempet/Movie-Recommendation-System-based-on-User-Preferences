@@ -2,7 +2,7 @@
 Property-based tests for RerankingPipeline invariants.
 # Feature: architecture-design-perfection, Property 8/9
 """
-
+import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -59,7 +59,9 @@ def test_reranking_determinism(ranked_items):
     result2 = pipeline.rerank(ranked_items, constraints={})
     ids1 = [f.movie_id for f in result1]
     ids2 = [f.movie_id for f in result2]
-    assert ids1 == ids2, f"Reranking is non-deterministic: first call={ids1}, second call={ids2}"
+    assert ids1 == ids2, (
+        f"Reranking is non-deterministic: first call={ids1}, second call={ids2}"
+    )
 
 
 def test_reranking_determinism_empty_input():

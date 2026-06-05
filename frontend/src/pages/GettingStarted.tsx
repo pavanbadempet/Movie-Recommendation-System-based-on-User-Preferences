@@ -18,7 +18,7 @@ import {
   Upload,
   BarChart3,
 } from "lucide-react";
-import { apiGet, API_BASES } from "../api";
+import { apiGet, apiPost, API_BASES } from "../api";
 
 interface GettingStartedProps {
   onNavigate: (page: string) => void;
@@ -73,7 +73,7 @@ recommendations.forEach(r =>
 // ---------------------------------------------------------------------------
 function StepIndicator({
   current,
-  total: _total,
+  total,
   onStep,
 }: {
   current: StepId;
@@ -274,7 +274,7 @@ export function GettingStartedPage({ onNavigate }: GettingStartedProps) {
               onClick={() => setStep(3)}
               aria-label="Skip to step 3: Make your first call"
             >
-              Skip — I&apos;ll use the demo catalog
+              Skip — I'll use the demo catalog
             </button>
           </div>
         </section>
@@ -499,7 +499,7 @@ export function GettingStartedPage({ onNavigate }: GettingStartedProps) {
 
           <div className="gs-complete">
             <CheckCircle2 size={48} aria-hidden="true" />
-            <h3>You&apos;re all set</h3>
+            <h3>You're all set</h3>
             <p>
               Your APEX integration is live. Log events to improve
               recommendations over time.
