@@ -2,8 +2,16 @@
 Tests for Kafka and Spark integration in Airflow DAGs.
 """
 
-import pytest
+import importlib.util
 import os
+
+import pytest
+
+if importlib.util.find_spec("fcntl") is None:
+    pytest.skip(
+        "Airflow DAG tests require a Unix-compatible Airflow runtime.",
+        allow_module_level=True,
+    )
 
 airflow_models = pytest.importorskip(
     "airflow.models",
@@ -21,12 +29,14 @@ except (ImportError, ModuleNotFoundError) as exc:
 os.environ["KAGGLE_KEY"] = "mock_key"
 os.environ["KAGGLE_USERNAME"] = "mock_user"
 
+
 def test_kafka_spark_integration_dag_loads():
     """Verify the Kafka-Spark integration DAG loads without import errors."""
     dag_bag = DagBag(dag_folder="airflow/dags", include_examples=False)
 
     assert len(dag_bag.import_errors) == 0, f"DAG import errors: {dag_bag.import_errors}"
     assert "kafka_spark_integration" in dag_bag.dags
+
 
 def test_kafka_spark_integration_dag_structure():
     """Verify the Kafka-Spark integration DAG has the expected tasks."""
@@ -41,7 +51,7 @@ def test_kafka_spark_integration_dag_structure():
         "create_movie_events_topic",
         "produce_movie_events",
         "process_events_with_spark",
-        "run_spark_etl_with_delta"
+        "run_spark_etl_with_delta",
     }
     assert expected_tasks.issubset(task_ids)
 
@@ -59,6 +69,7 @@ def test_kafka_spark_integration_dag_structure():
     assert t4 in t3.downstream_list
     assert t5 in t4.downstream_list
 
+
 def test_movie_data_refresh_dag_has_delta_support():
     """Verify the main movie data refresh DAG has Delta Lake support."""
     dag_bag = DagBag(dag_folder="airflow/dags", include_examples=False)
@@ -74,6 +85,7 @@ def test_movie_data_refresh_dag_has_delta_support():
     t3 = dag.get_task("rebuild_index")
 
     assert t3 in t2.downstream_list
+
 
 def test_dag_imports():
     """Test that the DAG files can import necessary modules."""

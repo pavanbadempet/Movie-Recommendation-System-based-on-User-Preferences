@@ -1,0 +1,43 @@
+name: Mutation Testing
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 10 * * 1'  # Every Monday at 10:00 UTC
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  mutation-tests:
+    name: Mutation Tests (serving_tier + onnx_engine)
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ env.PYTHON_VERSION }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install mutmut pytest hypothesis
+        pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+        pip install -r requirements.txt
+
+    - name: Run mutation tests
+      env:
+        JWT_SECRET_KEY: test-jwt-secret-key-for-ci-only
+        NOVA_DISABLE_MODEL_DOWNLOADS: "1"
+      run: |
+        mutmut run \
+          --paths-to-mutate backend/serving_tier.py,backend/onnx_engine.py \
+          --runner "python -m pytest tests/test_serving_tier_properties.py tests/test_onnx_thread_count.py -x -q"
+
+    - name: Print mutation score
+      run: mutmut results
+      if: always()

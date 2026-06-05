@@ -133,6 +133,23 @@ jobs:
           pip install numpy pandas pyarrow huggingface_hub scikit-learn joblib
           python scripts/validate_serving_artifacts.py --repo pavanbadempet/movie-recs-models
 
+      - name: Run ensemble model validation benchmark
+        if: success()
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          pip install numpy pandas pyarrow torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+          python scripts/benchmark_ensemble.py
+          echo "Model validation report written to reports/model_validation_report.json"
+
+      - name: Upload model validation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-validation-report
+          path: reports/model_validation_report.json
+
       - name: Evaluate semantic recommendation benchmark
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -191,3 +208,19 @@ jobs:
             echo "::warning title=Backend artifact reload skipped::Set NOVA_ADMIN_TOKEN in GitHub Actions and Render to let the daily refresh reload artifacts without waiting for a cold start."
             curl -sf --max-time 60 "$API_URL/health" || echo "Backend pinged (may be sleeping)"
           fi
+
+      - name: Snapshot A/B experiment results
+        if: always()
+        env:
+          NOVA_EVENT_DATABASE_URL: ${{ secrets.NOVA_EVENT_DATABASE_URL }}
+          NOVA_EVENTS_URL: ${{ secrets.NOVA_EVENTS_URL }}
+        run: |
+          pip install pandas pyarrow "psycopg[binary]" --quiet
+          python scripts/snapshot_experiment_results.py
+
+      - name: Upload experiment results report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: experiment-results
+          path: reports/experiment_results.json

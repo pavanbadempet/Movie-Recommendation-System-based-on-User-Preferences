@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apex Enterprise | Diagnostics</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #050505;
+            --glass-bg: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --accent-primary: #7c3aed; /* Vibrant Purple */
+            --accent-secondary: #3b82f6; /* Electric Blue */
+            --accent-glow: rgba(124, 58, 237, 0.5);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --success: #10b981;
+            --error: #ef4444;
+            --warning: #f59e0b;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(124, 58, 237, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.15) 0%, transparent 50%);
+            animation: bgShift 20s ease-in-out infinite alternate;
+        }
+
+        @keyframes bgShift {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 100% 50%; }
+        }
+
+        .container {
+            width: 90%;
+            max-width: 1400px;
+            height: 85vh;
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 30px;
+            position: relative;
+            z-index: 10;
+        }
+
+        /* Glassmorphism Panels */
+        .panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 30px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin: 0 0 8px 0;
+            background: linear-gradient(to right, #e2e8f0, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        p.subtitle {
+            color: var(--text-muted);
+            font-size: 14px;
+            line-height: 1.6;
+            margin-bottom: 40px;
+        }
+
+        /* Premium Buttons */
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        button {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 16px 20px;
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            font-weight: 500;
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        button::before {
+            content: '';
+            position: absolute;
+            top: 0; left: -100%;
+            width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+            transition: left 0.5s ease;
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px -10px rgba(0,0,0,0.5);
+        }
+
+        button:hover::before {
+            left: 100%;
+        }
+
+        button .icon {
+            font-size: 18px;
+            opacity: 0.5;
+            transition: all 0.3s ease;
+        }
+
+        button:hover .icon {
+            opacity: 1;
+            transform: translateX(4px);
+        }
+
+        /* Active/Running State */
+        button.running {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 20px var(--accent-glow);
+            background: rgba(124, 58, 237, 0.1);
+        }
+
+        button.running .icon {
+            animation: spin 1s linear infinite;
+            opacity: 1;
+            color: var(--accent-primary);
+        }
+
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        /* The Master Button */
+        button.master {
+            margin-top: auto;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            border: none;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 10px 30px var(--accent-glow);
+        }
+
+        button.master:hover {
+            box-shadow: 0 15px 40px var(--accent-glow);
+            transform: translateY(-3px);
+        }
+
+        /* Hyper-Realistic Terminal */
+        .terminal-panel {
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .terminal-header {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px 20px;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        .mac-dots {
+            display: flex;
+            gap: 8px;
+        }
+
+        .dot {
+            width: 12px; height: 12px;
+            border-radius: 50%;
+        }
+        .dot.red { background-color: #ff5f56; }
+        .dot.yellow { background-color: #ffbd2e; }
+        .dot.green { background-color: #27c93f; }
+
+        .terminal-title {
+            margin-left: 15px;
+            color: var(--text-muted);
+            font-size: 13px;
+            font-family: 'Fira Code', monospace;
+        }
+
+        .terminal-body {
+            padding: 24px;
+            font-family: 'Fira Code', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            height: calc(100% - 60px);
+            overflow-y: auto;
+            color: #e2e8f0;
+        }
+
+        /* Custom Scrollbar for Terminal */
+        .terminal-body::-webkit-scrollbar { width: 8px; }
+        .terminal-body::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+        .terminal-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+        .terminal-body::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+        /* Log Colors */
+        .log-line { display: block; margin-bottom: 4px; word-wrap: break-word; }
+        .log-info { color: var(--text-muted); }
+        .log-success { color: var(--success); text-shadow: 0 0 10px rgba(16, 185, 129, 0.4); }
+        .log-error { color: var(--error); text-shadow: 0 0 10px rgba(239, 68, 68, 0.4); }
+        .log-warning { color: var(--warning); }
+        .log-command { color: var(--accent-secondary); }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Controls Panel -->
+        <div class="panel">
+            <h1>Diagnostic Array</h1>
+            <p class="subtitle">Secure administrative interface for invoking automated extreme-stress CI/CD protocols on the neural cluster.</p>
+
+            <div class="btn-group">
+                <button id="btn-math" onclick="triggerTest('math', 'btn-math')">
+                    Neural Mathematical Proofs <span class="icon">➜</span>
+                </button>
+                <button id="btn-integration" onclick="triggerTest('integration', 'btn-integration')">
+                    E2E Pipeline Integrations <span class="icon">➜</span>
+                </button>
+                <button id="btn-fuzzing" onclick="triggerTest('fuzzing', 'btn-fuzzing')">
+                    Hypothesis Tensor Fuzzing <span class="icon">➜</span>
+                </button>
+                <button id="btn-security" onclick="triggerTest('security', 'btn-security')">
+                    Adversarial API Penetration <span class="icon">➜</span>
+                </button>
+            </div>
+
+            <button id="btn-all" class="master" onclick="triggerTest('all', 'btn-all')">
+                Deploy Full Protocol <span class="icon">⚡</span>
+            </button>
+        </div>
+
+        <!-- Terminal Panel -->
+        <div class="panel terminal-panel">
+            <div class="terminal-header">
+                <div class="mac-dots">
+                    <div class="dot red"></div>
+                    <div class="dot yellow"></div>
+                    <div class="dot green"></div>
+                </div>
+                <div class="terminal-title">admin@apex-cluster:~/$ tail -f pytest.log</div>
+            </div>
+            <div class="terminal-body" id="terminal">
+                <span class="log-line log-info">Apex Neural Diagnostic Subsystem initialized.</span>
+                <span class="log-line log-info">Awaiting secure command injection...</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "http://localhost:8000/v1/admin/tests/run";
+
+        function appendLog(text, type="info") {
+            const terminal = document.getElementById('terminal');
+            const lines = text.split('\n');
+            
+            lines.forEach(line => {
+                if (!line.trim()) return;
+                const span = document.createElement('span');
+                span.className = `log-line log-${type}`;
+                span.textContent = line;
+                terminal.appendChild(span);
+            });
+            
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        async function triggerTest(suite, btnId) {
+            const btn = document.getElementById(btnId);
+            const originalHTML = btn.innerHTML;
+            
+            // Prevent multiple clicks
+            if(btn.classList.contains('running')) return;
+
+            // Reset UI
+            document.querySelectorAll('button').forEach(b => {
+                b.style.opacity = '0.5';
+                b.style.pointerEvents = 'none';
+            });
+            
+            btn.style.opacity = '1';
+            btn.classList.add('running');
+            btn.innerHTML = btn.innerHTML.replace('➜', '⟳').replace('⚡', '⟳');
+
+            // Clear terminal for new run
+            document.getElementById('terminal').innerHTML = '';
+            appendLog(`$ pytest backend/tests/ --target=${suite}`, "command");
+            appendLog("Initiating distributed testing protocol. Please wait...", "warning");
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ suite })
+                });
+
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+                const data = await response.json();
+
+                if (data.status === "success") {
+                    appendLog(data.logs, "success");
+                    appendLog(`\n[✓] PROTOCOL PASSED. EXIT CODE 0.`, "success");
+                } else {
+                    appendLog(data.logs, "error");
+                    appendLog(`\n[✗] PROTOCOL FAILED. EXIT CODE ${data.exit_code}.`, "error");
+                }
+
+            } catch (err) {
+                appendLog(`\nFATAL CONNECTION ERROR: ${err.message}`, "error");
+                appendLog("Ensure the FastAPI backend is running on port 8000.", "info");
+            } finally {
+                // Restore UI
+                btn.classList.remove('running');
+                btn.innerHTML = originalHTML;
+                document.querySelectorAll('button').forEach(b => {
+                    b.style.opacity = '1';
+                    b.style.pointerEvents = 'auto';
+                });
+            }
+        }
+    </script>
+</body>
+</html>

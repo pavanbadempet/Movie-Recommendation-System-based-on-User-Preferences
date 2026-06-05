@@ -8,14 +8,15 @@ artifacts: canonical table models, per-run manifests, and as-of reads.
 
 from __future__ import annotations
 
-import hashlib
-import json
-import re
-import uuid
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
+import hashlib
+import json
 from pathlib import Path
-from typing import Any, Iterable
+import re
+from typing import Any
+import uuid
 
 import pandas as pd
 
@@ -266,11 +267,7 @@ def validate_table_contract(
     if missing_columns:
         raise ValueError(f"{model.name} missing required columns: {missing_columns}")
 
-    null_columns = [
-        column
-        for column in model.required_columns
-        if column in df.columns and df[column].isna().any()
-    ]
+    null_columns = [column for column in model.required_columns if column in df.columns and df[column].isna().any()]
     if null_columns:
         raise ValueError(f"{model.name} has nulls in required columns: {null_columns}")
 
@@ -416,17 +413,22 @@ def _prepare_movie_scd_input(incoming_df: pd.DataFrame) -> pd.DataFrame:
         if column not in df.columns:
             df[column] = pd.NA
 
-    for column in ("title", "overview", "genres", "release_date", "poster_path", "director", "cast", "original_language"):
+    for column in (
+        "title",
+        "overview",
+        "genres",
+        "release_date",
+        "poster_path",
+        "director",
+        "cast",
+        "original_language",
+    ):
         df[column] = df[column].fillna("").astype(str).str.strip()
 
     for column in ("vote_average", "vote_count", "popularity"):
         df[column] = pd.to_numeric(df[column], errors="coerce")
 
-    sort_columns = [
-        column
-        for column in ("content_quality_score", "vote_count", "popularity")
-        if column in df.columns
-    ]
+    sort_columns = [column for column in ("content_quality_score", "vote_count", "popularity") if column in df.columns]
     if sort_columns:
         df = df.sort_values(sort_columns, ascending=False, na_position="last")
 
@@ -553,21 +555,17 @@ def compare_scd_as_of(
         raise ValueError("key_columns must not be empty")
 
     before_map = {
-        tuple(row[column] for column in key_columns): row.get(hash_col)
-        for row in before.to_dict(orient="records")
+        tuple(row[column] for column in key_columns): row.get(hash_col) for row in before.to_dict(orient="records")
     }
     after_map = {
-        tuple(row[column] for column in key_columns): row.get(hash_col)
-        for row in after.to_dict(orient="records")
+        tuple(row[column] for column in key_columns): row.get(hash_col) for row in after.to_dict(orient="records")
     }
 
     before_keys = set(before_map)
     after_keys = set(after_map)
     new_keys = sorted(after_keys - before_keys)
     removed_keys = sorted(before_keys - after_keys)
-    changed_keys = sorted(
-        key for key in before_keys & after_keys if before_map[key] != after_map[key]
-    )
+    changed_keys = sorted(key for key in before_keys & after_keys if before_map[key] != after_map[key])
 
     return {
         "from_ts": normalize_as_of_ts(from_ts),

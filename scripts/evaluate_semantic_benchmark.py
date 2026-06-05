@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 import sys
 import tempfile
-from pathlib import Path
 
 import pandas as pd
 
@@ -48,6 +48,7 @@ def build_offline_recommender(movies_path: Path) -> Recommender:
         "disabled_reason": "offline semantic benchmark uses metadata/sparse fallback",
     }
     rec._optimize_movie_frame()
+    rec._rebuild_lookup_maps()
     return rec
 
 
@@ -89,16 +90,22 @@ def main() -> None:
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
 
     metrics = report.get("metrics") or {}
-    print(json.dumps({
-        "status": report.get("status"),
-        "evaluated_case_count": report.get("evaluated_case_count"),
-        "good_recall_at_k": metrics.get("good_recall_at_k"),
-        "hit_rate_at_k": metrics.get("hit_rate_at_k"),
-        "mrr_at_k": metrics.get("mrr_at_k"),
-        "ndcg_at_k": metrics.get("ndcg_at_k"),
-        "bad_match_rate_at_k": metrics.get("bad_match_rate_at_k"),
-        "output": str(args.output),
-    }, indent=2, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "status": report.get("status"),
+                "evaluated_case_count": report.get("evaluated_case_count"),
+                "good_recall_at_k": metrics.get("good_recall_at_k"),
+                "hit_rate_at_k": metrics.get("hit_rate_at_k"),
+                "mrr_at_k": metrics.get("mrr_at_k"),
+                "ndcg_at_k": metrics.get("ndcg_at_k"),
+                "bad_match_rate_at_k": metrics.get("bad_match_rate_at_k"),
+                "output": str(args.output),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
 
     if args.fail_on_threshold:
         bad_rate = float(metrics.get("bad_match_rate_at_k") or 0.0)

@@ -3,11 +3,29 @@
 from __future__ import annotations
 
 import json
-import math
+
+# Fast JSON
+try:
+    import orjson as _orjson
+
+    def _jloads(s):
+        return _orjson.loads(s)
+
+    def _jdumps(obj, **kw) -> str:
+        return _orjson.dumps(obj).decode()
+except ImportError:
+
+    def _jloads(s):
+        return json.loads(s)
+
+    def _jdumps(obj, **kw) -> str:
+        return json.dumps(obj, **kw)
+
+
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
-
+from typing import Any
 
 DEFAULT_SEARCH_BENCHMARK_PATH = (
     Path(__file__).resolve().parent.parent / "data" / "evaluation" / "search_quality_benchmark.json"
@@ -44,7 +62,7 @@ def load_search_benchmark(path: Path | str | None = None) -> list[dict[str, Any]
     benchmark_path = Path(path) if path is not None else DEFAULT_SEARCH_BENCHMARK_PATH
     if not benchmark_path.exists():
         return []
-    payload = json.loads(benchmark_path.read_text(encoding="utf-8"))
+    payload = _jloads(benchmark_path.read_text(encoding="utf-8"))
     if isinstance(payload, dict):
         return list(payload.get("cases") or [])
     if isinstance(payload, list):
@@ -140,8 +158,7 @@ def evaluate_search_benchmark(
                 "required_hits": required_hits,
                 "blocked_hits": blocked_hits,
                 "top_results": [
-                    {"id": result.get("id"), "title": result.get("title")}
-                    for result in results[: min(k, 5)]
+                    {"id": result.get("id"), "title": result.get("title")} for result in results[: min(k, 5)]
                 ],
             }
         )
