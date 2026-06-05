@@ -1097,6 +1097,12 @@ st.markdown("""
 /* Hide default button styles for the clickable area hack */
 .stButton button {
     width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    opacity: 0;
+    z-index: 10;
 }
 </style>
 """, unsafe_allow_html=True)
