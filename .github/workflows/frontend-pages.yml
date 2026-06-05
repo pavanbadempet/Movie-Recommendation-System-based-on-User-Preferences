@@ -62,7 +62,7 @@ jobs:
 
       - name: Configure Pages
         if: steps.pages.outputs.enabled == 'true'
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
       - name: Upload Pages artifact
         if: steps.pages.outputs.enabled == 'true'
