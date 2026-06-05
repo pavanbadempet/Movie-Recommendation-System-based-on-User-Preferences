@@ -16,14 +16,14 @@ This script:
 from __future__ import annotations
 
 import argparse
+from collections import defaultdict
+from datetime import UTC, datetime
 import json
 import logging
 import math
+from pathlib import Path
 import random
 import sys
-from collections import defaultdict
-from datetime import UTC, datetime
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -56,6 +56,7 @@ _DEFAULT_WEIGHTS: dict[str, float] = {
 # Metric helpers
 # ---------------------------------------------------------------------------
 
+
 def _ideal_dcg(num_hits: int, k: int) -> float:
     return sum(1.0 / math.log2(rank + 2) for rank in range(min(num_hits, k)))
 
@@ -79,6 +80,7 @@ def _hit_rate_at_k(ranked_items: list[int], ground_truth: set[int], k: int) -> f
 # Data loading
 # ---------------------------------------------------------------------------
 
+
 def _load_interaction_data() -> dict[str, list[dict]]:
     user_events: dict[str, list[dict]] = defaultdict(list)
     for event in event_module.iter_events():
@@ -93,10 +95,12 @@ def _load_interaction_data() -> dict[str, list[dict]]:
             movie_id = int(movie_id)
         except (TypeError, ValueError):
             continue
-        user_events[str(user_id)].append({
-            "event_ts": str(event.get("event_ts") or ""),
-            "movie_id": movie_id,
-        })
+        user_events[str(user_id)].append(
+            {
+                "event_ts": str(event.get("event_ts") or ""),
+                "movie_id": movie_id,
+            }
+        )
     return dict(user_events)
 
 
@@ -118,8 +122,9 @@ def _build_validation_split(
 # Fast pre-compute: run all 6 models ONCE per user, then blend analytically
 # ---------------------------------------------------------------------------
 
+
 def _precompute_per_model_scores(
-    engine: "ApexEnsembleEngine",
+    engine: ApexEnsembleEngine,
     train_history: dict[str, list[int]],
     val_ground_truth: dict[str, set[int]],
     rng: random.Random,
@@ -162,7 +167,7 @@ def _precompute_per_model_scores(
         safe_uid = uid_int % engine.num_users
         safe_items = [item % engine.num_items for item in candidate_ids]
         # Also remap candidate_ids for score storage using the safe indices
-        safe_to_orig = {(item % engine.num_items): item for item in candidate_ids}
+        {(item % engine.num_items): item for item in candidate_ids}
         u_t = torch.tensor([safe_uid], dtype=torch.long)
         i_t = torch.tensor(safe_items, dtype=torch.long)
 
@@ -175,7 +180,8 @@ def _precompute_per_model_scores(
 
                 # Quantum
                 qs = engine.quantum.predict(u_t, i_t, time_delta=1.0).squeeze()
-                if qs.dim() == 0: qs = qs.unsqueeze(0)
+                if qs.dim() == 0:
+                    qs = qs.unsqueeze(0)
                 q_s = qs.numpy()
 
                 # Hyperbolic
@@ -186,7 +192,8 @@ def _precompute_per_model_scores(
                 u_emb = engine.hyperbolic.user_embedding(u_t).expand(len(i_t), -1)
                 i_emb = engine.hyperbolic.item_embedding(i_t)
                 ks = engine.kan(u_emb, i_emb).squeeze()
-                if ks.dim() == 0: ks = ks.unsqueeze(0)
+                if ks.dim() == 0:
+                    ks = ks.unsqueeze(0)
                 k_s = ks.numpy()
 
                 t_val = torch.ones(len(i_t), 1) * 0.5
@@ -199,7 +206,8 @@ def _precompute_per_model_scores(
                 padded = [0] * (50 - len(safe_hist)) + safe_hist
                 seq = torch.tensor([padded], dtype=torch.long)
                 ss = engine.sasrec.predict(seq, i_t.unsqueeze(0)).squeeze()
-                if ss.dim() == 0: ss = ss.unsqueeze(0)
+                if ss.dim() == 0:
+                    ss = ss.unsqueeze(0)
                 sar_s = ss.numpy()
 
             def _norm(arr):
@@ -208,14 +216,12 @@ def _precompute_per_model_scores(
                     return np.full_like(arr, 0.5)
                 return (arr - mn) / (mx - mn)
 
-            scores_matrix = np.stack([
-                _norm(lgcn_s), _norm(q_s), _norm(sar_s),
-                _norm(k_s), _norm(h_s), _norm(d_s)
-            ], axis=1)  # [N_items, 6]
+            scores_matrix = np.stack(
+                [_norm(lgcn_s), _norm(q_s), _norm(sar_s), _norm(k_s), _norm(h_s), _norm(d_s)], axis=1
+            )  # [N_items, 6]
 
             per_model_scores[user_id] = {
-                orig_id: scores_matrix[idx].tolist()
-                for idx, orig_id in enumerate(candidate_ids)
+                orig_id: scores_matrix[idx].tolist() for idx, orig_id in enumerate(candidate_ids)
             }
 
         except Exception as exc:
@@ -238,10 +244,7 @@ def _evaluate_weights_fast(
         gt = val_ground_truth.get(user_id, set())
         if not gt or not item_scores:
             continue
-        blended = {
-            item_id: float(np.dot(weight_vector, np.array(ms)))
-            for item_id, ms in item_scores.items()
-        }
+        blended = {item_id: float(np.dot(weight_vector, np.array(ms))) for item_id, ms in item_scores.items()}
         ranked = sorted(item_scores.keys(), key=lambda x: blended.get(x, 0.0), reverse=True)
         ndcg_scores.append(_ndcg_at_k(ranked, gt, k))
         hit_scores.append(_hit_rate_at_k(ranked, gt, k))
@@ -254,11 +257,12 @@ def _evaluate_weights_fast(
 # Main grid-search
 # ---------------------------------------------------------------------------
 
+
 def run_dirichlet_grid_search(
     num_candidates: int = 500,
     k: int = 10,
     output_path: Path = Path("models/ensemble_weights.json"),
-    engine: "ApexEnsembleEngine | None" = None,
+    engine: ApexEnsembleEngine | None = None,
 ) -> dict[str, float]:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s — %(message)s")
 
@@ -280,9 +284,11 @@ def run_dirichlet_grid_search(
     if engine is None:
         logger.info("Initialising ApexEnsembleEngine …")
         from backend.ensemble_engine import ApexEnsembleEngine
+
         # Use catalog size to ensure embedding tables cover all item IDs
         try:
             from backend.recommender import get_recommender
+
             rec = get_recommender()
             num_items = len(rec.movies) if rec._movies is not None else 50000
         except Exception:
@@ -349,6 +355,7 @@ def run_dirichlet_grid_search(
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def _parse_args(argv=None):
     parser = argparse.ArgumentParser(

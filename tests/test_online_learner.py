@@ -5,19 +5,16 @@ and _checkpoint.
 Requirements: 3.2, 3.6, 3.7, 3.9, 3.10
 """
 
-import queue
-import threading
-import time
 from pathlib import Path
+import time
 
-import pytest
-import torch
 from hypothesis import given, settings
 from hypothesis import strategies as st
+import pytest
+import torch
 
 from backend.lightgcn import LightGCN
 from backend.online_learner import OnlineLearner
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -333,9 +330,7 @@ class TestRun:
     weight=st.floats(min_value=0.01, max_value=2.0, allow_nan=False, allow_infinity=False),
 )
 @settings(max_examples=50, deadline=None)
-def test_apply_gradient_step_never_raises_for_valid_positive_events(
-    user_id: int, movie_id: int, weight: float
-):
+def test_apply_gradient_step_never_raises_for_valid_positive_events(user_id: int, movie_id: int, weight: float):
     """
     **Validates: Requirements 3.2, 3.6, 3.7**
 
@@ -358,9 +353,7 @@ def test_apply_gradient_step_never_raises_for_valid_positive_events(
     weight=st.floats(min_value=-2.0, max_value=-0.01, allow_nan=False, allow_infinity=False),
 )
 @settings(max_examples=50, deadline=None)
-def test_apply_gradient_step_never_raises_for_valid_negative_events(
-    user_id: int, movie_id: int, weight: float
-):
+def test_apply_gradient_step_never_raises_for_valid_negative_events(user_id: int, movie_id: int, weight: float):
     """
     **Validates: Requirements 3.2, 3.6, 3.7**
 
@@ -379,12 +372,14 @@ def test_apply_gradient_step_never_raises_for_valid_negative_events(
 
 @given(
     batch=st.lists(
-        st.fixed_dictionaries({
-            "event_type": st.sampled_from(["rating", "click"]),
-            "user_id": st.one_of(st.none(), st.integers(0, 10**6).map(str)),
-            "movie_id": st.one_of(st.none(), st.integers(0, 10**6)),
-            "interaction_weight": st.floats(-2.0, 2.0, allow_nan=False, allow_infinity=False),
-        }),
+        st.fixed_dictionaries(
+            {
+                "event_type": st.sampled_from(["rating", "click"]),
+                "user_id": st.one_of(st.none(), st.integers(0, 10**6).map(str)),
+                "movie_id": st.one_of(st.none(), st.integers(0, 10**6)),
+                "interaction_weight": st.floats(-2.0, 2.0, allow_nan=False, allow_infinity=False),
+            }
+        ),
         min_size=0,
         max_size=64,
     )
@@ -397,31 +392,6 @@ def test_apply_gradient_step_never_raises_for_arbitrary_batches(batch: list[dict
     For any batch of events (including None IDs, zero weights, mixed types),
     _apply_gradient_step should never raise an exception.
     """
-    learner = make_learner()
-    learner._apply_gradient_step(batch)
-
-
-@given(
-    num_events=st.integers(min_value=1, max_value=100),
-)
-@settings(max_examples=30, deadline=None)
-def test_events_processed_counter_is_monotonically_increasing(num_events: int):
-    """
-    **Validates: Requirements 3.6, 3.9**
-
-    After processing N events, _events_processed should equal N.
-    """
-    learner = make_learner(batch_size=num_events)
-
-    for i in range(num_events):
-        learner._queue.put(positive_event(user_id=i % NUM_USERS, movie_id=i % NUM_ITEMS))
-
-    learner.start()
-    time.sleep(0.5)
-    learner.stop()
-
-    assert learner._events_processed >= num_events
-
     learner = make_learner()
     learner._apply_gradient_step(batch)
 

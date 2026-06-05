@@ -1,14 +1,16 @@
-import pytest
 from fastapi.testclient import TestClient
+
 from backend.main import app
 
 client = TestClient(app)
+
 
 def test_health_check():
     """Verify the API is online."""
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "healthy"
+
 
 def test_api_search_movies():
     """Verify the search endpoint returns valid recommendations."""
@@ -21,12 +23,14 @@ def test_api_search_movies():
         assert "id" in data[0]
         assert "title" in data[0]
 
+
 def test_api_ai_search():
     """Verify the AI semantic search endpoint routes correctly."""
     response = client.get("/v1/search/ai?q=Matrix")
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
+
 
 def test_record_telemetry_event():
     """
@@ -38,22 +42,23 @@ def test_record_telemetry_event():
         "session_id": "session_abc",
         "event_type": "rating",
         "movie_id": 999,
-        "rating": 1, # Dislike -> High Free Energy -> Triggers Active Inference
-        "timestamp": "2026-05-17T00:00:00Z"
+        "rating": 1,  # Dislike -> High Free Energy -> Triggers Active Inference
+        "timestamp": "2026-05-17T00:00:00Z",
     }
-    
+
     # Inject required tenant context headers
     headers = {
         "X-Tenant-ID": "test-tenant",
         "X-Catalog-ID": "test-catalog",
         "X-Tenant-Plan": "enterprise",
-        "X-Tenant-Tier": "enterprise"
+        "X-Tenant-Tier": "enterprise",
     }
     response = client.post("/v1/events", json=payload, headers=headers)
-    
+
     # Due to DLQ and safe error handling, this should never 500
     assert response.status_code == 200
     assert response.json()["status"] in ("accepted", "success")
+
 
 def test_rate_limiter_active():
     """

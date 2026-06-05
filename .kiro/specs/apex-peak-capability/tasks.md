@@ -34,7 +34,7 @@ they validate so regressions are caught early.
     - Replace `simulated_seq = torch.zeros((1, 50), dtype=torch.long)` with `simulated_seq = self._get_session_sequence(user_id, override=session_sequence)`
     - _Requirements: 1.1, 1.6_
 
-  - [-]* 1.4 Write property tests for session sequence (Properties 1 & 2)
+  - [x]* 1.4 Write property tests for session sequence (Properties 1 & 2)
     - **Property 1 & 2: Session Sequence Length Invariant and Padding Correctness**
     - **Validates: Requirements 1.2, 1.3, 1.7**
     - Create `tests/test_session_sequence.py`
@@ -64,7 +64,7 @@ they validate so regressions are caught early.
     - Return the newly loaded weights dict
     - _Requirements: 2.8_
 
-  - [-]* 2.4 Write property tests for ensemble weights (Property 3)
+  - [x]* 2.4 Write property tests for ensemble weights (Property 3)
     - **Property 3: Ensemble Weights Sum to One**
     - **Validates: Requirements 2.5**
     - Create `tests/test_ensemble_weights.py`
@@ -109,7 +109,7 @@ they validate so regressions are caught early.
     - `_checkpoint`: save `lightgcn.state_dict()` to `checkpoint_path`; log `ERROR` on write failure but continue
     - _Requirements: 3.2, 3.6, 3.7, 3.9, 3.10_
 
-  - [-]* 5.3 Write property tests for online learner (Property 4)
+  - [x]* 5.3 Write property tests for online learner (Property 4)
     - **Property 4: Online Learner Interaction Weight Assignment**
     - **Validates: Requirements 3.3, 3.4, 3.5**
     - Create `tests/test_online_learner.py`
@@ -158,7 +158,7 @@ they validate so regressions are caught early.
     - Accept `--epochs`, `--lr`, `--negatives` CLI arguments
     - _Requirements: 4.4, 4.5, 4.7, 4.8_
 
-  - [-]* 8.4 Write property tests for fine-tuning pair construction (Properties 5 & 6)
+  - [x]* 8.4 Write property tests for fine-tuning pair construction (Properties 5 & 6)
     - **Property 5 & 6: Fine-Tuning Negative Ratio and Positive Pair Filter**
     - **Validates: Requirements 4.1, 4.2**
     - Create `tests/test_finetune_two_tower.py`
@@ -207,7 +207,7 @@ they validate so regressions are caught early.
     - If filter removes all candidates: log `WARNING`; revert to pre-filter list (existing fallback behaviour)
     - _Requirements: 5.10, 5.11_
 
-  - [ ]* 10.5 Write property tests for RL wiring (Properties 7 & 8)
+  - [x]* 10.5 Write property tests for RL wiring (Properties 7 & 8)
     - **Property 7: RL State Vector Fixed Length**
     - **Validates: Requirements 5.8, 5.9**
     - **Property 8: RLSafetyFilter Exclusion Invariant**

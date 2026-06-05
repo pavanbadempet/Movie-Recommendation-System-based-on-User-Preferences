@@ -22,7 +22,6 @@ Usage:
 from __future__ import annotations
 
 import logging
-import math
 from typing import Any
 
 import numpy as np
@@ -133,11 +132,7 @@ def submodular_rerank(
             quality_gain = 1.0 if qt not in covered_quality else 0.0
 
             # Combined diversity score
-            diversity = (
-                genre_weight * genre_gain +
-                era_weight * era_gain +
-                quality_weight * quality_gain
-            )
+            diversity = genre_weight * genre_gain + era_weight * era_gain + quality_weight * quality_gain
 
             # Submodular objective
             f = (1.0 - lambda_diversity) * relevance + lambda_diversity * diversity
@@ -171,7 +166,9 @@ def submodular_rerank(
                 all_decades.add(d)
         logger.debug(
             "Submodular rerank: %d results, %d unique genres, %d decades covered",
-            len(result), len(all_genres), len(all_decades),
+            len(result),
+            len(all_genres),
+            len(all_decades),
         )
 
     return result

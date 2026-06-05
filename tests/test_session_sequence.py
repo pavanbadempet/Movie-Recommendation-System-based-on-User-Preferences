@@ -5,13 +5,12 @@ Feature: apex-peak-capability, Property 1 & 2: Session Sequence Length Invariant
 and Padding Correctness
 Validates: Requirements 1.2, 1.3, 1.7
 """
+
 from __future__ import annotations
 
 import time
 from unittest.mock import patch
 
-import pytest
-import torch
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -37,9 +36,8 @@ def _make_engine():
         patch("backend.ensemble_engine.ApexEnsembleEngine._load_trained_weights"),
     ):
         from backend.ensemble_engine import ApexEnsembleEngine
-        engine = ApexEnsembleEngine(
-            num_users=NUM_USERS, num_items=NUM_ITEMS, emb_dim=EMB_DIM
-        )
+
+        engine = ApexEnsembleEngine(num_users=NUM_USERS, num_items=NUM_ITEMS, emb_dim=EMB_DIM)
     return engine
 
 

@@ -1,17 +1,17 @@
 """Validate the Hugging Face serving artifact contract without downloading huge vectors."""
+
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
 import os
-import tempfile
 from pathlib import Path
+import tempfile
 
+from huggingface_hub import HfApi, hf_hub_download
 import numpy as np
 import pandas as pd
-from huggingface_hub import HfApi, hf_hub_download
-
 
 REQUIRED_FILES = {
     "movies_transformed.parquet",
@@ -41,10 +41,7 @@ def contract_value(manifest: dict, key: str):
 
 
 def _remote_size_map(info) -> dict[str, int | None]:
-    return {
-        sibling.rfilename: getattr(sibling, "size", None)
-        for sibling in getattr(info, "siblings", [])
-    }
+    return {sibling.rfilename: getattr(sibling, "size", None) for sibling in getattr(info, "siblings", [])}
 
 
 def _validate_heavy_artifact_contract(
@@ -73,9 +70,7 @@ def _validate_heavy_artifact_contract(
         expected_size = checksum_entry.get("size_bytes")
         remote_size = remote_sizes.get(filename)
         if expected_size is not None and remote_size is not None and int(expected_size) != int(remote_size):
-            raise RuntimeError(
-                f"manifest size for {filename} ({expected_size}) != Hugging Face size ({remote_size})"
-            )
+            raise RuntimeError(f"manifest size for {filename} ({expected_size}) != Hugging Face size ({remote_size})")
 
         checks[filename] = {
             "contract_rows": int(expected_rows),

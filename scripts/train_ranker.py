@@ -11,9 +11,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from pathlib import Path
 import sys
 import urllib.request
-from pathlib import Path
 
 import pandas as pd
 
@@ -69,12 +69,30 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Train Nova's learned recommendation ranker.")
     parser.add_argument("--movies", default=str(DATA_DIR / "movies_transformed.parquet"))
     parser.add_argument("--events", default=None, help="JSONL behavior event log. Defaults to EVENT_LOG_PATH.")
-    parser.add_argument("--events-url", default=None, help="Optional remote JSONL event log URL to download before training.")
+    parser.add_argument(
+        "--events-url", default=None, help="Optional remote JSONL event log URL to download before training."
+    )
     parser.add_argument("--output", default=str(default_ranker_path(MODELS_DIR)))
-    parser.add_argument("--promotion-gate", action="store_true", help="Write a candidate artifact and promote only when offline metrics pass.")
-    parser.add_argument("--production-output", default=str(default_ranker_path(MODELS_DIR)), help="Production ranker artifact path used by the promotion gate.")
-    parser.add_argument("--download-movies-from-hf", action="store_true", help="Download movies_transformed.parquet from Hugging Face before training.")
-    parser.add_argument("--upload-to-hf", action="store_true", help="Upload ranker artifact and metadata to Hugging Face after training.")
+    parser.add_argument(
+        "--promotion-gate",
+        action="store_true",
+        help="Write a candidate artifact and promote only when offline metrics pass.",
+    )
+    parser.add_argument(
+        "--production-output",
+        default=str(default_ranker_path(MODELS_DIR)),
+        help="Production ranker artifact path used by the promotion gate.",
+    )
+    parser.add_argument(
+        "--download-movies-from-hf",
+        action="store_true",
+        help="Download movies_transformed.parquet from Hugging Face before training.",
+    )
+    parser.add_argument(
+        "--upload-to-hf",
+        action="store_true",
+        help="Upload ranker artifact and metadata to Hugging Face after training.",
+    )
     parser.add_argument("--hf-repo", default=os.getenv("HF_MODEL_REPO", "pavanbadempet/movie-recs-models"))
     parser.add_argument("--hf-repo-type", default=os.getenv("HF_MODEL_REPO_TYPE", "model"))
     parser.add_argument("--hf-token", default=os.getenv("HF_TOKEN"))

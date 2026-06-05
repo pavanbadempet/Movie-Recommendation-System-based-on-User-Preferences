@@ -4,13 +4,13 @@ Property-based and unit tests for ApexEnsembleEngine._load_weights and reload_we
 Feature: apex-peak-capability, Property 3: Ensemble Weights Sum to One
 Validates: Requirements 2.5
 """
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
@@ -43,6 +43,7 @@ def _make_engine(tmp_path: Path):
         patch("backend.ensemble_engine.MODELS_DIR", tmp_path),
     ):
         from backend.ensemble_engine import ApexEnsembleEngine
+
         engine = ApexEnsembleEngine(num_users=10, num_items=100, emb_dim=4)
     return engine
 
@@ -69,12 +70,11 @@ def test_weights_sum_to_one(tmp_path, vals):
     assume(sum(vals) > 0)
 
     weights_file = tmp_path / "ensemble_weights.json"
-    weights_file.write_text(
-        json.dumps({k: v for k, v in zip(WEIGHT_KEYS, vals)}), encoding="utf-8"
-    )
+    weights_file.write_text(json.dumps(dict(zip(WEIGHT_KEYS, vals, strict=False))), encoding="utf-8")
 
     with patch("backend.ensemble_engine.MODELS_DIR", tmp_path):
         from backend.ensemble_engine import ApexEnsembleEngine
+
         with (
             patch("backend.ensemble_engine.QuantumFluidRecommender"),
             patch("backend.ensemble_engine.HyperbolicRecommender"),
@@ -102,8 +102,9 @@ class TestEnsembleWeightsUnit:
     def test_load_valid_file(self, tmp_path, monkeypatch):
         """Valid file with weights summing to 1.0 → exact values returned."""
         import backend.ensemble_engine as ee_mod
+
         monkeypatch.setattr(ee_mod, "MODELS_DIR", tmp_path)
-        weights = {k: v for k, v in zip(WEIGHT_KEYS, [0.4, 0.2, 0.2, 0.1, 0.05, 0.05])}
+        weights = dict(zip(WEIGHT_KEYS, [0.4, 0.2, 0.2, 0.1, 0.05, 0.05], strict=False))
         (tmp_path / "ensemble_weights.json").write_text(json.dumps(weights))
         engine = _make_engine(tmp_path)
         loaded = engine._load_weights()
@@ -113,6 +114,7 @@ class TestEnsembleWeightsUnit:
     def test_missing_file_returns_defaults(self, tmp_path, monkeypatch):
         """No file → hard-coded defaults returned."""
         import backend.ensemble_engine as ee_mod
+
         monkeypatch.setattr(ee_mod, "MODELS_DIR", tmp_path)
         engine = _make_engine(tmp_path)
         loaded = engine._load_weights()
@@ -123,6 +125,7 @@ class TestEnsembleWeightsUnit:
     def test_malformed_json_returns_defaults(self, tmp_path, monkeypatch):
         """Invalid JSON → defaults returned."""
         import backend.ensemble_engine as ee_mod
+
         monkeypatch.setattr(ee_mod, "MODELS_DIR", tmp_path)
         (tmp_path / "ensemble_weights.json").write_text("not valid json {{{")
         engine = _make_engine(tmp_path)
@@ -132,6 +135,7 @@ class TestEnsembleWeightsUnit:
     def test_missing_key_returns_defaults(self, tmp_path, monkeypatch):
         """JSON missing 'kan' key → defaults returned."""
         import backend.ensemble_engine as ee_mod
+
         monkeypatch.setattr(ee_mod, "MODELS_DIR", tmp_path)
         weights = {k: 1 / 5 for k in WEIGHT_KEYS if k != "kan"}
         (tmp_path / "ensemble_weights.json").write_text(json.dumps(weights))
@@ -142,6 +146,7 @@ class TestEnsembleWeightsUnit:
     def test_unnormalised_weights_are_renormalised(self, tmp_path, monkeypatch):
         """Weights summing to 2.0 → returned weights sum to 1.0."""
         import backend.ensemble_engine as ee_mod
+
         monkeypatch.setattr(ee_mod, "MODELS_DIR", tmp_path)
         weights = {k: v * 2 for k, v in DEFAULT_WEIGHTS.items()}
         (tmp_path / "ensemble_weights.json").write_text(json.dumps(weights))
@@ -152,9 +157,10 @@ class TestEnsembleWeightsUnit:
     def test_reload_weights_updates_engine_weights(self, tmp_path, monkeypatch):
         """reload_weights() updates engine._weights in place."""
         import backend.ensemble_engine as ee_mod
+
         monkeypatch.setattr(ee_mod, "MODELS_DIR", tmp_path)
         engine = _make_engine(tmp_path)
-        new_weights = {k: 1 / 6 for k in WEIGHT_KEYS}
+        new_weights = dict.fromkeys(WEIGHT_KEYS, 1 / 6)
         (tmp_path / "ensemble_weights.json").write_text(json.dumps(new_weights))
         result = engine.reload_weights()
         assert abs(result["lightgcn"] - 1 / 6) < 1e-5

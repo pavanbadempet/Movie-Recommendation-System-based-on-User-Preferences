@@ -1,0 +1,3189 @@
+openapi: 3.1.0
+info:
+  title: APEX Recommendation API
+  description: 'Production-grade AI recommendation engine with a 6-model ensemble
+    (SASRec, KAN, LightGCN, Diffusion, Quantum-Fluid, Hyperbolic). Implements Doubly
+    Robust IPS weight optimization, differential privacy, and adaptive 3-tier serving
+    (GPU / ONNX CPU / FAISS lite).
+
+
+    **Interactive docs:** `/docs` (Swagger UI) · `/redoc` (ReDoc)
+
+
+    **Full API reference:** [docs/API_REFERENCE.md](https://github.com/your-username/Movie-Recommendation-System/blob/main/docs/API_REFERENCE.md)'
+  contact:
+    name: APEX Project
+    url: https://github.com/your-username/Movie-Recommendation-System
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  version: 2.0.0
+paths:
+  /v1/admin/tests/run:
+    post:
+      tags:
+      - Admin Diagnostics
+      summary: Run Testing Suite
+      description: 'Triggers a PyTest suite programmatically and returns the stdout
+        logs.
+
+        In a full production environment, this would run asynchronously and
+
+        stream results via WebSockets.'
+      operationId: run_testing_suite_v1_admin_tests_run_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestTriggerRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/register:
+    post:
+      tags:
+      - Authentication
+      summary: Register User
+      operationId: register_user_v1_auth_register_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/token:
+    post:
+      tags:
+      - Authentication
+      summary: Login For Access Token
+      operationId: login_for_access_token_v1_auth_token_post
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Body_login_for_access_token_v1_auth_token_post'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /:
+    get:
+      summary: Root
+      operationId: root__get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /v1/evaluation/recommendations:
+    get:
+      tags:
+      - Evaluation
+      summary: Recommendation Quality Report
+      operationId: recommendation_quality_report_v1_evaluation_recommendations_get
+      parameters:
+      - name: sample_size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 25
+          title: Sample Size
+      - name: k
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          minimum: 1
+          default: 10
+          title: K
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/evaluation/semantic-benchmark:
+    get:
+      tags:
+      - Evaluation
+      summary: Semantic Benchmark Report
+      operationId: semantic_benchmark_report_v1_evaluation_semantic_benchmark_get
+      parameters:
+      - name: k
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          minimum: 1
+          default: 10
+          title: K
+      - name: sync
+        in: query
+        required: false
+        schema:
+          type: boolean
+          description: Compute synchronously instead of returning async cache warming
+            status
+          default: false
+          title: Sync
+        description: Compute synchronously instead of returning async cache warming
+          status
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/evaluation/search-benchmark:
+    get:
+      tags:
+      - Evaluation
+      summary: Search Benchmark Report
+      operationId: search_benchmark_report_v1_evaluation_search_benchmark_get
+      parameters:
+      - name: k
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 20
+          minimum: 1
+          default: 5
+          title: K
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/evaluation/recommendation-benchmark:
+    get:
+      tags:
+      - Evaluation
+      summary: Recommendation Benchmark Report
+      operationId: recommendation_benchmark_report_v1_evaluation_recommendation_benchmark_get
+      parameters:
+      - name: k
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          minimum: 1
+          default: 10
+          title: K
+      - name: sync
+        in: query
+        required: false
+        schema:
+          type: boolean
+          description: Compute synchronously instead of returning async cache warming
+            status
+          default: false
+          title: Sync
+        description: Compute synchronously instead of returning async cache warming
+          status
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/evaluation/offline-metrics:
+    get:
+      tags:
+      - Evaluation
+      summary: Offline Metrics
+      description: 'Return the most recent offline evaluation report.
+
+
+        Requirements: 2.1, 2.2, 2.3, 2.4, 2.5'
+      operationId: offline_metrics_v1_evaluation_offline_metrics_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /v1/admin/reload-ensemble-weights:
+    post:
+      tags:
+      - Admin
+      summary: Reload Ensemble Weights
+      description: Reload ensemble blend weights from models/ensemble_weights.json
+        without restarting.
+      operationId: reload_ensemble_weights_v1_admin_reload_ensemble_weights_post
+      parameters:
+      - name: X-Nova-Admin-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Admin-Token
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/artifacts/health:
+    get:
+      tags:
+      - Artifacts
+      summary: Artifact Health Report
+      operationId: artifact_health_report_v1_artifacts_health_get
+      parameters:
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/artifacts/reload:
+    post:
+      tags:
+      - Artifacts
+      summary: Artifact Reload
+      operationId: artifact_reload_v1_artifacts_reload_post
+      parameters:
+      - name: force_download
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: true
+          title: Force Download
+      - name: load
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: true
+          title: Load
+      - name: X-Nova-Admin-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Admin-Token
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/experiments/assignment:
+    get:
+      tags:
+      - Experiments
+      summary: Experiment Assignment
+      operationId: experiment_assignment_v1_experiments_assignment_get
+      parameters:
+      - name: user_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: User Id
+      - name: session_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Session Id
+      - name: experiment
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Experiment
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/experiments/metrics:
+    get:
+      tags:
+      - Experiments
+      summary: Experiment Metrics
+      operationId: experiment_metrics_v1_experiments_metrics_get
+      parameters:
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/catalog/preview:
+    post:
+      tags:
+      - Catalog
+      summary: Preview Catalog
+      operationId: preview_catalog_v1_catalog_preview_post
+      parameters:
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogPreviewRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/catalog/upload:
+    post:
+      tags:
+      - Catalog
+      summary: Upload Catalog
+      operationId: upload_catalog_v1_catalog_upload_post
+      parameters:
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogUploadRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /movies:
+    get:
+      tags:
+      - Browse
+      summary: List Movies
+      operationId: list_movies_movies_get
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 1000
+          description: Maximum movies to return
+          default: 100
+          title: Limit
+        description: Maximum movies to return
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          description: Offset for pagination
+          default: 0
+          title: Offset
+        description: Offset for pagination
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /movies/titles:
+    get:
+      tags:
+      - Browse
+      summary: Get All Titles
+      operationId: get_all_titles_movies_titles_get
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100000
+          minimum: 1
+          description: Maximum number of titles to return
+          default: 100000
+          title: Limit
+        description: Maximum number of titles to return
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/semantic-twins/id/{movie_id}:
+    get:
+      tags:
+      - Browse
+      summary: Semantic Twin By Id
+      operationId: semantic_twin_by_id_v1_semantic_twins_id__movie_id__get
+      parameters:
+      - name: movie_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Movie Id
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /movies/latest:
+    get:
+      summary: Get Latest Movies
+      operationId: get_latest_movies_movies_latest_get
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 20
+          default: 8
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/frontends/status:
+    get:
+      summary: Frontends Status
+      operationId: frontends_status_v1_frontends_status_get
+      parameters:
+      - name: include_remote
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: true
+          title: Include Remote
+      - name: preferred
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Preferred
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/platform/slo:
+    get:
+      summary: Platform Slo
+      operationId: platform_slo_v1_platform_slo_get
+      parameters:
+      - name: include_frontends
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Frontends
+      - name: include_remote_frontends
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Remote Frontends
+      - name: preferred_frontend
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Preferred Frontend
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/frontends/launch:
+    get:
+      summary: Launch Frontend
+      operationId: launch_frontend_v1_frontends_launch_get
+      parameters:
+      - name: include_remote
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: true
+          title: Include Remote
+      - name: preferred
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Preferred
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /go:
+    get:
+      summary: Launch Frontend
+      operationId: launch_frontend_go_get
+      parameters:
+      - name: include_remote
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: true
+          title: Include Remote
+      - name: preferred
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Preferred
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /health:
+    get:
+      summary: Health Check
+      operationId: health_check_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /v1/platform/context:
+    get:
+      summary: Platform Context
+      operationId: platform_context_v1_platform_context_get
+      parameters:
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformContextResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/platform/status:
+    get:
+      summary: Platform Status
+      operationId: platform_status_v1_platform_status_get
+      parameters:
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/platform/readiness:
+    get:
+      summary: Platform Readiness
+      operationId: platform_readiness_v1_platform_readiness_get
+      parameters:
+      - name: strict
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Strict
+      - name: k
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          minimum: 1
+          default: 10
+          title: K
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/usage:
+    get:
+      summary: Usage Summary
+      operationId: usage_summary_v1_usage_get
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/ranker/status:
+    get:
+      summary: Ranker Status
+      operationId: ranker_status_v1_ranker_status_get
+      parameters:
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /search:
+    get:
+      summary: Search Movies
+      operationId: search_movies_search_get
+      parameters:
+      - name: q
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          title: Q
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          default: 20
+          title: Limit
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Movie'
+                title: Response Search Movies Search Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/search:
+    get:
+      summary: Search Movies
+      operationId: search_movies_v1_search_get
+      parameters:
+      - name: q
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          title: Q
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          default: 20
+          title: Limit
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Movie'
+                title: Response Search Movies V1 Search Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/search/ai:
+    get:
+      summary: Ai Search Movies
+      operationId: ai_search_movies_v1_search_ai_get
+      parameters:
+      - name: q
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          title: Q
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          default: 20
+          title: Limit
+      - name: top_k
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 100
+            minimum: 1
+          - type: 'null'
+          title: Top K
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Movie'
+                title: Response Ai Search Movies V1 Search Ai Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /movie/{movie_id}:
+    get:
+      summary: Get Movie
+      operationId: get_movie_movie__movie_id__get
+      parameters:
+      - name: movie_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Movie Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Movie'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /movie/{movie_id}/enriched:
+    get:
+      summary: Get Movie Enriched
+      operationId: get_movie_enriched_movie__movie_id__enriched_get
+      parameters:
+      - name: movie_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Movie Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnrichedMovie'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /movie/{movie_id}/trailer:
+    get:
+      summary: Get Movie Trailer
+      operationId: get_movie_trailer_movie__movie_id__trailer_get
+      parameters:
+      - name: movie_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Movie Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /events:
+    post:
+      summary: Record Event
+      operationId: record_event_events_post
+      parameters:
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/events:
+    post:
+      summary: Record Event
+      operationId: record_event_v1_events_post
+      parameters:
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /events/features:
+    get:
+      summary: Get Behavior Features
+      operationId: get_behavior_features_events_features_get
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/events/features:
+    get:
+      summary: Get Behavior Features
+      operationId: get_behavior_features_v1_events_features_get
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/events/recommendation-analytics:
+    get:
+      summary: Recommendation Event Analytics
+      operationId: recommendation_event_analytics_v1_events_recommendation_analytics_get
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/diagnostics/recommendations/{movie_id}:
+    get:
+      summary: Recommendation Diagnostics
+      operationId: recommendation_diagnostics_v1_diagnostics_recommendations__movie_id__get
+      parameters:
+      - name: movie_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Movie Id
+      - name: n
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          minimum: 1
+          default: 10
+          title: N
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/recommendations/visually-similar/{movie_id}:
+    get:
+      summary: Visual Recommendation By Id
+      operationId: visual_recommendation_by_id_v1_recommendations_visually_similar__movie_id__get
+      parameters:
+      - name: movie_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Movie Id
+      - name: n
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 10
+          title: N
+      - name: explain
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Explain
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecommendationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/recommendations/knowledge-graph/{movie_id}:
+    get:
+      summary: Kg Recommendation By Id
+      operationId: kg_recommendation_by_id_v1_recommendations_knowledge_graph__movie_id__get
+      parameters:
+      - name: movie_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Movie Id
+      - name: n
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 10
+          title: N
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecommendationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /recommend/id/{movie_id}:
+    get:
+      summary: Recommend By Id
+      operationId: recommend_by_id_recommend_id__movie_id__get
+      parameters:
+      - name: movie_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Movie Id
+      - name: n
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          default: 10
+          title: N
+      - name: request_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+      - name: user_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: User Id
+      - name: session_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Session Id
+      - name: explain
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Explain
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecommendationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/recommendations/id/{movie_id}:
+    get:
+      summary: Recommend By Id
+      operationId: recommend_by_id_v1_recommendations_id__movie_id__get
+      parameters:
+      - name: movie_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Movie Id
+      - name: n
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          default: 10
+          title: N
+      - name: request_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+      - name: user_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: User Id
+      - name: session_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Session Id
+      - name: explain
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Explain
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecommendationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /recommend/id/{movie_id}/enriched:
+    get:
+      summary: Recommend By Id Enriched
+      operationId: recommend_by_id_enriched_recommend_id__movie_id__enriched_get
+      parameters:
+      - name: movie_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Movie Id
+      - name: n
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          default: 10
+          title: N
+      - name: request_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+      - name: user_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: User Id
+      - name: session_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Session Id
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnrichedRecommendationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/recommendations/id/{movie_id}/enriched:
+    get:
+      summary: Recommend By Id Enriched
+      operationId: recommend_by_id_enriched_v1_recommendations_id__movie_id__enriched_get
+      parameters:
+      - name: movie_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Movie Id
+      - name: n
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          default: 10
+          title: N
+      - name: request_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+      - name: user_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: User Id
+      - name: session_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Session Id
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnrichedRecommendationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /recommend/title/{title}:
+    get:
+      summary: Recommend By Title
+      operationId: recommend_by_title_recommend_title__title__get
+      parameters:
+      - name: title
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Title
+      - name: n
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          default: 10
+          title: N
+      - name: request_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+      - name: user_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: User Id
+      - name: session_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Session Id
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecommendationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/recommendations/title/{title}:
+    get:
+      summary: Recommend By Title
+      operationId: recommend_by_title_v1_recommendations_title__title__get
+      parameters:
+      - name: title
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Title
+      - name: n
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          default: 10
+          title: N
+      - name: request_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+      - name: user_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: User Id
+      - name: session_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Session Id
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecommendationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/recommendations/user/{user_id}:
+    get:
+      summary: Recommend For User
+      operationId: recommend_for_user_v1_recommendations_user__user_id__get
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+      - name: n
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          default: 10
+          title: N
+      - name: limit
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 50
+            minimum: 1
+          - type: 'null'
+          title: Limit
+      - name: top_k
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 50
+            minimum: 1
+          - type: 'null'
+          title: Top K
+      - name: request_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+      - name: session_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Session Id
+      - name: X-Nova-API-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Nova-Api-Key
+      - name: X-Tenant-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Tenant-Id
+      - name: X-Catalog-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Catalog-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Movie'
+                title: Response Recommend For User V1 Recommendations User  User Id  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /chat:
+    post:
+      summary: Chat Endpoint
+      operationId: chat_endpoint_chat_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    Body_login_for_access_token_v1_auth_token_post:
+      properties:
+        grant_type:
+          anyOf:
+          - type: string
+            pattern: ^password$
+          - type: 'null'
+          title: Grant Type
+        username:
+          type: string
+          title: Username
+        password:
+          type: string
+          format: password
+          title: Password
+        scope:
+          type: string
+          title: Scope
+          default: ''
+        client_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Client Id
+        client_secret:
+          anyOf:
+          - type: string
+          - type: 'null'
+          format: password
+          title: Client Secret
+      type: object
+      required:
+      - username
+      - password
+      title: Body_login_for_access_token_v1_auth_token_post
+    CatalogPreviewRequest:
+      properties:
+        filename:
+          type: string
+          title: Filename
+          default: catalog.csv
+        csv_text:
+          type: string
+          title: Csv Text
+        column_mapping:
+          additionalProperties:
+            type: string
+          type: object
+          title: Column Mapping
+        sample_size:
+          type: integer
+          title: Sample Size
+          default: 20
+      type: object
+      required:
+      - csv_text
+      title: CatalogPreviewRequest
+      description: CSV catalog preview request from the Nova Console.
+    CatalogUploadRequest:
+      properties:
+        filename:
+          type: string
+          title: Filename
+          default: catalog.csv
+        csv_text:
+          type: string
+          title: Csv Text
+        column_mapping:
+          additionalProperties:
+            type: string
+          type: object
+          title: Column Mapping
+        sample_size:
+          type: integer
+          title: Sample Size
+          default: 20
+      type: object
+      required:
+      - csv_text
+      title: CatalogUploadRequest
+      description: Persisted catalog upload request.
+    ChatMessage:
+      properties:
+        role:
+          type: string
+          title: Role
+        content:
+          type: string
+          title: Content
+      type: object
+      required:
+      - role
+      - content
+      title: ChatMessage
+    ChatRequest:
+      properties:
+        messages:
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+          type: array
+          title: Messages
+      type: object
+      required:
+      - messages
+      title: ChatRequest
+    ChatResponse:
+      properties:
+        role:
+          type: string
+          title: Role
+        content:
+          type: string
+          title: Content
+      type: object
+      required:
+      - role
+      - content
+      title: ChatResponse
+    EnrichedMovie:
+      properties:
+        id:
+          type: integer
+          title: Id
+        title:
+          type: string
+          title: Title
+        overview:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Overview
+        genres:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Genres
+        vote_average:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Vote Average
+        vote_count:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Vote Count
+        popularity:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Popularity
+        release_date:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Release Date
+        poster_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Poster Path
+        metadata_completeness:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Metadata Completeness
+        content_quality_score:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Content Quality Score
+        quality_bucket:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Quality Bucket
+        recommendable:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Recommendable
+        similarity_score:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Similarity Score
+        retrieval_stage:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Retrieval Stage
+        retrieval_signals:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Retrieval Signals
+        semantic_twin:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Semantic Twin
+        semantic_signals:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Semantic Signals
+        explanation_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Explanation Text
+        explanation:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Explanation
+        trailer_key:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Trailer Key
+        runtime:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Runtime
+        director:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Director
+        cast:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cast
+      type: object
+      required:
+      - id
+      - title
+      title: EnrichedMovie
+      description: Movie with TMDB enrichment data.
+    EnrichedRecommendationResponse:
+      properties:
+        request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+        query_movie:
+          $ref: '#/components/schemas/Movie'
+        recommendations:
+          items:
+            $ref: '#/components/schemas/EnrichedMovie'
+          type: array
+          title: Recommendations
+      type: object
+      required:
+      - query_movie
+      - recommendations
+      title: EnrichedRecommendationResponse
+      description: Enriched recommendation response with TMDB data.
+    EventRequest:
+      properties:
+        event_type:
+          type: string
+          enum:
+          - view
+          - search
+          - click
+          - rating
+          - recommendation_request
+          - recommendation_impression
+          title: Event Type
+        tenant_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tenant Id
+        catalog_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Catalog Id
+        content_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Content Id
+        source_content_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Content Id
+        movie_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Movie Id
+        query_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Query Text
+        user_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: User Id
+        session_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Session Id
+        rating:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Rating
+        request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+        metadata:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Metadata
+      type: object
+      required:
+      - event_type
+      title: EventRequest
+      description: Behavior event request model.
+    EventResponse:
+      properties:
+        status:
+          type: string
+          title: Status
+        event_id:
+          type: string
+          title: Event Id
+        event_path:
+          type: string
+          title: Event Path
+        event_store:
+          type: string
+          title: Event Store
+        durable:
+          type: boolean
+          title: Durable
+      type: object
+      required:
+      - status
+      - event_id
+      - event_path
+      - event_store
+      - durable
+      title: EventResponse
+      description: Behavior event write response.
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HealthResponse:
+      properties:
+        status:
+          type: string
+          title: Status
+        movie_count:
+          type: integer
+          title: Movie Count
+        app_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Version
+        app_commit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Commit
+        serving_tier:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Serving Tier
+        hardware_profile:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Hardware Profile
+        tier_selection_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tier Selection Reason
+      type: object
+      required:
+      - status
+      - movie_count
+      title: HealthResponse
+      description: Health check response.
+    Movie:
+      properties:
+        id:
+          type: integer
+          title: Id
+        title:
+          type: string
+          title: Title
+        overview:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Overview
+        genres:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Genres
+        vote_average:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Vote Average
+        vote_count:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Vote Count
+        popularity:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Popularity
+        release_date:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Release Date
+        poster_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Poster Path
+        metadata_completeness:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Metadata Completeness
+        content_quality_score:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Content Quality Score
+        quality_bucket:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Quality Bucket
+        recommendable:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Recommendable
+        similarity_score:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Similarity Score
+        ranker_score:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Ranker Score
+        retrieval_stage:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Retrieval Stage
+        retrieval_signals:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Retrieval Signals
+        semantic_twin:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Semantic Twin
+        semantic_signals:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Semantic Signals
+        explanation_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Explanation Text
+        explanation:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Explanation
+      type: object
+      required:
+      - id
+      - title
+      title: Movie
+      description: Movie response model.
+    PlatformContextResponse:
+      properties:
+        tenant_id:
+          type: string
+          title: Tenant Id
+        catalog_id:
+          type: string
+          title: Catalog Id
+        plan:
+          type: string
+          title: Plan
+        authenticated:
+          type: boolean
+          title: Authenticated
+        mode:
+          type: string
+          title: Mode
+      type: object
+      required:
+      - tenant_id
+      - catalog_id
+      - plan
+      - authenticated
+      - mode
+      title: PlatformContextResponse
+      description: Resolved product API context.
+    RecommendationResponse:
+      properties:
+        request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+        query_movie:
+          $ref: '#/components/schemas/Movie'
+        recommendations:
+          items:
+            $ref: '#/components/schemas/Movie'
+          type: array
+          title: Recommendations
+      type: object
+      required:
+      - query_movie
+      - recommendations
+      title: RecommendationResponse
+      description: Recommendation response.
+    RegisterRequest:
+      properties:
+        username:
+          type: string
+          title: Username
+        password:
+          type: string
+          title: Password
+      type: object
+      required:
+      - username
+      - password
+      title: RegisterRequest
+    TestTriggerRequest:
+      properties:
+        suite:
+          type: string
+          title: Suite
+      type: object
+      required:
+      - suite
+      title: TestTriggerRequest
+    UsageResponse:
+      properties:
+        generated_at:
+          type: string
+          title: Generated At
+        usage_log_path:
+          type: string
+          title: Usage Log Path
+        total_requests:
+          type: integer
+          title: Total Requests
+        last_seen:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Seen
+        operation_counts:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Operation Counts
+        tenant_counts:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Tenant Counts
+      type: object
+      required:
+      - generated_at
+      - usage_log_path
+      - total_requests
+      - operation_counts
+      - tenant_counts
+      title: UsageResponse
+      description: Lightweight API usage summary.
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+tags:
+- name: health
+  description: Health checks and platform readiness probes.
+- name: recommendations
+  description: Core recommendation endpoints — neural ensemble, multi-modal, knowledge
+    graph.
+- name: search
+  description: Semantic and hybrid search over the movie catalog.
+- name: events
+  description: Behavior event ingestion for online learning and analytics.
+- name: evaluation
+  description: Offline evaluation metrics — semantic benchmark, recommendation benchmark,
+    SLO.
+- name: admin
+  description: Admin operations — weight reload, artifact refresh, platform status.
+    Requires Bearer token.
+- name: auth
+  description: JWT authentication and user registration.
+- name: experiments
+  description: A/B experiment management.
+- name: catalog
+  description: Catalog browsing, filtering, and upload.
+servers:
+- url: http://localhost:8000
+  description: Local development
+- url: https://your-api.onrender.com
+  description: Production (Render free tier — Tier 3)

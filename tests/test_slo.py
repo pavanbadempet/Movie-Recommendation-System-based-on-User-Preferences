@@ -37,7 +37,9 @@ def test_internal_quality_routes_are_excluded_from_serving_slo(monkeypatch):
 
     assert should_track_request(path="/v1/search", route="/v1/search") is True
     assert should_track_request(path="/v1/recommendations/id/19995", route="/v1/recommendations/id/{movie_id}") is True
-    assert should_track_request(path="/v1/evaluation/search-benchmark", route="/v1/evaluation/search-benchmark") is False
+    assert (
+        should_track_request(path="/v1/evaluation/search-benchmark", route="/v1/evaluation/search-benchmark") is False
+    )
     assert should_track_request(path="/v1/platform/readiness", route="/v1/platform/readiness") is False
 
 

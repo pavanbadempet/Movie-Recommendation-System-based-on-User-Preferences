@@ -1,0 +1,97 @@
+groups:
+  - name: apex_slo_alerts
+    interval: 30s
+    rules:
+      # -----------------------------------------------------------------------
+      # Availability: error rate > 3% over 5 minutes
+      # -----------------------------------------------------------------------
+      - alert: HighErrorRate
+        expr: |
+          rate(nova_http_requests_total{http_status=~"5.."}[5m])
+          / rate(nova_http_requests_total[5m]) > 0.03
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "APEX error rate exceeds SLO (>3%)"
+          description: >
+            The 5-minute HTTP error rate is {{ $value | humanizePercentage }}.
+            SLO budget is 3%. Immediate investigation required.
+
+      # -----------------------------------------------------------------------
+      # Latency: p95 recommendation latency > 25s
+      # -----------------------------------------------------------------------
+      - alert: RecommendationLatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            rate(nova_http_request_duration_seconds_bucket{
+              endpoint=~"/v1/recommendations.*"
+            }[5m])
+          ) > 25
+        for: 3m
+        labels:
+          severity: warning
+          team: ml
+        annotations:
+          summary: "Recommendation p95 latency exceeds SLO (>25s)"
+          description: >
+            p95 recommendation latency is {{ $value | humanizeDuration }}.
+            This may indicate cold-start, model loading issues, or overload.
+
+      # -----------------------------------------------------------------------
+      # Latency: p95 search latency > 2.5s
+      # -----------------------------------------------------------------------
+      - alert: SearchLatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            rate(nova_http_request_duration_seconds_bucket{
+              endpoint=~"/v1/search.*"
+            }[5m])
+          ) > 2.5
+        for: 3m
+        labels:
+          severity: warning
+          team: ml
+        annotations:
+          summary: "Search p95 latency exceeds SLO (>2.5s)"
+          description: >
+            p95 search latency is {{ $value | humanizeDuration }}.
+
+      # -----------------------------------------------------------------------
+      # Availability: no requests received in 10 minutes (dead service)
+      # -----------------------------------------------------------------------
+      - alert: NoTraffic
+        expr: |
+          rate(nova_http_requests_total[10m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "APEX backend receiving no traffic"
+          description: >
+            No HTTP requests recorded for 10 minutes. The service may be down,
+            unreachable, or the keep-alive workflow may have stopped.
+
+  - name: apex_ml_alerts
+    interval: 60s
+    rules:
+      # -----------------------------------------------------------------------
+      # Recommendation quality: high 5xx rate on rec endpoints specifically
+      # -----------------------------------------------------------------------
+      - alert: RecommendationEndpointErrors
+        expr: |
+          rate(nova_http_requests_total{
+            endpoint=~"/v1/recommendations.*",
+            http_status=~"5.."
+          }[5m]) > 0.01
+        for: 2m
+        labels:
+          severity: critical
+          team: ml
+        annotations:
+          summary: "Recommendation endpoint returning 5xx errors"
+          description: >
+            Recommendation endpoint error rate is {{ $value }}/s. The ensemble
+            or retrieval pipeline may have a critical failure.

@@ -119,9 +119,7 @@ def compute_confidence_score(
     combined_uncertainty = 0.6 * unc_ensemble + 0.4 * unc_coverage
     confidence = round(1.0 - combined_uncertainty, 4)
 
-    is_cold_start = (
-        user_interaction_count < 5 or item_interaction_count < 5
-    )
+    is_cold_start = user_interaction_count < 5 or item_interaction_count < 5
 
     if confidence >= 0.8:
         label = "high"

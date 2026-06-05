@@ -25,6 +25,7 @@ frontend/.env
 data/raw/*.csv
 data/raw/*.zip
 data/raw/ml-latest-small/
+data/raw/ml-25m/
 data/datalake/
 data/events/*.jsonl
 data/events/*.dlq
@@ -35,8 +36,17 @@ data/processed/*_summary.json
 .hadoop/
 *.sqlite3
 *.sqlite3-*
+*.bak
 benchmark_temp.json
 movies_temp.parquet
+
+# Incremental dev scripts (never commit work-in-progress versions)
+scripts/_slim_recommender*.py
+scripts/_verify_arch.py
+
+# Frontend build logs
+frontend-vite*.log
+frontend-vite*.err.log
 
 # Model artifacts (hosted on HuggingFace, NOT in GitHub)
 # Kaggle generates -> Hugging Face stores -> Render downloads at runtime
@@ -84,6 +94,11 @@ test_punctuation_fix.py
 test_recs.py
 test_output.txt
 verify.log
+test_llm.py
+test_recommendations.py
+test_delta_implementation.py
+final_verification.py
+verify_implementation.py
 
 # Personal files (don't push to public repo)
 resume*.tex

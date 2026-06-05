@@ -75,10 +75,9 @@ def compute_serendipity_score(
         return 0.0
 
     total_profile = sum(user_genre_profile.values()) or 1.0
-    genre_familiarity = sum(
-        user_genre_profile.get(g, 0.0) / total_profile
-        for g in movie_genres
-    ) / max(len(movie_genres), 1)
+    genre_familiarity = sum(user_genre_profile.get(g, 0.0) / total_profile for g in movie_genres) / max(
+        len(movie_genres), 1
+    )
 
     serendipity = relevance_score * (1.0 - genre_familiarity)
     return round(max(0.0, serendipity), 4)
@@ -144,10 +143,10 @@ def pareto_rank(
 
         # Weighted multi-objective score
         mo_score = (
-            weights["relevance"] * relevance +
-            weights["novelty"] * novelty +
-            weights["serendipity"] * serendipity +
-            weights["quality"] * quality
+            weights["relevance"] * relevance
+            + weights["novelty"] * novelty
+            + weights["serendipity"] * serendipity
+            + weights["quality"] * quality
         )
 
         movie["multi_objective_score"] = round(mo_score, 4)

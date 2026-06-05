@@ -6,21 +6,23 @@ prevent filter bubbles and solve the cold-start problem for new items.
 This perfectly balances Exploitation (MMoE Ranker) with Exploration (Bandits).
 """
 
-import numpy as np
-import logging
-from typing import List, Dict, Any
 from collections import defaultdict
+import logging
+from typing import Any
+
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
+
 class BanditEngine:
     def __init__(self):
-        # In-memory storage for bandit states. 
+        # In-memory storage for bandit states.
         # In production, this syncs with Redis or PostgreSQL.
         self.item_impressions = defaultdict(int)
         self.item_clicks = defaultdict(int)
         self.total_impressions = 0
-        
+
     def inject_priors(self, movies_df):
         """
         Bootstrap the bandit with historical data so it doesn't start completely blind.
@@ -32,11 +34,11 @@ class BanditEngine:
                 movie_id = int(row["id"])
                 votes = int(row.get("vote_count", 0))
                 rating = float(row.get("vote_average", 0.0))
-                
+
                 # Scale down slightly to allow new data to easily overtake history
                 prior_impressions = min(votes, 1000)
                 prior_clicks = int(prior_impressions * (rating / 10.0))
-                
+
                 self.item_impressions[movie_id] = prior_impressions
                 self.item_clicks[movie_id] = prior_clicks
                 self.total_impressions += prior_impressions
@@ -62,8 +64,8 @@ class BanditEngine:
         """
         impressions = self.item_impressions.get(movie_id, 0)
         if impressions == 0:
-            return base_score + 100.0 # Force explore completely unseen items
-            
+            return base_score + 100.0  # Force explore completely unseen items
+
         # The UCB exploration term
         exploration_bonus = c * np.sqrt(np.log(max(self.total_impressions, 1)) / impressions)
         return base_score + exploration_bonus
@@ -72,34 +74,31 @@ class BanditEngine:
         """
         Thompson Sampling using Beta distribution.
         Draws a random sample from the item's posterior distribution.
-        If an item is uncertain (low impressions), the distribution is wide, allowing 
+        If an item is uncertain (low impressions), the distribution is wide, allowing
         it to occasionally sample a very high score and get shown.
         """
         impressions = self.item_impressions.get(movie_id, 0)
         clicks = self.item_clicks.get(movie_id, 0)
-        
+
         # Beta(alpha, beta) where alpha = successes + 1, beta = failures + 1
         alpha = clicks + 1
         beta_param = (impressions - clicks) + 1
-        
+
         # Draw sample
         ts_multiplier = np.random.beta(alpha, beta_param)
-        
+
         # Blend TS sample with the base score (base score from MMoE)
         return base_score * (0.5 + ts_multiplier)
 
     def apply_exploration(
-        self, 
-        candidates: List[Dict[str, Any]], 
-        strategy: str = "thompson", 
-        epsilon: float = 0.1
-    ) -> List[Dict[str, Any]]:
+        self, candidates: list[dict[str, Any]], strategy: str = "thompson", epsilon: float = 0.1
+    ) -> list[dict[str, Any]]:
         """
         Modifies candidate scores to inject exploration.
         """
         if not candidates:
             return candidates
-            
+
         if strategy == "epsilon_greedy":
             # Epsilon-Greedy: With probability epsilon, randomly boost an item
             for candidate in candidates:
@@ -109,27 +108,27 @@ class BanditEngine:
                     if "explanation" not in candidate:
                         candidate["explanation"] = []
                     candidate["explanation"].insert(0, "Exploration: Epsilon-Greedy Random Selection")
-                    
+
         elif strategy == "ucb":
             for candidate in candidates:
                 movie_id = int(candidate.get("id", 0))
                 base_score = float(candidate.get("similarity_score", 0.0))
-                
+
                 new_score = self.get_ucb_score(movie_id, base_score)
-                if new_score > base_score + 0.1: # Only label if it actually got a big UCB boost
+                if new_score > base_score + 0.1:  # Only label if it actually got a big UCB boost
                     if "explanation" not in candidate:
                         candidate["explanation"] = []
                     candidate["explanation"].insert(0, "Exploration: Upper Confidence Bound (UCB) Boost")
                 candidate["similarity_score"] = new_score
-                
+
         elif strategy == "thompson":
             for candidate in candidates:
                 movie_id = int(candidate.get("id", 0))
                 base_score = float(candidate.get("similarity_score", 0.0))
-                
+
                 new_score = self.get_thompson_sample(movie_id, base_score)
                 candidate["similarity_score"] = new_score
-                # Thompson is stochastic, hard to explicitly label as "explored", 
+                # Thompson is stochastic, hard to explicitly label as "explored",
                 # but we can note it in the metrics
                 candidate.setdefault("metrics", {})["thompson_applied"] = True
 
@@ -137,8 +136,10 @@ class BanditEngine:
         candidates.sort(key=lambda x: x.get("similarity_score", 0.0), reverse=True)
         return candidates
 
+
 # Singleton Instance
 _bandit_engine = None
+
 
 def get_bandit_engine() -> BanditEngine:
     global _bandit_engine

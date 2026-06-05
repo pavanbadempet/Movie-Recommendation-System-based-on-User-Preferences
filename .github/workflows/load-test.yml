@@ -1,0 +1,63 @@
+name: Load Test (SLO Smoke)
+
+on:
+  # Run after a successful CI build on main
+  workflow_run:
+    workflows: ["Nova Universal Recommendation Engine CI/CD"]
+    branches: [ "main" ]
+    types: [ completed ]
+  # Allow manual full-load runs
+  workflow_dispatch:
+    inputs:
+      smoke:
+        description: 'Run in smoke mode (fast, 10 VUs, 30 s)?'
+        required: false
+        default: 'true'
+      base_url:
+        description: 'Target API base URL'
+        required: false
+        default: 'https://movie-recs-api-5qvy.onrender.com'
+
+jobs:
+  k6-smoke:
+    name: k6 SLO Smoke Test
+    runs-on: ubuntu-latest
+    # Only run when the triggering workflow succeeded (or on manual dispatch)
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install k6
+      run: |
+        sudo gpg -k
+        sudo gpg --no-default-keyring \
+          --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+          --keyserver hkp://keyserver.ubuntu.com:80 \
+          --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+        echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] \
+          https://dl.k6.io/deb stable main" \
+          | sudo tee /etc/apt/sources.list.d/k6.list
+        sudo apt-get update
+        sudo apt-get install -y k6
+
+    - name: Run k6 smoke test
+      env:
+        BASE_URL: ${{ github.event.inputs.base_url || 'https://movie-recs-api-5qvy.onrender.com' }}
+        NOVA_API_KEY: ${{ secrets.NOVA_API_KEY }}
+        SMOKE: ${{ github.event.inputs.smoke || 'true' }}
+      run: |
+        k6 run load-tests/recommendation_slo.js \
+          --env BASE_URL="$BASE_URL" \
+          --env API_KEY="$NOVA_API_KEY" \
+          --env SMOKE="$SMOKE" \
+          --out json=load-test-results.json
+
+    - name: Upload k6 results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: k6-load-test-results
+        path: load-test-results.json

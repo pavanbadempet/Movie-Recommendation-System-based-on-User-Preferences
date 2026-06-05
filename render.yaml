@@ -1,21 +1,56 @@
 services:
   - type: web
-    name: nova-backend
+    name: apex-backend
     env: docker
     dockerContext: .
     dockerfilePath: ./Dockerfile
-    plan: free
-    healthCheckPath: /
+    # ---------------------------------------------------------------------------
+    # Tier 2 — ONNX CPU ensemble (200–800 ms latency)
+    # Upgrade to "pro" + NOVA_SERVING_TIER=tier1 for GPU inference (50–200 ms)
+    # ---------------------------------------------------------------------------
+    plan: standard
+    healthCheckPath: /health
     envVars:
       - key: ENVIRONMENT
         value: production
+      # Full ensemble — activates Tier 2 (ONNX CPU) on standard plan hardware
       - key: NOVA_SERVING_PROFILE
-        value: lite
+        value: full
+      - key: NOVA_SERVING_TIER
+        value: tier2
+      # Background warmup enabled — model artifacts loaded before first request
       - key: NOVA_HEALTH_LOAD_RECOMMENDER
-        value: "false"
+        value: "true"
       - key: NOVA_BACKGROUND_RECOMMENDER_WARMUP
-        value: "false"
+        value: "true"
       - key: DATABASE_URL
         sync: false
       - key: REDIS_URL
         sync: false
+      # JWT_SECRET_KEY must be set in the Render dashboard — never committed
+      - key: JWT_SECRET_KEY
+        sync: false
+      # NOVA_ADMIN_TOKEN must be set in the Render dashboard — never committed
+      - key: NOVA_ADMIN_TOKEN
+        sync: false
+      # Optional: Stripe keys for billing (set in Render dashboard)
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      # Optional: Sentry for error monitoring (set in Render dashboard)
+      - key: SENTRY_DSN
+        sync: false
+
+  # ---------------------------------------------------------------------------
+  # Tier 1 example — uncomment and switch plan to "pro" for GPU inference
+  # ---------------------------------------------------------------------------
+  # - type: web
+  #   name: apex-backend-gpu
+  #   env: docker
+  #   plan: pro
+  #   envVars:
+  #     - key: NOVA_SERVING_PROFILE
+  #       value: full
+  #     - key: NOVA_SERVING_TIER
+  #       value: tier1

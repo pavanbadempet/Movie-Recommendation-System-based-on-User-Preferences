@@ -15,11 +15,7 @@ class FakeRecommender:
 
     def search_movies(self, query, limit=5):
         normalized = query.lower()
-        return [
-            movie
-            for movie in self.movies.values()
-            if normalized in movie["title"].lower()
-        ][:limit]
+        return [movie for movie in self.movies.values() if normalized in movie["title"].lower()][:limit]
 
     def recommend_by_id(self, movie_id, n=10):
         return list(self.recommendations.get(int(movie_id), []))[:n]
@@ -53,7 +49,12 @@ def test_recommendation_benchmark_scores_good_and_bad_hits(tmp_path):
         movies={19995: {"id": 19995, "title": "Avatar"}},
         recommendations={
             19995: [
-                {"id": 76600, "title": "Avatar: The Way of Water", "retrieval_stage": "vector", "explanation": ["same world"]},
+                {
+                    "id": 76600,
+                    "title": "Avatar: The Way of Water",
+                    "retrieval_stage": "vector",
+                    "explanation": ["same world"],
+                },
                 {"id": 438631, "title": "Dune", "retrieval_stage": "vector", "explanation": ["desert epic"]},
             ]
         },

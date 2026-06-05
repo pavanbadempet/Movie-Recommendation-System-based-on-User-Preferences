@@ -19,8 +19,8 @@ Architecture:
 
 from __future__ import annotations
 
-import logging
 from collections import defaultdict
+import logging
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -142,8 +142,7 @@ def cross_domain_user_affinity(
     user_domain_tags: dict[str, float] = defaultdict(float)
     for event in user_events:
         catalog = str(event.get("catalog_id", "")).lower()
-        genres_str = str(event.get("genres") or
-                         (event.get("metadata") or {}).get("genres", "") or "")
+        genres_str = str(event.get("genres") or (event.get("metadata") or {}).get("genres", "") or "")
 
         # Determine domain from catalog_id
         if "book" in catalog:
@@ -169,10 +168,7 @@ def cross_domain_user_affinity(
         return 0.0
 
     # Compute overlap between user's cross-domain tags and movie's signals
-    overlap = sum(
-        user_domain_tags.get(signal, 0.0) * weight
-        for signal, weight in movie_signals.items()
-    )
+    overlap = sum(user_domain_tags.get(signal, 0.0) * weight for signal, weight in movie_signals.items())
 
     # Normalize by user's total cross-domain activity
     total_user_activity = sum(user_domain_tags.values()) or 1.0
@@ -211,17 +207,13 @@ def enrich_knowledge_graph_with_cross_domain(kg_engine: Any) -> None:
                 for tag in tags:
                     tag_node = f"{domain.upper()}_TAG_{tag}"
                     if not graph.has_node(tag_node):
-                        graph.add_node(tag_node, type="CROSS_DOMAIN_TAG",
-                                       name=tag, domain=domain)
+                        graph.add_node(tag_node, type="CROSS_DOMAIN_TAG", name=tag, domain=domain)
                     # Bridge: movie genre → cross-domain tag
                     if not graph.has_edge(genre_node, tag_node):
-                        graph.add_edge(genre_node, tag_node,
-                                       relation="CROSS_DOMAIN_EQUIVALENT",
-                                       weight=0.7)
+                        graph.add_edge(genre_node, tag_node, relation="CROSS_DOMAIN_EQUIVALENT", weight=0.7)
                     # Tag → domain
                     if not graph.has_edge(tag_node, domain_node):
-                        graph.add_edge(tag_node, domain_node,
-                                       relation="BELONGS_TO_DOMAIN")
+                        graph.add_edge(tag_node, domain_node, relation="BELONGS_TO_DOMAIN")
 
         logger.info(
             "Cross-domain KG enrichment complete: %d nodes, %d edges",

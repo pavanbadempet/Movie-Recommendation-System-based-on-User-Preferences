@@ -16,6 +16,13 @@ Why this matters:
   This is the same technique used by Netflix (published in RecSys 2020) and Spotify.
   No open-source recommendation system has this properly wired into training.
 
+References:
+  - Schnabel et al. "Recommendations as Treatments" (ICML 2016)
+  - Saito et al. "Unbiased Recommender Learning from Missing-Not-At-Random Implicit Feedback" (WSDM 2020)
+  - Dudík et al. "Doubly Robust Policy Evaluation and Learning" (ICML 2011)
+
+Model cards: docs/MODEL_CARDS.md (documents IPS training details per model)
+
 Usage:
     python scripts/causal_debias_training.py [--epochs N] [--clip-val N]
 """
@@ -23,11 +30,11 @@ Usage:
 from __future__ import annotations
 
 import argparse
+from collections import defaultdict
 import logging
 import math
-import sys
-from collections import defaultdict
 from pathlib import Path
+import sys
 
 import numpy as np
 import torch
@@ -48,6 +55,7 @@ MODELS_DIR = PROJECT_ROOT / "models"
 # ---------------------------------------------------------------------------
 # Propensity estimation
 # ---------------------------------------------------------------------------
+
 
 def estimate_item_propensities(
     events: list[dict],
@@ -115,6 +123,7 @@ def get_ips_weight(
 # IPS-weighted BPR training for LightGCN
 # ---------------------------------------------------------------------------
 
+
 def train_lightgcn_ips(
     epochs: int = 100,
     lr: float = 5e-4,
@@ -178,7 +187,9 @@ def train_lightgcn_ips(
     num_items = len(item_map)
     logger.info(
         "IPS training: %d positives, %d users, %d items",
-        len(positives), num_users, num_items,
+        len(positives),
+        num_users,
+        num_items,
     )
 
     # Load existing LightGCN weights as starting point
@@ -188,8 +199,10 @@ def train_lightgcn_ips(
         try:
             ckpt = torch.load(lgcn_path, map_location="cpu", weights_only=True)
             # Only load if dimensions match
-            if (ckpt["user_embedding.weight"].shape[0] == num_users and
-                    ckpt["item_embedding.weight"].shape[0] == num_items):
+            if (
+                ckpt["user_embedding.weight"].shape[0] == num_users
+                and ckpt["item_embedding.weight"].shape[0] == num_items
+            ):
                 model.load_state_dict(ckpt)
                 logger.info("Loaded existing LightGCN weights as starting point")
             else:
@@ -214,7 +227,7 @@ def train_lightgcn_ips(
 
         total_loss, nb = 0.0, 0
         for start in range(0, len(perm), batch_size):
-            bi = perm[start:start + batch_size]
+            bi = perm[start : start + batch_size]
             u = torch.tensor(u_arr[idx[bi]], dtype=torch.long)
             p = torch.tensor(p_arr[idx[bi]], dtype=torch.long)
             n = torch.tensor(n_arr[bi], dtype=torch.long)
@@ -254,6 +267,7 @@ def train_lightgcn_ips(
 # Doubly Robust ensemble weight selection
 # ---------------------------------------------------------------------------
 
+
 def select_weights_doubly_robust(
     num_candidates: int = 200,
     clip_val: float = 10.0,
@@ -268,15 +282,17 @@ def select_weights_doubly_robust(
     This gives unbiased weight selection even when the historical logging
     policy was biased toward popular items.
     """
-    from scripts.optimize_ensemble_weights import (
-        _load_interaction_data,
-        _build_validation_split,
-        _precompute_per_model_scores,
-        WEIGHT_KEYS,
-        _DEFAULT_WEIGHTS,
-    )
-    import random, json
     from datetime import UTC, datetime
+    import json
+    import random
+
+    from scripts.optimize_ensemble_weights import (
+        _DEFAULT_WEIGHTS,
+        WEIGHT_KEYS,
+        _build_validation_split,
+        _load_interaction_data,
+        _precompute_per_model_scores,
+    )
 
     logger.info("Loading interaction data for DR weight selection...")
     user_events = _load_interaction_data()
@@ -295,6 +311,7 @@ def select_weights_doubly_robust(
 
     # Load ensemble engine
     from backend.ensemble_engine import ApexEnsembleEngine
+
     engine = ApexEnsembleEngine()
 
     rng_obj = random.Random(42)
@@ -315,10 +332,7 @@ def select_weights_doubly_robust(
                 continue
 
             # Blend scores
-            blended = {
-                iid: float(np.dot(weight_vector, np.array(ms)))
-                for iid, ms in item_scores.items()
-            }
+            blended = {iid: float(np.dot(weight_vector, np.array(ms))) for iid, ms in item_scores.items()}
             ranked = sorted(item_scores.keys(), key=lambda x: blended.get(x, 0.0), reverse=True)
 
             # Direct imputation: predicted reward for top-10
@@ -385,6 +399,7 @@ def select_weights_doubly_robust(
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(

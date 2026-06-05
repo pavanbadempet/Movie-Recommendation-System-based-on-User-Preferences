@@ -27,14 +27,12 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
+from datetime import UTC, datetime, timedelta
 import logging
-import math
+from pathlib import Path
 import random
 import sys
 import uuid
-from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -60,11 +58,11 @@ PERSONAS = [
         "avoided_genres": ["Romance", "Documentary", "Animation"],
         "avg_rating": 3.8,
         "rating_std": 0.8,
-        "click_rate": 0.6,       # probability of clicking a recommended movie
+        "click_rate": 0.6,  # probability of clicking a recommended movie
         "view_rate": 0.4,
-        "session_length": (3, 8), # min/max movies per session
+        "session_length": (3, 8),  # min/max movies per session
         "sessions_per_month": (8, 15),
-        "quality_threshold": 6.0, # min vote_average to consider watching
+        "quality_threshold": 6.0,  # min vote_average to consider watching
     },
     {
         "name": "arthouse_fan",
@@ -181,6 +179,7 @@ PERSONAS = [
 # Movie scoring for a persona
 # ---------------------------------------------------------------------------
 
+
 def _genre_match_score(movie_genres: str, persona: dict) -> float:
     """Return a 0–1 affinity score between a movie's genres and a persona."""
     if not persona["preferred_genres"] and not persona["avoided_genres"]:
@@ -211,6 +210,7 @@ def _simulate_rating(base_rating: float, persona: dict, rng: random.Random) -> f
 # Timestamp generation
 # ---------------------------------------------------------------------------
 
+
 def _random_timestamp(base_dt: datetime, rng: random.Random, spread_days: int = 90) -> str:
     """Return a random ISO timestamp within spread_days of base_dt."""
     offset = timedelta(
@@ -225,6 +225,7 @@ def _random_timestamp(base_dt: datetime, rng: random.Random, spread_days: int = 
 # ---------------------------------------------------------------------------
 # Main simulation
 # ---------------------------------------------------------------------------
+
 
 def generate(
     num_users: int = 500,
@@ -246,8 +247,7 @@ def generate(
         sys.exit(1)
 
     logger.info("Loading movie catalog...")
-    cols = ["id", "title", "genres", "vote_average", "vote_count", "release_date",
-            "popularity", "recommendable"]
+    cols = ["id", "title", "genres", "vote_average", "vote_count", "release_date", "popularity", "recommendable"]
     try:
         movies_df = pd.read_parquet(movies_path, columns=cols)
     except (KeyError, ValueError):
@@ -255,8 +255,8 @@ def generate(
 
     # Filter to recommendable, quality movies
     movies_df = movies_df[
-        (pd.to_numeric(movies_df["vote_average"], errors="coerce").fillna(0) >= 5.0) &
-        (pd.to_numeric(movies_df["vote_count"], errors="coerce").fillna(0) >= 50)
+        (pd.to_numeric(movies_df["vote_average"], errors="coerce").fillna(0) >= 5.0)
+        & (pd.to_numeric(movies_df["vote_count"], errors="coerce").fillna(0) >= 50)
     ].copy()
     movies_df["vote_average"] = pd.to_numeric(movies_df["vote_average"], errors="coerce").fillna(6.0)
     movies_df["id"] = pd.to_numeric(movies_df["id"], errors="coerce").dropna().astype(int)
@@ -272,8 +272,7 @@ def generate(
     total_events = 0
     persona_cycle = PERSONAS * (num_users // len(PERSONAS) + 1)
 
-    logger.info("Generating interactions for %d synthetic users (%d events each)...",
-                num_users, events_per_user)
+    logger.info("Generating interactions for %d synthetic users (%d events each)...", num_users, events_per_user)
 
     for user_idx in range(num_users):
         persona = persona_cycle[user_idx % len(PERSONAS)]
@@ -282,8 +281,9 @@ def generate(
 
         # Score all movies for this persona
         scores = movies_df.apply(
-            lambda row: _genre_match_score(row.get("genres", ""), persona) *
-                        (float(row.get("vote_average", 6.0)) / 10.0),
+            lambda row, _persona=persona: (
+                _genre_match_score(row.get("genres", ""), _persona) * (float(row.get("vote_average", 6.0)) / 10.0)
+            ),
             axis=1,
         ).values.astype(np.float64)
 
@@ -315,15 +315,17 @@ def generate(
             # View event (always)
             if rng.random() < persona["view_rate"]:
                 try:
-                    append_event({
-                        "event_type": "view",
-                        "user_id": user_id,
-                        "session_id": session_id,
-                        "movie_id": movie_id,
-                        "event_ts": ts,
-                        "tenant_id": "synthetic",
-                        "catalog_id": "tmdb-movies",
-                    })
+                    append_event(
+                        {
+                            "event_type": "view",
+                            "user_id": user_id,
+                            "session_id": session_id,
+                            "movie_id": movie_id,
+                            "event_ts": ts,
+                            "tenant_id": "synthetic",
+                            "catalog_id": "tmdb-movies",
+                        }
+                    )
                     total_events += 1
                     events_written += 1
                 except Exception:
@@ -333,15 +335,17 @@ def generate(
             click_prob = persona["click_rate"] * (0.5 + genre_score)
             if rng.random() < click_prob:
                 try:
-                    append_event({
-                        "event_type": "click",
-                        "user_id": user_id,
-                        "session_id": session_id,
-                        "movie_id": movie_id,
-                        "event_ts": ts,
-                        "tenant_id": "synthetic",
-                        "catalog_id": "tmdb-movies",
-                    })
+                    append_event(
+                        {
+                            "event_type": "click",
+                            "user_id": user_id,
+                            "session_id": session_id,
+                            "movie_id": movie_id,
+                            "event_ts": ts,
+                            "tenant_id": "synthetic",
+                            "catalog_id": "tmdb-movies",
+                        }
+                    )
                     total_events += 1
                     events_written += 1
                 except Exception:
@@ -351,32 +355,32 @@ def generate(
             if rng.random() < 0.6 and genre_score > 0.3:
                 rating = _simulate_rating(vote_avg, persona, rng)
                 try:
-                    append_event({
-                        "event_type": "rating",
-                        "user_id": user_id,
-                        "session_id": session_id,
-                        "movie_id": movie_id,
-                        "rating": rating,
-                        "event_ts": ts,
-                        "tenant_id": "synthetic",
-                        "catalog_id": "tmdb-movies",
-                    })
+                    append_event(
+                        {
+                            "event_type": "rating",
+                            "user_id": user_id,
+                            "session_id": session_id,
+                            "movie_id": movie_id,
+                            "rating": rating,
+                            "event_ts": ts,
+                            "tenant_id": "synthetic",
+                            "catalog_id": "tmdb-movies",
+                        }
+                    )
                     total_events += 1
                     events_written += 1
                 except Exception:
                     pass
 
         if (user_idx + 1) % 50 == 0:
-            logger.info("  %d/%d users processed, %d events written so far",
-                        user_idx + 1, num_users, total_events)
+            logger.info("  %d/%d users processed, %d events written so far", user_idx + 1, num_users, total_events)
 
     logger.info("=" * 60)
     logger.info("Synthetic interaction generation complete.")
     logger.info("  Users: %d", num_users)
     logger.info("  Total events written: %d", total_events)
     logger.info("  Avg events per user: %.1f", total_events / max(num_users, 1))
-    logger.info("  Persona distribution: %d personas x %d users each",
-                len(PERSONAS), num_users // len(PERSONAS))
+    logger.info("  Persona distribution: %d personas x %d users each", len(PERSONAS), num_users // len(PERSONAS))
     logger.info("=" * 60)
     logger.info("Next steps:")
     logger.info("  1. python scripts/optimize_ensemble_weights.py")
@@ -391,21 +395,28 @@ def generate(
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate synthetic user interactions to bootstrap the APEX Event Store.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "--users", type=int, default=500,
+        "--users",
+        type=int,
+        default=500,
         help="Number of synthetic users to generate",
     )
     parser.add_argument(
-        "--events-per-user", type=int, default=40,
+        "--events-per-user",
+        type=int,
+        default=40,
         help="Target number of events per user",
     )
     parser.add_argument(
-        "--seed", type=int, default=42,
+        "--seed",
+        type=int,
+        default=42,
         help="Random seed for reproducibility",
     )
     return parser.parse_args()

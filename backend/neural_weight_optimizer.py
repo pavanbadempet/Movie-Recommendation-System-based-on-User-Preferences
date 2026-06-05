@@ -67,7 +67,7 @@ class ContextualWeightNetwork(nn.Module):
 
 def get_contextual_weights(
     behavior_profile: dict,
-    als_user_embedding: "np.ndarray | None" = None,
+    als_user_embedding: np.ndarray | None = None,
     model_path: Path = MODELS_DIR / "contextual_weight_net.pth",
 ) -> dict[str, float]:
     """
@@ -128,6 +128,7 @@ def get_contextual_weights(
 def _load_static_weights() -> dict[str, float]:
     """Load static weights from ensemble_weights.json."""
     import json
+
     weights_path = MODELS_DIR / "ensemble_weights.json"
     defaults = {k: 1.0 / len(WEIGHT_KEYS) for k in WEIGHT_KEYS}
     if not weights_path.exists():
@@ -150,7 +151,7 @@ def train_contextual_weight_network(
     Uses the pre-computed per-model scores from the ensemble optimizer
     to learn which weights work best for which user contexts.
     """
-    from backend.events import iter_events, build_user_behavior_profile
+    from backend.events import build_user_behavior_profile, iter_events
 
     logger.info("Training ContextualWeightNetwork...")
 
@@ -173,9 +174,14 @@ def train_contextual_weight_network(
             profile = build_user_behavior_profile(uid, limit=50)
             scalars = [
                 math.log1p(max(len(profile.get("recent_events", [])), 0)) / math.log1p(1000),
-                float(np.mean([e.get("rating", 3.0) for e in profile.get("recent_events", []) if e.get("rating")])) / 5.0 if profile.get("recent_events") else 0.6,
-                float(sum(1 for e in profile.get("recent_events", []) if e.get("event_type") == "click")) / math.log1p(500),
-                float(sum(1 for e in profile.get("recent_events", []) if e.get("event_type") == "view")) / math.log1p(500),
+                float(np.mean([e.get("rating", 3.0) for e in profile.get("recent_events", []) if e.get("rating")]))
+                / 5.0
+                if profile.get("recent_events")
+                else 0.6,
+                float(sum(1 for e in profile.get("recent_events", []) if e.get("event_type") == "click"))
+                / math.log1p(500),
+                float(sum(1 for e in profile.get("recent_events", []) if e.get("event_type") == "view"))
+                / math.log1p(500),
             ] + [0.0] * 16
             user_contexts.append(scalars)
         except Exception:

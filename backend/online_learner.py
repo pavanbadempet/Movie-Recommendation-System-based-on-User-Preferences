@@ -9,10 +9,10 @@ Requirements: 3.1, 3.3, 3.4, 3.5, 3.8
 """
 
 import logging
+from pathlib import Path
 import queue
 import random
 import threading
-from pathlib import Path
 
 import torch
 import torch.nn.functional as F
@@ -68,6 +68,11 @@ class OnlineLearner:
 
         # Background thread reference (set by start())
         self._thread: threading.Thread | None = None
+
+        # Persistent Adam optimizer — created once so momentum state (m, v,
+        # step count) accumulates across gradient steps. Creating a new
+        # optimizer per batch discards momentum and degrades to plain SGD.
+        self._optimizer: torch.optim.Adam | None = None
 
     def enqueue(self, event: dict) -> None:
         """
@@ -147,9 +152,7 @@ class OnlineLearner:
         if self._thread is not None:
             self._thread.join(timeout=5.0)
             if self._thread.is_alive():
-                logger.warning(
-                    "OnlineLearner thread did not stop within 5 seconds."
-                )
+                logger.warning("OnlineLearner thread did not stop within 5 seconds.")
         logger.info("OnlineLearner stopped.")
 
     # ------------------------------------------------------------------
@@ -187,8 +190,7 @@ class OnlineLearner:
                     self._checkpoint()
             except Exception:
                 logger.error(
-                    "OnlineLearner: exception during gradient step — "
-                    "batch of %d events discarded.",
+                    "OnlineLearner: exception during gradient step — batch of %d events discarded.",
                     len(batch),
                     exc_info=True,
                 )
@@ -270,14 +272,19 @@ class OnlineLearner:
             self.lightgcn.user_embedding.weight,
             self.lightgcn.item_embedding.weight,
         ]
-        optimizer = torch.optim.Adam(emb_params, lr=self.lr)
-        optimizer.zero_grad()
+
+        # Lazily create the optimizer on first call and reuse it across steps
+        # so Adam's momentum state (m, v, step count) accumulates correctly.
+        if self._optimizer is None:
+            self._optimizer = torch.optim.Adam(emb_params, lr=self.lr)
+
+        self._optimizer.zero_grad()
         loss.backward()
 
         # Clip gradients to prevent embedding collapse (Requirement 3.7)
         torch.nn.utils.clip_grad_norm_(emb_params, max_norm=1.0)
 
-        optimizer.step()
+        self._optimizer.step()
 
     def _checkpoint(self) -> None:
         """

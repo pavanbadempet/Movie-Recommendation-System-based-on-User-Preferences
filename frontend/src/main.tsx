@@ -54,15 +54,26 @@ import type {
   SemanticBenchmark,
 } from "./types";
 import "./styles.css";
+import "./apex-product.css";
 import { AuthPage } from "./AuthPage";
+import { ErrorBoundary } from "./ErrorBoundary";
+import { Dashboard } from "./pages/Dashboard";
+import { KnowledgeGraphPage } from "./pages/KnowledgeGraph";
+import { EvaluationPage } from "./pages/Evaluation";
+import { UserProfilePage } from "./pages/UserProfile";
+import { AdminPanel } from "./pages/AdminPanel";
+import { LandingPage } from "./pages/Landing";
+import { SignupPage } from "./pages/Signup";
+import { PricingPage } from "./pages/Pricing";
+import { GettingStartedPage } from "./pages/GettingStarted";
+import { StatusPage } from "./pages/Status";
 
 const imageBase = import.meta.env.VITE_TMDB_IMAGE_BASE || "https://image.tmdb.org/t/p/w500";
 const RECENT_STORAGE_KEY = "nova_recent_movies_v2";
 const SESSION_STORAGE_KEY = "nova_session_id_v1";
 const TITLE_CATALOG_LIMIT = 5000;
-const HOME_SEED_MOVIE_ID = 19995;
 
-type AppPage = "home" | "search" | "profile";
+type AppPage = "home" | "search" | "profile" | "dashboard" | "knowledge-graph" | "evaluation" | "admin" | "landing" | "signup" | "pricing" | "getting-started" | "status";
 type SearchMode = "title" | "semantic";
 type CatalogState = "booting" | "warming" | "ready" | "error";
 type ResultsKind = "idle" | "search" | "recommendations";
@@ -513,6 +524,30 @@ function RecommendationCard({
           )}
         </div>
         <div className="genre-line">{compactGenres(movie.genres)}</div>
+        {/* Retrieval stage badge — Requirements 7.1, 7.2 */}
+        {movie.retrieval_stage && (
+          <div className="retrieval-stage-badge" aria-label={`Retrieved via ${movie.retrieval_stage}`}>
+            {cleanStage(movie.retrieval_stage)}
+          </div>
+        )}
+        {/* Retrieval signals — Requirements 7.3 */}
+        {movie.retrieval_signals && Object.keys(movie.retrieval_signals).length > 0 && (
+          <dl className="retrieval-signals-dl" aria-label="Retrieval signals">
+            {Object.entries(movie.retrieval_signals)
+              .filter(([, v]) => v != null && typeof v !== "object")
+              .slice(0, 3)
+              .map(([k, v]) => (
+                <div key={k} className="retrieval-signal-row">
+                  <dt>{k.replaceAll("_", " ")}</dt>
+                  <dd>{typeof v === "number" ? (v as number).toFixed(3) : String(v)}</dd>
+                </div>
+              ))}
+          </dl>
+        )}
+        {/* Explanation text — Requirements 7.4 */}
+        {movie.explanation_text && (
+          <p className="card-explanation" aria-label="AI explanation">{movie.explanation_text}</p>
+        )}
         {chips.length > 0 && (
           <div className="evidence-chips">
             {chips.map((chip) => (
@@ -587,10 +622,14 @@ function MovieSpotlight({
   movie,
   loading,
   onRecommend,
+  userId,
+  sessionId,
 }: {
   movie: Movie;
   loading: boolean;
   onRecommend: () => void;
+  userId: string | null;
+  sessionId: string;
 }) {
   const [likedStatus, setLikedStatus] = React.useState<"none" | "liked" | "disliked">("none");
   const reasons = movieReasons(movie);
@@ -644,11 +683,11 @@ function MovieSpotlight({
             onClick={async () => {
               try {
                 await recordEvent({
-                  user_id: "Pavan",
+                  user_id: userId ?? undefined,
                   event_type: "rating",
                   movie_id: movie.id,
                   rating: 5.0,
-                  session_id: "test"
+                  session_id: sessionId,
                 });
                 setLikedStatus("liked");
               } catch (e) {
@@ -664,11 +703,11 @@ function MovieSpotlight({
             onClick={async () => {
               try {
                 await recordEvent({
-                  user_id: "Pavan",
+                  user_id: userId ?? undefined,
                   event_type: "rating",
                   movie_id: movie.id,
                   rating: 1.0,
-                  session_id: "test"
+                  session_id: sessionId,
                 });
                 setLikedStatus("disliked");
               } catch (e) {
@@ -782,16 +821,28 @@ function MovieDialog({ movie, onClose }: { movie: Movie; onClose: () => void }) 
   const rating = movieScore(movie);
   const scorePercent = ratingPercent(movie);
   const ratingColor = Number(movie.vote_average || 0) >= 7 ? "#21d07a" : Number(movie.vote_average || 0) >= 5 ? "#d2d531" : "#db2360";
+  // Accessibility: ref for focus management
+  const dialogRef = React.useRef<HTMLElement>(null);
+  const previousFocusRef = React.useRef<HTMLElement | null>(null);
 
   React.useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
     }
+    // Save the element that had focus before the dialog opened
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
     document.body.classList.add("modal-open");
     window.addEventListener("keydown", onKeyDown);
+    // Move focus into the dialog so screen readers announce it
+    const firstFocusable = dialogRef.current?.querySelector<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    firstFocusable?.focus();
     return () => {
       document.body.classList.remove("modal-open");
       window.removeEventListener("keydown", onKeyDown);
+      // Restore focus to the element that triggered the dialog
+      previousFocusRef.current?.focus();
     };
   }, [onClose]);
 
@@ -803,7 +854,7 @@ function MovieDialog({ movie, onClose }: { movie: Movie; onClose: () => void }) 
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <section className="movie-dialog" role="dialog" aria-modal="true" aria-label={`${movie.title} details`}>
+      <section ref={dialogRef} className="movie-dialog" role="dialog" aria-modal="true" aria-label={`${movie.title} details`}>
         <button className="dialog-close" type="button" aria-label="Close movie details" onClick={onClose}>
           <X size={24} />
         </button>
@@ -895,6 +946,12 @@ function HomePage({
   onHeroIndex,
   onSearch,
   onOpenMovie,
+  onDashboard,
+  onEvaluation,
+  onProfile,
+  onAdmin,
+  onSignIn,
+  username,
   recentMovies,
   forYouMovies,
   forYouLoading,
@@ -910,6 +967,12 @@ function HomePage({
   onHeroIndex: (index: number) => void;
   onSearch: (mode?: "title" | "semantic") => void;
   onOpenMovie: (movie: Movie) => void;
+  onDashboard: () => void;
+  onEvaluation: () => void;
+  onProfile: () => void;
+  onAdmin: () => void;
+  onSignIn: () => void;
+  username: string | null;
   recentMovies: Movie[];
   forYouMovies: Movie[];
   forYouLoading: boolean;
@@ -959,7 +1022,42 @@ function HomePage({
               description="Semantic deep search"
               onClick={() => onSearch("semantic")}
             />
+            <HomeNavCard
+              icon={<Activity size={22} />}
+              title="Dashboard"
+              description="System health & SLO"
+              onClick={() => onDashboard()}
+            />
+            <HomeNavCard
+              icon={<BarChart3 size={22} />}
+              title="Evaluation"
+              description="Benchmark metrics"
+              onClick={() => onEvaluation()}
+            />
+            <HomeNavCard
+              icon={<User size={22} />}
+              title={username ? `Hi, ${username}` : "Profile"}
+              description={username ? "Your recommendations" : "Sign in to personalise"}
+              onClick={() => username ? onProfile() : onSignIn()}
+            />
+            <HomeNavCard
+              icon={<Server size={22} />}
+              title="Admin"
+              description="Ensemble weights"
+              onClick={() => onAdmin()}
+            />
           </div>
+          {!username && (
+            <button
+              className="home-signin-btn"
+              type="button"
+              onClick={onSignIn}
+              aria-label="Sign in to your account"
+            >
+              <User size={16} aria-hidden="true" />
+              Sign In
+            </button>
+          )}
         </div>
 
         <div className="home-showcase">
@@ -1047,10 +1145,76 @@ function HomePage({
   );
 }
 
+// ─── Auth Modal (shared, focus-trapped) ──────────────────────────────────────
+
+function AuthModal({
+  onLogin,
+  onClose,
+}: {
+  onLogin: (tok: string, user: string) => void;
+  onClose: () => void;
+}) {
+  const overlayRef = React.useRef<HTMLDivElement>(null);
+
+  // Move focus into the modal on mount; restore on unmount
+  React.useEffect(() => {
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const firstFocusable = overlayRef.current?.querySelector<HTMLElement>(
+      'button, input, [href], select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    firstFocusable?.focus();
+    return () => { previousFocus?.focus(); };
+  }, []);
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key === "Escape") { onClose(); return; }
+    if (e.key !== "Tab") return;
+    const modal = overlayRef.current;
+    if (!modal) return;
+    const focusable = Array.from(
+      modal.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), [href], select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault(); last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault(); first.focus();
+    }
+  }
+
+  return (
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
+    <div
+      ref={overlayRef}
+      className="auth-modal-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Sign in to your account"
+      tabIndex={-1}
+      onKeyDown={handleKeyDown}
+    >
+      <AuthPage onLogin={(tok, user) => { onLogin(tok, user); }} />
+      <button
+        className="auth-modal-close"
+        type="button"
+        aria-label="Close sign in dialog"
+        onClick={onClose}
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
 function App() {
   const [token, setToken] = React.useState<string | null>(window.localStorage.getItem("nova_jwt_token"));
   const [username, setUsername] = React.useState<string | null>(window.localStorage.getItem("nova_username"));
   const [page, setPage] = React.useState<AppPage>("home");
+  const [showAuthModal, setShowAuthModal] = React.useState(false);
   const [titles, setTitles] = React.useState<MovieTitle[]>([]);
   const [titleQuery, setTitleQuery] = React.useState("");
   const [semanticQuery, setSemanticQuery] = React.useState("");
@@ -1065,7 +1229,7 @@ function App() {
   const [isSearching, setIsSearching] = React.useState(false);
   const [isSelecting, setIsSelecting] = React.useState(false);
   const [loadingRecs, setLoadingRecs] = React.useState(false);
-  const [lastUpdated, setLastUpdated] = React.useState("");
+  const [_lastUpdated, setLastUpdated] = React.useState("");
   const [platform, setPlatform] = React.useState<PlatformStatus | null>(null);
   const [readinessReport, setReadinessReport] = React.useState<PlatformReadiness | null>(null);
   const [artifactReport, setArtifactReport] = React.useState<ArtifactHealth | null>(null);
@@ -1092,7 +1256,7 @@ function App() {
   const bootstrapped = React.useRef(false);
   const loadedPlatform = React.useRef(false);
   const loadedHomeShowcase = React.useRef(false);
-  const loadedForYou = React.useRef(false);
+  const _loadedForYou = React.useRef(false);
   const userStarted = React.useRef(false);
 
   const activeQuery = mode === "title" ? titleQuery : semanticQuery;
@@ -1557,6 +1721,12 @@ function App() {
           onHeroIndex={setHomeHeroIndex}
           onSearch={openSearch}
           onOpenMovie={setDialogMovie}
+          onDashboard={() => setPage("dashboard")}
+          onEvaluation={() => setPage("evaluation")}
+          onProfile={() => setPage("profile")}
+          onAdmin={() => setPage("admin")}
+          onSignIn={() => setShowAuthModal(true)}
+          username={username}
           recentMovies={recentMovies}
           forYouMovies={forYouMovies}
           forYouLoading={forYouLoading}
@@ -1566,62 +1736,121 @@ function App() {
           onToggleMode={(mode) => { setHomeMode(mode); setHomeHeroIndex(0); }}
         />
         {dialogMovie && <MovieDialog movie={dialogMovie} onClose={() => setDialogMovie(null)} />}
+        {showAuthModal && (
+          <AuthModal
+            onLogin={(tok, user) => { setToken(tok); setUsername(user); setShowAuthModal(false); }}
+            onClose={() => setShowAuthModal(false)}
+          />
+        )}
       </>
     );
   }
 
-  if (page === "profile") {
-    if (!token) {
-      return <AuthPage onLogin={(t, u) => { setToken(t); setUsername(u); }} />;
-    }
+  // ── Shared inner-page shell (Dashboard / KG / Evaluation / Profile / Admin) ──
+  const innerPages: AppPage[] = ["dashboard", "knowledge-graph", "evaluation", "profile", "admin"];
 
-    const recent = loadRecentMovies();
+  // ── Full-screen pages (no tab shell) ────────────────────────────────────
+  if (page === "landing") {
+    return <LandingPage onNavigate={(p) => setPage(p as AppPage)} />;
+  }
+  if (page === "signup") {
     return (
-      <main className="app-shell profile-page">
+      <SignupPage
+        onNavigate={(p) => setPage(p as AppPage)}
+        onLoginSuccess={(tok, user) => { setToken(tok); setUsername(user); }}
+      />
+    );
+  }
+  if (page === "pricing") {
+    return <PricingPage onNavigate={(p) => setPage(p as AppPage)} />;
+  }
+  if (page === "getting-started") {
+    return <GettingStartedPage onNavigate={(p) => setPage(p as AppPage)} />;
+  }
+  if (page === "status") {
+    return <StatusPage />;
+  }
+
+  if (innerPages.includes(page)) {
+    const tabs: { id: AppPage; label: string; icon: React.ReactNode }[] = [
+      { id: "dashboard", label: "Dashboard", icon: <Activity size={14} /> },
+      { id: "knowledge-graph", label: "Knowledge Graph", icon: <Sparkles size={14} /> },
+      { id: "evaluation", label: "Evaluation", icon: <BarChart3 size={14} /> },
+      { id: "profile", label: "Profile", icon: <User size={14} /> },
+      { id: "admin", label: "Admin", icon: <Server size={14} /> },
+    ];
+
+    return (
+      <main className="app-shell" id="main-content">
+        <a href="#main-content" className="skip-link">Skip to main content</a>
         <header className="topbar">
-          <button className="home-button" type="button" onClick={openHome}>
-            <House size={18} /> Home
+          <button className="home-button" type="button" onClick={openHome} aria-label="Go to home">
+            <House size={18} aria-hidden="true" /> Home
           </button>
+          <nav className="topbar-nav" aria-label="Main navigation">
+            <button type="button" className="topbar-link" onClick={() => setPage("getting-started")}>Quickstart</button>
+            <button type="button" className="topbar-link" onClick={() => setPage("pricing")}>Pricing</button>
+            <button type="button" className="topbar-link" onClick={() => setPage("status")}>Status</button>
+          </nav>
           <div className="topbar-actions">
             {username && (
               <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#e5e7eb", background: "rgba(255,255,255,0.05)", padding: "4px 12px", borderRadius: "20px", border: "1px solid rgba(255,255,255,0.1)", fontSize: "0.85rem" }}>
-                <User size={14} /> Hi, <strong>{username}</strong>
+                <User size={14} aria-hidden="true" /> Hi, <strong>{username}</strong>
                 <button className="icon-button" onClick={() => {
                   window.localStorage.removeItem("nova_jwt_token");
                   window.localStorage.removeItem("nova_username");
-                  setToken(null);
-                  setUsername(null);
-              }} title="Logout" style={{ marginLeft: "4px", opacity: 0.7 }}>
-                  <LogOut size={14} />
+                  setToken(null); setUsername(null);
+                }} title="Logout" aria-label="Logout" style={{ marginLeft: "4px", opacity: 0.7 }}>
+                  <LogOut size={14} aria-hidden="true" />
                 </button>
               </div>
             )}
           </div>
         </header>
-        <section className="search-layout" style={{ padding: "40px 5%", color: "white" }}>
-          <h1 style={{ fontSize: "2rem", marginBottom: "8px" }}>User Profile</h1>
-          <p style={{ opacity: 0.7, marginBottom: "32px" }}>Manage your preferences and view your client-side interaction events.</p>
-          
-          <h2 style={{ fontSize: "1.2rem", marginBottom: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
-            <Database size={18} /> Local Database (Watch History)
-          </h2>
-          {recent.length > 0 ? (
-            <div className="poster-grid">
-              {recent.map(movie => (
-                <MoviePoster key={movie.id} movie={movie} onSelect={setDialogMovie} />
-              ))}
-            </div>
-          ) : (
-            <div style={{ opacity: 0.5, padding: "20px 0" }}>No watched history found.</div>
-          )}
-        </section>
+
+        <nav className="page-tabs" aria-label="Application sections" style={{ margin: "16px 0" }}>
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              className={`page-tab ${page === tab.id ? "active" : ""}`}
+              type="button"
+              onClick={() => setPage(tab.id)}
+              aria-current={page === tab.id ? "page" : undefined}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+
+        {page === "dashboard" && <ErrorBoundary><Dashboard /></ErrorBoundary>}
+        {page === "knowledge-graph" && <ErrorBoundary><KnowledgeGraphPage titles={titles} /></ErrorBoundary>}
+        {page === "evaluation" && <ErrorBoundary><EvaluationPage /></ErrorBoundary>}
+        {page === "profile" && (
+          <ErrorBoundary>
+            <UserProfilePage
+              token={token}
+              username={username}
+              onRequestLogin={() => setShowAuthModal(true)}
+              onSelectMovie={(movie) => { setDialogMovie(movie); }}
+            />
+          </ErrorBoundary>
+        )}
+        {page === "admin" && <ErrorBoundary><AdminPanel token={token} /></ErrorBoundary>}
+
         {dialogMovie && <MovieDialog movie={dialogMovie} onClose={() => setDialogMovie(null)} />}
+        {showAuthModal && (
+          <AuthModal
+            onLogin={(tok, user) => { setToken(tok); setUsername(user); setShowAuthModal(false); }}
+            onClose={() => setShowAuthModal(false)}
+          />
+        )}
       </main>
     );
   }
 
   return (
-    <main className="app-shell">
+    <main className="app-shell" id="main-content">
       <header className="topbar">
         <button
           className="home-button"
@@ -1770,7 +1999,7 @@ function App() {
               <span>Search by plot, genre, or description</span>
             </summary>
             <div className="semantic-body">
-              <p>Can't find the title? Describe the movie by mood, plot, genre, or viewing intent.</p>
+              <p>Can&apos;t find the title? Describe the movie by mood, plot, genre, or viewing intent.</p>
               <div className="search-box">
                 <Sparkles size={18} />
                 <input
@@ -1830,6 +2059,8 @@ function App() {
               movie={selectedMovie}
               loading={loadingRecs}
               onRecommend={() => void recommend()}
+              userId={username}
+              sessionId={sessionId}
             />
           ) : null}
 

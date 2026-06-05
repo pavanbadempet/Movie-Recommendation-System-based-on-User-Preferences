@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 # Local Differential Privacy
 # ---------------------------------------------------------------------------
 
+
 def add_laplace_noise(
     embedding: np.ndarray,
     sensitivity: float = 1.0,
@@ -124,6 +125,7 @@ def privatize_user_embedding(
 # k-Anonymity for User Profiles
 # ---------------------------------------------------------------------------
 
+
 def k_anonymize_profile(
     profile: dict[str, Any],
     k: int = 5,
@@ -165,6 +167,7 @@ def k_anonymize_profile(
     # Remove exact user_id (replace with hashed version)
     if "user_id" in anonymized and generalization_level >= 2:
         import hashlib
+
         uid = str(anonymized["user_id"])
         anonymized["user_id"] = hashlib.sha256(uid.encode()).hexdigest()[:16]
 
@@ -174,6 +177,7 @@ def k_anonymize_profile(
 # ---------------------------------------------------------------------------
 # Federated Gradient Aggregation
 # ---------------------------------------------------------------------------
+
 
 def federated_average_gradients(
     local_gradients: list[dict[str, torch.Tensor]],
@@ -205,11 +209,7 @@ def federated_average_gradients(
 
     aggregated: dict[str, torch.Tensor] = {}
     for key in local_gradients[0]:
-        stacked = torch.stack([
-            local_gradients[i][key] * weights[i]
-            for i in range(n)
-            if key in local_gradients[i]
-        ])
+        stacked = torch.stack([local_gradients[i][key] * weights[i] for i in range(n) if key in local_gradients[i]])
         aggregated[key] = stacked.sum(dim=0)
 
     return aggregated

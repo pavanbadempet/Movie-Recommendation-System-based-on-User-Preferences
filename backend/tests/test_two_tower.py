@@ -3,12 +3,12 @@ Tests for the Two-Tower Candidate Generation Model.
 Validates architecture, embedding quality, and FAISS retrieval.
 """
 
-import pytest
-import torch
-import numpy as np
 from pathlib import Path
 
-from backend.two_tower import TwoTowerModel, UserTower, ItemTower
+import numpy as np
+import torch
+
+from backend.two_tower import ItemTower, TwoTowerModel, UserTower
 
 
 class TestTwoTowerArchitecture:

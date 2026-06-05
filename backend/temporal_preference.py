@@ -17,9 +17,9 @@ a temporally-aware user state vector.
 
 from __future__ import annotations
 
-import math
-import logging
 from datetime import UTC, datetime
+import logging
+import math
 from typing import Any
 
 import numpy as np
@@ -38,8 +38,7 @@ def _days_ago(event_ts: str) -> float:
         event_dt = datetime.fromisoformat(event_ts)
         now = datetime.now(UTC)
         if event_dt.tzinfo is None:
-            from datetime import timezone
-            event_dt = event_dt.replace(tzinfo=timezone.utc)
+            event_dt = event_dt.replace(tzinfo=UTC)
         delta = now - event_dt
         return max(0.0, delta.total_seconds() / 86400.0)
     except Exception:

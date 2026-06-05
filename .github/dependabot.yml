@@ -1,0 +1,107 @@
+version: 2
+
+updates:
+  # ---------------------------------------------------------------------------
+  # Python dependencies (pip)
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    groups:
+      ml-core:
+        patterns:
+          - "torch*"
+          - "torchvision*"
+          - "torchaudio*"
+          - "faiss*"
+          - "sentence-transformers*"
+          - "transformers*"
+          - "scikit-learn*"
+          - "numpy*"
+          - "pandas*"
+      api-core:
+        patterns:
+          - "fastapi*"
+          - "uvicorn*"
+          - "pydantic*"
+          - "httpx*"
+          - "starlette*"
+      observability:
+        patterns:
+          - "prometheus-client*"
+          - "sentry-sdk*"
+          - "slowapi*"
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "chore(deps)"
+
+  # ---------------------------------------------------------------------------
+  # Python ETL dependencies
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3
+    target-branch: "develop"
+    labels:
+      - "dependencies"
+      - "etl"
+
+  # ---------------------------------------------------------------------------
+  # npm (frontend)
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "08:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    groups:
+      react-ecosystem:
+        patterns:
+          - "react*"
+          - "@types/react*"
+          - "vite*"
+          - "@vitejs/*"
+          - "vitest*"
+          - "@vitest/*"
+      ui-libs:
+        patterns:
+          - "d3*"
+          - "@axe-core/*"
+          - "jest-axe*"
+    labels:
+      - "dependencies"
+      - "frontend"
+    commit-message:
+      prefix: "chore(deps-frontend)"
+
+  # ---------------------------------------------------------------------------
+  # GitHub Actions
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "chore(ci)"

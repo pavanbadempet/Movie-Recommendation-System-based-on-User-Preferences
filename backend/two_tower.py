@@ -21,10 +21,11 @@ References:
     - Yi et al. "Sampling-Bias-Corrected Neural Modeling for Large Corpus Item Recommendations" (RecSys 2019)
 """
 
+import logging
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import logging
 
 logger = logging.getLogger(__name__)
 

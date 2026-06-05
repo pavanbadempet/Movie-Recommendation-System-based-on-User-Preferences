@@ -17,20 +17,22 @@ Usage:
     python scripts/train_apex_models.py
 """
 
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import torch
-import torch.nn as nn
+from collections import defaultdict
+import logging
+from pathlib import Path
+import time
+
+import mlflow
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
-import logging
-import time
-import mlflow
-from pathlib import Path
-from collections import defaultdict
+import torch
+import torch.nn as nn
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -44,6 +46,7 @@ MODELS_DIR.mkdir(parents=True, exist_ok=True)
 # ============================================================
 # Data Loading & Preparation
 # ============================================================
+
 
 def load_data():
     """Load ratings and build interaction structures."""
@@ -110,6 +113,7 @@ def sample_negatives(user_idx: int, num_items: int, user_interactions: dict, k: 
 # 1. SASRec Training
 # ============================================================
 
+
 def train_sasrec(data: dict):
     """Train Self-Attentive Sequential Recommendation model."""
     from backend.sasrec import SASRec
@@ -171,7 +175,7 @@ def train_sasrec(data: dict):
 
         avg_loss = total_loss / max(len(user_list), 1)
         if (epoch + 1) % 5 == 0 or epoch == 0:
-            logger.info(f"  Epoch {epoch+1:3d}/{num_epochs} | Loss: {avg_loss:.4f}")
+            logger.info(f"  Epoch {epoch + 1:3d}/{num_epochs} | Loss: {avg_loss:.4f}")
 
     path = MODELS_DIR / "sasrec.pth"
     torch.save(model.state_dict(), path)
@@ -182,6 +186,7 @@ def train_sasrec(data: dict):
 # ============================================================
 # 2. LightGCN Training
 # ============================================================
+
 
 def train_lightgcn(data: dict):
     """Train LightGCN graph collaborative filtering model."""
@@ -205,8 +210,7 @@ def train_lightgcn(data: dict):
 
     n = num_users + num_items
     adj = sp.coo_matrix(
-        (np.ones(len(rows) * 2),
-         (np.concatenate([rows, cols]), np.concatenate([cols, rows]))),
+        (np.ones(len(rows) * 2), (np.concatenate([rows, cols]), np.concatenate([cols, rows]))),
         shape=(n, n),
     ).tocsr()
 
@@ -236,7 +240,7 @@ def train_lightgcn(data: dict):
         perm = np.random.permutation(len(user_indices))
 
         for start in range(0, len(perm), batch_size):
-            batch_idx = perm[start:start + batch_size]
+            batch_idx = perm[start : start + batch_size]
             users = torch.LongTensor(user_indices[batch_idx])
             pos_items = torch.LongTensor(pos_indices[batch_idx])
 
@@ -257,7 +261,7 @@ def train_lightgcn(data: dict):
         num_batches = max(1, len(perm) // batch_size)
         avg_loss = total_loss / num_batches
         if (epoch + 1) % 5 == 0 or epoch == 0:
-            logger.info(f"  Epoch {epoch+1:3d}/{num_epochs} | Loss: {avg_loss:.4f}")
+            logger.info(f"  Epoch {epoch + 1:3d}/{num_epochs} | Loss: {avg_loss:.4f}")
 
     path = MODELS_DIR / "lightgcn.pth"
     torch.save(model.state_dict(), path)
@@ -269,9 +273,10 @@ def train_lightgcn(data: dict):
 # 3. Quantum Fluid ODE Training
 # ============================================================
 
+
 def train_quantum(data: dict):
     """Train Quantum Fluid Neural ODE model."""
-    from backend.quantum_fluid_recommender import QuantumFluidRecommender
+    from backend.neural_ode_recommender import QuantumFluidRecommender
 
     logger.info("=" * 50)
     logger.info("Training Quantum Fluid ODE")
@@ -304,13 +309,12 @@ def train_quantum(data: dict):
         perm = np.random.permutation(len(user_indices))
 
         for start in range(0, len(perm), batch_size):
-            batch_idx = perm[start:start + batch_size]
+            batch_idx = perm[start : start + batch_size]
             users = torch.LongTensor(user_indices[batch_idx])
             pos_items = torch.LongTensor(pos_indices[batch_idx])
             time_deltas = torch.FloatTensor(timestamps[batch_idx])
 
-            neg_items_list = [sample_negatives(u, num_items, data["user_interactions"])[0]
-                              for u in users.numpy()]
+            neg_items_list = [sample_negatives(u, num_items, data["user_interactions"])[0] for u in users.numpy()]
             neg_items = torch.LongTensor(neg_items_list)
 
             loss = model(users, pos_items, neg_items, time_deltas)
@@ -324,7 +328,7 @@ def train_quantum(data: dict):
         num_batches = max(1, len(perm) // batch_size)
         avg_loss = total_loss / num_batches
         if (epoch + 1) % 5 == 0 or epoch == 0:
-            logger.info(f"  Epoch {epoch+1:3d}/{num_epochs} | Loss: {avg_loss:.4f}")
+            logger.info(f"  Epoch {epoch + 1:3d}/{num_epochs} | Loss: {avg_loss:.4f}")
 
     path = MODELS_DIR / "quantum_fluid.pth"
     torch.save(model.state_dict(), path)
@@ -335,6 +339,7 @@ def train_quantum(data: dict):
 # ============================================================
 # 4. Hyperbolic Poincaré Training
 # ============================================================
+
 
 def train_hyperbolic(data: dict):
     """Train Hyperbolic Poincaré manifold embeddings."""
@@ -365,12 +370,11 @@ def train_hyperbolic(data: dict):
         perm = np.random.permutation(len(user_indices))
 
         for start in range(0, len(perm), batch_size):
-            batch_idx = perm[start:start + batch_size]
+            batch_idx = perm[start : start + batch_size]
             users = torch.LongTensor(user_indices[batch_idx])
             pos_items = torch.LongTensor(pos_indices[batch_idx])
 
-            neg_items_list = [sample_negatives(u, num_items, data["user_interactions"])[0]
-                              for u in users.numpy()]
+            neg_items_list = [sample_negatives(u, num_items, data["user_interactions"])[0] for u in users.numpy()]
             neg_items = torch.LongTensor(neg_items_list)
 
             loss = model(users, pos_items, neg_items)
@@ -393,7 +397,7 @@ def train_hyperbolic(data: dict):
         num_batches = max(1, len(perm) // batch_size)
         avg_loss = total_loss / num_batches
         if (epoch + 1) % 5 == 0 or epoch == 0:
-            logger.info(f"  Epoch {epoch+1:3d}/{num_epochs} | Loss: {avg_loss:.4f}")
+            logger.info(f"  Epoch {epoch + 1:3d}/{num_epochs} | Loss: {avg_loss:.4f}")
 
     path = MODELS_DIR / "hyperbolic.pth"
     torch.save(model.state_dict(), path)
@@ -404,6 +408,7 @@ def train_hyperbolic(data: dict):
 # ============================================================
 # 5. KAN Ranker Training
 # ============================================================
+
 
 def train_kan(data: dict):
     """Train Kolmogorov-Arnold B-Spline ranker."""
@@ -456,9 +461,15 @@ def train_kan(data: dict):
             batch_labels.append(1.0 if rating >= 3.5 else 0.0)
 
             # Negative sample (random item)
-            neg_candidates = list(valid_items - data["user_interactions"].get(
-                data["train_df"][data["train_df"]["userId"] == uid]["user_idx"].iloc[0]
-                if len(data["train_df"][data["train_df"]["userId"] == uid]) > 0 else 0, set()))
+            neg_candidates = list(
+                valid_items
+                - data["user_interactions"].get(
+                    data["train_df"][data["train_df"]["userId"] == uid]["user_idx"].iloc[0]
+                    if len(data["train_df"][data["train_df"]["userId"] == uid]) > 0
+                    else 0,
+                    set(),
+                )
+            )
             if neg_candidates:
                 neg_id = neg_candidates[np.random.randint(len(neg_candidates))]
                 if neg_id in item_embs:
@@ -485,7 +496,7 @@ def train_kan(data: dict):
 
         avg_loss = total_loss / max(num_batches, 1)
         if (epoch + 1) % 5 == 0 or epoch == 0:
-            logger.info(f"  Epoch {epoch+1:3d}/{num_epochs} | Loss: {avg_loss:.4f}")
+            logger.info(f"  Epoch {epoch + 1:3d}/{num_epochs} | Loss: {avg_loss:.4f}")
 
     path = MODELS_DIR / "kan_ranker.pth"
     torch.save(model.state_dict(), path)
@@ -496,6 +507,7 @@ def train_kan(data: dict):
 # ============================================================
 # Main
 # ============================================================
+
 
 def main():
     logger.info("=" * 60)
@@ -541,18 +553,18 @@ def main():
 
         logger.info("=" * 60)
         logger.info("PHASE 4 COMPLETE — All 5 Models Trained")
-        logger.info(f"  Total time: {elapsed:.0f}s ({elapsed/60:.1f} min)")
+        logger.info(f"  Total time: {elapsed:.0f}s ({elapsed / 60:.1f} min)")
         for name, loss in results.items():
             path = MODELS_DIR / f"{name}.pth" if name != "kan" else MODELS_DIR / "kan_ranker.pth"
             if name == "quantum":
                 path = MODELS_DIR / "quantum_fluid.pth"
             exists = "✅" if path.exists() else "❌"
             logger.info(f"  {exists} {name:12s} | Final loss: {loss:.4f} | {path.name}")
-            
+
             # Log model artifact to mlflow
             if path.exists():
                 mlflow.log_artifact(str(path), artifact_path=f"models/{name}")
-                
+
         logger.info("=" * 60)
 
 

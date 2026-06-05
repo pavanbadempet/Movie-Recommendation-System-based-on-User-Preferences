@@ -1,11 +1,12 @@
 """Inspect local medallion/lakehouse snapshots and SCD history."""
+
 from __future__ import annotations
 
 import argparse
-import json
-import sys
 from datetime import UTC, datetime
+import json
 from pathlib import Path
+import sys
 from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -20,7 +21,6 @@ from etl.lakehouse import (
     list_table_versions,
     load_table_version,
 )
-
 
 DEFAULT_TABLES = (
     ("bronze", "movies_raw", "bronze_data"),

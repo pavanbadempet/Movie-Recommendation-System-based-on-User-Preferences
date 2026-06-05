@@ -45,4 +45,3 @@ def test_summarize_experiment_metrics():
     assert row["variant"] == "control"
     assert row["ctr"] == 1.0
     assert row["avg_rating"] == 5.0
-

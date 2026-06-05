@@ -16,24 +16,27 @@ _inject_pyspark_priors() to replace random weight initialization
 with real learned collaborative signals.
 """
 
-import sys
 import os
+import sys
 
 # Add scripts/ and project root to path for setup_local_spark
 sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import setup_local_spark  # Dynamically configure JVM and Hadoop binaries
 
+import logging
+
+from pyspark.ml.evaluation import RegressionEvaluator
+from pyspark.ml.recommendation import ALS
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
-    col, to_timestamp, current_timestamp, when, count, avg,
-    lit, monotonically_increasing_id, regexp_replace, trim
+    avg,
+    col,
+    count,
+    current_timestamp,
+    monotonically_increasing_id,
 )
-from pyspark.sql.types import IntegerType, FloatType
-from pyspark.ml.recommendation import ALS
-from pyspark.ml.evaluation import RegressionEvaluator
-import logging
+from pyspark.sql.types import FloatType, IntegerType
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -59,21 +62,23 @@ GOLD_ITEM_EMBEDDINGS = os.path.join(PROJECT_ROOT, "data", "datalake", "gold", "m
 
 def create_spark_session() -> SparkSession:
     """Create a Spark session configured for local execution."""
-    return SparkSession.builder \
-        .appName("Apex_Medallion_Pipeline") \
-        .config("spark.driver.memory", "4g") \
-        .config("spark.executor.memory", "4g") \
-        .config("spark.sql.shuffle.partitions", "8") \
-        .config("spark.sql.parquet.int96RebaseModeInRead", "CORRECTED") \
-        .config("spark.sql.parquet.int96RebaseModeInWrite", "CORRECTED") \
-        .config("spark.sql.parquet.datetimeRebaseModeInRead", "CORRECTED") \
-        .config("spark.sql.parquet.datetimeRebaseModeInWrite", "CORRECTED") \
+    return (
+        SparkSession.builder.appName("Apex_Medallion_Pipeline")
+        .config("spark.driver.memory", "4g")
+        .config("spark.executor.memory", "4g")
+        .config("spark.sql.shuffle.partitions", "8")
+        .config("spark.sql.parquet.int96RebaseModeInRead", "CORRECTED")
+        .config("spark.sql.parquet.int96RebaseModeInWrite", "CORRECTED")
+        .config("spark.sql.parquet.datetimeRebaseModeInRead", "CORRECTED")
+        .config("spark.sql.parquet.datetimeRebaseModeInWrite", "CORRECTED")
         .getOrCreate()
+    )
 
 
 # ============================================================
 # BRONZE LAYER: Raw Ingestion (no transformations)
 # ============================================================
+
 
 def ingest_to_bronze(spark: SparkSession):
     """
@@ -103,6 +108,7 @@ def ingest_to_bronze(spark: SparkSession):
 # SILVER LAYER: Cleaned, validated, deduplicated
 # ============================================================
 
+
 def bronze_to_silver(spark: SparkSession):
     """
     Clean and validate Bronze data:
@@ -118,18 +124,19 @@ def bronze_to_silver(spark: SparkSession):
     # --- Clean Ratings ---
     df_bronze_ratings = spark.read.parquet(BRONZE_RATINGS)
 
-    df_silver_ratings = df_bronze_ratings \
-        .filter(col("userId").isNotNull()) \
-        .filter(col("movieId").isNotNull()) \
-        .filter(col("rating").isNotNull()) \
-        .filter((col("rating") >= 0.5) & (col("rating") <= 5.0)) \
-        .dropDuplicates(["userId", "movieId"]) \
+    df_silver_ratings = (
+        df_bronze_ratings.filter(col("userId").isNotNull())
+        .filter(col("movieId").isNotNull())
+        .filter(col("rating").isNotNull())
+        .filter((col("rating") >= 0.5) & (col("rating") <= 5.0))
+        .dropDuplicates(["userId", "movieId"])
         .select(
             col("userId").cast(IntegerType()).alias("user_id"),
             col("movieId").cast(IntegerType()).alias("movie_id"),
             col("rating").cast(FloatType()).alias("rating"),
             col("timestamp").cast("long").alias("event_ts"),
         )
+    )
 
     silver_ratings_count = df_silver_ratings.count()
     df_silver_ratings.write.mode("overwrite").parquet(SILVER_RATINGS)
@@ -138,10 +145,10 @@ def bronze_to_silver(spark: SparkSession):
     # --- Clean Movies ---
     df_bronze_movies = spark.read.parquet(BRONZE_MOVIES)
 
-    df_silver_movies = df_bronze_movies \
-        .filter(col("id").isNotNull()) \
-        .filter(col("title").isNotNull()) \
-        .dropDuplicates(["id"]) \
+    df_silver_movies = (
+        df_bronze_movies.filter(col("id").isNotNull())
+        .filter(col("title").isNotNull())
+        .dropDuplicates(["id"])
         .select(
             col("id").cast(IntegerType()).alias("movie_id"),
             col("title"),
@@ -153,6 +160,7 @@ def bronze_to_silver(spark: SparkSession):
             col("director"),
             col("original_language"),
         )
+    )
 
     silver_movies_count = df_silver_movies.count()
     df_silver_movies.write.mode("overwrite").parquet(SILVER_MOVIES)
@@ -168,6 +176,7 @@ def bronze_to_silver(spark: SparkSession):
 # ============================================================
 # GOLD LAYER: Feature engineering + dimensional modeling
 # ============================================================
+
 
 def silver_to_gold(spark: SparkSession):
     """
@@ -202,10 +211,14 @@ def silver_to_gold(spark: SparkSession):
     logger.info(f"  dim_movies: {dim_movies_count:,} rows")
 
     # --- Dimension: dim_users ---
-    dim_users = df_ratings.groupBy("user_id").agg(
-        count("*").alias("total_ratings"),
-        avg("rating").alias("avg_rating"),
-    ).withColumn("loaded_at", current_timestamp())
+    dim_users = (
+        df_ratings.groupBy("user_id")
+        .agg(
+            count("*").alias("total_ratings"),
+            avg("rating").alias("avg_rating"),
+        )
+        .withColumn("loaded_at", current_timestamp())
+    )
     dim_users_count = dim_users.count()
     dim_users.write.mode("overwrite").parquet(GOLD_DIM_USERS)
     logger.info(f"  dim_users: {dim_users_count:,} rows")
@@ -216,6 +229,7 @@ def silver_to_gold(spark: SparkSession):
 # ============================================================
 # GOLD LAYER: ALS Collaborative Filtering Embeddings
 # ============================================================
+
 
 def train_als_embeddings(spark: SparkSession):
     """
@@ -253,9 +267,7 @@ def train_als_embeddings(spark: SparkSession):
 
     # Evaluate
     predictions = model.transform(test)
-    evaluator = RegressionEvaluator(
-        metricName="rmse", labelCol="rating", predictionCol="prediction"
-    )
+    evaluator = RegressionEvaluator(metricName="rmse", labelCol="rating", predictionCol="prediction")
     rmse = evaluator.evaluate(predictions)
     logger.info(f"  ALS Model RMSE: {rmse:.4f}")
 
@@ -297,8 +309,12 @@ if __name__ == "__main__":
         logger.info("PIPELINE COMPLETE — Summary:")
         logger.info(f"  Bronze: {bronze_stats['ratings']:,} ratings, {bronze_stats['movies']:,} movies")
         logger.info(f"  Silver: {silver_stats['ratings']:,} ratings, {silver_stats['movies']:,} movies")
-        logger.info(f"  Gold:   {gold_stats['facts']:,} facts, {gold_stats['movies']:,} dim_movies, {gold_stats['users']:,} dim_users")
-        logger.info(f"  ALS:    RMSE={als_stats['rmse']:.4f}, {als_stats['user_vectors']:,} user vectors, {als_stats['item_vectors']:,} item vectors")
+        logger.info(
+            f"  Gold:   {gold_stats['facts']:,} facts, {gold_stats['movies']:,} dim_movies, {gold_stats['users']:,} dim_users"
+        )
+        logger.info(
+            f"  ALS:    RMSE={als_stats['rmse']:.4f}, {als_stats['user_vectors']:,} user vectors, {als_stats['item_vectors']:,} item vectors"
+        )
         logger.info("=" * 60)
     finally:
         spark.stop()

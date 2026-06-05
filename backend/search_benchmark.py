@@ -7,16 +7,25 @@ import json
 # Fast JSON
 try:
     import orjson as _orjson
-    def _jloads(s): return _or_jloads(s)
-    def _jdumps(obj, **kw) -> str: return _orjson.dumps(obj).decode()
+
+    def _jloads(s):
+        return _orjson.loads(s)
+
+    def _jdumps(obj, **kw) -> str:
+        return _orjson.dumps(obj).decode()
 except ImportError:
-    def _jloads(s): return _jloads(s)
-    def _jdumps(obj, **kw) -> str: return json.dumps(obj, **kw)
-import math
+
+    def _jloads(s):
+        return json.loads(s)
+
+    def _jdumps(obj, **kw) -> str:
+        return json.dumps(obj, **kw)
+
+
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
-
+from typing import Any
 
 DEFAULT_SEARCH_BENCHMARK_PATH = (
     Path(__file__).resolve().parent.parent / "data" / "evaluation" / "search_quality_benchmark.json"
@@ -149,8 +158,7 @@ def evaluate_search_benchmark(
                 "required_hits": required_hits,
                 "blocked_hits": blocked_hits,
                 "top_results": [
-                    {"id": result.get("id"), "title": result.get("title")}
-                    for result in results[: min(k, 5)]
+                    {"id": result.get("id"), "title": result.get("title")} for result in results[: min(k, 5)]
                 ],
             }
         )

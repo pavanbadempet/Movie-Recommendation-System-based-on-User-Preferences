@@ -2,22 +2,28 @@
 Model file manager for downloading large model files from external storage.
 Handles downloading embeddings from Hugging Face Hub to avoid Git LFS issues.
 """
+
+import hashlib
 import logging
 import os
-import json
-import hashlib
 from pathlib import Path
-import urllib.request
 import shutil
+import urllib.request
 
 import numpy as np
 
 # Fast JSON for manifest reads
 try:
     import orjson as _orjson
-    def _jloads(s): return _or_jloads(s)
+
+    def _jloads(s):
+        return _orjson.loads(s)
 except ImportError:
-    def _jloads(s): return _jloads(s)
+    import json as _json_stdlib
+
+    def _jloads(s):
+        return _json_stdlib.loads(s)
+
 
 logger = logging.getLogger(__name__)
 
@@ -30,22 +36,19 @@ logger = logging.getLogger(__name__)
 MODEL_FILES = {
     "sbert_embeddings.npy": {
         "url": os.getenv(
-            "EMBEDDINGS_URL",
-            "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/sbert_embeddings.npy"
+            "EMBEDDINGS_URL", "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/sbert_embeddings.npy"
         ),
-        "dest": "sbert_embeddings.npy"
+        "dest": "sbert_embeddings.npy",
     },
     "faiss.index": {
         "url": os.getenv(
-            "FAISS_INDEX_URL",
-            "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/faiss.index"
+            "FAISS_INDEX_URL", "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/faiss.index"
         ),
-        "dest": "faiss.index"
+        "dest": "faiss.index",
     },
     "movie_ids.npy": {
         "url": os.getenv(
-            "MOVIE_IDS_URL",
-            "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/movie_ids.npy"
+            "MOVIE_IDS_URL", "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/movie_ids.npy"
         ),
         "dest": "movie_ids.npy",
         "required": False,
@@ -53,7 +56,7 @@ MODEL_FILES = {
     "pipeline_manifest.json": {
         "url": os.getenv(
             "PIPELINE_MANIFEST_URL",
-            "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/pipeline_manifest.json"
+            "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/pipeline_manifest.json",
         ),
         "dest": "pipeline_manifest.json",
         "required": False,
@@ -61,14 +64,14 @@ MODEL_FILES = {
     "movies_transformed.parquet": {
         "url": os.getenv(
             "MOVIES_DATA_URL",
-            "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/movies_transformed.parquet"
+            "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/movies_transformed.parquet",
         ),
-        "dest": "../data/processed/movies_transformed.parquet"
+        "dest": "../data/processed/movies_transformed.parquet",
     },
     "semantic_twins.parquet": {
         "url": os.getenv(
             "SEMANTIC_TWINS_URL",
-            "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/semantic_twins.parquet"
+            "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/semantic_twins.parquet",
         ),
         "dest": "../data/processed/semantic_twins.parquet",
         "required": False,
@@ -76,15 +79,14 @@ MODEL_FILES = {
     "semantic_twin_summary.json": {
         "url": os.getenv(
             "SEMANTIC_TWIN_SUMMARY_URL",
-            "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/semantic_twin_summary.json"
+            "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/semantic_twin_summary.json",
         ),
         "dest": "../data/processed/semantic_twin_summary.json",
         "required": False,
     },
     "nova_ranker.joblib": {
         "url": os.getenv(
-            "NOVA_RANKER_URL",
-            "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/nova_ranker.joblib"
+            "NOVA_RANKER_URL", "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/nova_ranker.joblib"
         ),
         "dest": "nova_ranker.joblib",
         "required": False,
@@ -92,11 +94,11 @@ MODEL_FILES = {
     "nova_ranker.joblib.metadata.json": {
         "url": os.getenv(
             "NOVA_RANKER_METADATA_URL",
-            "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/nova_ranker.joblib.metadata.json"
+            "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/nova_ranker.joblib.metadata.json",
         ),
         "dest": "nova_ranker.joblib.metadata.json",
         "required": False,
-    }
+    },
 }
 
 
@@ -107,19 +109,19 @@ def download_file(url: str, dest_path: Path, chunk_size: int = 8192, required: b
     """
     if not url:
         return False
-    
+
     # Ensure parent directory exists
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = dest_path.with_name(f"{dest_path.name}.tmp")
-    
+
     try:
         logger.info(f"Downloading {dest_path.name} from {url[:50]}...")
-        
+
         # Use urllib for simple, reliable downloads
         with urllib.request.urlopen(url, timeout=300) as response:
-            total_size = int(response.headers.get('content-length', 0))
-            
-            with open(temp_path, 'wb') as f:
+            total_size = int(response.headers.get("content-length", 0))
+
+            with open(temp_path, "wb") as f:
                 downloaded = 0
                 while True:
                     chunk = response.read(chunk_size)
@@ -127,16 +129,18 @@ def download_file(url: str, dest_path: Path, chunk_size: int = 8192, required: b
                         break
                     f.write(chunk)
                     downloaded += len(chunk)
-                    
+
                     # Log progress every 10MB
                     if total_size > 0 and downloaded % (10 * 1024 * 1024) < chunk_size:
                         pct = (downloaded / total_size) * 100
-                        logger.info(f"  Progress: {pct:.1f}% ({downloaded // (1024*1024)}MB / {total_size // (1024*1024)}MB)")
-        
+                        logger.info(
+                            f"  Progress: {pct:.1f}% ({downloaded // (1024 * 1024)}MB / {total_size // (1024 * 1024)}MB)"
+                        )
+
         shutil.move(str(temp_path), str(dest_path))
-        logger.info(f"Downloaded {dest_path.name} ({dest_path.stat().st_size // (1024*1024)}MB)")
+        logger.info(f"Downloaded {dest_path.name} ({dest_path.stat().st_size // (1024 * 1024)}MB)")
         return True
-        
+
     except Exception as e:
         log_fn = logger.error if required else logger.info
         log_fn(f"Failed to download {'required' if required else 'optional'} artifact {url}: {e}")
@@ -194,12 +198,12 @@ def _manifest_entry_matches(file_path: Path, manifest_entry: dict | None) -> boo
     if expected_size is not None and int(expected_size) != int(file_path.stat().st_size):
         return False
     expected_hash = manifest_entry.get("sha256")
-    if expected_hash and expected_hash != file_sha256(file_path):
-        return False
-    return True
+    return not (expected_hash and expected_hash != file_sha256(file_path))
 
 
-def _manifest_contract_matches(file_path: Path, filename: str, manifest_contract: dict[str, object]) -> tuple[bool, str | None]:
+def _manifest_contract_matches(
+    file_path: Path, filename: str, manifest_contract: dict[str, object]
+) -> tuple[bool, str | None]:
     """Validate local artifact row counts against the serving contract when available."""
     if not manifest_contract:
         return True, None
@@ -213,7 +217,9 @@ def _manifest_contract_matches(file_path: Path, filename: str, manifest_contract
                 return False, f"pipeline manifest movie_id_map_rows ({expected_rows}) != local rows ({actual_rows})"
             expected_hash = manifest_contract.get("movie_id_sha256")
             if expected_hash:
-                actual_hash = hashlib.sha256(np.asarray(movie_ids, dtype=np.int64).astype("<i8", copy=False).tobytes()).hexdigest()
+                actual_hash = hashlib.sha256(
+                    np.asarray(movie_ids, dtype=np.int64).astype("<i8", copy=False).tobytes()
+                ).hexdigest()
                 if actual_hash != expected_hash:
                     return False, "pipeline manifest movie_id_sha256 does not match local movie_ids.npy"
             return True, None
@@ -272,24 +278,26 @@ def _local_artifact_is_valid(file_path: Path, filename: str) -> bool:
 
     if header.startswith(b"version https://git-lfs"):
         return False
-    if filename.endswith(".npy") and not header.startswith(b"\x93NUMPY"):
-        return False
-    return True
+    return not (filename.endswith(".npy") and not header.startswith(b"\x93NUMPY"))
 
 
-def ensure_model_files(models_dir: Path, selected_files: set[str] | list[str] | tuple[str, ...] | None = None) -> dict[str, bool]:
+def ensure_model_files(
+    models_dir: Path, selected_files: set[str] | list[str] | tuple[str, ...] | None = None
+) -> dict[str, bool]:
     """
     Ensure all required model files exist, downloading if necessary.
-    
+
     Returns:
         Dict mapping filename to success status
     """
     results = {}
     force_refresh = os.getenv("FORCE_MODEL_REFRESH", "").lower() in {"1", "true", "yes"}
-    refresh_manifest = (
-        force_refresh
-        or os.getenv("NOVA_REFRESH_PIPELINE_MANIFEST", "").strip().lower() in {"1", "true", "yes", "on"}
-    )
+    refresh_manifest = force_refresh or os.getenv("NOVA_REFRESH_PIPELINE_MANIFEST", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
     downloads_disabled = _env_truthy("NOVA_DISABLE_MODEL_DOWNLOADS")
     selected = set(selected_files) if selected_files is not None else None
 
@@ -309,7 +317,7 @@ def ensure_model_files(models_dir: Path, selected_files: set[str] | list[str] | 
 
     manifest_checksums = _load_manifest_checksums(models_dir)
     manifest_contract = _load_manifest_contract(models_dir)
-    
+
     for filename, config in MODEL_FILES.items():
         if selected is not None and filename not in selected:
             logger.info("Skipping %s; not required for this serving profile", filename)
@@ -332,13 +340,15 @@ def ensure_model_files(models_dir: Path, selected_files: set[str] | list[str] | 
             file_path = models_dir / filename
 
         local_valid = _local_artifact_is_valid(file_path, filename)
-            
+
         manifest_entry = manifest_checksums.get(filename)
         manifest_mismatch = False
         if local_valid and manifest_entry:
             if _manifest_entry_matches(file_path, manifest_entry):
                 if not force_refresh:
-                    logger.info("%s matches pipeline manifest (%sMB)", filename, file_path.stat().st_size // (1024 * 1024))
+                    logger.info(
+                        "%s matches pipeline manifest (%sMB)", filename, file_path.stat().st_size // (1024 * 1024)
+                    )
                     results[filename] = True
                     continue
             else:
@@ -346,14 +356,20 @@ def ensure_model_files(models_dir: Path, selected_files: set[str] | list[str] | 
                 manifest_mismatch = True
 
         contract_mismatch = False
-        contract_matches, contract_reason = _manifest_contract_matches(file_path, filename, manifest_contract) if local_valid else (True, None)
+        contract_matches, contract_reason = (
+            _manifest_contract_matches(file_path, filename, manifest_contract) if local_valid else (True, None)
+        )
         if local_valid and not manifest_mismatch and not contract_matches:
-            logger.info("%s exists but violates the pipeline manifest contract; re-downloading. Reason: %s", filename, contract_reason)
+            logger.info(
+                "%s exists but violates the pipeline manifest contract; re-downloading. Reason: %s",
+                filename,
+                contract_reason,
+            )
             contract_mismatch = True
 
         # Skip if file already exists and is valid
         if local_valid and not force_refresh and not manifest_mismatch and not contract_mismatch:
-            logger.info(f"{filename} already exists ({file_path.stat().st_size // (1024*1024)}MB)")
+            logger.info(f"{filename} already exists ({file_path.stat().st_size // (1024 * 1024)}MB)")
             results[filename] = True
             continue
 
@@ -361,26 +377,28 @@ def ensure_model_files(models_dir: Path, selected_files: set[str] | list[str] | 
             # Check if remote file has changed (size-based cache invalidation)
             if url:
                 try:
-                    req = urllib.request.Request(url, method='HEAD')
+                    req = urllib.request.Request(url, method="HEAD")
                     with urllib.request.urlopen(req, timeout=10) as resp:
-                        remote_size = int(resp.headers.get('content-length', 0))
+                        remote_size = int(resp.headers.get("content-length", 0))
                         local_size = file_path.stat().st_size
                         if remote_size > 0 and abs(remote_size - local_size) > 1024:
-                            logger.info(f"⟳ {filename} changed remotely ({local_size//1024}KB → {remote_size//1024}KB), re-downloading...")
+                            logger.info(
+                                f"⟳ {filename} changed remotely ({local_size // 1024}KB → {remote_size // 1024}KB), re-downloading..."
+                            )
                         else:
-                            logger.info(f"✓ {filename} is up-to-date ({local_size // (1024*1024)}MB)")
+                            logger.info(f"✓ {filename} is up-to-date ({local_size // (1024 * 1024)}MB)")
                             results[filename] = True
                             continue
                 except Exception:
                     # If HEAD request fails, use cached file
-                    logger.info(f"✓ {filename} already exists ({file_path.stat().st_size // (1024*1024)}MB)")
+                    logger.info(f"✓ {filename} already exists ({file_path.stat().st_size // (1024 * 1024)}MB)")
                     results[filename] = True
                     continue
             else:
-                logger.info(f"✓ {filename} already exists ({file_path.stat().st_size // (1024*1024)}MB)")
+                logger.info(f"✓ {filename} already exists ({file_path.stat().st_size // (1024 * 1024)}MB)")
                 results[filename] = True
                 continue
-        
+
         if downloads_disabled:
             log_fn = logger.warning if required else logger.info
             log_fn("Skipping %s download because NOVA_DISABLE_MODEL_DOWNLOADS is set.", filename)
@@ -395,14 +413,16 @@ def ensure_model_files(models_dir: Path, selected_files: set[str] | list[str] | 
             if file_path.exists():
                 # Might be an LFS pointer file or malformed artifact.
                 if not _local_artifact_is_valid(file_path, filename):
-                    logger.warning(f"⚠ {filename} appears to be an LFS pointer. Configure {filename.upper().replace('.', '_')}_URL in environment.")
+                    logger.warning(
+                        f"⚠ {filename} appears to be an LFS pointer. Configure {filename.upper().replace('.', '_')}_URL in environment."
+                    )
                     results[filename] = False
                 else:
                     results[filename] = True
             else:
                 logger.warning(f"⚠ {filename} not found and no download URL configured")
                 results[filename] = False
-    
+
     return results
 
 
