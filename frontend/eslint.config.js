@@ -61,6 +61,9 @@ const browserGlobals = {
   PopStateEvent: "readonly",
   Node: "readonly",
   Element: "readonly",
+  navigator: "readonly",
+  File: "readonly",
+  HTMLLabelElement: "readonly",
 };
 
 export default [

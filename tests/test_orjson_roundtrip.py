@@ -2,7 +2,7 @@
 Property-based tests for orjson / stdlib JSON round-trip consistency.
 # Feature: perfect-10-final, Property 5: orjson round-trip consistency
 """
-import pytest
+
 from hypothesis import given, settings
 from hypothesis import strategies as st
 

@@ -42,6 +42,7 @@ class ChatResponse(_BaseModel):
     role: str
     content: str
 
+
 # ---------------------------------------------------------------------------
 # Module-level config (resolved at import time from environment / main.py)
 # ---------------------------------------------------------------------------

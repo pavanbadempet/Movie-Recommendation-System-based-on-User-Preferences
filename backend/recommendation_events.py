@@ -125,7 +125,7 @@ def recommendation_diagnostic_report(
     }
 
 
-def record_recommendation_events(
+def record_recommendation_events_core(
     *,
     endpoint: str,
     context,
@@ -218,9 +218,9 @@ def _candidate_event_summary(candidate: dict, rank: int) -> dict:
 # Private-named wrappers moved from backend/main.py (task 2.2)
 # These preserve the exact call signatures that main.py and routers expect.
 # ---------------------------------------------------------------------------
+from collections import Counter as _Counter
 import os
 import uuid as _uuid
-from collections import Counter as _Counter
 
 from backend.events import append_event as _append_event
 from backend.recommender_helpers import event_logging_enabled as _event_logging_enabled
