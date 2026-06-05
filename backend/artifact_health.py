@@ -6,9 +6,9 @@ without loading the full recommendation engine or large embedding arrays.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import hashlib
 import json
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -16,9 +16,15 @@ import numpy as np
 
 try:
     import orjson as _orjson
-    def _jloads(s): return _orjson.loads(s)
+
+    def _jloads(s):
+        return _orjson.loads(s)
 except ImportError:
-    def _jloads(s): return json.loads(s)
+
+    def _jloads(s):
+        return json.loads(s)
+
+
 import pandas as pd
 
 
@@ -132,7 +138,9 @@ def evaluate_artifact_health(models_dir: Path, data_dir: Path) -> dict[str, Any]
             len(movies_ids) == len(movie_ids) and np.array_equal(movies_ids, movie_ids)
         )
         if not checks["catalog_vector_aligned"]:
-            recommendations.append("Regenerate artifacts: movies_transformed.parquet and movie_ids.npy are not aligned.")
+            recommendations.append(
+                "Regenerate artifacts: movies_transformed.parquet and movie_ids.npy are not aligned."
+            )
 
     if movies_ids is not None and semantic_ids is not None:
         checks["semantic_catalog_aligned"] = bool(
@@ -163,7 +171,9 @@ def evaluate_artifact_health(models_dir: Path, data_dir: Path) -> dict[str, Any]
     if not files["semantic_twins"]["exists"]:
         recommendations.append("Run the updated Kaggle refresh so semantic_twins.parquet is published to Hugging Face.")
     if not files["semantic_twin_summary"]["exists"]:
-        recommendations.append("Run the updated Kaggle refresh so semantic_twin_summary.json is published to Hugging Face.")
+        recommendations.append(
+            "Run the updated Kaggle refresh so semantic_twin_summary.json is published to Hugging Face."
+        )
     if not checks["vector_files_ready"]:
         recommendations.append("Vector artifacts are missing; full FAISS serving will fall back or be unavailable.")
     if not checks["manifest_ready"]:
@@ -175,9 +185,7 @@ def evaluate_artifact_health(models_dir: Path, data_dir: Path) -> dict[str, Any]
         and checks["semantic_summary_aligned"] is not False
     )
     vector_ready = bool(
-        checks["vector_files_ready"]
-        and checks["movie_id_map_ready"]
-        and checks["catalog_vector_aligned"] is not False
+        checks["vector_files_ready"] and checks["movie_id_map_ready"] and checks["catalog_vector_aligned"] is not False
     )
 
     if not checks["metadata_ready"]:

@@ -73,4 +73,3 @@ def test_evaluate_search_benchmark_flags_regressions(tmp_path):
     assert report["status"] == "needs_attention"
     assert report["metrics"]["top1_hit_rate"] == 0.0
     assert report["metrics"]["blocked_hit_case_rate"] == 1.0
-

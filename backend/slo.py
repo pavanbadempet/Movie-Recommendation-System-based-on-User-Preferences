@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import os
-import time
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import UTC, datetime
+import os
 from threading import Lock
+import time
 from typing import Any
 
 DEFAULT_EXCLUDED_ROUTE_PREFIXES = (
@@ -106,10 +106,7 @@ def slo_route_latency_budgets() -> dict[str, float]:
 def should_track_request(*, path: str, route: str) -> bool:
     """Return whether this request belongs in the user-serving SLO window."""
 
-    for prefix in slo_excluded_route_prefixes():
-        if path.startswith(prefix) or route.startswith(prefix):
-            return False
-    return True
+    return all(not (path.startswith(prefix) or route.startswith(prefix)) for prefix in slo_excluded_route_prefixes())
 
 
 def _percentile(values: list[float], percentile: float) -> float | None:

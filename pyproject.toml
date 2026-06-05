@@ -1,0 +1,166 @@
+[project]
+name = "apex-recommendation-engine"
+version = "2.0.0"
+description = "APEX: Production-grade AI recommendation engine with 6-model ensemble"
+requires-python = ">=3.11"
+readme = "README.md"
+license = { text = "MIT" }
+
+# ---------------------------------------------------------------------------
+# Ruff — linter + formatter
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+# Rule sets enabled:
+#   E/W  — pycodestyle errors and warnings
+#   F    — pyflakes (unused imports, undefined names, etc.)
+#   N    — pep8-naming
+#   UP   — pyupgrade (modernise syntax)
+#   B    — flake8-bugbear (likely bugs and design issues)
+#   C4   — flake8-comprehensions (unnecessary comprehensions)
+#   SIM  — flake8-simplify
+#   I    — isort
+select = ["E", "W", "F", "N", "UP", "B", "C4", "SIM", "I"]
+
+ignore = [
+    # E402: module-level import not at top — intentional in main.py (orjson fallback)
+    # and recommendation_routes.py (factory pattern with injected dependencies)
+    "E402",
+    # E501: line too long — handled by formatter with line-length = 120
+    "E501",
+    # N806: variable in function should be lowercase — conflicts with PyTorch conventions (W, B, Q, K, V)
+    "N806",
+    # N812: lowercase imported as non-lowercase — common in torch (F = torch.nn.functional)
+    "N812",
+    # B008: do not perform function calls in default arguments — FastAPI uses this pattern
+    "B008",
+    # UP007: use X | Y for union type annotations — keep Optional[] for clarity in public APIs
+    "UP007",
+    # SIM108: use ternary operator — sometimes explicit if/else is clearer
+    "SIM108",
+    # SIM102: collapsible-if — nested ifs are sometimes more readable with comments between them
+    "SIM102",
+    # B904: raise from — not always applicable in exception handlers
+    "B904",
+]
+
+# Files/directories to exclude from linting
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "*.egg-info",
+    "frontend/node_modules",
+    "frontend/dist",
+    "notebooks",
+    ".hypothesis",
+    ".pytest_cache",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Test files: allow assert statements, magic values, and broad exception catches
+"tests/**/*.py" = ["S101", "PLR2004", "BLE001"]
+"backend/tests/**/*.py" = ["S101", "PLR2004", "BLE001"]
+# Delta lakehouse test mocks PySpark's camelCase API (partitionBy) — N802 is intentional
+"tests/test_delta_lakehouse.py" = ["S101", "PLR2004", "BLE001", "N802"]
+# RL wiring test imports ActorCriticPolicy as _ACP to trigger import side-effects — N814 intentional
+"tests/test_rl_wiring.py" = ["S101", "PLR2004", "BLE001", "N814"]
+# Scripts: allow print statements and broad exception handling
+"scripts/**/*.py" = ["T201", "BLE001"]
+# Main entry point: allow complex imports due to orjson fallback pattern
+"backend/main.py" = ["E402", "F401"]
+# Router factory: imports inside function body are intentional;
+# Pydantic model classes passed as factory args are PascalCase by convention (N803)
+"backend/recommendation_routes.py" = ["E402", "N803"]
+# Browse routes: same factory pattern
+"backend/browse_routes.py" = ["N803"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["backend", "etl", "scripts"]
+force-sort-within-sections = true
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+
+# ---------------------------------------------------------------------------
+# Mypy — static type checking
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+# Strict mode components — enabled selectively to avoid overwhelming noise
+warn_return_any = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+strict_equality = true
+
+# Ignore missing stubs for third-party libraries that don't ship them
+[[tool.mypy.overrides]]
+module = [
+    "faiss.*",
+    "sentence_transformers.*",
+    "transformers.*",
+    "torch.*",
+    "torchvision.*",
+    "sklearn.*",
+    "scipy.*",
+    "pandera.*",
+    "pyspark.*",
+    "networkx.*",
+    "PIL.*",
+    "orjson.*",
+    "hypothesis.*",
+    "slowapi.*",
+    "sentry_sdk.*",
+    "prometheus_client.*",
+    "passlib.*",
+    "jose.*",
+    "psutil.*",
+    "joblib.*",
+    "plotly.*",
+    "streamlit.*",
+]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:builtin type SwigPyPacked has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type SwigPyObject has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning",
+    "ignore:'asyncio\\.iscoroutinefunction' is deprecated and slated for removal in Python 3\\.16.*:DeprecationWarning:slowapi\\.extension",
+]
+testpaths = ["tests", "backend/tests"]
+
+# ---------------------------------------------------------------------------
+# Coverage
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+source = ["backend"]
+omit = [
+    "backend/tests/*",
+    "backend/admin_tests.py",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "@(abc\\.)?abstractmethod",
+]

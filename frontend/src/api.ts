@@ -270,7 +270,6 @@ async function fetchTmdbTrailer(movieId: number): Promise<string | null> {
       `/v1/recommendations/id/${movieId}/enriched`, { n: 1 }, 15000,
     );
     // The recommendations (not query_movie) have trailer_key from TMDB enrichment
-    const recs = recResult.data.recommendations || [];
     // We can't get OUR movie's trailer from recs, but query_movie might have it
     const qm = recResult.data.query_movie;
     if ((qm as Record<string, unknown>).trailer_key) {
@@ -305,15 +304,15 @@ export async function recordEvent(payload: EventPayload): Promise<BackendResult<
   return apiPost<EventResponse>("/v1/events", payload, 8000);
 }
 
-export async function registerUser(username: string): Promise<BackendResult<any>> {
-  return apiPost("/v1/auth/register", { username, password: "password123" }, 8000);
+export async function registerUser(username: string, password: string): Promise<BackendResult<{ detail?: string; username?: string }>> {
+  return apiPost<{ detail?: string; username?: string }>("/v1/auth/register", { username, password }, 8000);
 }
 
-export async function loginUser(username: string): Promise<BackendResult<{access_token: string, token_type: string}>> {
+export async function loginUser(username: string, password: string): Promise<BackendResult<{access_token: string, token_type: string}>> {
   const errors: string[] = [];
   const body = new URLSearchParams();
   body.append("username", username);
-  body.append("password", "password123");
+  body.append("password", password);
 
   for (const baseUrl of candidateBackends()) {
     try {
@@ -327,7 +326,7 @@ export async function loginUser(username: string): Promise<BackendResult<{access
         continue;
       }
       return { data: await response.json(), baseUrl };
-    } catch (error) {
+    } catch {
       errors.push(`${baseUrl} failed`);
     }
   }

@@ -20,10 +20,9 @@ Integration:
 
 from __future__ import annotations
 
+from collections import defaultdict
 import logging
 import threading
-import time
-from collections import defaultdict
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -73,8 +72,8 @@ def update_user_index(event: dict[str, Any]) -> None:
                     key=lambda u: _realtime_index[u][-1][0] if _realtime_index[u] else "",
                 )
                 del _realtime_index[oldest_uid]
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Could not evict oldest realtime user index entry: %s", exc)
 
         user_events = _realtime_index[uid_str]
         user_events.append((ts, mid))
@@ -131,6 +130,7 @@ def preload_from_event_store(max_users: int = 10_000) -> int:
     """
     try:
         from backend.events import iter_events
+
         logger.info("Pre-loading real-time index from event store (max %d users)...", max_users)
 
         # Collect all events grouped by user

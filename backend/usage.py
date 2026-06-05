@@ -8,21 +8,30 @@ loaded into the Delta event fact table.
 
 from __future__ import annotations
 
-import json
-import os
 from collections import Counter
 from datetime import UTC, datetime
+import json
+import os
 from pathlib import Path
 from typing import Any
 
 # Fast JSON for usage log writes
 try:
     import orjson as _orjson
-    def _usage_dumps(obj) -> str: return _orjson.dumps(obj, option=_orjson.OPT_SORT_KEYS).decode()
-    def _usage_loads(s): return _orjson.loads(s)
+
+    def _usage_dumps(obj) -> str:
+        return _orjson.dumps(obj, option=_orjson.OPT_SORT_KEYS).decode()
+
+    def _usage_loads(s):
+        return _orjson.loads(s)
 except ImportError:
-    def _usage_dumps(obj) -> str: return json.dumps(obj, sort_keys=True, ensure_ascii=True)
-    def _usage_loads(s): return json.loads(s)
+
+    def _usage_dumps(obj) -> str:
+        return json.dumps(obj, sort_keys=True, ensure_ascii=True)
+
+    def _usage_loads(s):
+        return json.loads(s)
+
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_USAGE_PATH = REPO_ROOT / "data" / "events" / "api_usage.jsonl"

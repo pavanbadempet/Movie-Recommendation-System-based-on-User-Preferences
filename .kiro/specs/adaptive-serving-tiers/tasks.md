@@ -50,7 +50,7 @@ Implement hardware-aware serving tier selection by creating `backend/serving_tie
     - Assert auto-selection boundary conditions: ram < 8 → tier3, gpu + ram >= 16 → tier1, else → tier2
     - **Validates: Requirements 2.1, 2.2, 2.3, 2.4, 2.5**
 
-- [ ] 3. Checkpoint — core detection module complete
+- [~] 3. Checkpoint — core detection module complete
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 4. Modify `backend/onnx_engine.py` — wire cpu_cores into ONNX sessions

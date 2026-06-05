@@ -15,19 +15,20 @@ Usage:
     python scripts/train_two_tower.py
 """
 
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import torch
-import torch.nn as nn
+import logging
+from pathlib import Path
+import time
+
+import faiss
 import numpy as np
 import pandas as pd
-import faiss
-import logging
-import time
-from pathlib import Path
-from torch.utils.data import Dataset, DataLoader
+import torch
+from torch.utils.data import DataLoader, Dataset
 
 from backend.two_tower import TwoTowerModel
 
@@ -43,6 +44,7 @@ MODELS_DIR = PROJECT_ROOT / "models"
 # ============================================================
 # Dataset
 # ============================================================
+
 
 class TwoTowerDataset(Dataset):
     """
@@ -66,9 +68,7 @@ class TwoTowerDataset(Dataset):
         # Filter to only users and items that have features
         valid_users = set(user_features.keys())
         valid_items = set(item_features.keys())
-        filtered = ratings_df[
-            ratings_df["userId"].isin(valid_users) & ratings_df["movieId"].isin(valid_items)
-        ]
+        filtered = ratings_df[ratings_df["userId"].isin(valid_users) & ratings_df["movieId"].isin(valid_items)]
 
         # Positive interactions: rating >= 3.5
         self.positives = filtered[filtered["rating"] >= 3.5][["userId", "movieId"]].values
@@ -79,8 +79,9 @@ class TwoTowerDataset(Dataset):
         for uid, mid in self.positives:
             self.user_positives.setdefault(uid, set()).add(mid)
 
-        logger.info(f"  Dataset: {len(self.positives):,} positive pairs, "
-                    f"{len(valid_users)} users, {len(valid_items)} items")
+        logger.info(
+            f"  Dataset: {len(self.positives):,} positive pairs, {len(valid_users)} users, {len(valid_items)} items"
+        )
 
     def __len__(self) -> int:
         return len(self.positives)
@@ -119,6 +120,7 @@ class TwoTowerDataset(Dataset):
 # Feature Engineering
 # ============================================================
 
+
 def build_user_features(
     user_emb_df: pd.DataFrame,
     ratings_df: pd.DataFrame,
@@ -127,10 +129,14 @@ def build_user_features(
     logger.info("Building user features...")
 
     # Aggregate rating stats per user
-    user_stats = ratings_df.groupby("userId").agg(
-        total_ratings=("rating", "count"),
-        avg_rating=("rating", "mean"),
-    ).reset_index()
+    user_stats = (
+        ratings_df.groupby("userId")
+        .agg(
+            total_ratings=("rating", "count"),
+            avg_rating=("rating", "mean"),
+        )
+        .reset_index()
+    )
 
     # Normalize stats
     user_stats["total_ratings"] = np.log1p(user_stats["total_ratings"])
@@ -146,10 +152,13 @@ def build_user_features(
 
         stats = user_stats[user_stats["userId"] == uid]
         if len(stats) > 0:
-            activity = np.array([
-                stats.iloc[0]["total_ratings"],
-                stats.iloc[0]["avg_rating"],
-            ], dtype=np.float32)
+            activity = np.array(
+                [
+                    stats.iloc[0]["total_ratings"],
+                    stats.iloc[0]["avg_rating"],
+                ],
+                dtype=np.float32,
+            )
         else:
             activity = np.zeros(2, dtype=np.float32)
 
@@ -193,6 +202,7 @@ def build_item_features(
 # Training Loop
 # ============================================================
 
+
 def train(
     model: TwoTowerModel,
     dataloader: DataLoader,
@@ -232,7 +242,9 @@ def train(
         losses.append(avg_loss)
 
         if (epoch + 1) % 5 == 0 or epoch == 0:
-            logger.info(f"  Epoch {epoch+1:3d}/{num_epochs} | Loss: {avg_loss:.4f} | LR: {scheduler.get_last_lr()[0]:.6f}")
+            logger.info(
+                f"  Epoch {epoch + 1:3d}/{num_epochs} | Loss: {avg_loss:.4f} | LR: {scheduler.get_last_lr()[0]:.6f}"
+            )
 
     return losses
 
@@ -240,6 +252,7 @@ def train(
 # ============================================================
 # FAISS Index Export
 # ============================================================
+
 
 def export_to_faiss(
     model: TwoTowerModel,
@@ -261,7 +274,7 @@ def export_to_faiss(
         batch_size = 1024
         embeddings = []
         for i in range(0, len(item_tensor), batch_size):
-            batch = item_tensor[i:i + batch_size]
+            batch = item_tensor[i : i + batch_size]
             emb = model.item_tower(batch).numpy()
             embeddings.append(emb)
         all_embeddings = np.vstack(embeddings).astype(np.float32)
@@ -283,6 +296,7 @@ def export_to_faiss(
 # ============================================================
 # Main
 # ============================================================
+
 
 def main():
     logger.info("=" * 60)
@@ -350,7 +364,7 @@ def main():
     # 9. Summary
     elapsed = time.time() - start_time
     logger.info("=" * 60)
-    logger.info(f"PHASE 3 COMPLETE — Two-Tower Model Trained")
+    logger.info("PHASE 3 COMPLETE — Two-Tower Model Trained")
     logger.info(f"  Final loss: {losses[-1]:.4f}")
     logger.info(f"  Initial loss: {losses[0]:.4f}")
     logger.info(f"  Loss reduction: {((losses[0] - losses[-1]) / losses[0]) * 100:.1f}%")

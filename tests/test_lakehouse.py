@@ -18,18 +18,22 @@ from etl.lakehouse import (
 
 
 def test_write_versioned_snapshot_and_load_as_of_date(tmp_path):
-    first = pd.DataFrame({
-        "id": [1, 2],
-        "title": ["Matrix", "Inception"],
-        "overview": ["Red pill", "Dreams"],
-        "tags": ["matrix sci-fi", "inception dreams"],
-    })
-    second = pd.DataFrame({
-        "id": [1, 2, 3],
-        "title": ["Matrix", "Inception", "Interstellar"],
-        "overview": ["Red pill", "Dreams", "Space"],
-        "tags": ["matrix sci-fi", "inception dreams", "interstellar space"],
-    })
+    first = pd.DataFrame(
+        {
+            "id": [1, 2],
+            "title": ["Matrix", "Inception"],
+            "overview": ["Red pill", "Dreams"],
+            "tags": ["matrix sci-fi", "inception dreams"],
+        }
+    )
+    second = pd.DataFrame(
+        {
+            "id": [1, 2, 3],
+            "title": ["Matrix", "Inception", "Interstellar"],
+            "overview": ["Red pill", "Dreams", "Space"],
+            "tags": ["matrix sci-fi", "inception dreams", "interstellar space"],
+        }
+    )
 
     first_manifest = write_versioned_snapshot(
         first,
@@ -75,25 +79,27 @@ def test_bronze_raw_contract_allows_untrusted_source_rows():
 
 
 def test_scd_as_of_time_travel_and_comparison():
-    history = pd.DataFrame({
-        "id": [1, 1, 2, 3],
-        "title": ["Matrix", "Matrix", "Inception", "Interstellar"],
-        "overview": ["Old overview", "New overview", "Dreams", "Space"],
-        "record_hash": ["old", "new", "same", "added"],
-        "effective_start_at": [
-            "2026-05-01T00:00:00Z",
-            "2026-05-02T00:00:00Z",
-            "2026-05-01T00:00:00Z",
-            "2026-05-02T00:00:00Z",
-        ],
-        "effective_end_at": [
-            "2026-05-02T00:00:00Z",
-            "9999-12-31T00:00:00",
-            "9999-12-31T00:00:00",
-            "9999-12-31T00:00:00",
-        ],
-        "is_current": [False, True, True, True],
-    })
+    history = pd.DataFrame(
+        {
+            "id": [1, 1, 2, 3],
+            "title": ["Matrix", "Matrix", "Inception", "Interstellar"],
+            "overview": ["Old overview", "New overview", "Dreams", "Space"],
+            "record_hash": ["old", "new", "same", "added"],
+            "effective_start_at": [
+                "2026-05-01T00:00:00Z",
+                "2026-05-02T00:00:00Z",
+                "2026-05-01T00:00:00Z",
+                "2026-05-02T00:00:00Z",
+            ],
+            "effective_end_at": [
+                "2026-05-02T00:00:00Z",
+                "9999-12-31T00:00:00",
+                "9999-12-31T00:00:00",
+                "9999-12-31T00:00:00",
+            ],
+            "is_current": [False, True, True, True],
+        }
+    )
 
     before = as_of_scd(history, "2026-05-01T12:00:00Z")
     after = as_of_scd(history, "2026-05-02T12:00:00Z")

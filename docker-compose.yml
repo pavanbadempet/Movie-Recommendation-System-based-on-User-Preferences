@@ -16,9 +16,18 @@ services:
     volumes:
       - ./data:/app/data  # Share the Delta Lake with the backend
     depends_on:
-      - kafka
-      - spark-master
-      - redis
+      kafka:
+        condition: service_healthy
+      spark-master:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     networks:
       - nova-net
   # ---------------------------------------------------------------------------
@@ -60,6 +69,12 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
     networks:
       - nova-net
 
@@ -72,6 +87,11 @@ services:
     ports:
       - "6379:6379"
     command: redis-server --save 60 1 --loglevel warning
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - nova-net
 
@@ -123,9 +143,11 @@ services:
     image: postgres:15-alpine
     container_name: postgres-db
     environment:
-      POSTGRES_USER: nova_user
-      POSTGRES_PASSWORD: nova_password
-      POSTGRES_DB: nova_db
+      # Override these in a .env file or shell environment for local dev.
+      # NEVER commit real credentials. See .env.example for variable names.
+      POSTGRES_USER: ${POSTGRES_USER:-nova_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nova_password}
+      POSTGRES_DB: ${POSTGRES_DB:-nova_db}
     ports:
       - "5432:5432"
     volumes:
@@ -142,6 +164,7 @@ services:
     container_name: prometheus
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus.rules.yml:/etc/prometheus/prometheus.rules.yml
     ports:
       - "9090:9090"
     networks:
@@ -154,6 +177,10 @@ services:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/etc/grafana/dashboards
     depends_on:
       - prometheus
     networks:

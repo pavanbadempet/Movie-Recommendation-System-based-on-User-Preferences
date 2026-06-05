@@ -16,9 +16,10 @@ References:
 
 from __future__ import annotations
 
+from collections import Counter
+import contextlib
 import logging
 import math
-from collections import Counter
 from typing import Any
 
 import numpy as np
@@ -38,19 +39,14 @@ def compute_item_popularity(
     for event in events:
         mid = event.get("movie_id")
         if mid is not None:
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 counts[int(mid)] += 1
-            except (TypeError, ValueError):
-                pass
 
     if not counts:
         return {}
 
     total = sum(counts.values()) + smoothing * len(counts)
-    return {
-        item_id: (count + smoothing) / total
-        for item_id, count in counts.items()
-    }
+    return {item_id: (count + smoothing) / total for item_id, count in counts.items()}
 
 
 def ips_ndcg_at_k(
@@ -79,21 +75,14 @@ def ips_ndcg_at_k(
         return min(1.0 / max(p, 1e-6), clip_val)
 
     top_k = ranked_items[:k]
-    dcg = sum(
-        ips_weight(item) / math.log2(rank + 2)
-        for rank, item in enumerate(top_k)
-        if item in ground_truth
-    )
+    dcg = sum(ips_weight(item) / math.log2(rank + 2) for rank, item in enumerate(top_k) if item in ground_truth)
 
     # Ideal DCG: sort ground truth by IPS weight (rarest items first)
     gt_weights = sorted(
         [ips_weight(item) for item in ground_truth],
         reverse=True,
     )
-    idcg = sum(
-        w / math.log2(rank + 2)
-        for rank, w in enumerate(gt_weights[:k])
-    )
+    idcg = sum(w / math.log2(rank + 2) for rank, w in enumerate(gt_weights[:k]))
 
     return dcg / idcg if idcg > 0 else 0.0
 

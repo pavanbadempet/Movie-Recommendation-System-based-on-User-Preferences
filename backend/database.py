@@ -6,31 +6,30 @@ to the Multi-Tenant Star Schema defined in PostgreSQL.
 """
 
 import os
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, Float, ForeignKey, BigInteger
-from sqlalchemy.orm import sessionmaker, declarative_base, relationship
-# Use generic String for UUID to support SQLite fallback
-from sqlalchemy import String as UUIDType
-import uuid
+
+from dotenv import load_dotenv
+
+load_dotenv()
 import datetime
 
+# Use generic String for UUID to support SQLite fallback
+import uuid
+
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, create_engine
+from sqlalchemy.orm import declarative_base, relationship, sessionmaker
+
 # PostgreSQL Connection String (Fallback to SQLite if no PGSQL)
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", 
-    "sqlite:///nova_db.sqlite3"
-)
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///nova_db.sqlite3")
 
 if "sqlite" in DATABASE_URL:
-    engine = create_engine(
-        DATABASE_URL,
-        connect_args={"check_same_thread": False}
-    )
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 else:
     engine = create_engine(
         DATABASE_URL,
-        pool_size=20,          # Allow 20 persistent connections
-        max_overflow=10,       # Allow up to 10 additional temporary connections
+        pool_size=20,  # Allow 20 persistent connections
+        max_overflow=10,  # Allow up to 10 additional temporary connections
         pool_timeout=30,
-        pool_recycle=1800,     # Recycle connections every 30 minutes to prevent staleness
+        pool_recycle=1800,  # Recycle connections every 30 minutes to prevent staleness
     )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -46,6 +45,7 @@ def utc_now() -> datetime.datetime:
 # ORM MODELS
 # -----------------------------------------------------------------------------
 
+
 class Tenant(Base):
     __tablename__ = "dim_tenant"
     tenant_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -54,6 +54,10 @@ class Tenant(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+    # Stripe billing — populated on first checkout.session.completed webhook
+    stripe_customer_id = Column(String(255), nullable=True)
+    subscription_id = Column(String(255), nullable=True)
+
 
 class APIKey(Base):
     __tablename__ = "dim_api_key"
@@ -65,8 +69,9 @@ class APIKey(Base):
     created_at = Column(DateTime, default=utc_now)
     expires_at = Column(DateTime, nullable=True)
     is_revoked = Column(Boolean, default=False)
-    
+
     tenant = relationship("Tenant")
+
 
 class User(Base):
     __tablename__ = "dim_user"
@@ -77,8 +82,9 @@ class User(Base):
     password_hash = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
-    
+
     tenant = relationship("Tenant")
+
 
 class UserEvent(Base):
     __tablename__ = "fact_user_event"
@@ -86,18 +92,20 @@ class UserEvent(Base):
     tenant_id = Column(String(36), ForeignKey("dim_tenant.tenant_id"), nullable=False)
     user_sk = Column(String(36), ForeignKey("dim_user.user_sk"), nullable=True)
     movie_sk = Column(String(36), nullable=True)
-    
+
     event_type = Column(String(50), nullable=False)
     event_value = Column(Float, nullable=True)
     query_text = Column(String(500), nullable=True)
-    
+
     context_device = Column(String(100), nullable=True)
     context_os = Column(String(100), nullable=True)
     created_at = Column(DateTime, default=utc_now)
 
+
 # -----------------------------------------------------------------------------
 # DEPENDENCY
 # -----------------------------------------------------------------------------
+
 
 def get_db():
     """FastAPI Dependency for providing a safe DB session per request."""
@@ -107,5 +115,36 @@ def get_db():
     finally:
         db.close()
 
-# Initialize tables if they don't exist (important for SQLite fallback)
-Base.metadata.create_all(bind=engine)
+
+# ---------------------------------------------------------------------------
+# Schema bootstrap
+# ---------------------------------------------------------------------------
+# create_all is intentionally guarded: it only runs for SQLite (local dev /
+# CI) where there is no migration runner. On PostgreSQL, schema is managed
+# by Flyway migrations in sql/migrations/ — running create_all there would
+# silently diverge from the versioned schema.
+# ---------------------------------------------------------------------------
+_DB_IS_SQLITE = "sqlite" in DATABASE_URL
+
+if _DB_IS_SQLITE:
+    Base.metadata.create_all(bind=engine)
+
+
+def seed_database():
+    db = SessionLocal()
+    try:
+        tenant_id = os.getenv("NOVA_TENANT_ID", "demo-media-co")
+        tenant = db.query(Tenant).filter_by(tenant_id=tenant_id).first()
+        if not tenant:
+            new_tenant = Tenant(tenant_id=tenant_id, company_name="Demo Media Co", plan_tier="enterprise")
+            db.add(new_tenant)
+            db.commit()
+    except Exception as e:
+        print(f"Seed error: {e}")
+    finally:
+        db.close()
+
+
+# Run seeder on startup — SQLite only; Postgres is seeded via V1 migration
+if _DB_IS_SQLITE:
+    seed_database()

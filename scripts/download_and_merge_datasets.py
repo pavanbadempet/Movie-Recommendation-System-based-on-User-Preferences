@@ -13,18 +13,16 @@ also tend to like thriller books — enabling taste transfer across domains.
 Usage:
     python scripts/download_and_merge_datasets.py [--skip-amazon] [--skip-books]
 """
+
 from __future__ import annotations
 
 import argparse
+from datetime import UTC, datetime
 import json
 import logging
+from pathlib import Path
 import sys
 import uuid
-from datetime import datetime, timezone
-from pathlib import Path
-
-import numpy as np
-import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -84,36 +82,39 @@ def load_amazon_movies(max_rows: int = 2_000_000) -> int:
         rating = float(row.get("rating", 3.0))
         ts_raw = row.get("timestamp", 0)
         try:
-            ts = datetime.fromtimestamp(float(ts_raw), tz=timezone.utc).isoformat(
-                timespec="seconds").replace("+00:00", "Z")
+            ts = datetime.fromtimestamp(float(ts_raw), tz=UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
         except Exception:
-            ts = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+            ts = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
-        events.append({
-            "event_id": str(uuid.uuid4()),
-            "event_ts": ts,
-            "event_type": "rating",
-            "user_id": uid,
-            "movie_id": item_id,
-            "source_content_id": str(item_id),
-            "rating": min(5.0, max(1.0, rating)),
-            "tenant_id": "amazon_movies",
-            "catalog_id": "amazon-movies-tv",
-            "source": "amazon_import",
-        })
-
-        if rating >= 4.0:
-            events.append({
+        events.append(
+            {
                 "event_id": str(uuid.uuid4()),
                 "event_ts": ts,
-                "event_type": "click",
+                "event_type": "rating",
                 "user_id": uid,
                 "movie_id": item_id,
                 "source_content_id": str(item_id),
+                "rating": min(5.0, max(1.0, rating)),
                 "tenant_id": "amazon_movies",
                 "catalog_id": "amazon-movies-tv",
                 "source": "amazon_import",
-            })
+            }
+        )
+
+        if rating >= 4.0:
+            events.append(
+                {
+                    "event_id": str(uuid.uuid4()),
+                    "event_ts": ts,
+                    "event_type": "click",
+                    "user_id": uid,
+                    "movie_id": item_id,
+                    "source_content_id": str(item_id),
+                    "tenant_id": "amazon_movies",
+                    "catalog_id": "amazon-movies-tv",
+                    "source": "amazon_import",
+                }
+            )
 
     total = write_events_batch(events)
     logger.info("Wrote %d Amazon movie events", total)
@@ -155,24 +156,25 @@ def load_amazon_books(max_rows: int = 1_000_000) -> int:
         rating = float(row.get("rating", 3.0))
         ts_raw = row.get("timestamp", 0)
         try:
-            ts = datetime.fromtimestamp(float(ts_raw), tz=timezone.utc).isoformat(
-                timespec="seconds").replace("+00:00", "Z")
+            ts = datetime.fromtimestamp(float(ts_raw), tz=UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
         except Exception:
-            ts = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+            ts = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
         if rating >= 4.0:  # Only strong signals for cross-domain
-            events.append({
-                "event_id": str(uuid.uuid4()),
-                "event_ts": ts,
-                "event_type": "rating",
-                "user_id": uid,
-                "movie_id": item_id,
-                "source_content_id": str(item_id),
-                "rating": min(5.0, max(1.0, rating)),
-                "tenant_id": "amazon_books",
-                "catalog_id": "amazon-books",
-                "source": "amazon_books_import",
-            })
+            events.append(
+                {
+                    "event_id": str(uuid.uuid4()),
+                    "event_ts": ts,
+                    "event_type": "rating",
+                    "user_id": uid,
+                    "movie_id": item_id,
+                    "source_content_id": str(item_id),
+                    "rating": min(5.0, max(1.0, rating)),
+                    "tenant_id": "amazon_books",
+                    "catalog_id": "amazon-books",
+                    "source": "amazon_books_import",
+                }
+            )
 
     total = write_events_batch(events)
     logger.info("Wrote %d Amazon book events (cross-domain signals)", total)

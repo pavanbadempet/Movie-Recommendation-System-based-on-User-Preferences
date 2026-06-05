@@ -7,16 +7,25 @@ import json
 # Fast JSON
 try:
     import orjson as _orjson
-    def _jloads(s): return _or_jloads(s)
-    def _jdumps(obj, **kw) -> str: return _orjson.dumps(obj).decode()
+
+    def _jloads(s):
+        return _orjson.loads(s)
+
+    def _jdumps(obj, **kw) -> str:
+        return _orjson.dumps(obj).decode()
 except ImportError:
-    def _jloads(s): return _jloads(s)
-    def _jdumps(obj, **kw) -> str: return json.dumps(obj, **kw)
-import math
+
+    def _jloads(s):
+        return json.loads(s)
+
+    def _jdumps(obj, **kw) -> str:
+        return json.dumps(obj, **kw)
+
+
 from datetime import UTC, datetime
+import math
 from pathlib import Path
 from typing import Any
-
 
 DEFAULT_RECOMMENDATION_BENCHMARK_PATH = (
     Path(__file__).resolve().parent.parent / "data" / "evaluation" / "recommendation_quality_benchmark.json"

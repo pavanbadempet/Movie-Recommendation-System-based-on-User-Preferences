@@ -5,8 +5,9 @@ These tests skip automatically when PySpark/Java is not available, so the
 serving app can stay lightweight while the ETL path remains testable.
 """
 
-import pytest
 from functools import reduce
+
+import pytest
 
 
 def test_parse_metadata_name_list_normalizes_kaggle_jsonish_values():
@@ -54,12 +55,7 @@ def _movie_snapshot(spark, rows):
     column_types = {column: _column_type(column) for column in columns}
 
     frames = [
-        spark.range(1).select(
-            *[
-                F.lit(row.get(column)).cast(column_types[column]).alias(column)
-                for column in columns
-            ]
-        )
+        spark.range(1).select(*[F.lit(row.get(column)).cast(column_types[column]).alias(column) for column in columns])
         for row in rows
     ]
     return reduce(lambda left, right: left.unionByName(right), frames)
@@ -131,10 +127,7 @@ def test_apply_spark_scd_type2_tracks_changed_and_new_movies(spark_session):
         effective_ts="2026-05-02T00:00:00Z",
     )
 
-    rows = [
-        row.asDict()
-        for row in updated.select("id", "overview", SCD_CURRENT_COL, SCD_END_COL).collect()
-    ]
+    rows = [row.asDict() for row in updated.select("id", "overview", SCD_CURRENT_COL, SCD_END_COL).collect()]
 
     assert len(rows) == 4
     assert sum(1 for row in rows if row["id"] == 1 and row[SCD_CURRENT_COL]) == 1

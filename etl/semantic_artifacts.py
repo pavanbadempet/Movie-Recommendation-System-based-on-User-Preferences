@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import json
 from collections import Counter
+import json
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
 from backend.semantic_twin import build_semantic_twin
-
 
 SEMANTIC_TWIN_ARTIFACT_VERSION = 1
 
@@ -67,7 +66,9 @@ def summarize_semantic_twins(twins: pd.DataFrame, run_id: str, run_date: str) ->
         "avg_confidence": round(float(twins["confidence"].mean()), 6) if len(twins) else 0.0,
         "coverage": {
             "rows_with_concepts": int((twins["concepts"] != "[]").sum()) if "concepts" in twins else 0,
-            "rows_with_emotional_arcs": int((twins["emotional_arcs"] != "[]").sum()) if "emotional_arcs" in twins else 0,
+            "rows_with_emotional_arcs": int((twins["emotional_arcs"] != "[]").sum())
+            if "emotional_arcs" in twins
+            else 0,
             "rows_with_viewer_jobs": int((twins["viewer_jobs"] != "[]").sum()) if "viewer_jobs" in twins else 0,
             "rows_with_risk_tags": int((twins["risk_tags"] != "[]").sum()) if "risk_tags" in twins else 0,
         },

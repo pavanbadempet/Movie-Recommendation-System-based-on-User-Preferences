@@ -7,24 +7,32 @@ Replaces the legacy environment-variable based API keys.
 """
 
 from __future__ import annotations
+
 import os
+
+from dotenv import load_dotenv
+
+load_dotenv()
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 import hmac
-from datetime import datetime, timedelta
-from typing import Any, Optional
-from fastapi import Depends, HTTPException, status, Security, Header
-from fastapi.security import OAuth2PasswordBearer, APIKeyHeader
+import logging
+from typing import Any
+
+from fastapi import Depends, Header, HTTPException, status
+from fastapi.security import APIKeyHeader, OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
-from dataclasses import dataclass
-import logging
 
-from backend.database import get_db, User, APIKey, Tenant
+from backend.database import APIKey, User, get_db
 
 logger = logging.getLogger(__name__)
 
 # Security Settings
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7")
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "").strip()
+if not SECRET_KEY:
+    raise RuntimeError("JWT_SECRET_KEY is required. Set a strong random secret before starting the backend.")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
@@ -35,9 +43,11 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/auth/token")
 api_key_header = APIKeyHeader(name="X-Nova-API-Key", auto_error=False)
 
+
 @dataclass(frozen=True)
 class TenantContext:
     """Resolved customer/catalog context for a request."""
+
     tenant_id: str
     catalog_id: str
     plan: str = "demo"
@@ -70,29 +80,35 @@ def _configured_static_api_keys() -> dict[str, TenantContext]:
         )
     return entries
 
+
 # -----------------------------------------------------------------------------
 # PASSWORD CRYPTOGRAPHY
 # -----------------------------------------------------------------------------
 
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
+
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
+
 
 # -----------------------------------------------------------------------------
 # JWT TOKENS (B2C / Web UI)
 # -----------------------------------------------------------------------------
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(UTC) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
+        expire = datetime.now(UTC) + timedelta(minutes=15)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
 
 async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """Verifies the JWT and loads the user from PostgreSQL."""
@@ -108,15 +124,22 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-        
+
     user = db.query(User).filter(User.external_user_id == user_id).first()
     if user is None:
+        # Token is cryptographically valid but references a user that doesn't
+        # exist in the database. Reject rather than silently create — silent
+        # creation would allow any forged sub claim to gain access.
+        logger.warning("JWT references unknown user_id=%s — rejecting", user_id)
         raise credentials_exception
+
     return user
+
 
 # -----------------------------------------------------------------------------
 # B2B MULTI-TENANT API KEYS
 # -----------------------------------------------------------------------------
+
 
 def resolve_admin_token(
     x_nova_admin_token: str | None = Header(default=None, alias="X-Nova-Admin-Token"),
@@ -127,11 +150,12 @@ def resolve_admin_token(
     if not x_nova_admin_token or not hmac.compare_digest(expected_token, x_nova_admin_token):
         raise HTTPException(status_code=401, detail="Invalid X-Nova-Admin-Token")
 
+
 def resolve_tenant_context(
     x_nova_api_key: str | None = Header(default=None, alias="X-Nova-API-Key"),
     x_tenant_id: str | None = Header(default=None, alias="X-Tenant-ID"),
     x_catalog_id: str | None = Header(default=None, alias="X-Catalog-ID"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ) -> TenantContext:
     """
     Resolve request tenant context directly from PostgreSQL `dim_api_key`
@@ -163,33 +187,31 @@ def resolve_tenant_context(
         )
 
     prefix = x_nova_api_key[:10]
-    potential_keys = db.query(APIKey).filter(
-        APIKey.key_prefix == prefix,
-        APIKey.is_revoked == False
-    ).all()
-    
+    potential_keys = db.query(APIKey).filter(APIKey.key_prefix == prefix, ~APIKey.is_revoked).all()
+
     is_valid = False
     active_tenant = None
-    
+
     for key_record in potential_keys:
         if verify_password(x_nova_api_key, key_record.api_key_hash):
             is_valid = True
             active_tenant = key_record.tenant
             break
-            
+
     if not is_valid or not active_tenant:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid X-Nova-API-Key")
-        
+
     if not active_tenant.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant account suspended.")
-        
+
     return TenantContext(
         tenant_id=str(active_tenant.tenant_id),
         catalog_id=x_catalog_id or DEFAULT_CATALOG_ID,
         plan=active_tenant.plan_tier,
         authenticated=True,
-        api_key_label=active_tenant.company_name
+        api_key_label=active_tenant.company_name,
     )
+
 
 def enforce_payload_context(
     payload: Any,

@@ -19,10 +19,9 @@ Netflix uses a similar approach for their "New Releases" row.
 
 from __future__ import annotations
 
-import logging
-import math
-import random
 from collections import defaultdict
+import logging
+import random
 from typing import Any
 
 import numpy as np
@@ -70,7 +69,7 @@ class ThompsonSamplingBandit:
         """Return uncertainty (variance) of the click probability estimate."""
         alpha, beta = self._item_stats[item_id]
         total = alpha + beta
-        variance = (alpha * beta) / (total ** 2 * (total + 1))
+        variance = (alpha * beta) / (total**2 * (total + 1))
         return float(variance)
 
     def apply_exploration(
@@ -104,7 +103,7 @@ class ThompsonSamplingBandit:
             return candidates[:n]
 
         # Exploitation: top n-1 by score
-        exploit_results = candidates[:max(n - 1, 1)]
+        exploit_results = candidates[: max(n - 1, 1)]
 
         # Exploration: find the item with highest uncertainty not already selected
         selected_ids = {c.get("id") for c in exploit_results}
@@ -170,6 +169,7 @@ def get_thompson_bandit() -> ThompsonSamplingBandit:
         # Initialize from event store
         try:
             from backend.events import iter_events
+
             events = list(iter_events())
             _bandit.load_from_events(events)
         except Exception as exc:

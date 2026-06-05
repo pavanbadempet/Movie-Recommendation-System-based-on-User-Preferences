@@ -10,22 +10,22 @@ Implements all four improvements over the ML-100K baseline:
 Usage:
     python scripts/bootstrap_ml25m.py [--sample N] [--epochs-lgcn N] [--epochs-sasrec N]
 """
+
 from __future__ import annotations
 
 import argparse
+from datetime import UTC, datetime
 import json
 import logging
 import math
+from pathlib import Path
 import sys
 import time
 import uuid
-from datetime import datetime, timezone
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -46,6 +46,7 @@ MODELS_DIR.mkdir(parents=True, exist_ok=True)
 # Step 1: Load ML-25M with TMDB mapping
 # ---------------------------------------------------------------------------
 
+
 def load_ml25m(sample: int | None = None) -> pd.DataFrame:
     """Load ML-25M ratings merged with TMDB IDs. Optionally sample N ratings."""
     ml_dir = ML25_DIR if ML25_DIR.exists() else ML_SMALL_DIR
@@ -63,7 +64,9 @@ def load_ml25m(sample: int | None = None) -> pd.DataFrame:
 
     logger.info(
         "Loaded %d ratings, %d users, %d TMDB movies",
-        len(merged), merged["userId"].nunique(), merged["tmdbId"].nunique(),
+        len(merged),
+        merged["userId"].nunique(),
+        merged["tmdbId"].nunique(),
     )
     return merged
 
@@ -87,9 +90,11 @@ def load_tmdb_metadata() -> pd.DataFrame:
 # Step 2: Write events to APEX Event Store (batch JSONL)
 # ---------------------------------------------------------------------------
 
+
 def write_events(ratings: pd.DataFrame) -> int:
     """Batch-write ML-25M ratings as APEX events."""
     from backend.events import get_events_path
+
     events_path = get_events_path()
     events_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -98,27 +103,47 @@ def write_events(ratings: pd.DataFrame) -> int:
 
     with events_path.open("a", encoding="utf-8") as fh:
         for i, row in enumerate(ratings.itertuples(index=False)):
-            ts = datetime.fromtimestamp(row.timestamp, tz=timezone.utc).isoformat(
-                timespec="seconds").replace("+00:00", "Z")
+            ts = datetime.fromtimestamp(row.timestamp, tz=UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
             uid = f"ml25_user_{row.userId}"
             mid = int(row.tmdbId)
             r = float(row.rating)
 
-            fh.write(json.dumps({
-                "event_id": str(uuid.uuid4()), "event_ts": ts,
-                "event_type": "rating", "user_id": uid, "movie_id": mid,
-                "source_content_id": str(mid), "rating": r,
-                "tenant_id": "movielens25", "catalog_id": "tmdb-movies",
-            }, sort_keys=True) + "\n")
+            fh.write(
+                json.dumps(
+                    {
+                        "event_id": str(uuid.uuid4()),
+                        "event_ts": ts,
+                        "event_type": "rating",
+                        "user_id": uid,
+                        "movie_id": mid,
+                        "source_content_id": str(mid),
+                        "rating": r,
+                        "tenant_id": "movielens25",
+                        "catalog_id": "tmdb-movies",
+                    },
+                    sort_keys=True,
+                )
+                + "\n"
+            )
             total += 1
 
             if r >= 3.5:
-                fh.write(json.dumps({
-                    "event_id": str(uuid.uuid4()), "event_ts": ts,
-                    "event_type": "click", "user_id": uid, "movie_id": mid,
-                    "source_content_id": str(mid),
-                    "tenant_id": "movielens25", "catalog_id": "tmdb-movies",
-                }, sort_keys=True) + "\n")
+                fh.write(
+                    json.dumps(
+                        {
+                            "event_id": str(uuid.uuid4()),
+                            "event_ts": ts,
+                            "event_type": "click",
+                            "user_id": uid,
+                            "movie_id": mid,
+                            "source_content_id": str(mid),
+                            "tenant_id": "movielens25",
+                            "catalog_id": "tmdb-movies",
+                        },
+                        sort_keys=True,
+                    )
+                    + "\n"
+                )
                 total += 1
 
             if (i + 1) % 100000 == 0:
@@ -132,9 +157,11 @@ def write_events(ratings: pd.DataFrame) -> int:
 # Step 3: Train deeper LightGCN (Improvement 2)
 # ---------------------------------------------------------------------------
 
+
 def train_lightgcn(ratings: pd.DataFrame, epochs: int = 200, emb_dim: int = 32) -> None:
     """Train LightGCN with more epochs and larger embeddings on ML-25M."""
     import scipy.sparse as sp
+
     from backend.lightgcn import LightGCN
 
     logger.info("Building LightGCN interaction graph...")
@@ -153,10 +180,9 @@ def train_lightgcn(ratings: pd.DataFrame, epochs: int = 200, emb_dim: int = 32) 
     data = np.ones(len(rows), dtype=np.float32)
     R = sp.csr_matrix((data, (rows, cols)), shape=(num_users, num_items))
 
-    adj = sp.bmat([
-        [sp.csr_matrix((num_users, num_users)), R],
-        [R.T, sp.csr_matrix((num_items, num_items))]
-    ], format="csr")
+    adj = sp.bmat(
+        [[sp.csr_matrix((num_users, num_users)), R], [R.T, sp.csr_matrix((num_items, num_items))]], format="csr"
+    )
 
     deg = np.array(adj.sum(axis=1)).flatten()
     d_inv = np.power(deg + 1e-8, -0.5)
@@ -166,9 +192,7 @@ def train_lightgcn(ratings: pd.DataFrame, epochs: int = 200, emb_dim: int = 32) 
     coo = adj_norm.tocoo()
     indices = torch.tensor(np.vstack([coo.row, coo.col]), dtype=torch.long)
     values = torch.tensor(coo.data, dtype=torch.float32)
-    adj_sparse = torch.sparse_coo_tensor(
-        indices, values, size=(num_users + num_items, num_users + num_items)
-    ).coalesce()
+    torch.sparse_coo_tensor(indices, values, size=(num_users + num_items, num_users + num_items)).coalesce()
 
     model = LightGCN(num_users=num_users, num_items=num_items, embedding_dim=emb_dim, num_layers=3)
     optimizer = torch.optim.Adam(model.parameters(), lr=5e-4, weight_decay=1e-5)
@@ -190,7 +214,7 @@ def train_lightgcn(ratings: pd.DataFrame, epochs: int = 200, emb_dim: int = 32) 
         idx = rng.permutation(len(u_arr))
         total_loss, n_batches = 0.0, 0
         for start in range(0, len(idx), batch_size):
-            bi = idx[start:start + batch_size]
+            bi = idx[start : start + batch_size]
             u = torch.tensor(u_arr[bi], dtype=torch.long)
             p = torch.tensor(p_arr[bi], dtype=torch.long)
             n = torch.tensor(n_arr[bi], dtype=torch.long)
@@ -227,15 +251,18 @@ def train_lightgcn(ratings: pd.DataFrame, epochs: int = 200, emb_dim: int = 32) 
         u_embs = model.user_embedding.weight.cpu().numpy()
         i_embs = model.item_embedding.weight.cpu().numpy()
     pd.DataFrame([{"id": uid, "features": u_embs[user_map[uid]].tolist()} for uid in user_ids]).to_parquet(
-        GOLD_DIR / "model_user_embeddings" / "part-0.parquet")
+        GOLD_DIR / "model_user_embeddings" / "part-0.parquet"
+    )
     pd.DataFrame([{"id": mid, "features": i_embs[item_map[mid]].tolist()} for mid in item_ids]).to_parquet(
-        GOLD_DIR / "model_item_embeddings" / "part-0.parquet")
+        GOLD_DIR / "model_item_embeddings" / "part-0.parquet"
+    )
     logger.info("LightGCN embeddings exported: %d users, %d items", num_users, num_items)
 
 
 # ---------------------------------------------------------------------------
 # Step 4: Train SASRec on real chronological sequences (Improvement 3)
 # ---------------------------------------------------------------------------
+
 
 def train_sasrec(ratings: pd.DataFrame, epochs: int = 50, max_users: int = 50000) -> None:
     """Train SASRec on real ML-25M watch sequences ordered by timestamp."""
@@ -294,7 +321,7 @@ def train_sasrec(ratings: pd.DataFrame, epochs: int = 50, max_users: int = 50000
                 continue
             # Pick a random position in the sequence
             pos = rng.integers(1, len(seq))
-            inp = seq[max(0, pos - MAX_SEQ):pos]
+            inp = seq[max(0, pos - MAX_SEQ) : pos]
             inp = [0] * (MAX_SEQ - len(inp)) + inp
             seqs_batch.append(inp)
             targets_batch.append(seq[pos])
@@ -304,7 +331,7 @@ def train_sasrec(ratings: pd.DataFrame, epochs: int = 50, max_users: int = 50000
 
         idx = rng.permutation(len(seqs_batch))
         for start in range(0, len(idx), batch_size):
-            bi = idx[start:start + batch_size]
+            bi = idx[start : start + batch_size]
             seqs_t = torch.tensor([seqs_batch[i] for i in bi], dtype=torch.long)
             pos_t = torch.tensor([targets_batch[i] for i in bi], dtype=torch.long)
             neg_t = torch.tensor(rng.integers(1, num_items + 1, size=len(bi)), dtype=torch.long)
@@ -335,10 +362,12 @@ def train_sasrec(ratings: pd.DataFrame, epochs: int = 50, max_users: int = 50000
 # Step 5: Fine-tune Two-Tower with TMDB-enriched features (Improvement 4)
 # ---------------------------------------------------------------------------
 
+
 def train_two_tower_enriched(ratings: pd.DataFrame, tmdb_meta: pd.DataFrame, epochs: int = 10) -> None:
     """Fine-tune Two-Tower using LightGCN embeddings + TMDB metadata as item features."""
+    from torch.utils.data import DataLoader, Dataset
+
     from backend.two_tower import TwoTowerModel
-    from torch.utils.data import Dataset, DataLoader
 
     logger.info("Building enriched Two-Tower training data...")
 
@@ -350,8 +379,9 @@ def train_two_tower_enriched(ratings: pd.DataFrame, tmdb_meta: pd.DataFrame, epo
         user_emb_df = pd.read_parquet(user_emb_path)
         item_emb_df = pd.read_parquet(item_emb_path)
         emb_dim = len(user_emb_df.iloc[0]["features"])
-        logger.info("Loaded LightGCN embeddings: %d users, %d items (dim=%d)",
-                    len(user_emb_df), len(item_emb_df), emb_dim)
+        logger.info(
+            "Loaded LightGCN embeddings: %d users, %d items (dim=%d)", len(user_emb_df), len(item_emb_df), emb_dim
+        )
         user_als = {int(r["id"]): np.array(r["features"], dtype=np.float32) for _, r in user_emb_df.iterrows()}
         item_als = {int(r["id"]): np.array(r["features"], dtype=np.float32) for _, r in item_emb_df.iterrows()}
     else:
@@ -375,20 +405,27 @@ def train_two_tower_enriched(ratings: pd.DataFrame, tmdb_meta: pd.DataFrame, epo
     item_feat_dim = emb_dim + 4
 
     # Aggregate user stats
-    user_stats = ratings.groupby("userId").agg(
-        total_ratings=("rating", "count"),
-        avg_rating=("rating", "mean"),
-    ).reset_index()
+    user_stats = (
+        ratings.groupby("userId")
+        .agg(
+            total_ratings=("rating", "count"),
+            avg_rating=("rating", "mean"),
+        )
+        .reset_index()
+    )
     user_stats_map = {int(r["userId"]): r for _, r in user_stats.iterrows()}
 
     def build_user_feat(uid: int) -> np.ndarray:
         als = user_als.get(uid, np.zeros(emb_dim, dtype=np.float32))
-        stats = user_stats_map.get(uid, None)
+        stats = user_stats_map.get(uid)
         if stats is not None:
-            activity = np.array([
-                math.log1p(float(stats["total_ratings"])) / math.log1p(1000),
-                float(stats["avg_rating"]) / 5.0,
-            ], dtype=np.float32)
+            activity = np.array(
+                [
+                    math.log1p(float(stats["total_ratings"])) / math.log1p(1000),
+                    float(stats["avg_rating"]) / 5.0,
+                ],
+                dtype=np.float32,
+            )
         else:
             activity = np.zeros(2, dtype=np.float32)
         return np.concatenate([als[:emb_dim], activity])
@@ -417,7 +454,7 @@ def train_two_tower_enriched(ratings: pd.DataFrame, tmdb_meta: pd.DataFrame, epo
     idx = rng.permutation(len(positives))
     split = int(len(positives) * 0.8)
     train_pairs = positives[idx[:split]]
-    val_pairs = positives[idx[split:]]
+    positives[idx[split:]]
 
     class PairDataset(Dataset):
         def __init__(self, pairs, num_negatives=4):
@@ -428,7 +465,8 @@ def train_two_tower_enriched(ratings: pd.DataFrame, tmdb_meta: pd.DataFrame, epo
             for uid, mid in pairs:
                 self.user_pos.setdefault(int(uid), set()).add(int(mid))
 
-        def __len__(self): return len(self.pairs)
+        def __len__(self):
+            return len(self.pairs)
 
         def __getitem__(self, i):
             uid, mid = int(self.pairs[i][0]), int(self.pairs[i][1])
@@ -488,8 +526,10 @@ def train_two_tower_enriched(ratings: pd.DataFrame, tmdb_meta: pd.DataFrame, epo
 # Step 6: Run RL + ensemble calibration
 # ---------------------------------------------------------------------------
 
+
 def run_calibration() -> None:
     import subprocess
+
     scripts = [
         ("RL policy", ["python", "scripts/train_rl_policy_compact.py", "--epochs", "300"]),
         ("Ensemble weights", ["python", "scripts/optimize_ensemble_weights.py", "--num-candidates", "500"]),
@@ -504,6 +544,7 @@ def run_calibration() -> None:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main(
     sample: int | None = None,

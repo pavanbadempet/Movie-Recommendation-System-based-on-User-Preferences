@@ -1,11 +1,12 @@
 """Rebuild aligned vector serving artifacts from the current serving catalog."""
+
 from __future__ import annotations
 
 import argparse
 import json
 import os
-import sys
 from pathlib import Path
+import sys
 from typing import Any
 
 import numpy as np
@@ -22,7 +23,6 @@ from etl.pandas_etl import (
     movie_id_vector,
 )
 from scripts.backfill_serving_metadata_artifacts import build_backfill_artifacts, upload_artifacts
-
 
 DEFAULT_MODEL_NAME = "all-mpnet-base-v2"
 

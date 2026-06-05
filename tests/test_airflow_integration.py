@@ -4,9 +4,9 @@ Test script to verify Airflow can interact with Kafka and Spark services.
 This script tests the connectivity between services in the Docker Compose setup.
 """
 
-import sys
 import logging
 import os
+import sys
 
 import pytest
 
@@ -25,13 +25,11 @@ SparkSession = pytest.importorskip("pyspark.sql").SparkSession
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 def test_kafka_connection():
     """Test Kafka connection from Airflow context"""
     try:
-        admin_client = KafkaAdminClient(
-            bootstrap_servers="kafka:9092",
-            client_id='integration-test'
-        )
+        admin_client = KafkaAdminClient(bootstrap_servers="kafka:9092", client_id="integration-test")
         topics = admin_client.list_topics()
         admin_client.close()
         logger.info(f"✓ Kafka connection successful. Topics: {topics}")
@@ -40,15 +38,17 @@ def test_kafka_connection():
         logger.error(f"✗ Kafka connection failed: {e}")
         return False
 
+
 def test_spark_connection():
     """Test Spark connection from Airflow context"""
     try:
-        spark = SparkSession.builder \
-            .appName("IntegrationTest") \
-            .master("spark://spark:7077") \
-            .config("spark.executor.memory", "2g") \
-            .config("spark.driver.memory", "1g") \
+        spark = (
+            SparkSession.builder.appName("IntegrationTest")
+            .master("spark://spark:7077")
+            .config("spark.executor.memory", "2g")
+            .config("spark.driver.memory", "1g")
             .getOrCreate()
+        )
 
         spark_version = spark.version
         spark.stop()
@@ -58,22 +58,17 @@ def test_spark_connection():
         logger.error(f"✗ Spark connection failed: {e}")
         return False
 
+
 def test_kafka_producer():
     """Test producing messages to Kafka"""
     try:
-        producer = KafkaProducer(
-            bootstrap_servers='kafka:9092',
-            value_serializer=lambda v: str(v).encode('utf-8')
-        )
+        producer = KafkaProducer(bootstrap_servers="kafka:9092", value_serializer=lambda v: str(v).encode("utf-8"))
 
         # Create test topic if it doesn't exist
-        admin_client = KafkaAdminClient(
-            bootstrap_servers="kafka:9092",
-            client_id='integration-test'
-        )
+        admin_client = KafkaAdminClient(bootstrap_servers="kafka:9092", client_id="integration-test")
 
         # Test producing a message
-        producer.send('test_topic', value="test_message")
+        producer.send("test_topic", value="test_message")
         producer.flush()
         producer.close()
         admin_client.close()
@@ -84,25 +79,28 @@ def test_kafka_producer():
         logger.error(f"✗ Kafka message production failed: {e}")
         return False
 
+
 def test_spark_kafka_integration():
     """Test Spark reading from Kafka"""
     try:
-        spark = SparkSession.builder \
-            .appName("KafkaIntegrationTest") \
-            .master("spark://spark:7077") \
-            .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0") \
+        spark = (
+            SparkSession.builder.appName("KafkaIntegrationTest")
+            .master("spark://spark:7077")
+            .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0")
             .getOrCreate()
+        )
 
         # Test reading from Kafka (this will fail if the connector is not available)
-        df = spark.readStream \
-            .format("kafka") \
-            .option("kafka.bootstrap.servers", "kafka:9092") \
-            .option("subscribe", "test_topic") \
-            .option("startingOffsets", "earliest") \
+        df = (
+            spark.readStream.format("kafka")
+            .option("kafka.bootstrap.servers", "kafka:9092")
+            .option("subscribe", "test_topic")
+            .option("startingOffsets", "earliest")
             .load()
+        )
 
         # Just test the schema to verify the connector works
-        df.schema
+        _ = df.schema
         spark.stop()
 
         logger.info("✓ Spark Kafka connector available and working")
@@ -110,6 +108,7 @@ def test_spark_kafka_integration():
     except Exception as e:
         logger.error(f"✗ Spark Kafka integration failed: {e}")
         return False
+
 
 def main():
     """Run all integration tests"""
@@ -143,6 +142,7 @@ def main():
     else:
         logger.error("\n✗ Some integration tests failed!")
         return 1
+
 
 if __name__ == "__main__":
     sys.exit(main())

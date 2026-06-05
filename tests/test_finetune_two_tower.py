@@ -5,16 +5,18 @@ Feature: apex-peak-capability, Property 5 & 6: Fine-Tuning Negative Ratio
 and Positive Pair Filter
 Validates: Requirements 4.1, 4.2
 """
+
 from __future__ import annotations
 
 import os
 import sys
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+from hypothesis import given, settings
+from hypothesis import strategies as st
 import numpy as np
 import pytest
-from hypothesis import assume, given, settings
-from hypothesis import strategies as st
+import torch
 
 # Ensure scripts/ is importable
 _REPO_ROOT = os.path.join(os.path.dirname(__file__), "..")
@@ -44,12 +46,14 @@ def _make_event(event_type: str, rating: float | None = None, user_id: str = "u1
 
 @given(
     events=st.lists(
-        st.fixed_dictionaries({
-            "event_type": st.sampled_from(EVENT_TYPES),
-            "rating": st.one_of(st.none(), st.floats(min_value=1.0, max_value=5.0, allow_nan=False)),
-            "user_id": st.just("u1"),
-            "movie_id": st.integers(min_value=1, max_value=1000),
-        }),
+        st.fixed_dictionaries(
+            {
+                "event_type": st.sampled_from(EVENT_TYPES),
+                "rating": st.one_of(st.none(), st.floats(min_value=1.0, max_value=5.0, allow_nan=False)),
+                "user_id": st.just("u1"),
+                "movie_id": st.integers(min_value=1, max_value=1000),
+            }
+        ),
         min_size=0,
         max_size=50,
     )
@@ -72,15 +76,11 @@ def test_positive_pair_filter_property(events: list[dict]):
         uid = e.get("user_id")
         if mid is None or uid is None:
             continue
-        if et == "click":
-            qualifying_movie_ids.add(mid)
-        elif et == "rating" and r is not None and float(r) >= 3.5:
+        if et == "click" or et == "rating" and r is not None and float(r) >= 3.5:
             qualifying_movie_ids.add(mid)
 
     for _, mid in pairs:
-        assert mid in qualifying_movie_ids, (
-            f"movie_id {mid} in pairs but not from a qualifying event"
-        )
+        assert mid in qualifying_movie_ids, f"movie_id {mid} in pairs but not from a qualifying event"
 
 
 @given(
@@ -92,8 +92,9 @@ def test_negative_ratio_property(num_positives: int):
     Feature: apex-peak-capability, Property 5
     TwoTowerDataset produces exactly num_negatives=4 negatives per positive.
     """
-    from scripts.train_two_tower import TwoTowerDataset
     import pandas as pd
+
+    from scripts.train_two_tower import TwoTowerDataset
 
     num_negatives = 4
     num_items = 200
@@ -114,9 +115,7 @@ def test_negative_ratio_property(num_positives: int):
 
     for i in range(len(dataset)):
         _, _, neg_feats = dataset[i]
-        assert neg_feats.shape[0] == num_negatives, (
-            f"Expected {num_negatives} negatives, got {neg_feats.shape[0]}"
-        )
+        assert neg_feats.shape[0] == num_negatives, f"Expected {num_negatives} negatives, got {neg_feats.shape[0]}"
 
 
 # ---------------------------------------------------------------------------
@@ -181,3 +180,132 @@ class TestPositivePairExtraction:
         with patch("scripts.finetune_two_tower.iter_events", return_value=iter(events)):
             pairs = extract_positive_pairs()
         assert len(pairs) == 0
+
+
+# ---------------------------------------------------------------------------
+# Unit tests: min-pairs guard, output file creation, NaN loss guard
+# ---------------------------------------------------------------------------
+
+
+class TestMinPairsGuard:
+    """Tests for the < 100 positive pairs guard (Requirement 4.3)."""
+
+    def test_fewer_than_100_pairs_exits_zero(self):
+        """When fewer than 100 positive pairs exist, finetune() calls sys.exit(0)."""
+        from scripts.finetune_two_tower import finetune
+
+        # Provide 50 qualifying click events (< 100 pairs)
+        events = [_make_event("click", movie_id=i, user_id=f"u{i}") for i in range(1, 51)]
+
+        with (
+            patch("scripts.finetune_two_tower.iter_events", return_value=iter(events)),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            finetune(epochs=1, lr=1e-4, num_negatives=4)
+        assert exc_info.value.code == 0, f"Expected sys.exit(0) for < 100 pairs, got exit code {exc_info.value.code}"
+
+    def test_zero_pairs_exits_zero(self):
+        """When there are zero qualifying events, finetune() calls sys.exit(0)."""
+        from scripts.finetune_two_tower import finetune
+
+        # Only view events — none qualify
+        events = [_make_event("view", movie_id=i) for i in range(1, 200)]
+
+        with (
+            patch("scripts.finetune_two_tower.iter_events", return_value=iter(events)),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            finetune(epochs=1, lr=1e-4, num_negatives=4)
+        assert exc_info.value.code == 0
+
+    def test_exactly_99_pairs_exits_zero(self):
+        """Boundary: exactly 99 qualifying events → sys.exit(0)."""
+        from scripts.finetune_two_tower import finetune
+
+        events = [_make_event("click", movie_id=i, user_id=f"u{i}") for i in range(1, 100)]
+        assert len(events) == 99
+
+        with (
+            patch("scripts.finetune_two_tower.iter_events", return_value=iter(events)),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            finetune(epochs=1, lr=1e-4, num_negatives=4)
+        assert exc_info.value.code == 0
+
+
+class TestOutputFileCreation:
+    """Tests that finetune() writes models/two_tower_finetuned.pth on success."""
+
+    def _make_events(self, n: int = 120) -> list[dict]:
+        """Generate n qualifying click events with distinct users and movies."""
+        return [_make_event("click", movie_id=i, user_id=f"u{i}") for i in range(1, n + 1)]
+
+    def test_output_file_created_on_success(self, tmp_path):
+        """
+        When >= 100 pairs exist and training completes without NaN,
+        models/two_tower_finetuned.pth is written.
+        """
+        from scripts.finetune_two_tower import finetune
+
+        events = self._make_events(120)
+
+        with (
+            patch("scripts.finetune_two_tower.iter_events", return_value=iter(events)),
+            patch("scripts.finetune_two_tower.MODELS_DIR", tmp_path),
+            patch("scripts.finetune_two_tower._load_als_embeddings", return_value=(None, None)),
+            patch("scripts.finetune_two_tower.build_live_user_features") as mock_user_feats,
+            patch("scripts.finetune_two_tower.build_live_item_features") as mock_item_feats,
+        ):
+            # Build minimal feature dicts for 120 users/items
+            user_features = {f"u{i}": np.zeros(18, dtype=np.float32) for i in range(1, 121)}
+            item_features = {i: np.zeros(20, dtype=np.float32) for i in range(1, 121)}
+            mock_user_feats.return_value = user_features
+            mock_item_feats.return_value = item_features
+
+            finetune(epochs=1, lr=1e-4, num_negatives=4)
+
+        output_file = tmp_path / "two_tower_finetuned.pth"
+        assert output_file.exists(), "Expected two_tower_finetuned.pth to be created after successful fine-tuning"
+        # Verify it's a valid PyTorch state dict
+        state_dict = torch.load(str(output_file), map_location="cpu", weights_only=True)
+        assert isinstance(state_dict, dict)
+        assert len(state_dict) > 0
+
+
+class TestNaNLossGuard:
+    """Tests for the NaN loss guard (Requirement 4.4 / design error handling)."""
+
+    def test_nan_loss_exits_one_no_file_written(self, tmp_path):
+        """
+        When training produces NaN loss, finetune() calls sys.exit(1)
+        and does NOT write the output model file.
+        """
+        from backend.two_tower import TwoTowerModel
+        from scripts.finetune_two_tower import finetune
+
+        events = [_make_event("click", movie_id=i, user_id=f"u{i}") for i in range(1, 121)]
+
+        # Patch compute_contrastive_loss to return NaN
+        nan_loss = MagicMock()
+        nan_loss.item.return_value = float("nan")
+        nan_loss.backward = MagicMock()
+
+        with (
+            patch("scripts.finetune_two_tower.iter_events", return_value=iter(events)),
+            patch("scripts.finetune_two_tower.MODELS_DIR", tmp_path),
+            patch("scripts.finetune_two_tower._load_als_embeddings", return_value=(None, None)),
+            patch("scripts.finetune_two_tower.build_live_user_features") as mock_user_feats,
+            patch("scripts.finetune_two_tower.build_live_item_features") as mock_item_feats,
+            patch.object(TwoTowerModel, "compute_contrastive_loss", return_value=nan_loss),
+        ):
+            user_features = {f"u{i}": np.zeros(18, dtype=np.float32) for i in range(1, 121)}
+            item_features = {i: np.zeros(20, dtype=np.float32) for i in range(1, 121)}
+            mock_user_feats.return_value = user_features
+            mock_item_feats.return_value = item_features
+
+            with pytest.raises(SystemExit) as exc_info:
+                finetune(epochs=1, lr=1e-4, num_negatives=4)
+
+        assert exc_info.value.code == 1, f"Expected sys.exit(1) on NaN loss, got exit code {exc_info.value.code}"
+        output_file = tmp_path / "two_tower_finetuned.pth"
+        assert not output_file.exists(), "Model file should NOT be written when NaN loss is detected"

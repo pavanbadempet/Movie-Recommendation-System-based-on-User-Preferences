@@ -8,6 +8,7 @@ tradeoffs without paid inference.
 
 from __future__ import annotations
 
+import contextlib
 import re
 from typing import Any
 
@@ -52,15 +53,13 @@ def parse_query_intent(query: str) -> dict[str, Any]:
     }
 
 
-def intent_score(movie: dict[str, Any], intent: dict[str, Any], current_year: int | None = None) -> tuple[float, list[str]]:
+def intent_score(
+    movie: dict[str, Any], intent: dict[str, Any], current_year: int | None = None
+) -> tuple[float, list[str]]:
     """Return a bounded score adjustment and explanations for a movie."""
     score = 0.0
     reasons = []
-    movie_genres = {
-        part.strip().lower()
-        for part in str(movie.get("genres") or "").split(",")
-        if part.strip()
-    }
+    movie_genres = {part.strip().lower() for part in str(movie.get("genres") or "").split(",") if part.strip()}
     desired_genres = set(intent.get("genres") or [])
     if desired_genres:
         overlap = desired_genres & movie_genres
@@ -71,10 +70,8 @@ def intent_score(movie: dict[str, Any], intent: dict[str, Any], current_year: in
             score -= 0.025
 
     release_year = None
-    try:
+    with contextlib.suppress(TypeError, ValueError):
         release_year = int(str(movie.get("release_date") or "")[:4])
-    except (TypeError, ValueError):
-        pass
 
     current_year = current_year or 2026
     if intent.get("recent") and release_year and current_year - release_year <= 5:
@@ -95,4 +92,3 @@ def intent_score(movie: dict[str, Any], intent: dict[str, Any], current_year: in
         reasons.append("matches family-safe intent")
 
     return max(-0.08, min(0.22, score)), reasons[:3]
-

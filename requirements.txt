@@ -1,49 +1,51 @@
 # Movie Recommendation System - Dependencies
-# Updated for FAISS-based similarity search
+# Pinned to exact versions for reproducible builds.
+# To upgrade: pip install --upgrade <package> && pip freeze | grep <package>
 
 # Core data processing
-pandas>=2.0.0
-numpy>=1.24.0
-pyarrow>=14.0.0  # Parquet support
+pandas==3.0.2
+numpy==2.4.4
+pyarrow==14.0.1  # Parquet support — pinned to last stable 14.x for broad compat
 
 # Machine learning & NLP
-scikit-learn>=1.3.0
-sentence-transformers>=2.2.0  # Neural embeddings (SBERT)
-faiss-cpu>=1.7.4  # Similarity search (use faiss-gpu for GPU)
-onnx>=1.15.0  # Export models
-onnxruntime>=1.16.0  # Lightning-fast CPU inference
-transformers>=4.34.0  # CLIP Vision Encoding
-Pillow>=10.0.0  # Image processing
+scikit-learn==1.8.0
+sentence-transformers==5.4.1  # Neural embeddings (SBERT)
+faiss-cpu==1.13.2             # Similarity search (swap for faiss-gpu on GPU hosts)
+onnx==1.21.0                  # Model export
+onnxruntime==1.26.0           # Lightning-fast CPU inference
+transformers==5.7.0           # CLIP Vision Encoding
+Pillow==12.2.0                # Image processing
 
 # Data validation
-pandera>=0.17.0
+pandera==0.31.1
 
 # Web backend
-fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
-pydantic>=2.0.0
-slowapi>=0.1.8  # Rate limiting
+fastapi==0.136.1
+uvicorn[standard]==0.46.0
+pydantic==2.13.3
+slowapi==0.1.9                # Rate limiting
 
 # Frontend
-streamlit>=1.54.0
-st-clickable-images>=0.0.3  # Clickable image grid
-plotly>=5.0.0  # Frontend charts
-requests>=2.31.0
+streamlit==1.57.0
+st-clickable-images==0.0.3    # Clickable image grid
+plotly==6.7.0                 # Frontend charts
+requests==2.33.1
 
 # Utilities
-python-dotenv>=1.0.0
-joblib>=1.3.0
-sentry-sdk[fastapi,pure_eval]>=1.39.0  # Error Monitoring
-httpx>=0.25.0  # Async HTTP client
-psycopg[binary]>=3.1.0  # Durable Postgres driver
-sqlalchemy>=2.0.0  # ORM and Connection Pooling
-python-jose[cryptography]>=3.3.0  # JWT auth
-passlib[bcrypt]>=1.7.4  # Password hashing
-prometheus-client>=0.19.0  # Observability metrics
-psutil>=5.9.0  # Hardware detection (RAM, CPU cores)
-mlflow>=2.7.0  # Experiment tracking
+python-dotenv==1.2.2
+joblib==1.5.3
+sentry-sdk[fastapi,pure_eval]==2.58.0  # Error Monitoring
+httpx==0.28.1                          # Async HTTP client
+psycopg[binary]==3.3.4                 # Durable Postgres driver
+sqlalchemy==2.0.49                     # ORM and Connection Pooling
+python-jose[cryptography]==3.5.0       # JWT auth
+passlib[bcrypt]==1.7.4                 # Password hashing
+prometheus-client==0.25.0             # Observability metrics
+psutil==7.2.2                          # Hardware detection (RAM, CPU cores)
+
 # Optional performance dependencies
-orjson>=3.9.0  # Fast JSON serialization (Requirement 6.1); falls back to stdlib json if absent
+orjson==3.11.8  # Fast JSON serialization; falls back to stdlib json if absent
 
 # Development & testing
-pytest>=7.4.0
+pytest==8.4.2
+hypothesis==6.152.4  # Property-based testing

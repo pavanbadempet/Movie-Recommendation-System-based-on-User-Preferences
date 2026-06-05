@@ -8,11 +8,10 @@ risk tags.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import math
 import re
-from dataclasses import dataclass
 from typing import Any
-
 
 STOPWORDS = {
     "about",
@@ -192,10 +191,7 @@ def _top_concepts(movie: dict[str, Any], limit: int = 14) -> list[str]:
             counts[token] += 1.25
         if token in genre_tokens:
             counts[token] += 0.75
-    return [
-        token
-        for token, _score in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]
-    ]
+    return [token for token, _score in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]]
 
 
 def _labels_from_lexicon(tokens: set[str], lexicon: dict[str, set[str]]) -> list[str]:

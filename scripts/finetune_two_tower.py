@@ -30,9 +30,10 @@ import sys
 # Ensure project root is on the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from pathlib import Path
+
 import numpy as np
 import torch
-from pathlib import Path
 from torch.utils.data import DataLoader
 
 from backend.events import iter_events
@@ -41,8 +42,6 @@ from backend.two_tower import TwoTowerModel
 # Re-use dataset and feature helpers from the base training script
 from scripts.train_two_tower import (
     TwoTowerDataset,
-    build_item_features,
-    build_user_features,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -189,9 +188,7 @@ def build_live_user_features(
             als_emb = als_user_embs[uid][:16]  # cap to 16d
             num_interactions = user_interaction_counts.get(uid, 0)
             avg_rating = (
-                user_rating_sums.get(uid, 0.0) / user_rating_counts[uid]
-                if user_rating_counts.get(uid, 0) > 0
-                else 3.0
+                user_rating_sums.get(uid, 0.0) / user_rating_counts[uid] if user_rating_counts.get(uid, 0) > 0 else 3.0
             )
             activity = np.array(
                 [
@@ -205,9 +202,7 @@ def build_live_user_features(
             # Simple proxy: [log1p(num_interactions)/log1p(100), avg_rating/5.0] + zeros to 18d
             num_interactions = user_interaction_counts.get(uid, 0)
             avg_rating = (
-                user_rating_sums.get(uid, 0.0) / user_rating_counts[uid]
-                if user_rating_counts.get(uid, 0) > 0
-                else 3.0
+                user_rating_sums.get(uid, 0.0) / user_rating_counts[uid] if user_rating_counts.get(uid, 0) > 0 else 3.0
             )
             proxy = np.array(
                 [
@@ -278,9 +273,7 @@ def compute_hit_rate_at_k(
         return 0.0
 
     # Encode all validation items
-    val_item_feats = np.array(
-        [item_features[mid] for mid in val_item_ids], dtype=np.float32
-    )
+    val_item_feats = np.array([item_features[mid] for mid in val_item_ids], dtype=np.float32)
     with torch.no_grad():
         item_tensor = torch.tensor(val_item_feats, dtype=torch.float32).to(device)
         item_embs = model.item_tower(item_tensor)  # [N_items, D]
@@ -292,9 +285,7 @@ def compute_hit_rate_at_k(
         if user_id not in user_features or gt_item_id not in item_features:
             continue
 
-        user_feat = torch.tensor(
-            user_features[user_id], dtype=torch.float32
-        ).unsqueeze(0).to(device)
+        user_feat = torch.tensor(user_features[user_id], dtype=torch.float32).unsqueeze(0).to(device)
 
         with torch.no_grad():
             user_emb = model.user_tower(user_feat)  # [1, D]
@@ -325,8 +316,7 @@ def finetune(
 
     if len(pairs) < 100:
         logger.warning(
-            "Fewer than 100 positive pairs found (%d). "
-            "Skipping fine-tuning — no model file written.",
+            "Fewer than 100 positive pairs found (%d). Skipping fine-tuning — no model file written.",
             len(pairs),
         )
         sys.exit(0)
@@ -340,11 +330,7 @@ def finetune(
     item_features = build_live_item_features(pairs, als_item_embs)
 
     # Filter pairs to those with features on both sides
-    valid_pairs = [
-        (uid, mid)
-        for uid, mid in pairs
-        if uid in user_features and mid in item_features
-    ]
+    valid_pairs = [(uid, mid) for uid, mid in pairs if uid in user_features and mid in item_features]
     if len(valid_pairs) < 100:
         logger.warning(
             "After feature filtering, fewer than 100 valid pairs remain (%d). "
@@ -381,12 +367,10 @@ def finetune(
     # We use string user IDs from live events; build a mapping
     unique_user_ids = list({uid for uid, _ in valid_pairs})
     user_id_to_int: dict[str, int] = {uid: i for i, uid in enumerate(unique_user_ids)}
-    int_to_user_id: dict[int, str] = {i: uid for uid, i in user_id_to_int.items()}
+    {i: uid for uid, i in user_id_to_int.items()}
 
     # Remap user features to int keys for TwoTowerDataset compatibility
-    user_features_int: dict[int, np.ndarray] = {
-        user_id_to_int[uid]: feat for uid, feat in user_features.items()
-    }
+    user_features_int: dict[int, np.ndarray] = {user_id_to_int[uid]: feat for uid, feat in user_features.items()}
 
     train_df["userId"] = train_df["userId"].map(user_id_to_int)
 
@@ -460,8 +444,7 @@ def finetune(
         # Check for NaN loss
         if math.isnan(avg_loss):
             logger.error(
-                "NaN loss detected at epoch %d/%d. "
-                "Aborting fine-tuning — no model file written.",
+                "NaN loss detected at epoch %d/%d. Aborting fine-tuning — no model file written.",
                 epoch + 1,
                 epochs,
             )
@@ -472,11 +455,7 @@ def finetune(
 
     # ── Task 8.3: Validation Hit_Rate@10 ──────────────────────────────────────
     # Remap val_pairs back to int user IDs for evaluation
-    val_pairs_int = [
-        (user_id_to_int[uid], mid)
-        for uid, mid in val_pairs
-        if uid in user_id_to_int
-    ]
+    val_pairs_int = [(user_id_to_int[uid], mid) for uid, mid in val_pairs if uid in user_id_to_int]
 
     hit_rate = compute_hit_rate_at_k(
         model=model,

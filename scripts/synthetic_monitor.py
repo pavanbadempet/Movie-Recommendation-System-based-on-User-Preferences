@@ -8,13 +8,13 @@ recommendation case.
 from __future__ import annotations
 
 import argparse
+from datetime import UTC, datetime
 import json
+from pathlib import Path
 import time
+from typing import Any
 import urllib.parse
 import urllib.request
-from datetime import UTC, datetime
-from pathlib import Path
-from typing import Any
 
 
 def _url(base_url: str, path: str) -> str:
@@ -193,7 +193,9 @@ def evaluate_synthetic_monitor(args: argparse.Namespace) -> dict[str, Any]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base-url", action="append", required=True, help="Base API URL to probe. Repeat for failover targets.")
+    parser.add_argument(
+        "--base-url", action="append", required=True, help="Base API URL to probe. Repeat for failover targets."
+    )
     parser.add_argument("--timeout", type=int, default=30)
     parser.add_argument("--output", type=Path, default=Path("reports/synthetic_monitor.json"))
     parser.add_argument("--skip-recommendations", action="store_true", help="Skip the heavier recommendation path.")

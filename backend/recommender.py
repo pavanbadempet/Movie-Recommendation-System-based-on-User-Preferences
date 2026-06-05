@@ -1,144 +1,83 @@
 """
 Recommendation engine.
-This isn't just a database wrapper; it loads the FAISS index and handles the "fuzzy" logic 
+This isn't just a database wrapper; it loads the FAISS index and handles the "fuzzy" logic
 of making recommendations feel personalized.
 """
-import logging
-import hashlib
-import re
+
 from datetime import UTC, datetime
+import gc
+import hashlib
+import json
+import logging
+import os
 from pathlib import Path
+import re
 from threading import Lock
 from typing import Any
-import gc
 
 import numpy as np
 import pandas as pd
-import os
-import json
 
 # Import model loader to handle external model downloads
 from backend.model_loader import ensure_model_files
+
+try:
+    from backend.serving_tier import resolve_serving_tier as _resolve_serving_tier
+except Exception:  # pragma: no cover
+    _resolve_serving_tier = None  # type: ignore[assignment]
+import contextlib
+
+import torch
+
+from backend.diffusion_recommender import LatentDiffusionRecommender
+from backend.feature_store import feature_store
+from backend.knowledge_graph import KnowledgeGraphEngine
+from backend.multimodal_fusion import MultiModalFusionIndex
 from backend.openrouter_client import chat_completion, configured_models, openrouter_api_key
 from backend.query_understanding import intent_score, parse_query_intent
 from backend.ranker import load_ranker
 from backend.semantic_twin import build_semantic_twin, compare_semantic_twins
-from backend.feature_store import feature_store
-import torch
-from backend.diffusion_recommender import LatentDiffusionRecommender
-from backend.multimodal_fusion import MultiModalFusionIndex
-from backend.knowledge_graph import KnowledgeGraphEngine
+
 logger = logging.getLogger(__name__)
 
 # Resolve paths relative to this file
 MODELS_DIR = Path(__file__).parent.parent / "models"
 DATA_DIR = Path(__file__).parent.parent / "data" / "processed"
 
-
 def _env_truthy(name: str) -> bool:
     return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
-
 def _render_like_environment() -> bool:
     """Detect constrained PaaS runtimes where the full vector stack can exceed memory."""
-    return any(
-        os.getenv(name)
-        for name in (
-            "RENDER",
-            "RENDER_SERVICE_ID",
-            "RENDER_SERVICE_NAME",
-            "RENDER_EXTERNAL_URL",
-            "RENDER_EXTERNAL_HOSTNAME",
-        )
-    )
-
+    from backend.recommender_core import render_like_environment
+    return render_like_environment()
 
 def _serving_profile() -> str:
     """Resolve the serving profile for this process."""
-    profile = os.getenv("NOVA_SERVING_PROFILE", "auto").strip().lower()
-    if profile in {"full", "lite", "light", "low-memory", "metadata"}:
-        return profile
-    return "auto"
-
+    from backend.recommender_core import serving_profile
+    return serving_profile()
 
 def _low_memory_serving_enabled() -> bool:
     """Return true when serving should avoid loading heavyweight vector artifacts."""
-    if _env_truthy("NOVA_LOW_MEMORY"):
-        return True
-    if os.getenv("NOVA_LOW_MEMORY", "").strip().lower() in {"0", "false", "no", "off"}:
-        return False
+    from backend.recommender_core import low_memory_serving_enabled
+    return low_memory_serving_enabled()
 
-    profile = _serving_profile()
-    if profile in {"lite", "light", "low-memory", "metadata"}:
-        return True
-    if profile == "full":
-        return False
+def _build_rl_state(behavior_profile: dict, als_user_embedding: "np.ndarray | None", state_dim: int = 20) -> "torch.Tensor":
+    """Build a fixed-length RL state vector from user behavior profile."""
+    from backend.recommender_core import build_rl_state
+    return build_rl_state(behavior_profile, als_user_embedding, state_dim)
 
-    return _render_like_environment()
-
-
-def _build_rl_state(
-    behavior_profile: dict,
-    als_user_embedding: "np.ndarray | None",
-    state_dim: int = 20,
-) -> "torch.Tensor":
-    """Build a fixed-length RL state vector from user behavior profile.
-
-    State vector layout (20 floats):
-      [0] log1p(total_ratings) / log1p(1000)
-      [1] avg_rating / 5.0
-      [2] log1p(click_count) / log1p(500)
-      [3] log1p(view_count) / log1p(500)
-      [4..19] ALS user embedding (16d), zeros if unavailable
-
-    Returns a torch.Tensor of shape [1, 20] with no NaN/Inf values.
-    """
-    import math
-    import torch
-    import numpy as np
-
-    def safe_float(val, default=0.0):
-        try:
-            v = float(val)
-            return v if math.isfinite(v) else default
-        except (TypeError, ValueError):
-            return default
-
-    total_ratings = safe_float(behavior_profile.get("total_ratings", 0))
-    avg_rating = safe_float(behavior_profile.get("avg_rating", 0))
-    click_count = safe_float(behavior_profile.get("click_count", 0))
-    view_count = safe_float(behavior_profile.get("view_count", 0))
-
-    scalars = [
-        math.log1p(max(total_ratings, 0)) / math.log1p(1000),
-        avg_rating / 5.0,
-        math.log1p(max(click_count, 0)) / math.log1p(500),
-        math.log1p(max(view_count, 0)) / math.log1p(500),
-    ]
-
-    # ALS embedding: 16 floats
-    if als_user_embedding is not None:
-        emb = np.asarray(als_user_embedding, dtype=np.float32).flatten()[:16]
-        emb_list = emb.tolist()
-        # Pad to 16 if shorter
-        emb_list = emb_list + [0.0] * (16 - len(emb_list))
-    else:
-        emb_list = [0.0] * 16
-
-    state = scalars + emb_list  # 4 + 16 = 20 floats
-    tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)  # [1, 20]
-
-    # Replace any NaN/Inf with 0
-    tensor = torch.nan_to_num(tensor, nan=0.0, posinf=0.0, neginf=0.0)
-    return tensor
-
+def safe_float(val, default=0.0):
+    """Convert val to float safely, returning default on error or non-finite."""
+    from backend.recommender_core import safe_float as _sf
+    return _sf(val, default)
 
 class Recommender:
     """
     The brain of the operation.
     It manages the FAISS index (for speed) and the metadata (for context).
     """
-    
+
     def __init__(self):
         self._index: Any | None = None
         self._vectorizer: Any | None = None
@@ -156,6 +95,7 @@ class Recommender:
         self._learned_ranker = None
         self._behavior_features: dict[str, Any] = {}
         self._behavior_features_refreshed_at: datetime | None = None
+        self._behavior_features_lock = Lock()  # guards concurrent refresh calls
         self._semantic_twin_cache: dict[int, dict[str, Any]] = {}
         self._search_text_cache: dict[str, pd.Series] = {}
         self._search_text_cache_frame_id: int | None = None
@@ -164,209 +104,68 @@ class Recommender:
         self.multimodal_index = None
         self.kg_engine = KnowledgeGraphEngine()
         self._rl_policy = None
+        self._retrieval_pipeline = None
+        self._ranking_pipeline = None
+        self._reranking_pipeline = None
+
     def load(self) -> "Recommender":
-        """
-        Loads the heavy artifacts.
-        We use memory-mapping for the vectors so we don't blow up the RAM on the free tier.
-        """
+        """Load all heavy artifacts. Delegates to private sub-loaders."""
         logger.info("Loading recommendation engine...")
-
-        # Read active serving tier and apply tier3 constraints
-        try:
-            from backend.serving_tier import resolve_serving_tier
-            active_tier, tier_reason = resolve_serving_tier()
-            is_tier3 = (active_tier == "tier3")
-            if is_tier3:
-                logger.info("Tier3 serving: skipping neural models, enforcing low-memory mode")
-                self._low_memory = True
-                # Cap TF-IDF vocabulary for tier3
-                current_max = int(os.getenv("NOVA_TFIDF_MAX_FEATURES", "50000"))
-                if current_max > 12000:
-                    os.environ["NOVA_TFIDF_MAX_FEATURES"] = "12000"
-        except Exception as exc:
-            logger.warning("Could not resolve serving tier: %s; proceeding with defaults", exc)
-            is_tier3 = False
-
-        try:
-            feature_store.load()
-        except Exception as e:
-            logger.warning(f"Could not load Feature Store: {e}")
-            
-        self.diffusion_model = None
-        try:
-            diffusion_path = MODELS_DIR / "diffusion_recommender.pth"
-            if diffusion_path.exists() and not self._low_memory:
-                model = LatentDiffusionRecommender(emb_dim=384, num_timesteps=100)
-                model.load_state_dict(torch.load(diffusion_path, map_location="cpu", weights_only=True))
-                model.eval()
-                self.diffusion_model = model
-                logger.info("Loaded Generative Diffusion Recommender.")
-        except Exception as e:
-            logger.warning(f"Could not load Diffusion Recommender: {e}")
-            
-        selected_artifacts = {
-            "movies_transformed.parquet",
-            "semantic_twins.parquet",
-            "semantic_twin_summary.json",
-            "pipeline_manifest.json",
-            "nova_ranker.joblib",
-            "nova_ranker.joblib.metadata.json",
-        }
-        if not self._low_memory or _env_truthy("NOVA_FORCE_VECTOR_ARTIFACTS"):
-            selected_artifacts.update({"sbert_embeddings.npy", "faiss.index", "movie_ids.npy"})
-        ensure_model_files(MODELS_DIR, selected_files=selected_artifacts)
-        if self._low_memory:
-            logger.info("Using low-memory serving profile; FAISS/SBERT artifacts are optional.")
-        
-        # Load FAISS index
-        index_path = MODELS_DIR / "faiss.index"
-        if self._low_memory and not _env_truthy("NOVA_FORCE_VECTOR_ARTIFACTS"):
-            logger.info("Skipping FAISS index load in low-memory serving profile.")
-        elif not index_path.exists():
-            raise FileNotFoundError(f"FAISS index not found at {index_path}. Run the ETL pipeline first.")
-        else:
-            import faiss
-
-            self._index = faiss.read_index(str(index_path))
-            logger.info(f"Loaded FAISS index with {self._index.ntotal:,} vectors")
-        
-        # Load SBERT embeddings with memory-mapping (reads from disk, not RAM)
-        vectors_path = MODELS_DIR / "sbert_embeddings.npy"
-        if self._low_memory and not _env_truthy("NOVA_FORCE_VECTOR_ARTIFACTS"):
-            logger.info("Skipping embedding matrix load in low-memory serving profile.")
-        elif vectors_path.exists():
-            # Memory-mapped mode: doesn't load entire array into RAM
-            self._vectors = np.load(vectors_path, mmap_mode='r')
-            logger.info(f"Loaded SBERT embeddings with shape {self._vectors.shape} (memory-mapped)")
-        else:
-            # Fallback to TF-IDF if SBERT not found
-            vectors_path = MODELS_DIR / "tfidf_vectors.npy"
-            if vectors_path.exists():
-                self._vectors = np.load(vectors_path, mmap_mode='r')
-                logger.warning("SBERT embeddings not found, using TF-IDF vectors.")
-            else:
-                logger.warning("No vectors found.")
-
-        movie_ids_path = MODELS_DIR / "movie_ids.npy"
-        if movie_ids_path.exists():
-            self._artifact_movie_ids = np.load(movie_ids_path, mmap_mode="r")
-            logger.info("Loaded vector movie id map with %s ids", len(self._artifact_movie_ids))
-
-        manifest_path = MODELS_DIR / "pipeline_manifest.json"
-        if manifest_path.exists():
-            try:
-                self._artifact_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-                self._artifact_status.update(
-                    {
-                        "manifest_run_id": self._artifact_manifest.get("run_id"),
-                        "manifest_run_date": self._artifact_manifest.get("run_date"),
-                    }
-                )
-            except Exception as exc:
-                logger.warning("Could not read pipeline manifest %s: %s", manifest_path, exc)
-        
-        # Load movie metadata - only essential columns to save memory
-        movies_path = DATA_DIR / "movies_transformed.parquet"
-        if not movies_path.exists():
-            movies_path = DATA_DIR / "movies.parquet"
-        
-        if movies_path.exists():
-            # Only load columns we actually need for recommendations
-            essential_cols = ['id', 'title', 'overview', 'genres', 'vote_average',
-                            'vote_count', 'popularity', 'release_date', 'poster_path',
-                            'director', 'original_language', 'tagline', 'runtime',
-                            'metadata_completeness', 'content_quality_score',
-                            'quality_bucket', 'searchable', 'recommendable',
-                            'public_demo_eligible']
-            if not self._low_memory:
-                essential_cols.append('cast')
-            try:
-                self._movies = pd.read_parquet(movies_path, columns=essential_cols)
-            except (KeyError, ValueError):
-                # Fallback if some columns don't exist
-                self._movies = pd.read_parquet(movies_path)
-            self._optimize_movie_frame()
-            self._rebuild_lookup_maps()
-            self._validate_vector_artifacts()
-            logger.info(f"Loaded {len(self._movies):,} movies")
-        else:
-            raise FileNotFoundError("Movie data not found. Run the ETL pipeline first.")
-
-        if self._low_memory and not _env_truthy("NOVA_BUILD_SPARSE_ON_LOAD"):
-            logger.info("Deferring sparse retrieval index build until first AI search.")
-        else:
-            self._build_sparse_retrieval_index()
-        self._learned_ranker = load_ranker(models_dir=MODELS_DIR)
-
-        self.refresh_behavior_features(force=True)
-        
-        # Phase 6: Initialize Contextual Bandit Exploration Engine
-        try:
-            from backend.contextual_bandit import get_bandit_engine
-            bandit = get_bandit_engine()
-            bandit.inject_priors(self._movies)
-        except Exception as e:
-            logger.warning(f"Failed to initialize bandit engine: {e}")
-            
-        # Phase 13: Multi-Modal Vision Index
-        try:
-            logger.info("Attempting to load Multi-Modal FAISS index...")
-            self.multimodal_index = MultiModalFusionIndex()
-            self.multimodal_index.load()
-            
-            logger.info("Attempting to load Knowledge Graph...")
-            self.kg_engine.load()
-
-            # Enrich KG with cross-domain nodes
-            try:
-                from backend.cross_domain_kg import enrich_knowledge_graph_with_cross_domain
-                enrich_knowledge_graph_with_cross_domain(self.kg_engine)
-            except Exception as exc:
-                logger.warning("Cross-domain KG enrichment skipped: %s", exc)
-            
-        except Exception as e:
-            self.multimodal_index = None
-            logger.warning(f"Failed to load Multi-Modal/KG indexes: {e}")
-
-        # Load fine-tuned Two-Tower weights if available (Requirement 4.6)
-        try:
-            from backend.two_tower import TwoTowerModel
-            two_tower_finetuned_path = MODELS_DIR / "two_tower_finetuned.pth"
-            if two_tower_finetuned_path.exists():
-                if not hasattr(self, '_two_tower_model') or self._two_tower_model is None:
-                    self._two_tower_model = TwoTowerModel(
-                        user_input_dim=18, item_input_dim=20, embedding_dim=128, temperature=0.07
-                    )
-                state_dict = torch.load(two_tower_finetuned_path, map_location="cpu", weights_only=True)
-                self._two_tower_model.load_state_dict(state_dict)
-                logger.info("Loaded fine-tuned Two-Tower weights from %s", two_tower_finetuned_path)
-        except Exception as exc:
-            logger.warning("Could not load fine-tuned Two-Tower weights: %s — using base weights", exc)
-
-        # Load RL policy for score shifting (Requirement 5.3)
-        try:
-            from backend.rl_policy import ActorCriticPolicy
-            rl_policy_path = MODELS_DIR / "rl_policy.pth"
-            if not rl_policy_path.exists():
-                logger.debug("rl_policy.pth not found; RL score adjustment disabled.")
-                self._rl_policy = None
-            else:
-                policy = ActorCriticPolicy(state_dim=20, action_dim=16)
-                state_dict = torch.load(rl_policy_path, map_location="cpu", weights_only=True)
-                policy.load_state_dict(state_dict)
-                policy.eval()
-                self._rl_policy = policy
-                logger.info("Loaded ActorCriticPolicy from %s", rl_policy_path)
-        except RuntimeError as exc:
-            # state_dim mismatch or other load error
-            logger.warning("Could not load RL policy (state_dim mismatch or corrupt file): %s", exc)
-            self._rl_policy = None
-        except Exception as exc:
-            logger.warning("Could not load RL policy: %s", exc)
-            self._rl_policy = None
-
+        active_tier = self._resolve_active_tier()
+        is_tier3 = active_tier == "tier3"
+        self._apply_tier3_constraints(is_tier3)
+        self._load_vector_artifacts()
+        self._load_movie_catalog()
+        self._load_ranker_and_behavior()
+        self._load_optional_models()
+        self._wire_pipelines(is_tier3)
         return self
-    
+
+    def _resolve_active_tier(self) -> str:
+        """Resolve the active serving tier at startup."""
+        try:
+            if _resolve_serving_tier is None:
+                raise ImportError("backend.serving_tier module is unavailable")
+            active_tier, _ = _resolve_serving_tier()
+            return active_tier
+        except Exception as exc:
+            logger.warning("Could not resolve serving tier: %s; defaulting to tier2", exc)
+            return "tier2"
+
+    def _apply_tier3_constraints(self, is_tier3: bool) -> None:
+        """Apply low-memory constraints for Tier 3 deployments."""
+        if is_tier3:
+            logger.info("Tier3 serving: skipping neural models, enforcing low-memory mode")
+            self._low_memory = True
+            current_max = int(os.getenv("NOVA_TFIDF_MAX_FEATURES", "50000"))
+            if current_max > 12000:
+                os.environ["NOVA_TFIDF_MAX_FEATURES"] = "12000"
+
+    def _load_vector_artifacts(self) -> None:
+        """Load FAISS index, SBERT embeddings, movie ID map, and pipeline manifest."""
+        from backend.recommender_core import load_vector_artifacts
+        load_vector_artifacts(self)
+
+    def _load_movie_catalog(self) -> None:
+        """Load movie metadata parquet and build lookup maps."""
+        from backend.recommender_core import load_movie_catalog
+        load_movie_catalog(self)
+
+    def _load_ranker_and_behavior(self) -> None:
+        """Load learned ranker, build sparse index, and warm behavior features."""
+        from backend.recommender_core import load_ranker_and_behavior
+        load_ranker_and_behavior(self)
+
+    def _load_optional_models(self) -> None:
+        """Load multi-modal index, KG, Two-Tower fine-tune, and RL policy."""
+        from backend.recommender_core import load_optional_models
+        load_optional_models(self)
+
+    def _wire_pipelines(self, is_tier3: bool) -> None:
+        """Wire RetrievalPipeline, RankingPipeline, and RerankingPipeline."""
+        from backend.recommender_core import wire_pipelines
+        wire_pipelines(self, is_tier3)
+
     @property
     def movies(self) -> pd.DataFrame:
         """Get movie metadata DataFrame."""
@@ -374,67 +173,25 @@ class Recommender:
             raise RuntimeError("Recommender not loaded. Call load() first.")
         return self._movies
 
-    def refresh_behavior_features(self, force: bool = False) -> dict[str, Any]:
+    def refresh_behavior_features(self, force: bool = False) -> dict:
         """Refresh aggregated behavior features used as a light ranking signal."""
-        ttl_seconds = int(os.getenv("BEHAVIOR_FEATURE_TTL_SECONDS", "60"))
-        now = datetime.now(UTC)
-
-        if (
-            not force
-            and self._behavior_features_refreshed_at is not None
-            and (now - self._behavior_features_refreshed_at).total_seconds() < ttl_seconds
-        ):
-            return self._behavior_features
-
-        try:
-            from backend.events import aggregate_behavior_features
-
-            self._behavior_features = aggregate_behavior_features(limit=100)
-            self._behavior_features_refreshed_at = now
-        except Exception as exc:
-            logger.warning("Behavior feature refresh skipped: %s", exc)
-            self._behavior_features = {}
-            self._behavior_features_refreshed_at = now
-
-        return self._behavior_features
+        from backend.recommender_core import refresh_behavior_features
+        return refresh_behavior_features(self, force)
 
     def _optimize_movie_frame(self) -> None:
         """Reduce the in-memory footprint of the serving catalog."""
-        if self._movies is None:
-            return
-
-        for column in ("id", "vote_count"):
-            if column in self._movies.columns:
-                self._movies[column] = pd.to_numeric(self._movies[column], errors="coerce", downcast="integer")
-
-        for column in (
-            "vote_average",
-            "popularity",
-            "metadata_completeness",
-            "content_quality_score",
-        ):
-            if column in self._movies.columns:
-                self._movies[column] = pd.to_numeric(self._movies[column], errors="coerce", downcast="float")
-
-        for column in ("searchable", "recommendable", "public_demo_eligible"):
-            if column in self._movies.columns:
-                self._movies[column] = self._movies[column].fillna(False).astype(bool)
-
-        for column in ("quality_bucket", "original_language"):
-            if column in self._movies.columns:
-                self._movies[column] = self._movies[column].fillna("").astype("category")
+        from backend.recommender_core import optimize_movie_frame
+        optimize_movie_frame(self)
 
     def _rebuild_lookup_maps(self) -> None:
         """Build row-position lookup maps for hot recommendation paths."""
         self._movie_id_to_index = {}
-        if self._movies is None or "id" not in self._movies.columns:
+        if self._movies is None or 'id' not in self._movies.columns:
             return
-
-        ids = pd.to_numeric(self._movies["id"], errors="coerce")
-        for row_position, movie_id in enumerate(ids):
-            if pd.isna(movie_id):
-                continue
-            self._movie_id_to_index.setdefault(int(movie_id), row_position)
+        ids = pd.to_numeric(self._movies['id'], errors='coerce')
+        for pos, mid in enumerate(ids):
+            if not pd.isna(mid):
+                self._movie_id_to_index.setdefault(int(mid), pos)
 
     def _index_for_movie_id(self, movie_id: Any) -> int | None:
         try:
@@ -442,6 +199,7 @@ class Recommender:
         except (TypeError, ValueError):
             return None
 
+    @staticmethod
     @staticmethod
     def _clean_response_value(value: Any) -> Any:
         """Convert pandas/numpy missing values and scalars to JSON-safe values."""
@@ -452,9 +210,7 @@ class Recommender:
                 return None
         except (TypeError, ValueError):
             pass
-        if isinstance(value, np.generic):
-            return value.item()
-        return value
+        return value.item() if isinstance(value, np.generic) else value
 
     @classmethod
     def _clean_response_record(cls, record: dict[str, Any]) -> dict[str, Any]:
@@ -463,13 +219,8 @@ class Recommender:
 
     def _disable_vector_artifacts(self, reason: str) -> None:
         """Disable vector serving when artifacts violate row-alignment contracts."""
-        logger.warning("Disabling FAISS/SBERT recommendations: %s", reason)
-        self._artifact_status.update(
-            {
-                "vector_artifacts_ready": False,
-                "disabled_reason": reason,
-            }
-        )
+        logger.warning('Disabling FAISS/SBERT recommendations: %s', reason)
+        self._artifact_status.update({'vector_artifacts_ready': False, 'disabled_reason': reason})
         self._index = None
         self._vectors = None
         gc.collect()
@@ -483,157 +234,32 @@ class Recommender:
     def _expected_manifest_contract(self) -> dict[str, Any]:
         """Extract row-level expectations from the optional pipeline manifest."""
         manifest = self._artifact_manifest or {}
-        contract = manifest.get("serving_contract") or {}
-        quality = manifest.get("quality") or {}
+        contract = manifest.get('serving_contract') or {}
+        quality = manifest.get('quality') or {}
         return {
-            "movie_count": contract.get("movie_rows") or quality.get("serving_rows"),
-            "vector_count": contract.get("embedding_rows") or quality.get("embedding_rows"),
-            "index_count": contract.get("faiss_index_size") or quality.get("faiss_index_size"),
-            "id_map_count": contract.get("movie_id_map_rows") or quality.get("movie_id_map_rows"),
-            "movie_id_sha256": contract.get("movie_id_sha256") or quality.get("movie_id_sha256"),
+            'movie_count': contract.get('movie_rows') or quality.get('serving_rows'),
+            'vector_count': contract.get('embedding_rows') or quality.get('embedding_rows'),
+            'index_count': contract.get('faiss_index_size') or quality.get('faiss_index_size'),
+            'id_map_count': contract.get('movie_id_map_rows') or quality.get('movie_id_map_rows'),
+            'movie_id_sha256': contract.get('movie_id_sha256') or quality.get('movie_id_sha256'),
         }
 
     def _validate_vector_artifacts(self) -> None:
         """Validate that vector artifacts are row-aligned with the serving catalog."""
-        if self._movies is None:
+        if self._vectors is None or self._movies is None:
             return
-
-        movie_count = len(self._movies)
-        vector_count = int(self._vectors.shape[0]) if self._vectors is not None and len(self._vectors.shape) == 2 else None
-        index_count = int(getattr(self._index, "ntotal", 0)) if self._index is not None else None
-        id_map_count = int(len(self._artifact_movie_ids)) if self._artifact_movie_ids is not None else None
-
-        self._artifact_status.update(
-            {
-                "movie_count": movie_count,
-                "vector_count": vector_count,
-                "faiss_index_count": index_count,
-                "movie_id_map_count": id_map_count,
-            }
-        )
-
-        expected = self._expected_manifest_contract()
-        for key, actual in (
-            ("movie_count", movie_count),
-            ("vector_count", vector_count),
-            ("index_count", index_count),
-            ("id_map_count", id_map_count),
-        ):
-            expected_value = expected.get(key)
-            if expected_value is not None and actual is not None and int(expected_value) != int(actual):
-                self._disable_vector_artifacts(
-                    f"pipeline manifest {key} ({expected_value}) != loaded artifact count ({actual})"
-                )
-                return
-
-        if self._vectors is None and self._index is None:
-            return
-        if self._vectors is None or self._index is None:
-            self._disable_vector_artifacts("both embedding matrix and FAISS index must be present")
-            return
-        if vector_count != index_count:
-            self._disable_vector_artifacts(f"embedding rows ({vector_count}) != FAISS rows ({index_count})")
-            return
-
-        if self._artifact_movie_ids is None:
-            if _env_truthy("NOVA_ALLOW_LEGACY_ROW_ALIGNED_VECTORS"):
-                if vector_count != movie_count:
-                    self._disable_vector_artifacts(
-                        f"vector rows ({vector_count}) != serving catalog rows ({movie_count}) and no movie_ids.npy map exists"
-                    )
-                    return
-                self._artifact_status.update(
-                    {
-                        "vector_artifacts_ready": True,
-                        "disabled_reason": None,
-                        "legacy_row_alignment": True,
-                    }
-                )
-                return
-
-            self._disable_vector_artifacts(
-                "movie_ids.npy is required for vector serving; row count alone cannot prove FAISS/catalog alignment"
-            )
-            return
-
-        if id_map_count != vector_count:
-            self._disable_vector_artifacts(f"movie id map rows ({id_map_count}) != vector rows ({vector_count})")
-            return
-
-        artifact_id_values = np.asarray(self._artifact_movie_ids, dtype=np.int64)
-        actual_id_hash = self._movie_id_sha256(artifact_id_values)
-        self._artifact_status["movie_id_sha256"] = actual_id_hash
-        expected_id_hash = expected.get("movie_id_sha256")
-        if expected_id_hash and expected_id_hash != actual_id_hash:
-            self._disable_vector_artifacts("movie_ids.npy checksum does not match the pipeline manifest")
-            return
-
-        artifact_ids = pd.Series(artifact_id_values).astype("int64")
-        if artifact_ids.duplicated().any():
-            self._disable_vector_artifacts("movie_ids.npy contains duplicate movie ids")
-            return
-
-        movie_ids = pd.to_numeric(self._movies["id"], errors="coerce")
-        if movie_ids.isna().any():
-            self._disable_vector_artifacts("serving catalog contains non-numeric movie ids")
-            return
-
-        current_ids = movie_ids.astype("int64").to_numpy()
-        if len(current_ids) != len(artifact_id_values):
-            self._disable_vector_artifacts(
-                f"serving catalog rows ({len(current_ids)}) != vector id rows ({len(artifact_id_values)})"
-            )
-            return
-
-        if not np.array_equal(current_ids, artifact_id_values):
-            current_set = set(current_ids.tolist())
-            artifact_set = set(artifact_id_values.tolist())
-            if current_set != artifact_set:
-                self._disable_vector_artifacts("vector id map does not contain the same movie ids as the catalog")
-                return
-
-            logger.warning("Reordering serving catalog to match vector movie id map.")
-            reordered = (
-                self._movies.assign(_movie_id_for_alignment=current_ids)
-                .drop_duplicates(subset=["_movie_id_for_alignment"], keep="first")
-                .set_index("_movie_id_for_alignment")
-                .loc[artifact_id_values]
-                .reset_index(drop=True)
-            )
-            self._movies = reordered
-
-        self._artifact_status.update({"vector_artifacts_ready": True, "disabled_reason": None})
+        try:
+            from backend.artifact_validator import ArtifactValidator
+            validator = ArtifactValidator(MODELS_DIR / 'pipeline_manifest.json')
+            validator.validate_row_alignment(self._vectors, self._movies)
+        except Exception as exc:
+            logger.warning('Vector artifact validation failed: %s; disabling.', exc)
+            self._disable_vector_artifacts(str(exc))
 
     def _build_sparse_retrieval_index(self) -> None:
-        """Build a TF-IDF recall index for hybrid search and cold-start resilience."""
-        from sklearn.feature_extraction.text import TfidfVectorizer
-
-        text_parts = []
-        for column in ("title", "overview", "genres", "director", "cast", "original_language"):
-            if column in self._movies.columns:
-                text_parts.append(self._movies[column].fillna("").astype(str))
-
-        if not text_parts:
-            self._content_text = pd.Series([""] * len(self._movies), index=self._movies.index)
-        else:
-            content_text = text_parts[0]
-            for part in text_parts[1:]:
-                content_text = content_text + ". " + part
-            self._content_text = content_text
-
-        default_features = "12000" if self._low_memory else "50000"
-        max_features = int(os.getenv("NOVA_TFIDF_MAX_FEATURES", default_features))
-        ngram_range = (1, 1) if self._low_memory else (1, 2)
-        self._vectorizer = TfidfVectorizer(
-            max_features=max_features,
-            ngram_range=ngram_range,
-            stop_words="english",
-            min_df=1,
-            dtype=np.float32,
-        )
-        self._tfidf_matrix = self._vectorizer.fit_transform(self._content_text)
-        logger.info("Built sparse TF-IDF retrieval index with %s features", len(self._vectorizer.vocabulary_))
-        self._content_text = None
+        """Build a TF-IDF recall index for hybrid search."""
+        from backend.recommender_core import build_sparse_retrieval_index
+        build_sparse_retrieval_index(self)
 
     def _ensure_sparse_retrieval_index(self) -> None:
         """Build sparse retrieval lazily when a request path needs AI search."""
@@ -642,45 +268,8 @@ class Recommender:
 
     def _build_item_retrieval_index(self) -> None:
         """Build a plot/genre-focused sparse index for item-to-item recommendations."""
-        from sklearn.feature_extraction.text import TfidfVectorizer
-
-        if self._movies is None:
-            return
-
-        def text_column(column: str) -> pd.Series:
-            if column not in self._movies.columns:
-                return pd.Series([""] * len(self._movies), index=self._movies.index)
-            return self._movies[column].fillna("").astype(str)
-
-        overview = text_column("overview")
-        tagline = text_column("tagline")
-        genres = text_column("genres").str.replace(",", " ", regex=False)
-        language = text_column("original_language")
-
-        # Item recommendations should be about story, tone, and genre. Title is
-        # deliberately omitted so "Avatar" does not mostly retrieve making-of
-        # documentaries just because they repeat the title.
-        item_text = (
-            overview
-            + ". "
-            + tagline
-            + ". Genres "
-            + genres
-            + ". Language "
-            + language
-        )
-
-        default_features = "18000" if self._low_memory else "40000"
-        max_features = int(os.getenv("NOVA_ITEM_TFIDF_MAX_FEATURES", default_features))
-        self._item_vectorizer = TfidfVectorizer(
-            max_features=max_features,
-            ngram_range=(1, 2),
-            stop_words="english",
-            min_df=1,
-            dtype=np.float32,
-        )
-        self._item_tfidf_matrix = self._item_vectorizer.fit_transform(item_text)
-        logger.info("Built item-to-item sparse retrieval index with %s features", len(self._item_vectorizer.vocabulary_))
+        from backend.recommender_core import build_item_retrieval_index
+        build_item_retrieval_index(self)
 
     def _ensure_item_retrieval_index(self) -> None:
         """Build item recommendation sparse retrieval lazily."""
@@ -722,38 +311,22 @@ class Recommender:
             logger.info("Loaded cross-encoder reranker: %s", model_name)
         return self._cross_encoder
 
-    def _popularity_quality_score(self, movie: dict[str, Any]) -> float:
+    def _popularity_quality_score(self, movie) -> float:
         """Small bounded business score from popularity and quality."""
-        if movie.get("content_quality_score") is not None:
-            try:
-                score = float(movie.get("content_quality_score"))
-                if not np.isnan(score):
-                    return max(0.0, min(1.0, score))
-            except (TypeError, ValueError):
-                pass
-        completeness = float(movie.get("metadata_completeness") or 0.0)
-        popularity = float(movie.get("popularity") or 0)
-        rating = float(movie.get("vote_average") or 0)
-        votes = float(movie.get("vote_count") or 0)
-        popularity_score = min(1.0, np.log1p(max(popularity, 0)) / 8.0)
-        confidence = min(1.0, np.log1p(max(votes, 0)) / 8.0)
-        quality_score = (rating / 10.0) * confidence if rating > 0 else 0.0
-        return float(0.35 * popularity_score + 0.35 * quality_score + 0.30 * completeness)
+        from backend.recommender_core import popularity_quality_score
+        return popularity_quality_score(movie)
 
+    @staticmethod
     @staticmethod
     def _normalize_score_map(scores: dict[int, float]) -> dict[int, float]:
         """Min-max normalize a sparse score map into [0, 1]."""
         if not scores:
             return {}
-        values = np.array(list(scores.values()), dtype=np.float32)
-        min_value = float(values.min())
-        max_value = float(values.max())
-        if max_value <= min_value:
-            return {key: 1.0 for key in scores}
-        return {
-            key: float((value - min_value) / (max_value - min_value))
-            for key, value in scores.items()
-        }
+        vals = np.array(list(scores.values()), dtype=np.float32)
+        lo, hi = float(vals.min()), float(vals.max())
+        if hi <= lo:
+            return dict.fromkeys(scores, 1.0)
+        return {k: float((v - lo) / (hi - lo)) for k, v in scores.items()}
 
     def _genre_set(self, movie: dict[str, Any]) -> set[str]:
         return {part.strip().lower() for part in str(movie.get("genres") or "").split(",") if part.strip()}
@@ -763,10 +336,8 @@ class Recommender:
         if movie_idx not in self._semantic_twin_cache:
             # Evict oldest entry if cache is full (cap at 5000 to prevent memory growth)
             if len(self._semantic_twin_cache) >= 5000:
-                try:
+                with contextlib.suppress(StopIteration):
                     self._semantic_twin_cache.pop(next(iter(self._semantic_twin_cache)))
-                except StopIteration:
-                    pass
             self._semantic_twin_cache[movie_idx] = build_semantic_twin(self.get_movie_by_index(movie_idx))
         return self._semantic_twin_cache[movie_idx]
 
@@ -777,27 +348,10 @@ class Recommender:
             return None
         return self._semantic_twin_for_index(movie_idx)
 
-    def _semantic_affinity_for_indices(self, query_idx: int, candidate_idx: int) -> dict[str, Any]:
+    def _semantic_affinity_for_indices(self, query_idx: int, candidate_idx: int) -> dict:
         """Compare query/candidate semantic twins and return serializable signals."""
-        # Cache affinity pairs — deterministic, so safe to cache indefinitely (cap at 20000)
-        if not hasattr(self, "_affinity_cache"):
-            self._affinity_cache: dict[tuple[int, int], dict[str, Any]] = {}
-        pair_key = (query_idx, candidate_idx)
-        cached = self._affinity_cache.get(pair_key)
-        if cached is not None:
-            return cached
-        affinity = compare_semantic_twins(
-            self._semantic_twin_for_index(query_idx),
-            self._semantic_twin_for_index(candidate_idx),
-        )
-        result = affinity.as_dict()
-        if len(self._affinity_cache) >= 20000:
-            try:
-                self._affinity_cache.pop(next(iter(self._affinity_cache)))
-            except StopIteration:
-                pass
-        self._affinity_cache[pair_key] = result
-        return result
+        from backend.recommender_core import semantic_affinity_for_indices
+        return semantic_affinity_for_indices(self, query_idx, candidate_idx)
 
     def _apply_query_mmr(
         self,
@@ -806,226 +360,47 @@ class Recommender:
         lambda_param: float = 0.72,
     ) -> list[dict]:
         """Diversify query search results using candidate vectors where available."""
-        if len(candidates) <= n or self._vectors is None:
-            return candidates[:n]
+        from backend.recommender_core import apply_query_mmr
 
-        selected: list[dict] = []
-        remaining = candidates.copy()
-        selected.append(remaining.pop(0))
-        vector_cache: dict[int, np.ndarray] = {}
+        return apply_query_mmr(candidates, n, self._vectors, self._index_for_movie_id, lambda_param)
 
-        def candidate_vector(movie: dict) -> np.ndarray | None:
-            row_idx = self._index_for_movie_id(movie.get("id"))
-            if row_idx is None:
-                return None
-            if row_idx not in vector_cache:
-                vector_cache[row_idx] = np.asarray(self._vectors[row_idx], dtype=np.float32)
-            return vector_cache[row_idx]
-
-        while remaining and len(selected) < n:
-            best_idx = 0
-            best_score = -float("inf")
-            for idx, candidate in enumerate(remaining):
-                candidate_vec = candidate_vector(candidate)
-                if candidate_vec is None:
-                    continue
-                relevance = float(candidate.get("similarity_score") or 0)
-
-                max_similarity = 0.0
-                for chosen in selected:
-                    chosen_vec = candidate_vector(chosen)
-                    if chosen_vec is None:
-                        continue
-                    max_similarity = max(max_similarity, float(np.dot(candidate_vec, chosen_vec)))
-
-                mmr_score = lambda_param * relevance - (1 - lambda_param) * max_similarity
-                if mmr_score > best_score:
-                    best_score = mmr_score
-                    best_idx = idx
-
-            selected.append(remaining.pop(best_idx))
-        return selected[:n]
-
-    def _apply_learned_ranker(self, candidates: list[dict[str, Any]], user_id: int = 0, precomputed_ensemble_scores: dict[int, float] | None = None) -> list[dict[str, Any]]:
+    def _apply_learned_ranker(
+        self,
+        candidates: list[dict[str, Any]],
+        user_id: int = 0,
+        precomputed_ensemble_scores: dict[int, float] | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Applies the true APEX ranking pipeline.
         Accepts precomputed_ensemble_scores to avoid redundant ensemble forward passes.
         """
-        if not candidates:
-            return candidates
-            
-        try:
-            from backend.ensemble_engine import get_apex_engine
-            from backend.mmoe_ranker import get_mmoe_ranker
-            import torch
-            
-            # The models were trained on specific vocab sizes. We enforce safe modulus.
-            apex_engine = get_apex_engine(num_users=610, num_items=9724)
-            mmoe_ranker = get_mmoe_ranker(num_users=611, num_items=193610)
-            
-            item_ids = []
-            for c in candidates:
-                try:
-                    item_ids.append(int(c.get("id", 0)))
-                except:
-                    item_ids.append(0)
-                    
-            safe_user_id_apex = user_id % 610
-            safe_item_ids_apex = [i % 9724 for i in item_ids]
-            
-            safe_user_id_mmoe = user_id % 611
-            safe_item_ids_mmoe = [i % 193610 for i in item_ids]
-            
-            # 1. Get Ensemble Scores — use precomputed if available to avoid redundant forward pass
-            if precomputed_ensemble_scores is not None:
-                ensemble_scores = precomputed_ensemble_scores
-            else:
-                ensemble_scores = apex_engine.predict_ensemble(safe_user_id_apex, safe_item_ids_apex)
-            
-            from backend.onnx_engine import get_onnx_engine
-            import numpy as np
-            onnx = get_onnx_engine()
-            
-            # 2. Get MMoE Task Predictions via High-Speed ONNX Runtime (No PyTorch Overhead)
-            u_mmoe = np.array([safe_user_id_mmoe] * len(item_ids), dtype=np.int64)
-            i_mmoe = np.array(safe_item_ids_mmoe, dtype=np.int64)
-            
-            p_ctr, p_watch, p_sat = onnx.predict_mmoe(u_mmoe, i_mmoe)
-                
-            # 3. Final Unified Ranking Equation
-            for idx, candidate in enumerate(candidates):
-                base_score = float(candidate.get("similarity_score") or 0.0)
-                ens_score = ensemble_scores.get(safe_item_ids_apex[idx], 0.0)
-                
-                ctr = float(p_ctr[idx])
-                watch = float(p_watch[idx])
-                sat = float(p_sat[idx])
-                
-                # The YouTube formulation: (P(click) * P(watch) * P(satisfaction)) + Structural Prior
-                # We blend the retrieval base score to ensure query relevance isn't lost
-                final_score = (base_score * 0.3) + (ens_score * 0.4) + (ctr * watch * sat * 0.3)
-                
-                candidate["similarity_score"] = final_score
-                candidate["metrics"] = {
-                    "p_click": round(ctr, 4),
-                    "p_watch": round(watch, 4),
-                    "p_satisfaction": round(sat, 4),
-                    "ensemble_prior": round(ens_score, 4)
-                }
-                
-                if "explanation" not in candidate:
-                    candidate["explanation"] = []
-                candidate["explanation"].insert(0, "DeepSeek-inspired MMoE Multi-Task Ranker")
-                
-            # Apply Contextual Bandit Exploration (Thompson Sampling / UCB)
-            from backend.contextual_bandit import get_bandit_engine
-            bandit = get_bandit_engine()
-            # 10% chance to run UCB (cold-start discoverability), otherwise Thompson Sampling
-            strategy = "ucb" if torch.rand(1).item() < 0.1 else "thompson"
-            candidates = bandit.apply_exploration(candidates, strategy=strategy)
-            
-            # Final Safety Sort
-            candidates.sort(key=lambda x: x.get("similarity_score", 0.0), reverse=True)
-            return candidates
-            
-        except Exception as exc:
-            logger.error("MMoE Neural Ranker failed, falling back to base retrieval: %s", exc)
-            return candidates
+        from backend.recommender_core import apply_learned_ranker
 
-    def _quality_gate_item_recommendations(
-        self,
-        candidates: list[dict[str, Any]],
-        query_movie: dict[str, Any],
-        n: int,
-    ) -> list[dict[str, Any]]:
-        """Drop obvious low-quality or genre-drift candidates when enough alternatives exist."""
-        if len(candidates) <= n:
-            return candidates
+        return apply_learned_ranker(candidates, user_id, precomputed_ensemble_scores)
 
-        query_genres = self._genre_set(query_movie)
-        gated: list[dict[str, Any]] = []
-        for candidate in candidates:
-            rating = float(candidate.get("vote_average") or 0.0)
-            votes = float(candidate.get("vote_count") or 0.0)
-            candidate_genres = self._genre_set(candidate)
-            shared_genres = query_genres & candidate_genres
-            signals = candidate.get("retrieval_signals") or {}
-            semantic_score = float(signals.get("semantic_twin") or 0.0)
-
-            if votes >= 500 and 0 < rating < 5.5:
-                continue
-            if "science fiction" in query_genres and "science fiction" not in candidate_genres:
-                if len(shared_genres) < 2 and semantic_score < 0.62:
-                    continue
-
-            gated.append(candidate)
-
-        return gated if len(gated) >= n else candidates
+    def _quality_gate_item_recommendations(self, candidates, query_movie, n) -> list:
+        """Drop obvious low-quality or genre-drift candidates."""
+        from backend.recommender_core import quality_gate_item_recommendations
+        return quality_gate_item_recommendations(self, candidates, query_movie, n)
 
     def _learned_ranker_enabled(self) -> bool:
         """Return whether the learned ranker has enough signal to influence serving."""
-        value = os.getenv("NOVA_ENABLE_LEARNED_RANKER", "auto").strip().lower()
-        if value in {"1", "true", "yes", "on"}:
-            return True
-        if value in {"0", "false", "no", "off"}:
-            return False
+        from backend.recommender_core import learned_ranker_enabled
+        return learned_ranker_enabled(self)
 
-        metadata = getattr(self._learned_ranker, "metadata", {}) or {}
-        training_mode = str(metadata.get("training_mode") or "").lower()
-        try:
-            feedback_count = int(metadata.get("feedback_item_count") or 0)
-        except (TypeError, ValueError):
-            feedback_count = 0
-        min_feedback = int(os.getenv("NOVA_MIN_RANKER_FEEDBACK_ITEMS", "100"))
-
-        if training_mode == "catalog_bootstrap" and feedback_count < min_feedback:
-            return False
-        return feedback_count >= min_feedback
-
-    def _behavior_boost(self, movie_id: Any) -> tuple[float, list[str]]:
+    def _behavior_boost(self, movie_id) -> tuple:
         """Return a bounded score nudge from recent product behavior."""
-        if movie_id is None:
-            return 0.0, []
+        from backend.recommender_core import behavior_boost
+        return behavior_boost(self, movie_id)
 
-        try:
-            movie_key = str(int(movie_id))
-        except (TypeError, ValueError):
-            return 0.0, []
-
-        trending_movies = self._behavior_features.get("trending_movies", {})
-        if not isinstance(trending_movies, dict):
-            return 0.0, []
-
-        stats = trending_movies.get(movie_key)
-        if not isinstance(stats, dict):
-            return 0.0, []
-
-        event_count = int(stats.get("event_count") or 0)
-        views = int(stats.get("views") or 0)
-        clicks = int(stats.get("clicks") or 0)
-        ratings = int(stats.get("ratings") or 0)
-        avg_rating = stats.get("avg_rating")
-
-        boost = min(0.08, event_count * 0.005 + views * 0.003 + clicks * 0.01)
-        if avg_rating is not None and ratings > 0 and float(avg_rating) >= 4.0:
-            boost += min(0.02, ratings * 0.005)
-        boost = min(0.10, boost)
-
-        reasons = []
-        if event_count:
-            reasons.append(f"Trending with viewers ({event_count} recent events)")
-        if avg_rating is not None and ratings > 0:
-            reasons.append(f"Audience signal ({float(avg_rating):.1f}/5)")
-
-        return boost, reasons[:2]
-
+    @staticmethod
     @staticmethod
     def _event_recency_decay(event_ts: Any, half_life_days: float = 14.0) -> float:
         """Return a bounded recency weight for personalization events."""
         if not event_ts:
             return 0.65
         try:
-            parsed = datetime.fromisoformat(str(event_ts).replace("Z", "+00:00"))
+            parsed = datetime.fromisoformat(str(event_ts).replace('Z', '+00:00'))
             if parsed.tzinfo is None:
                 parsed = parsed.replace(tzinfo=UTC)
             age_days = max(0.0, (datetime.now(UTC) - parsed).total_seconds() / 86400.0)
@@ -1033,1457 +408,196 @@ class Recommender:
         except Exception:
             return 0.65
 
-    def _genre_affinity_from_profile(self, profile: dict[str, Any]) -> dict[str, float]:
+    def _genre_affinity_from_profile(self, profile) -> dict:
         """Build genre affinity weights from positive user events."""
-        affinity: dict[str, float] = {}
-        for event in profile.get("recent_events") or []:
-            if event.get("negative"):
-                continue
-            movie = self.get_movie_by_id(int(event.get("movie_id"))) if event.get("movie_id") is not None else None
-            if not movie:
-                continue
-            weight = float(event.get("weight") or 1.0) * self._event_recency_decay(event.get("event_ts"))
-            for genre in self._genre_set(movie):
-                affinity[genre] = affinity.get(genre, 0.0) + weight
-
-        if not affinity:
-            return {}
-        max_weight = max(affinity.values())
-        if max_weight <= 0:
-            return {}
-        return {genre: round(weight / max_weight, 4) for genre, weight in affinity.items()}
+        from backend.recommender_core import genre_affinity_from_profile
+        return genre_affinity_from_profile(self, profile)
 
     def recommend_for_user_profile(self, profile: dict[str, Any], n: int = 10) -> list[dict[str, Any]]:
         """Blend seed-item, search-intent, genre-affinity, and trending signals for a user."""
         result_limit = max(1, min(int(n), 50))
-        negative_ids = {int(movie_id) for movie_id in profile.get("negative_movie_ids") or []}
-        seed_events = [
-            event for event in (profile.get("recent_events") or [])
-            if event.get("movie_id") is not None and not event.get("negative")
-        ]
-        genre_affinity = self._genre_affinity_from_profile(profile)
+        if self._retrieval_pipeline is not None and self._ranking_pipeline is not None:
+            liked_vecs = [
+                self._vectors[idx]
+                for event in (profile.get("recent_events") or [])
+                if not event.get("negative") and event.get("movie_id") is not None
+                and (idx := self._index_for_movie_id(int(event["movie_id"]))) is not None
+                and self._vectors is not None
+            ]
+            if not liked_vecs:
+                return self._metadata_recommend_by_index(0, n=n)
+            query_vector = np.mean(liked_vecs, axis=0).astype(np.float32).reshape(1, -1)
+            candidates = self._retrieval_pipeline.retrieve(query_vector, n=min(100, len(self._movies)))
+            ranked = self._ranking_pipeline.rank(candidates, user_context={"profile": profile})
+            final = self._reranking_pipeline.rerank(ranked, constraints={})
+            return [self._candidate_to_dict(item) for item in final[:result_limit]]
+        from backend.recommender_core import user_profile_fallback
+        return user_profile_fallback(self, profile, result_limit)
 
-        scored: dict[int, dict[str, Any]] = {}
-
-        def add_candidate(candidate: dict[str, Any], score: float, reason: str, stage: str) -> None:
-            candidate_id = candidate.get("id")
-            if candidate_id is None:
-                return
-            try:
-                candidate_id = int(candidate_id)
-            except (TypeError, ValueError):
-                return
-            if candidate_id in negative_ids:
-                return
-
-            item = dict(candidate)
-            genre_boost = 0.0
-            for genre in self._genre_set(item):
-                genre_boost += genre_affinity.get(genre, 0.0)
-            genre_boost = min(0.15, genre_boost * 0.045)
-            final_score = float(score) + genre_boost
-            current = scored.get(candidate_id)
-            if current is None or final_score > float(current.get("similarity_score") or 0):
-                explanations = list(item.get("explanation") or [])
-                explanations.insert(0, reason)
-                if genre_boost > 0:
-                    explanations.insert(1, "matches your genre affinity")
-                item["similarity_score"] = final_score
-                item["retrieval_stage"] = stage
-                item["retrieval_signals"] = {
-                    **(item.get("retrieval_signals") or {}),
-                    "personalization": round(final_score, 4),
-                    "genre_affinity": round(genre_boost, 4),
-                }
-                item["explanation"] = explanations[:5]
-                item["explanation_text"] = " | ".join(item["explanation"])
-                scored[candidate_id] = item
-
-        seen_seed_ids = set()
-        for event_rank, event in enumerate(seed_events[:8]):
-            seed_movie_id = int(event["movie_id"])
-            seen_seed_ids.add(seed_movie_id)
-            event_weight = float(event.get("weight") or 1.0)
-            recency = self._event_recency_decay(event.get("event_ts"))
-            seed_weight = event_weight * recency / (event_rank + 1)
-            for candidate in self.recommend_by_id(seed_movie_id, n=min(30, max(result_limit * 4, 12))):
-                if candidate.get("id") in seen_seed_ids:
-                    continue
-                base_score = float(candidate.get("similarity_score") or 0.0)
-                add_candidate(
-                    candidate,
-                    score=base_score * seed_weight,
-                    reason=f"personalized from recent {event.get('event_type', 'interaction')}",
-                    stage="personalized_v2_seed_blend",
-                )
-
-        for search in (profile.get("top_searches") or [])[:3]:
-            query_text = str(search.get("query_text") or "").strip()
-            if not query_text:
-                continue
-            count_weight = min(1.0, float(search.get("count") or 1) / 3.0)
-            for candidate in self.ai_search(query_text, n=min(12, max(result_limit * 2, 8))):
-                add_candidate(
-                    candidate,
-                    score=float(candidate.get("similarity_score") or 0.0) * 0.42 * count_weight,
-                    reason=f"matches your search intent: {query_text}",
-                    stage="personalized_v2_search_blend",
-                )
-
-        # Tier 1D: Generative Diffusion Retrieval (GDR) - Hallucinating the perfect embedding
-        if getattr(self, "diffusion_model", None) is not None and getattr(self, "_index", None) is not None and seed_events:
-            try:
-                recent_embs = []
-                for event in seed_events[:5]:
-                    movie_idx = self._index_for_movie_id(int(event["movie_id"]))
-                    if movie_idx is not None and getattr(self, "_vectors", None) is not None:
-                        recent_embs.append(self._vectors[movie_idx])
-                
-                if recent_embs:
-                    user_emb_np = np.mean(recent_embs, axis=0, keepdims=True)
-                    user_emb_np = user_emb_np / (np.linalg.norm(user_emb_np) + 1e-9)
-                    
-                    user_tensor = torch.FloatTensor(user_emb_np)
-                    with torch.no_grad():
-                        ideal_emb = self.diffusion_model.generate_ideal_embedding(user_tensor).cpu().numpy()
-                    
-                    _, diff_indices = self._index.search(ideal_emb, max(result_limit, 8))
-                    
-                    for cand_idx in diff_indices[0]:
-                        movie = self.get_movie_by_index(int(cand_idx))
-                        if movie:
-                            add_candidate(
-                                movie,
-                                score=1.0, # Generative Match is heavily weighted
-                                reason="mathematically hallucinated by Latent Diffusion Generation",
-                                stage="personalized_v2_generative_diffusion",
-                            )
-            except Exception as e:
-                logger.warning(f"Diffusion Retrieval failed: {e}")
-
-        # Step 3: Collaborative Filtering (ALS Mathematical Dot-Product)
-        user_id = profile.get("user_id")
-        if user_id:
-            cf_candidates = feature_store.get_collaborative_candidates(str(user_id), top_k=max(result_limit * 3, 20))
-            for cand_movie_id, cand_score in cf_candidates:
-                movie = self.get_movie_by_id(cand_movie_id)
-                if movie:
-                    # Normalize the raw dot-product score safely (ALS scores often sit around 0.5-4.5)
-                    normalized_score = max(0.0, min(1.0, float(cand_score) / 5.0))
-                    add_candidate(
-                        movie,
-                        score=normalized_score * 0.85, # Weigh mathematical CF heavily
-                        reason="mathematically derived from similar users (Collaborative Filtering)",
-                        stage="personalized_v2_collaborative_filtering",
-                    )
-
-        if not scored:
-            behavior = self.refresh_behavior_features()
-            for item in (behavior.get("trending_movies") or {}).values():
-                movie_id = item.get("movie_id")
-                if movie_id is None:
-                    continue
-                movie = self.get_movie_by_id(int(movie_id)) if isinstance(movie_id, int) else None
-                if movie:
-                    add_candidate(
-                        movie,
-                        score=min(1.0, float(item.get("event_count") or 0) / 20.0),
-                        reason=f"trending with viewers ({item.get('event_count')} recent events)",
-                        stage="personalized_v2_trending_fallback",
-                    )
-
-        results = sorted(scored.values(), key=lambda item: float(item.get("similarity_score") or 0), reverse=True)
-        
-        # --- APEX ENSEMBLE ENGINE RERANKING ---
-        user_id = profile.get("user_id")
-        if user_id and results:
-            try:
-                from backend.ensemble_engine import get_apex_engine
-                apex_engine = get_apex_engine(num_items=len(self._movies))
-                
-                candidate_ids = []
-                for res in results:
-                    try:
-                        candidate_ids.append(int(res["id"]))
-                    except (ValueError, TypeError):
-                        candidate_ids.append(0)
-                        
-                # Hash the alphanumeric user_id to a safe integer for the Embedding matrix
-                import hashlib
-                safe_user_idx = int(hashlib.md5(str(user_id).encode()).hexdigest(), 16) % apex_engine.num_users
-                
-                # Get neural ensemble scores for all candidates
-                ensemble_scores = apex_engine.predict_ensemble(safe_user_idx, candidate_ids)
-                
-                # Blend the mathematical AI scores with the existing candidate scores
-                for idx, res in enumerate(results):
-                    c_id = candidate_ids[idx]
-                    if c_id in ensemble_scores:
-                        ai_boost = float(ensemble_scores[c_id])
-                        original_score = float(res.get("similarity_score") or 0.0)
-                        # Blend: 40% traditional behavioral/semantic, 60% Apex AI Models
-                        blended_score = (0.4 * original_score) + (0.6 * ai_boost)
-                        res["similarity_score"] = blended_score
-                        res["retrieval_stage"] += "+apex_ensemble"
-                        
-                        # Provide XAI explanation
-                        explanations = list(res.get("explanation") or [])
-                        explanations.insert(0, f"Reranked by Apex AI (Ensemble Score: {ai_boost:.2f})")
-                        res["explanation"] = explanations[:5]
-                        res["explanation_text"] = " | ".join(res["explanation"])
-                
-                # Resort the final list based on the new blended AI scores
-                results = sorted(results, key=lambda item: float(item.get("similarity_score") or 0), reverse=True)
-            except Exception as e:
-                logger.error(f"Apex Ensemble Engine failed during inference: {e}")
-                
-        return results[:result_limit]
-    
     def get_movie_by_id(self, movie_id: int) -> dict | None:
         """Get movie details by TMDB ID."""
         movie_idx = self._index_for_movie_id(movie_id)
         if movie_idx is None:
             return None
         return self.get_movie_by_index(movie_idx)
-    
+
     def get_movie_by_index(self, idx: int) -> dict:
         """Get movie details by DataFrame index."""
         return self._clean_response_record(self._movies.iloc[idx].to_dict())
-        
+
     def get_all_titles(self, limit: int = 100000) -> list[dict]:
-        """
-        Return a lightweight list of movie IDs and Titles for autocomplete.
-        """
-        if self._movies is None:
-            return []
-        
-        # Extract necessary columns
-        cols = ["id", "title"]
-        if "release_date" in self._movies.columns:
-            cols.append("release_date")
-        if "popularity" in self._movies.columns:
-            cols.append("popularity")
-        if "genres" in self._movies.columns:
-            cols.append("genres")
-            
-        titles_df = self._movies[cols].copy()
-        
-        # Append release year to the title for disambiguation
-        if "release_date" in titles_df.columns:
-            years = pd.to_datetime(titles_df["release_date"], errors="coerce").dt.year
-            mask = years.notna() & (years > 0)
-            titles_df.loc[mask, "title"] = titles_df.loc[mask, "title"] + " (" + years[mask].astype(int).astype(str) + ")"
-            
-        # Append genres to the title for extra context
-        if "genres" in titles_df.columns:
-            # Handle NaN/None in genres
-            mask = titles_df["genres"].notna() & (titles_df["genres"] != "")
-            # Take only the first 2 genres to keep it clean, if it's a comma-separated string
-            def get_top_genres(g_str):
-                try:
-                    parts = str(g_str).split(",")
-                    return ", ".join(p.strip() for p in parts[:2])
-                except Exception:
-                    return str(g_str)
-            
-            top_genres = titles_df.loc[mask, "genres"].apply(get_top_genres)
-            titles_df.loc[mask, "title"] = titles_df.loc[mask, "title"] + " - " + top_genres
-        
-        # Sort by popularity so famous movies appear at the top instead of garbage punctuation
-        if "popularity" in titles_df.columns:
-            titles_df = titles_df.sort_values("popularity", ascending=False)
-        else:
-            titles_df = titles_df.sort_values("title")
-            
-        # Limit to the requested catalog slice to control payload size for hosted UIs.
-        if limit and limit > 0:
-            titles_df = titles_df.head(limit)
-        
-        # Return only id and title
+        """Return lightweight movie ID + title list for autocomplete."""
+        from backend.recommender_core import get_all_titles
+        return get_all_titles(self, limit)
 
-        return titles_df[["id", "title"]].to_dict(orient="records")
-    
     def search_movies(self, query: str, limit: int = 20) -> list[dict]:
-        """
-        Standard text search, but with a few tweaks to make it feel smarter.
-        We prioritize Titles, but also peek at Genres and Overviews so you can search for "action aliens".
-        """
-        """
-        Search movies by title, overview, and genres (Deep Search).
-        
-        Args:
-            query: Search query string
-            limit: Maximum results to return
-            
-        Returns:
-            List of matching movie dictionaries sorted by relevance
-        """
-        if not query:
+        """Search movies by title, overview, and genres. Delegates to pipeline or sparse fallback."""
+        if not query or self._movies is None:
             return []
-        if self._movies is None:
-            return []
-            
-        q_lower = query.lower().strip()
-        q_norm = re.sub(r"[^a-z0-9]+", " ", q_lower).strip()
+        if self._retrieval_pipeline is not None:
+            try:
+                encoder = self._get_query_encoder()
+                query_embedding = encoder.encode([query], convert_to_numpy=True)
+                query_embedding = query_embedding / np.linalg.norm(query_embedding, axis=1, keepdims=True)
+                candidates = self._retrieval_pipeline.retrieve(query_embedding.astype(np.float32), n=limit)
+                return [self._candidate_to_dict(item) for item in candidates]
+            except Exception as exc:
+                logger.warning("search_movies pipeline failed (%s); falling back.", type(exc).__name__)
+        return self._sparse_search_movies(query, limit)
 
-        def text_column(column: str) -> pd.Series:
-            if column not in self._movies.columns:
-                return pd.Series("", index=self._movies.index, dtype="string")
-            return self._movies[column].fillna("").astype(str)
-
-        def normalized_text_column(column: str) -> pd.Series:
-            frame_id = id(self._movies)
-            if self._search_text_cache_frame_id != frame_id:
-                self._search_text_cache.clear()
-                self._search_text_cache_frame_id = frame_id
-            cached = self._search_text_cache.get(column)
-            if cached is not None and cached.index.equals(self._movies.index):
-                return cached
-            normalized = (
-                text_column(column)
-                .str.lower()
-                .str.replace(r"[^a-z0-9]+", " ", regex=True)
-                .str.replace(r"\s+", " ", regex=True)
-                .str.strip()
-            )
-            self._search_text_cache[column] = normalized
-            return normalized
-
-        def numeric_column(column: str) -> pd.Series:
-            if column not in self._movies.columns:
-                return pd.Series(0.0, index=self._movies.index, dtype="float32")
-            return pd.to_numeric(self._movies[column], errors="coerce").fillna(0.0)
-
-        titles = text_column("title")
-        overviews = text_column("overview")
-        genres = text_column("genres")
-        normalized_titles = normalized_text_column("title")
-        normalized_overviews = normalized_text_column("overview")
-        normalized_genres = normalized_text_column("genres")
-        
-        # 1. Title Match (Weight: 10)
-        mask_title = titles.str.lower().str.contains(q_lower, regex=False, na=False)
-        if q_norm:
-            mask_title = mask_title | normalized_titles.str.contains(q_norm, regex=False, na=False)
-        
-        # 2. Overview Match (Weight: 3) - Allows searching by plot concepts
-        mask_overview = overviews.str.lower().str.contains(q_lower, regex=False, na=False)
-        if q_norm:
-            mask_overview = mask_overview | normalized_overviews.str.contains(q_norm, regex=False, na=False)
-        
-        # 3. Genre Match (Weight: 5)
-        mask_genre = genres.str.lower().str.contains(q_lower, regex=False, na=False)
-        if q_norm:
-            mask_genre = mask_genre | normalized_genres.str.contains(q_norm, regex=False, na=False)
-        
-        # Combine matches
-        matches = self._movies[mask_title | mask_overview | mask_genre].copy()
-        
-        if len(matches) == 0:
-            return []
-            
-        matches["relevance"] = 0.0
-        
-        # Title Factors
-        m_title = text_column("title").loc[matches.index].str.lower()
-        m_title_norm = normalized_text_column("title").loc[matches.index]
-        exact_title = m_title == q_lower
-        if q_norm:
-            exact_title = exact_title | (m_title_norm == q_norm)
-        starts_with_boundary = (
-            exact_title
-            | m_title.str.startswith(f"{q_lower} ", na=False)
-            | m_title.str.startswith(f"{q_lower}:", na=False)
-            | m_title.str.startswith(f"{q_lower}-", na=False)
-        )
-        if q_norm:
-            starts_with_boundary = starts_with_boundary | m_title_norm.str.startswith(f"{q_norm} ", na=False)
-        starts_with_prefix = m_title.str.startswith(q_lower, na=False) & ~starts_with_boundary
-        if q_norm:
-            starts_with_prefix = starts_with_prefix | (m_title_norm.str.startswith(q_norm, na=False) & ~starts_with_boundary)
-        matches.loc[exact_title, "relevance"] += 50.0
-        matches.loc[starts_with_boundary, "relevance"] += 20.0
-        matches.loc[starts_with_prefix, "relevance"] += 8.0
-        matches.loc[m_title.str.contains(q_lower, regex=False), "relevance"] += 10.0
-        if q_norm:
-            matches.loc[m_title_norm.str.contains(q_norm, regex=False), "relevance"] += 10.0
-        
-        # Other Factors
-        # Note: We use the masks subsetted by the matches index
-        matches.loc[mask_genre[matches.index], "relevance"] += 5.0
-        matches.loc[mask_overview[matches.index], "relevance"] += 3.0
-        
-        # Ranking intent: exact title should find the canonical title first, but
-        # weak duplicate-title records should not bury major franchise entries.
-        popularity = numeric_column("popularity").loc[matches.index].clip(lower=0)
-        vote_count = numeric_column("vote_count").loc[matches.index].clip(lower=0)
-        matches["relevance"] += np.log1p(popularity) * 2.0
-        matches["relevance"] += np.log1p(vote_count) * 0.8
-
-        strong_exact_exists = bool((exact_title & ((vote_count >= 500) | (popularity >= 20))).any())
-        if strong_exact_exists:
-            weak_exact_duplicate = exact_title & (vote_count < 100) & (popularity < 15)
-            matches.loc[weak_exact_duplicate, "relevance"] -= 55.0
-
-        franchise_continuation = (
-            (
-                m_title.str.startswith(f"{q_lower}: ", na=False)
-                | m_title.str.startswith(f"{q_lower} - ", na=False)
-                | (m_title_norm.str.startswith(f"{q_norm} ", na=False) if q_norm else False)
-            )
-            & ((vote_count >= 250) | (popularity >= 20))
-        )
-        matches.loc[franchise_continuation, "relevance"] += 16.0
-        
-        # Sort by relevance
-        matches = matches.sort_values("relevance", ascending=False).head(limit)
-        
-        return [self._clean_response_record(record) for record in matches.to_dict(orient="records")]
+    def _sparse_search_movies(self, query: str, limit: int = 20) -> list[dict]:
+        """TF-IDF + relevance-scoring fallback for search_movies."""
+        from backend.recommender_core import sparse_search_movies
+        return sparse_search_movies(self, query, limit)
 
     def _metadata_recommend_by_index(self, movie_idx: int, n: int = 10) -> list[dict]:
-        """Content-based fallback recommender when vector artifacts are unavailable."""
-        if self._movies is None or movie_idx < 0 or movie_idx >= len(self._movies):
-            return []
+        """Content-based fallback — delegates to recommender_core."""
+        from backend.recommender_core import metadata_recommend_by_index
+        return metadata_recommend_by_index(self, movie_idx, n)
 
-        self.refresh_behavior_features()
-        try:
-            self._ensure_item_retrieval_index()
-            content_scores = self._item_tfidf_matrix[movie_idx].dot(self._item_tfidf_matrix.T).toarray().ravel()
-        except Exception as exc:
-            logger.warning("Item sparse similarity unavailable; using metadata-only scoring: %s", exc)
-            content_scores = np.zeros(len(self._movies), dtype=np.float32)
-
-        query_movie = self.get_movie_by_index(movie_idx)
-        query_twin = self._semantic_twin_for_index(movie_idx)
-        q_genres = self._genre_set(query_movie)
-        q_director = str(query_movie.get("director") or "").strip().lower()
-        q_language = str(query_movie.get("original_language") or "").strip().lower()
-        query_votes = float(query_movie.get("vote_count") or 0)
-        query_runtime = float(query_movie.get("runtime") or 0)
-        q_title_tokens = {
-            token
-            for token in str(query_movie.get("title") or "").lower().replace(":", " ").replace("-", " ").split()
-            if len(token) >= 4 and token not in {"movie", "part", "chapter"}
-        }
-
-        scores = np.asarray(content_scores, dtype=np.float32) * 0.76
-
-        def numeric_array(column: str, default: float = 0.0) -> np.ndarray:
-            if column not in self._movies.columns:
-                return np.full(len(self._movies), default, dtype=np.float32)
-            return pd.to_numeric(
-                self._movies[column],
-                errors="coerce",
-            ).fillna(default).to_numpy(dtype=np.float32)
-
-        genre_overlap = np.zeros(len(self._movies), dtype=np.float32)
-        if q_genres and "genres" in self._movies.columns:
-            genres = self._movies["genres"].fillna("").astype(str).str.lower()
-            for genre in q_genres:
-                genre_mask = genres.str.contains(genre, regex=False, na=False).to_numpy()
-                genre_overlap += genre_mask.astype(np.float32)
-            genre_ratio = genre_overlap / max(len(q_genres), 1)
-            scores += genre_ratio * 0.12
-            scores += np.minimum(genre_overlap, 2) * 0.02
-
-        if q_director and q_director != "unknown" and "director" in self._movies.columns:
-            directors = self._movies["director"].fillna("").astype(str).str.lower()
-            director_mask = directors.eq(q_director).to_numpy()
-            scores += director_mask.astype(np.float32) * 0.08
-
-        if q_language and "original_language" in self._movies.columns:
-            languages = self._movies["original_language"].astype(str).str.lower()
-            language_mask = languages.eq(q_language).to_numpy()
-            scores += language_mask.astype(np.float32) * 0.025
-
-        if "content_quality_score" in self._movies.columns:
-            quality = numeric_array("content_quality_score")
-            scores += np.clip(quality, 0, 1) * 0.12
-        else:
-            vote_average = numeric_array("vote_average")
-            vote_count = numeric_array("vote_count")
-            confidence = np.minimum(1.0, np.log1p(np.maximum(vote_count, 0)) / 8.0)
-            scores += np.clip(vote_average / 10.0, 0, 1) * confidence * 0.10
-
-        if "vote_count" in self._movies.columns:
-            vote_count = numeric_array("vote_count")
-            scores += np.minimum(1.0, np.log1p(np.maximum(vote_count, 0)) / 10.0) * 0.06
-
-        if "popularity" in self._movies.columns:
-            popularity = numeric_array("popularity")
-            scores += np.minimum(1.0, np.log1p(np.maximum(popularity, 0)) / 8.0) * 0.08
-
-        scores[movie_idx] = -np.inf
-        if len(scores) <= 1:
-            return []
-
-        candidate_count = min(max(n * 40, 250), len(scores) - 1)
-        candidate_indices = np.argpartition(scores, -candidate_count)[-candidate_count:]
-        candidate_indices = candidate_indices[np.argsort(scores[candidate_indices])[::-1]]
-
-        results = []
-        for idx in candidate_indices:
-            idx = int(idx)
-            if len(results) >= n:
-                break
-            if not np.isfinite(scores[idx]) or scores[idx] <= 0:
-                continue
-
-            movie = self.get_movie_by_index(idx)
-            movie_genres = self._genre_set(movie)
-            content_score = float(content_scores[idx]) if len(content_scores) > idx else 0.0
-            shared_genres = q_genres & movie_genres
-            candidate_votes = float(movie.get("vote_count") or 0)
-            candidate_runtime = float(movie.get("runtime") or 0)
-            semantic_affinity = self._semantic_affinity_for_indices(movie_idx, idx)
-            semantic_score = float(semantic_affinity["score"])
-
-            if movie.get("public_demo_eligible") is False:
-                continue
-            if movie.get("recommendable") is False:
-                continue
-            if query_runtime >= 60 and 0 < candidate_runtime < 60:
-                continue
-            if "documentary" in movie_genres and "documentary" not in q_genres:
-                continue
-            if "tv movie" in movie_genres and "tv movie" not in q_genres:
-                continue
-            if not shared_genres and content_score < 0.10:
-                continue
-            min_votes = 500 if query_votes >= 5000 else 50
-            if candidate_votes < min_votes and content_score < 0.16:
-                continue
-            if {"animation", "family"} & movie_genres and not ({"animation", "family"} & q_genres):
-                scores[idx] -= 0.12
-            if "comedy" in movie_genres and "comedy" not in q_genres and content_score < 0.16:
-                continue
-
-            scores[idx] += semantic_score * 0.18
-
-            title_tokens = {
-                token
-                for token in str(movie.get("title") or "").lower().replace(":", " ").replace("-", " ").split()
-                if len(token) >= 4
-            }
-            if q_title_tokens & title_tokens and "documentary" not in movie_genres:
-                scores[idx] += 0.14
-
-            reasons = []
-            if shared_genres:
-                reasons.append(f"Shared genres: {', '.join(sorted(g.title() for g in shared_genres)[:2])}")
-            if content_score >= 0.18:
-                reasons.append("Similar story and setting")
-            reasons.extend(semantic_affinity.get("reasons") or [])
-            if q_director and str(movie.get("director") or "").strip().lower() == q_director:
-                reasons.append(f"Same director ({movie.get('director')})")
-            if q_language and str(movie.get("original_language") or "").strip().lower() == q_language:
-                reasons.append("Same catalog language")
-            if float(movie.get("vote_average") or 0) >= 7.5:
-                reasons.append(f"Strong audience rating ({float(movie.get('vote_average') or 0):.1f}/10)")
-            if not reasons:
-                reasons.append("Closest content and catalog-quality match")
-
-            behavior_boost, behavior_reasons = self._behavior_boost(movie.get("id"))
-            score = float(scores[idx] + behavior_boost)
-            movie["similarity_score"] = score
-            movie["retrieval_stage"] = "content_sparse_fallback"
-            movie["retrieval_signals"] = {
-                "content_sparse": round(content_score, 4),
-                "semantic_twin": round(semantic_score, 4),
-                "semantic_twin_details": semantic_affinity,
-                "genre_overlap": round(float(len(shared_genres) / max(len(q_genres), 1)), 4),
-                "metadata": round(float(scores[idx]), 4),
-                "behavior": round(behavior_boost, 4),
-                "vector_artifacts_loaded": False,
-                "vector_artifact_status": self._artifact_status,
-            }
-            movie["explanation"] = (reasons + behavior_reasons)[:5]
-            movie["explanation_text"] = " | ".join(movie["explanation"])
-            results.append(movie)
-
-        results.sort(key=lambda item: float(item.get("similarity_score") or 0), reverse=True)
-        results = self._apply_learned_ranker(results)
-        return self._quality_gate_item_recommendations(results, query_movie, n)[:n]
-        
     def kg_recommend(self, movie_id: int, n: int = 10) -> list[dict]:
-        """
-        Uses the Knowledge Graph to find thematically similar movies via multi-hop reasoning.
-        """
+        """Knowledge Graph multi-hop thematic recommendations."""
         if not self.kg_engine or not self.kg_engine.graph:
             return []
-            
-        kg_results = self.kg_engine.find_thematically_similar(movie_id, top_k=n*2)
-        if not kg_results:
+        kg_results = self.kg_engine.find_thematically_similar(movie_id, top_k=n * 2)
+        if not kg_results or not self.get_movie_by_id(movie_id):
             return []
-            
-        query_movie = self.get_movie_by_id(movie_id)
-        if not query_movie:
-            return []
-            
         results = []
         for sim_id, score in kg_results:
             movie = self.get_movie_by_id(sim_id)
             if not movie:
                 continue
-                
-            # Copy to avoid mutating original
             movie = dict(movie)
-            movie["similarity_score"] = float(score) / 10.0 # Normalize mock score
-            
-            # Formulate the explanation
+            movie["similarity_score"] = float(score) / 10.0
             movie["retrieval_signals"] = {"kg_shared_semantics": score}
             movie["explanation"] = [f"Shares {int(score)} narrative themes/moods"]
             movie["explanation_text"] = movie["explanation"][0]
-            
             results.append(movie)
             if len(results) >= n:
                 break
-                
         return results
-    
-    def visual_search(self, movie_id: int, n: int = 10) -> list[dict]:
-        """
-        Executes a Multi-Modal similarity search utilizing both Text and Visual (Poster) embeddings.
-        Finds movies that are aesthetically and thematically similar.
-        """
-        if self.multimodal_index is None or self.multimodal_index.index is None:
-            logger.warning("Visual search requested, but multimodal index is not loaded.")
-            return []
-            
-        # Fetch the target movie's vectors
-        text_emb_path = MODELS_DIR / "sbert_embeddings.npy"
-        text_ids_path = MODELS_DIR / "movie_ids.npy"
-        vision_emb_path = MODELS_DIR / "poster_embeddings.npy"
-        vision_ids_path = MODELS_DIR / "poster_movie_ids.npy"
-        
-        if not all(p.exists() for p in (text_emb_path, text_ids_path, vision_emb_path, vision_ids_path)):
-            return []
-            
-        # Since we just want the target vectors quickly, we can memory map them
-        text_vectors = np.load(text_emb_path, mmap_mode="r")
-        text_ids = np.load(text_ids_path, mmap_mode="r")
-        vision_vectors = np.load(vision_emb_path, mmap_mode="r")
-        vision_ids = np.load(vision_ids_path, mmap_mode="r")
-        
-        # Find indices
-        t_loc = np.where(text_ids == movie_id)[0]
-        v_loc = np.where(vision_ids == movie_id)[0]
-        
-        if len(t_loc) == 0 or len(v_loc) == 0:
-            logger.warning(f"Movie {movie_id} is missing text or vision vectors.")
-            return []
-            
-        t_vec = text_vectors[t_loc[0]]
-        v_vec = vision_vectors[v_loc[0]]
-        
-        # Execute fused search
-        results = self.multimodal_index.search(t_vec, v_vec, top_k=n*2)
-        
-        final_results = []
-        for res_id, dist in results:
-            if res_id == movie_id:
-                continue
-            if len(final_results) >= n:
-                break
-                
-            movie = self.get_movie_by_id(int(res_id))
-            if movie:
-                movie["similarity_score"] = float(dist)
-                movie["retrieval_stage"] = "multi_modal_fusion"
-                movie["explanation"] = ["Aesthetically and thematically similar (Text + Vision matching)"]
-                movie["explanation_text"] = movie["explanation"][0]
-                final_results.append(movie)
-                
-        return final_results
-    
+
+    def visual_search(self, movie_id: int, n: int = 10) -> list:
+        """Multi-Modal similarity search using Text + Visual (Poster) embeddings."""
+        from backend.recommender_core import visual_search
+        return visual_search(self, movie_id, n)
+
+    def _candidate_to_dict(self, item) -> dict:
+        """Convert a FinalItem from the pipeline to the response dict shape."""
+        from backend.recommender_core import candidate_to_dict
+        return candidate_to_dict(self, item)
+
     def recommend_by_index(self, movie_idx: int, n: int = 10) -> list[dict]:
-        """
-        Get recommendations for a movie by its DataFrame index.
-        
-        Args:
-            movie_idx: Index of the movie in the DataFrame
-            n: Number of recommendations
-            
-            Returns:
-            List of recommended movie dictionaries with similarity scores
-        """
-        if self._vectors is None or self._index is None:
-            logger.info("Vector artifacts not loaded/aligned; using content sparse recommendation fallback.")
+        """Get recommendations for a movie by its DataFrame index."""
+        if (self._retrieval_pipeline is None or self._ranking_pipeline is None
+                or self._vectors is None or self._index is None):
+            return self._metadata_recommend_by_index(movie_idx, n=n)
+        try:
+            query_vector = self._vectors[movie_idx].reshape(1, -1).astype(np.float32)
+            candidates = self._retrieval_pipeline.retrieve(query_vector, n=min(100, len(self._movies)))
+            if not candidates:
+                return self._metadata_recommend_by_index(movie_idx, n=n)
+            ranked = self._ranking_pipeline.rank(candidates, user_context={})
+            final = self._reranking_pipeline.rerank(ranked, constraints={})
+            return [self._candidate_to_dict(item) for item in final[:n]]
+        except Exception as exc:
+            logger.warning("Pipeline delegation failed (%s); falling back.", type(exc).__name__)
             return self._metadata_recommend_by_index(movie_idx, n=n)
 
-        self.refresh_behavior_features()
-        
-        # Get query vector
-        query_vector = self._vectors[movie_idx].reshape(1, -1).astype(np.float32)
-        query_vector = np.ascontiguousarray(query_vector)
-        
-        # Search (Fetch 100 candidates for re-ranking)
-        # We fetch more than N to allow the business logic to re-order them
-        fetch_k = min(100, getattr(self._index, "ntotal", len(self._movies)))
-        
-        # Configure IVF search
-        if hasattr(self._index, "nprobe"):
-            self._index.nprobe = min(50, getattr(self._index, "nlist", 10))
-            
-        # Configure HNSW search (efSearch > k helps recall)
-        if hasattr(self._index, "hnsw"):
-            self._index.hnsw.efSearch = 200
-        
-        distances, indices = self._index.search(query_vector, fetch_k)
-        
-        # Get Query Metadata for Re-Ranking
-        query_movie = self.get_movie_by_index(movie_idx)
-        query_twin = self._semantic_twin_for_index(movie_idx)
-        q_director = query_movie.get("director")
-        q_title_tokens = set(query_movie["title"].lower().split())
-        stop_words = {"the", "a", "an", "of", "and", "in", "to", "part", "vol", "volume", "chapter"}
-        q_title_tokens -= stop_words
-        
-        # --- APEX ENSEMBLE ENGINE RE-RANKING (BATCH PREDICTION) ---
-        valid_indices = [int(idx) for idx in indices[0] if idx != movie_idx and 0 <= idx < len(self._movies)]
-        try:
-            from backend.ensemble_engine import get_apex_engine
-            apex = get_apex_engine(len(self._movies))
-            # User 0 is a placeholder unless we extract user_id from the live request session
-            ensemble_scores = apex.predict_ensemble(0, valid_indices)
-        except Exception as e:
-            logger.warning(f"Apex Ensemble failed: {e}")
-            ensemble_scores = {}
-
-        # --- RL POLICY SCORE SHIFT (Requirement 5.1, 5.2) ---
-        rl_score_shift: dict[int, float] = {}
-        if self._rl_policy is not None:
-            try:
-                # Build RL state from empty behavior profile (no user context at item-to-item level)
-                rl_state = _build_rl_state({}, None)
-                action, _ = self._rl_policy.get_action(rl_state, deterministic=True)
-                # Reuse the apex engine already loaded above — no second import needed
-                _apex = apex if ensemble_scores else get_apex_engine(len(self._movies))
-                action_vec = action.squeeze().detach().numpy()  # [16]
-                for idx in valid_indices:
-                    safe_idx = idx % _apex.num_items
-                    item_emb = _apex.lightgcn.item_embedding.weight[safe_idx].detach().numpy()  # [16]
-                    rl_score_shift[idx] = float(np.dot(item_emb, action_vec))
-                # Normalise rl_score_shift to [0, 1]
-                if rl_score_shift:
-                    vals = np.array(list(rl_score_shift.values()), dtype=np.float32)
-                    v_min, v_max = vals.min(), vals.max()
-                    if v_max - v_min > 1e-8:
-                        rl_score_shift = {k: float((v - v_min) / (v_max - v_min)) for k, v in rl_score_shift.items()}
-                    else:
-                        rl_score_shift = {k: 0.5 for k in rl_score_shift}
-            except Exception as exc:
-                logger.warning("RL score shift failed: %s", exc)
-                rl_score_shift = {}
-        
-        # Build results
-        results = []
-        for dist, idx in zip(distances[0], indices[0]):
-            if idx == movie_idx or idx < 0 or idx >= len(self._movies):
-                continue
-            
-            cand = self.get_movie_by_index(idx)
-            raw_score = float(dist)
-            final_score = raw_score
-            semantic_affinity = self._semantic_affinity_for_indices(movie_idx, int(idx))
-            semantic_score = float(semantic_affinity["score"])
-            final_score += semantic_score * 0.14
-            
-            # --- APEX ENSEMBLE SCORE INJECTION ---
-            if int(idx) in ensemble_scores:
-                apex_score = ensemble_scores[int(idx)]
-                final_score += apex_score * 0.40  # Heavy weight for the Apex Engine
-                # Apply RL score shift (10% additive, Requirement 5.2)
-                if int(idx) in rl_score_shift:
-                    final_score += 0.1 * rl_score_shift[int(idx)]
-                cand["retrieval_stage"] = "apex_hybrid_ensemble"
-            else:
-                cand["retrieval_stage"] = "faiss_baseline"
-            
-            # --- BUSINESS LOGIC RE-RANKING ---
-            
-            # Director Match (+0.10) - Strong signal for stylistic similarity
-            if q_director and cand.get("director") == q_director:
-                final_score += 0.10
-                
-            # We are removing franchise string-matching heuristics because they overly heavily bias
-            # the FAISS pool. The Hugging Face Llama-3 Reranker is now smart enough to detect true franchises
-            # based on plot semantics and metadata without brute forcing scores.
-            pass
-            
-            # Popularity Nudge (Log Scale)
-            votes = cand.get("vote_count", 0)
-            if votes > 0:
-                final_score += 0.02 * np.log10(votes)
-
-            # Genre Consistency Check
-            # If the candidate shares NO genres with the query, it's likely a semantic drift (e.g. word match).
-            # "Avatar" (Sci-Fi) vs "The Aviator" (Drama) -> No overlap.
-            q_genres_str = str(query_movie.get("genres", "")).lower()
-            cand_genres_str = str(cand.get("genres", "")).lower()
-            
-            # Simple set parsing (assuming comma separated)
-            q_genre_set = {g.strip() for g in q_genres_str.split(",") if g.strip()}
-            cand_genre_set = {g.strip() for g in cand_genres_str.split(",") if g.strip()}
-            
-            # Penalize if Disjoint (and query actually has genres)
-            if q_genre_set and cand_genre_set.isdisjoint(q_genre_set):
-                final_score -= 0.15 
-
-            # Documentary Penalty (Unless Query is also a Documentary)
-            # Users usually don't want "Making Of" videos when searching for feature films.
-            is_query_doc = "documentary" in q_genres_str
-            is_cand_doc = "documentary" in cand_genres_str
-            
-            if is_cand_doc and not is_query_doc:
-                final_score -= 0.15 # Strong penalty to push them down
-            
-            # Quality-based score adjustments
-            
-            # Quality Boost (Favor well-rated films)
-            cand_rating = cand.get("vote_average", 0) or 0
-            cand_votes = cand.get("vote_count", 0) or 0
-            if cand_rating > 0 and cand_votes > 100:
-                # Combines rating quality with vote confidence
-                quality_score = (cand_rating / 10) * np.log10(max(cand_votes, 1))
-                final_score += 0.02 * quality_score  # Subtle but effective
-            
-            # Era Matching (Penalize large time gaps)
-            try:
-                q_year = int(str(query_movie.get("release_date", ""))[:4])
-                c_year = int(str(cand.get("release_date", ""))[:4])
-                year_gap = abs(q_year - c_year)
-                
-                if year_gap <= 5:
-                    final_score += 0.03  # Same era boost
-                elif year_gap >= 30:
-                    final_score -= 0.05  # Different generation penalty
-            except (ValueError, TypeError, IndexError):
-                pass  # Skip if dates are invalid
-            
-            # Recency Boost (Slight preference for newer films)
-            try:
-                c_year = int(str(cand.get("release_date", ""))[:4])
-                current_year = datetime.now().year
-                years_old = current_year - c_year
-                if years_old <= 5:
-                    final_score += 0.02  # Recent film boost
-            except (ValueError, TypeError, IndexError):
-                pass
-            
-            # Same Language Preference
-            q_lang = str(query_movie.get("original_language", "en")).lower()
-            c_lang = str(cand.get("original_language", "en")).lower()
-            if q_lang == c_lang:
-                final_score += 0.02  # Same language slight boost
-
-            behavior_boost, behavior_reasons = self._behavior_boost(cand.get("id"))
-            final_score += behavior_boost
-
-            # Temporal preference boost — weights recent genre preferences more heavily
-            try:
-                from backend.temporal_preference import temporal_score_boost
-                if hasattr(self, "_temporal_profile") and self._temporal_profile:
-                    t_boost = temporal_score_boost(
-                        cand.get("genres", ""),
-                        self._temporal_profile,
-                        boost_scale=0.05,
-                    )
-                    final_score += t_boost
-            except Exception:
-                pass
-
-            # Long-horizon RL adjustment (churn risk + preference stability)
-            try:
-                from backend.long_horizon_rl import long_horizon_score_adjustment
-                if hasattr(self, "_user_events_cache"):
-                    lh_adj = long_horizon_score_adjustment(
-                        cand,
-                        self._user_events_cache,
-                        churn_risk=getattr(self, "_churn_risk", 0.3),
-                        preference_stability=getattr(self, "_pref_stability", 0.7),
-                    )
-                    final_score += lh_adj
-            except Exception:
-                pass
-            
-            # === EXPLAINABILITY (Why was this recommended?) ===
-            explanation_tags = []
-            
-
-            
-            # Director match
-            if q_director and cand.get("director") == q_director:
-                explanation_tags.append(f"Same director ({q_director})")
-            
-            # Genre overlap
-            shared_genres = q_genre_set & cand_genre_set
-            if shared_genres:
-                top_genres = list(shared_genres)[:2]
-                explanation_tags.append(f"Shared genres: {', '.join(g.title() for g in top_genres)}")
-
-            explanation_tags.extend(semantic_affinity.get("reasons") or [])
-            
-            # Era match
-            try:
-                q_year = int(str(query_movie.get("release_date", ""))[:4])
-                c_year = int(str(cand.get("release_date", ""))[:4])
-                if abs(q_year - c_year) <= 5:
-                    explanation_tags.append(f"Same era ({c_year})")
-            except (ValueError, TypeError, IndexError):
-                pass
-            
-            # High quality
-            if cand_rating >= 7.5 and cand_votes >= 1000:
-                explanation_tags.append(f"Critically acclaimed ({cand_rating}/10)")
-            
-            # Same language (if not English - more notable)
-            if q_lang == c_lang and q_lang != "en":
-                explanation_tags.append(f"Same language ({c_lang.upper()})")
-
-            explanation_tags.extend(behavior_reasons)
-            
-            # Default if no specific reasons found
-            if not explanation_tags:
-                explanation_tags.append("Similar themes and plot")
-                
-            cand["similarity_score"] = final_score
-            cand["retrieval_stage"] = "vector_semantic_ranked"
-            cand["retrieval_signals"] = {
-                "dense": round(raw_score, 4),
-                "semantic_twin": round(semantic_score, 4),
-                "semantic_twin_details": semantic_affinity,
-                "behavior": round(behavior_boost, 4),
-            }
-            cand["explanation"] = explanation_tags  # NEW: Add explanation
-            cand["explanation_text"] = " | ".join(explanation_tags)  # Human-readable
-            results.append(cand)
-        
-        # Sort by boosted score
-        results.sort(key=lambda x: x["similarity_score"], reverse=True)
-        results = self._apply_learned_ranker(results, precomputed_ensemble_scores=ensemble_scores)
-        results = self._quality_gate_item_recommendations(results, query_movie, n)
-        llm_window = int(os.getenv("NOVA_LLM_RERANK_CANDIDATES", "12"))
-        top_candidates = results[: max(1, min(20, llm_window))]
-        
-        # Optional LLM-as-judge reranking. Keep this off by default because free
-        # OpenRouter models can be rate-limited and should never block serving.
-        if self._llm_rerank_enabled():
-            try:
-                llm_results = self._rerank_with_llm(query_movie, top_candidates, n)
-                if llm_results and len(llm_results) > 0:
-                    return llm_results
-            except Exception as e:
-                logger.warning("LLM reranking skipped; falling back to FAISS/MMR. Error: %s", e)
-        
-        # === MMR DIVERSITY (Maximal Marginal Relevance) ===
-        # Prevents returning 5 nearly identical movies
-        if len(results) > n and self._vectors is not None:
-            final_results = self._apply_mmr(results, movie_idx, n, lambda_param=0.7)
-        else:
-            final_results = results[:n]
-
-        # --- SUBMODULAR DIVERSITY RE-RANKING ---
-        # Provides stronger diversity guarantees than MMR with (1-1/e) optimality
-        try:
-            from backend.diversity_reranker import submodular_rerank
-            final_results = submodular_rerank(
-                final_results,
-                n=n,
-                lambda_diversity=0.25,
-            )
-        except Exception as exc:
-            logger.warning("Submodular rerank failed: %s", exc)
-
-        # --- RL SAFETY FILTER (Requirement 5.10, 5.11) ---
-        try:
-            from backend.rl_policy import RLSafetyFilter
-            candidate_ids = [int(r.get("id", 0)) for r in final_results]
-            # No user context at item-to-item level; empty dislike set
-            safe_ids = set(RLSafetyFilter.apply_hard_constraints(candidate_ids, set()))
-            filtered = [r for r in final_results if int(r.get("id", 0)) in safe_ids]
-            if not filtered:
-                logger.warning("RLSafetyFilter removed all candidates; reverting to pre-filter list.")
-                filtered = final_results
-            final_results = filtered
-        except Exception as exc:
-            logger.warning("RLSafetyFilter failed: %s", exc)
-
-        # --- THOMPSON SAMPLING EXPLORATION ---
-        # Occasionally surface high-uncertainty items to discover user preferences
-        try:
-            from backend.exploration_engine import get_thompson_bandit
-            import random as _random
-            bandit = get_thompson_bandit()
-            final_results = bandit.apply_exploration(final_results, n=n, rng=_random.Random())
-        except Exception as exc:
-            logger.debug("Thompson sampling skipped: %s", exc)
-
-        # --- MULTI-OBJECTIVE RE-RANKING ---
-        # Balance relevance, novelty, serendipity, and quality
-        try:
-            from backend.multi_objective_ranker import pareto_rank
-            from backend.debiased_metrics import compute_item_popularity
-            from backend.events import iter_events as _iter_events
-            # Use cached popularity if available
-            if not hasattr(self, "_item_popularity_cache"):
-                events_sample = list(_iter_events())[:5000]
-                self._item_popularity_cache = compute_item_popularity(events_sample)
-            user_history = set()
-            user_genre_profile: dict[str, float] = {}
-            final_results = pareto_rank(
-                final_results,
-                user_history_ids=user_history,
-                user_genre_profile=user_genre_profile,
-                popularity=self._item_popularity_cache,
-                n=n,
-            )
-        except Exception as exc:
-            logger.debug("Multi-objective ranking skipped: %s", exc)
-
-        # --- UNCERTAINTY ANNOTATION ---
-        # Add confidence scores to each recommendation
-        try:
-            from backend.uncertainty_estimator import compute_confidence_score
-            for movie in final_results:
-                mid = movie.get("id")
-                if mid is not None:
-                    confidence = compute_confidence_score(
-                        ensemble_scores={},
-                        weights={},
-                        user_interaction_count=0,
-                        item_interaction_count=int(movie.get("vote_count") or 0),
-                    )
-                    movie["confidence"] = confidence["confidence"]
-                    movie["confidence_label"] = confidence["confidence_label"]
-        except Exception:
-            pass
-
-        return final_results
-    
-    def _rerank_with_llm(self, query_movie: dict, candidates: list[dict], n: int = 10) -> list[dict]:
-        """
-        Uses OpenRouter API to semantically rerank candidates.
-        """
-        openrouter_key = openrouter_api_key()
-        if not openrouter_key:
-            logger.warning("OPENROUTER_API_KEY missing. Skipping LLM reranking and falling back to FAISS/MMR.")
-            raise ValueError("OPENROUTER_API_KEY environment variable is not set or accessible.")
-        prompt = f"""You are an expert film critic. I will give you a QUERY MOVIE and a list of CANDIDATE MOVIES.
-Your job is to select the {n} absolute best recommendations based on deep aesthetic similarity, themes, tropes, target audience, and vibe.
-Ignore generic keyword matches. Focus on the actual experience of watching the movie.
-
-QUERY MOVIE:
-Title: {query_movie.get('title')}
-Genres: {query_movie.get('genres')}
-Plot: {query_movie.get('overview')}
-
-CANDIDATE MOVIES:
-{cand_text}
-
-Output strictly in valid JSON format like this:
-{{
-  "recommendations": [
-    {{"index": <candidate_index_from_above>, "explanation": "<a one-sentence explanation of why this matches the query aesthetic>"}}
-  ]
-}}
-Do not write any other text except the JSON object.
-"""
-        cleaned_response = chat_completion(
-            messages=[{"role": "user", "content": prompt}],
-            models=configured_models("OPENROUTER_RERANK_MODELS"),
-            temperature=0.1,
-            timeout_seconds=float(os.getenv("OPENROUTER_RERANK_TIMEOUT_SECONDS", "8")),
-            api_key=openrouter_key,
-        )
-        if cleaned_response.startswith("```json"):
-            cleaned_response = cleaned_response[7:]
-        if cleaned_response.startswith("```"):
-            cleaned_response = cleaned_response[3:]
-        if cleaned_response.endswith("```"):
-            cleaned_response = cleaned_response[:-3]
-            
-        data = json.loads(cleaned_response)
-        
-        reranked_results = []
-        for item in data.get("recommendations", []):
-            idx = item.get("index")
-            if isinstance(idx, int) and 0 <= idx < len(candidates):
-                movie = candidates[idx]
-                movie["explanation_text"] = "LLM Reranked: " + str(item.get("explanation", "Highly similar aesthetic vibe."))
-                # Keep original similarity score but sort by the LLM's chosen order
-                reranked_results.append(movie)
-                
-        if not reranked_results:
-            raise ValueError(f"LLM returned no valid recommendations. Raw text: {cleaned_response[:100]}")
-            
-        return reranked_results[:n]
-    
-    def _apply_mmr(self, candidates: list[dict], query_idx: int, n: int, lambda_param: float = 0.7) -> list[dict]:
-        """
-        Apply Maximal Marginal Relevance for diversity.
-        
-        MMR = λ * sim(query, doc) - (1-λ) * max(sim(doc, selected))
-        
-        λ = 0.7 means 70% relevance, 30% diversity
-        """
-        if len(candidates) <= n or self._vectors is None:
-            return candidates
-        
-        selected = []
-        remaining = candidates.copy()
-        vector_cache: dict[int, np.ndarray] = {}
-
-        def candidate_vector(movie: dict) -> np.ndarray | None:
-            row_idx = self._index_for_movie_id(movie.get("id"))
-            if row_idx is None:
-                return None
-            if row_idx not in vector_cache:
-                vector_cache[row_idx] = np.asarray(self._vectors[row_idx], dtype=np.float32)
-            return vector_cache[row_idx]
-        
-        # First pick: highest score (most relevant)
-        selected.append(remaining.pop(0))
-        
-        while len(selected) < n and remaining:
-            best_mmr = -float('inf')
-            best_idx = 0
-            
-            for i, cand in enumerate(remaining):
-                v_cand = candidate_vector(cand)
-                if v_cand is None:
-                    continue
-                
-                relevance = cand["similarity_score"]
-                
-                # Calculate max similarity to already selected
-                max_sim_to_selected = 0
-                for sel in selected:
-                    v_sel = candidate_vector(sel)
-                    if v_sel is None:
-                        continue
-                    sim = float(np.dot(v_cand, v_sel))
-                    max_sim_to_selected = max(max_sim_to_selected, sim)
-                
-                # MMR score
-                mmr = lambda_param * relevance - (1 - lambda_param) * max_sim_to_selected
-                
-                if mmr > best_mmr:
-                    best_mmr = mmr
-                    best_idx = i
-            
-            selected.append(remaining.pop(best_idx))
-        
-        return selected
-    
     def recommend_by_id(self, movie_id: int, n: int = 10) -> list[dict]:
-        """
-        Get recommendations for a movie by its TMDB ID.
-        
-        Args:
-            movie_id: TMDB movie ID
-            n: Number of recommendations
-            
-        Returns:
-            List of recommended movie dictionaries
-        """
+        """Get recommendations for a movie by its TMDB ID (with 5-min TTL cache)."""
         movie_idx = self._index_for_movie_id(movie_id)
         if movie_idx is None:
             return []
-
-        # Simple TTL cache: same movie+n within 5 minutes returns cached results
-        cache_key = (movie_id, n)
-        cached = getattr(self, "_rec_cache", {}).get(cache_key)
-        if cached is not None:
-            cached_at, cached_result = cached
-            import time as _time
-            if _time.time() - cached_at < 300:  # 5-minute TTL
-                return cached_result
-
-        result = self.recommend_by_index(movie_idx, n)
-
-        # Store in cache (cap at 500 entries)
+        import time as _time
         if not hasattr(self, "_rec_cache"):
             self._rec_cache: dict = {}
+        cached = self._rec_cache.get((movie_id, n))
+        if cached is not None and _time.time() - cached[0] < 300:
+            return cached[1]
+        result = self.recommend_by_index(movie_idx, n)
         if len(self._rec_cache) >= 500:
-            try:
+            with contextlib.suppress(StopIteration):
                 self._rec_cache.pop(next(iter(self._rec_cache)))
-            except StopIteration:
-                pass
-        import time as _time
-        self._rec_cache[cache_key] = (_time.time(), result)
-
+        self._rec_cache[(movie_id, n)] = (_time.time(), result)
         return result
 
     def recommend_batch(self, movie_ids: list[int], n: int = 10) -> dict[int, list[dict]]:
-        """
-        Get recommendations for multiple movies in a single batched FAISS search.
-        More efficient than calling recommend_by_id N times when N > 1.
+        """Batch recommendations — delegates to recommender_core."""
+        from backend.recommender_core import recommend_batch
+        return recommend_batch(self, movie_ids, n)
 
-        Args:
-            movie_ids: List of TMDB movie IDs
-            n: Number of recommendations per movie
-
-        Returns:
-            Dict mapping movie_id → list of recommendations
-        """
-        if not movie_ids or self._vectors is None or self._index is None:
-            return {mid: self.recommend_by_id(mid, n) for mid in movie_ids}
-
-        # Check cache first
-        results: dict[int, list[dict]] = {}
-        uncached_ids: list[int] = []
-        import time as _time
-        if not hasattr(self, "_rec_cache"):
-            self._rec_cache = {}
-        for mid in movie_ids:
-            cached = self._rec_cache.get((mid, n))
-            if cached is not None and _time.time() - cached[0] < 300:
-                results[mid] = cached[1]
-            else:
-                uncached_ids.append(mid)
-
-        if not uncached_ids:
-            return results
-
-        # Build batch query matrix
-        valid_pairs: list[tuple[int, int]] = []  # (movie_id, movie_idx)
-        for mid in uncached_ids:
-            idx = self._index_for_movie_id(mid)
-            if idx is not None:
-                valid_pairs.append((mid, idx))
-
-        if not valid_pairs:
-            for mid in uncached_ids:
-                results[mid] = []
-            return results
-
-        # Single batched FAISS search
-        fetch_k = min(100, getattr(self._index, "ntotal", len(self._movies)))
-        if hasattr(self._index, "nprobe"):
-            self._index.nprobe = min(50, getattr(self._index, "nlist", 10))
-        if hasattr(self._index, "hnsw"):
-            self._index.hnsw.efSearch = 200
-
-        batch_vectors = np.vstack([
-            np.ascontiguousarray(self._vectors[idx].reshape(1, -1).astype(np.float32))
-            for _, idx in valid_pairs
-        ])
-        all_distances, all_indices = self._index.search(batch_vectors, fetch_k)
-
-        # Process each result
-        for i, (mid, movie_idx) in enumerate(valid_pairs):
-            distances = all_distances[i:i+1]
-            indices = all_indices[i:i+1]
-            # Reuse recommend_by_index logic but with pre-fetched results
-            result = self.recommend_by_index(movie_idx, n)
-            results[mid] = result
-            # Cache it
-            if len(self._rec_cache) >= 500:
-                try:
-                    self._rec_cache.pop(next(iter(self._rec_cache)))
-                except StopIteration:
-                    pass
-            self._rec_cache[(mid, n)] = (_time.time(), result)
-
-        # Fill any that had no valid index
-        for mid in uncached_ids:
-            if mid not in results:
-                results[mid] = []
-
-        return results
-    
     def recommend_by_title(self, title: str, n: int = 10) -> list[dict]:
-        """
-        Get recommendations for a movie by its title.
-        
-        Args:
-            title: Movie title (case-insensitive)
-            n: Number of recommendations
-            
-        Returns:
-            List of recommended movie dictionaries
-        """
+        """Get recommendations for a movie by its title (case-insensitive)."""
         title_lower = title.lower()
         matches = self._movies[self._movies["title"].str.lower() == title_lower].index
-        
         if len(matches) == 0:
-            # Try partial match
-            matches = self._movies[
-                self._movies["title"].str.lower().str.contains(title_lower, na=False)
-            ].index
-        
+            matches = self._movies[self._movies["title"].str.lower().str.contains(title_lower, na=False)].index
         if len(matches) == 0:
             return []
-        
-        movie_idx = matches[0]
-        return self.recommend_by_index(movie_idx, n)
+        return self.recommend_by_index(matches[0], n)
 
     def ai_search(self, query: str, n: int = 10, fetch_k: int = 80) -> list[dict]:
-        """
-        Multi-stage AI search for the product API.
-
-        Stages:
-        1. Sparse TF-IDF recall for exact names, entities, and cold-start text.
-        2. Dense vector recall when online query encoding is enabled.
-        3. Metadata, popularity, quality, and behavior scoring.
-        4. Optional cross-encoder reranking for high-precision top-window ranking.
-        5. MMR diversification so the list is not repetitive.
-        """
+        """Multi-stage AI search. Delegates to pipeline or legacy SBERT+FAISS+MMR fallback."""
         if not query or self._movies is None:
             return []
-
-        self.refresh_behavior_features()
-        query_intent = parse_query_intent(query)
-        fetch_k = max(n, min(fetch_k, len(self._movies)))
-        dense_scores: dict[int, float] = {}
-        sparse_scores: dict[int, float] = {}
-        dense_error = None
-
-        self._ensure_sparse_retrieval_index()
-        if self._tfidf_matrix is not None and self._vectorizer is not None:
-            from sklearn.metrics.pairwise import cosine_similarity
-
-            query_sparse = self._vectorizer.transform([query])
-            sparse_similarities = cosine_similarity(query_sparse, self._tfidf_matrix).ravel()
-            sparse_indices = np.argsort(sparse_similarities)[::-1][:fetch_k]
-            sparse_scores = {
-                int(idx): float(sparse_similarities[int(idx)])
-                for idx in sparse_indices
-                if sparse_similarities[int(idx)] > 0
-            }
-
-        if self._dense_query_enabled() and self._index is not None and self._vectors is not None:
+        if self._retrieval_pipeline is not None:
             try:
                 encoder = self._get_query_encoder()
                 query_embedding = encoder.encode([query], convert_to_numpy=True)
                 query_embedding = query_embedding / np.linalg.norm(query_embedding, axis=1, keepdims=True)
-                query_embedding = query_embedding.astype(np.float32)
-                distances, indices = self._index.search(query_embedding, fetch_k)
-                dense_scores = {
-                    int(idx): float(distances[0][rank])
-                    for rank, idx in enumerate(indices[0])
-                    if idx >= 0 and idx < len(self._movies)
-                }
+                candidates = self._retrieval_pipeline.retrieve(query_embedding.astype(np.float32), n=n)
+                return [self._candidate_to_dict(item) for item in candidates]
             except Exception as exc:
-                dense_error = str(exc)
-                logger.warning("Dense query retrieval skipped: %s", exc)
+                logger.warning("ai_search pipeline failed (%s); falling back.", type(exc).__name__)
+        return self._legacy_ai_search(query, n=n, fetch_k=fetch_k)
 
-        normalized_sparse = self._normalize_score_map(sparse_scores)
-        normalized_dense = self._normalize_score_map(dense_scores)
-        candidate_indices = set(normalized_sparse) | set(normalized_dense)
-        if not candidate_indices:
-            return self.search_movies(query, limit=n)
-
-        alpha = 0.62 if normalized_dense else 0.0
-        ranked_candidates = []
-        for idx in candidate_indices:
-            movie = self._clean_response_record(self._movies.iloc[idx].to_dict())
-            sparse_score = normalized_sparse.get(idx, 0.0)
-            dense_score = normalized_dense.get(idx, 0.0)
-            metadata_score = self._popularity_quality_score(movie)
-            behavior_boost, behavior_reasons = self._behavior_boost(movie.get("id"))
-            intent_boost, intent_reasons = intent_score(movie, query_intent)
-            hybrid_score = (
-                alpha * dense_score
-                + (1 - alpha) * sparse_score
-                + 0.10 * metadata_score
-                + behavior_boost
-                + intent_boost
-            )
-
-            explanation = []
-            if dense_score > 0:
-                explanation.append("semantic meaning match")
-            if sparse_score > 0:
-                explanation.append("keyword/entity match")
-            if metadata_score > 0.5:
-                explanation.append("strong catalog quality signal")
-            explanation.extend(intent_reasons)
-            explanation.extend(behavior_reasons)
-            if dense_error and not normalized_dense:
-                explanation.append("dense query model unavailable; sparse fallback used")
-            if not explanation:
-                explanation.append("best available catalog match")
-
-            movie["similarity_score"] = float(hybrid_score)
-            movie["retrieval_stage"] = "hybrid" if normalized_dense else "sparse_metadata"
-            movie["retrieval_signals"] = {
-                "dense": round(dense_score, 4),
-                "sparse": round(sparse_score, 4),
-                "metadata": round(metadata_score, 4),
-                "behavior": round(behavior_boost, 4),
-                "intent": round(intent_boost, 4),
-                "intent_features": query_intent,
-            }
-            movie["explanation"] = explanation[:4]
-            movie["explanation_text"] = " | ".join(movie["explanation"])
-            ranked_candidates.append(movie)
-
-        ranked_candidates.sort(key=lambda item: item["similarity_score"], reverse=True)
-
-        if self._cross_encoder_enabled() and len(ranked_candidates) > 1:
-            try:
-                reranker = self._get_cross_encoder()
-                rerank_window = ranked_candidates[: min(len(ranked_candidates), int(os.getenv("NOVA_RERANK_WINDOW", "30")))]
-                pairs = [
-                    [
-                        query,
-                        f"{item.get('title', '')}. {item.get('genres', '')}. {item.get('overview', '')}",
-                    ]
-                    for item in rerank_window
-                ]
-                rerank_scores = reranker.predict(pairs)
-                for item, rerank_score in zip(rerank_window, rerank_scores):
-                    item["retrieval_signals"]["cross_encoder"] = round(float(rerank_score), 4)
-                    item["similarity_score"] = 0.75 * float(item["similarity_score"]) + 0.25 * float(rerank_score)
-                    item["retrieval_stage"] = f"{item['retrieval_stage']}_cross_encoder"
-                    item["explanation"] = ["neural reranker selected this match"] + item["explanation"][:3]
-                    item["explanation_text"] = " | ".join(item["explanation"])
-                ranked_candidates = rerank_window + ranked_candidates[len(rerank_window):]
-                ranked_candidates.sort(key=lambda item: item["similarity_score"], reverse=True)
-            except Exception as exc:
-                logger.warning("Cross-encoder reranking skipped: %s", exc)
-
-        ranked_candidates = self._apply_learned_ranker(ranked_candidates)
-        return self._apply_query_mmr(ranked_candidates, n=n)
+    def _legacy_ai_search(self, query: str, n: int = 10, fetch_k: int = 80) -> list[dict]:
+        """Legacy AI search fallback — delegates to recommender_core."""
+        from backend.recommender_core import legacy_ai_search
+        return legacy_ai_search(self, query, n, fetch_k)
 
     def semantic_search(self, query: str, n: int = 10) -> list[dict]:
-        """
-        Search movies by semantic meaning using the SBERT model + FAISS index.
-        
-        Unlike search_movies() which does text matching on titles,
-        this encodes the query with the same model used for embeddings
-        and searches the FAISS index directly.
-        
-        Args:
-            query: Natural language query (e.g. "movies about space exploration")
-            n: Number of results to return
-            
-        Returns:
-            List of movie dictionaries with similarity scores
-        """
+        """Semantic search via SBERT + FAISS. Delegates to ai_search."""
         return self.ai_search(query, n=n)
 
 
-# Lazy-loaded SBERT model for semantic search queries
+# Lazy-loaded SBERT model
 _sbert_model = None
+
 
 def _get_sbert_model():
     """Get or load the SBERT model (lazy singleton)."""
     global _sbert_model
     if _sbert_model is None:
         from sentence_transformers import SentenceTransformer
-        _sbert_model = SentenceTransformer('all-mpnet-base-v2')
+        _sbert_model = SentenceTransformer("all-mpnet-base-v2")
         logger.info("Loaded SBERT model for semantic search")
     return _sbert_model
 
 
-# Global singleton instance (lazy loaded)
 _recommender: Recommender | None = None
 _recommender_lock = Lock()
-
-
 def get_recommender() -> Recommender:
     """Get or create the global Recommender instance."""
     global _recommender
@@ -2492,4 +606,3 @@ def get_recommender() -> Recommender:
             if _recommender is None:
                 _recommender = Recommender().load()
     return _recommender
-

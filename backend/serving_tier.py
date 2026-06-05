@@ -10,11 +10,13 @@ Usage:
     from backend.serving_tier import resolve_serving_tier
     tier, reason = resolve_serving_tier()
 """
+
 from __future__ import annotations
 
+from dataclasses import dataclass
 import logging
 import os
-from dataclasses import dataclass
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +42,7 @@ class TierDetector:
         # GPU
         try:
             import torch
+
             gpu_available = torch.cuda.is_available()
         except Exception as exc:
             logger.warning("GPU detection failed (%s); defaulting to False", exc)
@@ -48,7 +51,8 @@ class TierDetector:
         # RAM
         try:
             import psutil
-            ram_gb = psutil.virtual_memory().total / (1024 ** 3)
+
+            ram_gb = psutil.virtual_memory().total / (1024**3)
         except Exception as exc:
             logger.warning("RAM detection failed (%s); defaulting to 4.0 GB", exc)
             ram_gb = 4.0
@@ -124,13 +128,20 @@ class TierDetector:
 
 
 _detector: TierDetector | None = None
+_detector_lock: threading.Lock | None = None
 
 
 def get_tier_detector() -> TierDetector:
-    """Return the module-level singleton TierDetector, creating it if needed."""
-    global _detector
+    """Return the module-level singleton TierDetector (thread-safe)."""
+    global _detector, _detector_lock
+    if _detector_lock is None:
+        import threading
+
+        _detector_lock = threading.Lock()
     if _detector is None:
-        _detector = TierDetector()
+        with _detector_lock:
+            if _detector is None:
+                _detector = TierDetector()
     return _detector
 
 

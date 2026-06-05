@@ -20,10 +20,10 @@ Architecture:
 
 from __future__ import annotations
 
-import logging
-import math
 from collections import defaultdict
 from datetime import UTC, datetime
+import logging
+import math
 from typing import Any
 
 import numpy as np
@@ -114,8 +114,7 @@ def estimate_churn_risk(
             last_ts = last_ts[:-1] + "+00:00"
         last_dt = datetime.fromisoformat(last_ts)
         if last_dt.tzinfo is None:
-            from datetime import timezone
-            last_dt = last_dt.replace(tzinfo=timezone.utc)
+            last_dt = last_dt.replace(tzinfo=UTC)
         days_since_last = (now - last_dt).total_seconds() / 86400.0
     except Exception:
         days_since_last = 30.0
@@ -123,13 +122,9 @@ def estimate_churn_risk(
     recency_risk = 1.0 - math.exp(-days_since_last / 14.0)  # 14-day half-life
 
     # Frequency trend: compare recent vs older activity
-    recent_count = sum(
-        1 for e in sorted_events
-        if _days_ago_from_ts(str(e.get("event_ts") or "")) <= lookback_days
-    )
+    recent_count = sum(1 for e in sorted_events if _days_ago_from_ts(str(e.get("event_ts") or "")) <= lookback_days)
     older_count = sum(
-        1 for e in sorted_events
-        if lookback_days < _days_ago_from_ts(str(e.get("event_ts") or "")) <= lookback_days * 2
+        1 for e in sorted_events if lookback_days < _days_ago_from_ts(str(e.get("event_ts") or "")) <= lookback_days * 2
     )
 
     if older_count > 0:
@@ -150,8 +145,7 @@ def _days_ago_from_ts(ts: str) -> float:
         dt = datetime.fromisoformat(ts)
         now = datetime.now(UTC)
         if dt.tzinfo is None:
-            from datetime import timezone
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         return max(0.0, (now - dt).total_seconds() / 86400.0)
     except Exception:
         return 0.0

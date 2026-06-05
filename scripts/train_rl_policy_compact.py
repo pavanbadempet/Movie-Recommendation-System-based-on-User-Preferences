@@ -28,11 +28,11 @@ Usage:
 from __future__ import annotations
 
 import argparse
+from collections import defaultdict
 import logging
 import math
-import sys
-from collections import defaultdict
 from pathlib import Path
+import sys
 
 import numpy as np
 import torch
@@ -41,8 +41,8 @@ import torch.optim as optim
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from backend.rl_policy import ActorCriticPolicy
 from backend.events import iter_events
+from backend.rl_policy import ActorCriticPolicy
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -59,6 +59,7 @@ ACTION_DIM = 16  # matches LightGCN emb_dim
 # State builder — mirrors _build_rl_state in recommender.py exactly
 # ---------------------------------------------------------------------------
 
+
 def build_state(
     total_ratings: int,
     avg_rating: float,
@@ -67,6 +68,7 @@ def build_state(
     als_emb: np.ndarray | None = None,
 ) -> np.ndarray:
     """Build a 20-float state vector matching the serving path."""
+
     def safe(v: float) -> float:
         return v if math.isfinite(v) else 0.0
 
@@ -92,6 +94,7 @@ def build_state(
 # Data loading from Event Store
 # ---------------------------------------------------------------------------
 
+
 def load_training_data(min_interactions: int = 50) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Build (states, actions, rewards) from the Event Store.
@@ -106,13 +109,15 @@ def load_training_data(min_interactions: int = 50) -> tuple[np.ndarray, np.ndarr
     logger.info("Loading interaction data from Event Store...")
 
     # Aggregate per-user stats
-    user_stats: dict[str, dict] = defaultdict(lambda: {
-        "total_ratings": 0,
-        "rating_sum": 0.0,
-        "click_count": 0,
-        "view_count": 0,
-        "rewards": [],
-    })
+    user_stats: dict[str, dict] = defaultdict(
+        lambda: {
+            "total_ratings": 0,
+            "rating_sum": 0.0,
+            "click_count": 0,
+            "view_count": 0,
+            "rewards": [],
+        }
+    )
 
     total_events = 0
     for event in iter_events():
@@ -145,8 +150,7 @@ def load_training_data(min_interactions: int = 50) -> tuple[np.ndarray, np.ndarr
 
     if total_events < min_interactions:
         logger.warning(
-            "Only %d real interactions found (minimum %d). "
-            "Falling back to synthetic training data.",
+            "Only %d real interactions found (minimum %d). Falling back to synthetic training data.",
             total_events,
             min_interactions,
         )
@@ -159,15 +163,11 @@ def load_training_data(min_interactions: int = 50) -> tuple[np.ndarray, np.ndarr
 
     rng = np.random.default_rng(seed=42)
 
-    for uid, stats in user_stats.items():
+    for _uid, stats in user_stats.items():
         if not stats["rewards"]:
             continue
 
-        avg_rating = (
-            stats["rating_sum"] / stats["total_ratings"]
-            if stats["total_ratings"] > 0
-            else 3.0
-        )
+        avg_rating = stats["rating_sum"] / stats["total_ratings"] if stats["total_ratings"] > 0 else 3.0
         state = build_state(
             total_ratings=stats["total_ratings"],
             avg_rating=avg_rating,
@@ -225,6 +225,7 @@ def _synthetic_data(batch_size: int = 512) -> tuple[np.ndarray, np.ndarray, np.n
 # Training loop
 # ---------------------------------------------------------------------------
 
+
 def train(
     epochs: int = 200,
     lr: float = 1e-4,
@@ -272,7 +273,7 @@ def train(
         critic_loss = F.mse_loss(values, r)
 
         # Advantage
-        advantages = (r - values.detach())
+        advantages = r - values.detach()
 
         # Actor loss: behavioural cloning weighted by advantage
         dist = torch.distributions.Normal(action_mean, action_std.clamp(min=1e-4))
@@ -328,6 +329,7 @@ def train(
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(

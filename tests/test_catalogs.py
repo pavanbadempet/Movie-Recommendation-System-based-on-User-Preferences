@@ -2,8 +2,7 @@
 Tests for customer catalog onboarding.
 """
 
-from backend.catalogs import profile_catalog_csv, persist_catalog_upload
-
+from backend.catalogs import persist_catalog_upload, profile_catalog_csv
 
 SAMPLE_CSV = """id,title,overview,genres,cast,original_language,release_date,vote_average,popularity
 1,Arrival,A linguist works with the military to communicate with alien visitors.,Sci-Fi,"Amy Adams, Jeremy Renner",en,2016-11-11,7.6,88.1

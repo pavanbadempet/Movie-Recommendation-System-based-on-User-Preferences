@@ -7,18 +7,29 @@ import json
 # Fast JSON
 try:
     import orjson as _orjson
-    def _jloads(s): return _or_jloads(s)
-    def _jdumps(obj, **kw) -> str: return _orjson.dumps(obj).decode()
+
+    def _jloads(s):
+        return _orjson.loads(s)
+
+    def _jdumps(obj, **kw) -> str:
+        return _orjson.dumps(obj).decode()
 except ImportError:
-    def _jloads(s): return _jloads(s)
-    def _jdumps(obj, **kw) -> str: return json.dumps(obj, **kw)
-import math
+
+    def _jloads(s):
+        return json.loads(s)
+
+    def _jdumps(obj, **kw) -> str:
+        return json.dumps(obj, **kw)
+
+
 from datetime import UTC, datetime
+import math
 from pathlib import Path
 from typing import Any
 
-
-DEFAULT_BENCHMARK_PATH = Path(__file__).resolve().parent.parent / "data" / "evaluation" / "semantic_similarity_benchmark.json"
+DEFAULT_BENCHMARK_PATH = (
+    Path(__file__).resolve().parent.parent / "data" / "evaluation" / "semantic_similarity_benchmark.json"
+)
 
 
 def _canonical_title(value: Any) -> str:

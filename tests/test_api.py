@@ -1,31 +1,36 @@
 """
 API integration tests for FastAPI backend
 """
-import pytest
+
 import json
 import sys
+import uuid
+
 from fastapi.testclient import TestClient
-import pandas as pd
 import numpy as np
+import pandas as pd
+import pytest
 
 
 @pytest.fixture
 def mock_artifacts(tmp_path, monkeypatch):
     """Set up mock model artifacts for testing."""
     import faiss
-    
+
     # Mock movies
-    movies = pd.DataFrame({
-        "id": [100, 200, 300],
-        "title": ["Test Movie A", "Test Movie B", "Test Movie C"],
-        "overview": ["Action thriller", "Comedy romance", "Sci-fi adventure"],
-        "genres": ["Action", "Comedy", "Sci-Fi"],
-        "vote_average": [7.5, 6.5, 8.0],
-        "vote_count": [1000, 500, 2000],
-        "popularity": [100.0, 50.0, 150.0],
-        "release_date": ["2020-01-01", "2021-01-01", "2022-01-01"],
-        "poster_path": [None, None, None],
-    })
+    movies = pd.DataFrame(
+        {
+            "id": [100, 200, 300],
+            "title": ["Test Movie A", "Test Movie B", "Test Movie C"],
+            "overview": ["Action thriller", "Comedy romance", "Sci-fi adventure"],
+            "genres": ["Action", "Comedy", "Sci-Fi"],
+            "vote_average": [7.5, 6.5, 8.0],
+            "vote_count": [1000, 500, 2000],
+            "popularity": [100.0, 50.0, 150.0],
+            "release_date": ["2020-01-01", "2021-01-01", "2022-01-01"],
+            "poster_path": [None, None, None],
+        }
+    )
     movies.to_parquet(tmp_path / "movies_transformed.parquet")
     pd.DataFrame(
         {
@@ -37,17 +42,17 @@ def mock_artifacts(tmp_path, monkeypatch):
         json.dumps({"row_count": len(movies), "avg_confidence": 0.8}),
         encoding="utf-8",
     )
-    
+
     # Mock vectors (MPNet style - 768 dims)
     vecs = np.random.rand(3, 768).astype(np.float32)
-    
+
     # Normalize
     norms = np.linalg.norm(vecs, axis=1, keepdims=True)
     vecs = vecs / norms
-    
+
     np.save(tmp_path / "sbert_embeddings.npy", vecs)
     np.save(tmp_path / "movie_ids.npy", movies["id"].astype("int64").to_numpy())
-    
+
     # FAISS index
     idx = faiss.IndexFlatIP(vecs.shape[1])
     idx.add(vecs)
@@ -68,26 +73,28 @@ def mock_artifacts(tmp_path, monkeypatch):
         ),
         encoding="utf-8",
     )
-    
+
     # Patch paths
     import backend.recommender as rec
+
     monkeypatch.setattr(rec, "MODELS_DIR", tmp_path)
     monkeypatch.setattr(rec, "DATA_DIR", tmp_path)
     monkeypatch.setenv("NOVA_USAGE_PATH", str(tmp_path / "api_usage.jsonl"))
     monkeypatch.setenv("EVENT_LOG_PATH", str(tmp_path / "events.jsonl"))
     monkeypatch.delenv("NOVA_API_KEYS", raising=False)
-    
+
     # Reset singleton
     rec._recommender = None
     if "backend.main" in sys.modules:
         sys.modules["backend.main"]._recommender = None
-    
+
     return tmp_path
 
 
 class TestHealthEndpoint:
     def test_health_returns_ok(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
         resp = client.get("/health")
         assert resp.status_code == 200
@@ -100,6 +107,7 @@ class TestHealthEndpoint:
         monkeypatch.setenv("NOVA_APP_COMMIT", "abcdef1234567890")
 
         from backend.main import app
+
         client = TestClient(app)
         resp = client.get("/health")
 
@@ -128,6 +136,7 @@ class TestHealthEndpoint:
         monkeypatch.setenv("NOVA_HEALTH_LOAD_RECOMMENDER", "false")
 
         from backend.main import app
+
         client = TestClient(app)
 
         resp = client.get("/health")
@@ -141,6 +150,7 @@ class TestHealthEndpoint:
 class TestPlatformEndpoint:
     def test_platform_context_public_demo(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
 
         resp = client.get("/v1/platform/context")
@@ -153,6 +163,7 @@ class TestPlatformEndpoint:
         monkeypatch.setenv("NOVA_API_KEYS", "secret-key:acme:main:free")
 
         from backend.main import app
+
         client = TestClient(app)
 
         missing_resp = client.get("/v1/platform/context")
@@ -166,6 +177,7 @@ class TestPlatformEndpoint:
 
     def test_platform_status(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
 
         resp = client.get("/v1/platform/status")
@@ -180,6 +192,7 @@ class TestPlatformEndpoint:
 
     def test_platform_readiness_reports_component_status(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
 
         resp = client.get("/v1/platform/readiness", params={"k": 3})
@@ -222,7 +235,9 @@ class TestPlatformEndpoint:
         main._semantic_benchmark_cache.clear()
         main._recommendation_benchmark_cache.clear()
         monkeypatch.setattr(main, "_start_background_semantic_benchmark", lambda k: started.append(("semantic", k)))
-        monkeypatch.setattr(main, "_start_background_recommendation_benchmark", lambda k: started.append(("recommendation", k)))
+        monkeypatch.setattr(
+            main, "_start_background_recommendation_benchmark", lambda k: started.append(("recommendation", k))
+        )
 
         client = TestClient(app)
         resp = client.get("/v1/platform/readiness", params={"strict": True, "k": 3})
@@ -395,6 +410,7 @@ class TestPlatformEndpoint:
 class TestCorsPolicy:
     def test_github_pages_origin_is_allowed_by_default(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
 
         resp = client.options(
@@ -410,6 +426,7 @@ class TestCorsPolicy:
 
     def test_local_vite_dev_origin_is_allowed_by_default(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
 
         resp = client.options(
@@ -424,9 +441,54 @@ class TestCorsPolicy:
         assert resp.headers["access-control-allow-origin"] == "http://127.0.0.1:5174"
 
 
+class TestAuthEndpoints:
+    def test_register_and_login_requires_valid_password(self, mock_artifacts):
+        from backend.main import app
+
+        client = TestClient(app)
+
+        username = f"auth-user-{uuid.uuid4().hex[:8]}"
+        password = "verysecure123"
+        register_resp = client.post(
+            "/v1/auth/register",
+            json={"username": username, "password": password},
+        )
+        assert register_resp.status_code == 200
+
+        bad_login_resp = client.post(
+            "/v1/auth/token",
+            data={"username": username, "password": "wrong-password"},
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        assert bad_login_resp.status_code == 401
+
+        good_login_resp = client.post(
+            "/v1/auth/token",
+            data={"username": username, "password": password},
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        assert good_login_resp.status_code == 200
+        payload = good_login_resp.json()
+        assert payload["token_type"] == "bearer"
+        assert payload["access_token"]
+
+    def test_register_rejects_short_password(self, mock_artifacts):
+        from backend.main import app
+
+        client = TestClient(app)
+
+        resp = client.post(
+            "/v1/auth/register",
+            json={"username": "short-pass-user", "password": "1234567"},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "Password must be at least 8 characters"
+
+
 class TestSearchEndpoint:
     def test_movie_titles_limit_for_readiness_probe(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
 
         resp = client.get("/movies/titles", params={"limit": 1})
@@ -436,6 +498,7 @@ class TestSearchEndpoint:
 
     def test_movie_titles_accepts_full_catalog_limit(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
 
         resp = client.get("/movies/titles", params={"limit": 100000})
@@ -445,6 +508,7 @@ class TestSearchEndpoint:
 
     def test_search_finds_movie(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
         resp = client.get("/search", params={"q": "Test Movie A"})
         assert resp.status_code == 200
@@ -454,6 +518,7 @@ class TestSearchEndpoint:
 
     def test_search_empty_returns_empty(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
         resp = client.get("/search", params={"q": "xyz123nonexistent"})
         assert resp.status_code == 200
@@ -461,6 +526,7 @@ class TestSearchEndpoint:
 
     def test_v1_search_alias(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
         resp = client.get("/v1/search", params={"q": "Test Movie A"})
         assert resp.status_code == 200
@@ -495,6 +561,7 @@ class TestSearchEndpoint:
         monkeypatch.setenv("NOVA_ENABLE_DENSE_QUERY", "false")
 
         from backend.main import app
+
         client = TestClient(app)
 
         resp = client.get("/v1/search/ai", params={"q": "sci fi adventure", "top_k": 2})
@@ -545,6 +612,7 @@ class TestSearchEndpoint:
 
     def test_semantic_twin_endpoint_returns_structured_catalog_evidence(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
 
         resp = client.get("/v1/semantic-twins/id/300")
@@ -557,6 +625,7 @@ class TestSearchEndpoint:
 
     def test_semantic_benchmark_endpoint_is_available(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
 
         resp = client.get("/v1/evaluation/semantic-benchmark", params={"k": 3})
@@ -568,6 +637,7 @@ class TestSearchEndpoint:
 
     def test_search_benchmark_endpoint_is_available(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
 
         resp = client.get("/v1/evaluation/search-benchmark", params={"k": 3})
@@ -580,6 +650,7 @@ class TestSearchEndpoint:
 
     def test_recommendation_benchmark_endpoint_is_available(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
 
         resp = client.get("/v1/evaluation/recommendation-benchmark", params={"k": 3})
@@ -664,6 +735,7 @@ class TestSearchEndpoint:
 
     def test_artifact_health_endpoint_reports_alignment(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
 
         resp = client.get("/v1/artifacts/health")
@@ -722,6 +794,7 @@ class TestSearchEndpoint:
 class TestMoviesEndpoint:
     def test_movies_returns_list(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
         resp = client.get("/movies", params={"limit": 2, "offset": 0})
         assert resp.status_code == 200
@@ -730,10 +803,11 @@ class TestMoviesEndpoint:
 
     def test_movies_pagination(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
         resp1 = client.get("/movies", params={"limit": 1, "offset": 0})
         resp2 = client.get("/movies", params={"limit": 1, "offset": 1})
-        
+
         m1 = resp1.json()[0]
         m2 = resp2.json()[0]
         assert m1["id"] != m2["id"]
@@ -832,6 +906,7 @@ class TestEventsEndpoint:
 class TestRecommendEndpoints:
     def test_recommend_by_id(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
         resp = client.get("/recommend/id/100", params={"n": 2})
         assert resp.status_code == 200
@@ -887,12 +962,14 @@ class TestRecommendEndpoints:
 
     def test_recommend_by_id_not_found(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
         resp = client.get("/recommend/id/999999")
         assert resp.status_code == 404
 
     def test_recommendation_diagnostics_exposes_ranking_evidence(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
 
         resp = client.get("/v1/diagnostics/recommendations/100", params={"n": 2})
@@ -959,6 +1036,7 @@ class TestRecommendEndpoints:
 
     def test_recommend_by_title(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
         resp = client.get("/recommend/title/Test Movie B", params={"n": 2})
         assert resp.status_code == 200
@@ -989,6 +1067,7 @@ class TestRecommendEndpoints:
 class TestEvaluationEndpoint:
     def test_recommendation_quality_report(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
 
         resp = client.get("/v1/evaluation/recommendations", params={"sample_size": 2, "k": 2})
@@ -1021,6 +1100,7 @@ class TestEvaluationEndpoint:
 class TestExperimentsEndpoint:
     def test_experiment_assignment_is_available(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
 
         resp = client.get("/v1/experiments/assignment", params={"user_id": "user-1"})
@@ -1057,6 +1137,7 @@ class TestExperimentsEndpoint:
 class TestCatalogOnboardingEndpoints:
     def test_catalog_preview_profiles_csv(self, mock_artifacts):
         from backend.main import app
+
         client = TestClient(app)
 
         csv_text = (
@@ -1080,6 +1161,7 @@ class TestCatalogOnboardingEndpoints:
         monkeypatch.setenv("NOVA_CATALOG_UPLOAD_PATH", str(tmp_path))
 
         from backend.main import app
+
         client = TestClient(app)
 
         csv_text = (

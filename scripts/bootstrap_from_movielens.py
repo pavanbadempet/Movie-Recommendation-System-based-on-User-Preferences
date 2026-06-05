@@ -20,16 +20,21 @@ Usage:
 from __future__ import annotations
 
 import argparse
+from datetime import UTC
 import logging
+from pathlib import Path
 import sys
 import time
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+if TYPE_CHECKING:
+    from backend.lightgcn import LightGCN
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -43,6 +48,7 @@ MODELS_DIR.mkdir(parents=True, exist_ok=True)
 # ---------------------------------------------------------------------------
 # Step 1: Load and map MovieLens data to TMDB IDs
 # ---------------------------------------------------------------------------
+
 
 def load_movielens() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Load ratings, movies, and links. Returns DataFrames with TMDB IDs."""
@@ -72,11 +78,13 @@ def load_movielens() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 # Step 2: Write MovieLens ratings as APEX events
 # ---------------------------------------------------------------------------
 
+
 def write_events(ratings_with_tmdb: pd.DataFrame, batch_size: int = 5000) -> int:
     """Convert MovieLens ratings to APEX Event Store events (batch JSONL write)."""
+    from datetime import datetime
     import json
     import uuid
-    from datetime import datetime, timezone
+
     from backend.events import get_events_path
 
     events_path = get_events_path()
@@ -87,9 +95,7 @@ def write_events(ratings_with_tmdb: pd.DataFrame, batch_size: int = 5000) -> int
 
     with events_path.open("a", encoding="utf-8") as fh:
         for i, row in enumerate(ratings_with_tmdb.itertuples(index=False)):
-            ts = datetime.fromtimestamp(row.timestamp, tz=timezone.utc).isoformat(
-                timespec="seconds"
-            ).replace("+00:00", "Z")
+            ts = datetime.fromtimestamp(row.timestamp, tz=UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
             user_id = f"ml_user_{row.userId}"
             movie_id = int(row.tmdbId)
             rating = float(row.rating)
@@ -136,6 +142,7 @@ def write_events(ratings_with_tmdb: pd.DataFrame, batch_size: int = 5000) -> int
 # ---------------------------------------------------------------------------
 # Step 3: Train LightGCN on the MovieLens interaction graph
 # ---------------------------------------------------------------------------
+
 
 def train_lightgcn(ratings_with_tmdb: pd.DataFrame) -> None:
     """Train LightGCN on the real MovieLens bipartite graph."""
@@ -186,9 +193,7 @@ def train_lightgcn(ratings_with_tmdb: pd.DataFrame) -> None:
 
     # Convert to sparse torch tensor (efficient for large graphs)
     adj_coo = adj_norm.tocoo()
-    indices = torch.tensor(
-        np.vstack([adj_coo.row, adj_coo.col]), dtype=torch.long
-    )
+    indices = torch.tensor(np.vstack([adj_coo.row, adj_coo.col]), dtype=torch.long)
     values = torch.tensor(adj_coo.data, dtype=torch.float32)
     adj_sparse = torch.sparse_coo_tensor(
         indices, values, size=(num_users + num_items, num_users + num_items)
@@ -199,7 +204,7 @@ def train_lightgcn(ratings_with_tmdb: pd.DataFrame) -> None:
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
     # BPR training
-    all_item_indices = list(range(num_items))
+    list(range(num_items))
     user_pos_items: dict[int, list[int]] = {}
     for _, row in positives.iterrows():
         uid = int(row["user_idx"])
@@ -229,7 +234,7 @@ def train_lightgcn(ratings_with_tmdb: pd.DataFrame) -> None:
         total_loss = 0.0
         n_batches = 0
         for start in range(0, len(idx), batch_size):
-            batch_idx = idx[start:start + batch_size]
+            batch_idx = idx[start : start + batch_size]
             u = torch.tensor([users_batch[i] for i in batch_idx], dtype=torch.long)
             p = torch.tensor([pos_batch[i] for i in batch_idx], dtype=torch.long)
             n = torch.tensor([neg_batch[i] for i in batch_idx], dtype=torch.long)
@@ -255,7 +260,7 @@ def train_lightgcn(ratings_with_tmdb: pd.DataFrame) -> None:
 
 
 def _export_lightgcn_embeddings(
-    model: "LightGCN",
+    model: LightGCN,
     user_ids: list,
     item_ids: list,
     user_map: dict,
@@ -270,17 +275,11 @@ def _export_lightgcn_embeddings(
         item_embs = model.item_embedding.weight.cpu().numpy()
 
     # User embeddings
-    user_records = [
-        {"id": uid, "features": user_embs[user_map[uid]].tolist()}
-        for uid in user_ids
-    ]
+    user_records = [{"id": uid, "features": user_embs[user_map[uid]].tolist()} for uid in user_ids]
     pd.DataFrame(user_records).to_parquet(gold_dir / "model_user_embeddings" / "part-0.parquet")
 
     # Item embeddings (keyed by TMDB ID)
-    item_records = [
-        {"id": mid, "features": item_embs[item_map[mid]].tolist()}
-        for mid in item_ids
-    ]
+    item_records = [{"id": mid, "features": item_embs[item_map[mid]].tolist()} for mid in item_ids]
     (gold_dir / "model_item_embeddings").mkdir(parents=True, exist_ok=True)
     (gold_dir / "model_user_embeddings").mkdir(parents=True, exist_ok=True)
     pd.DataFrame(user_records).to_parquet(gold_dir / "model_user_embeddings" / "part-0.parquet")
@@ -296,6 +295,7 @@ def _export_lightgcn_embeddings(
 # ---------------------------------------------------------------------------
 # Step 4: Run all calibration scripts
 # ---------------------------------------------------------------------------
+
 
 def run_calibration() -> None:
     """Run Two-Tower fine-tune, RL training, and ensemble weight optimization."""
@@ -321,6 +321,7 @@ def run_calibration() -> None:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main(skip_events: bool = False, skip_training: bool = False) -> None:
     logger.info("=" * 60)
@@ -359,11 +360,13 @@ def _parse_args() -> argparse.Namespace:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "--skip-events", action="store_true",
+        "--skip-events",
+        action="store_true",
         help="Skip writing events to the Event Store (if already done)",
     )
     parser.add_argument(
-        "--skip-training", action="store_true",
+        "--skip-training",
+        action="store_true",
         help="Skip model training (only write events)",
     )
     return parser.parse_args()
