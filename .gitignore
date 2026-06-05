@@ -103,4 +103,3 @@ verify_implementation.py
 # Personal files (don't push to public repo)
 resume*.tex
 docs/INTERVIEW_GUIDE.md
-data/events/*.jsonl
