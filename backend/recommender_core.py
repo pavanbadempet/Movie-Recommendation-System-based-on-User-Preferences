@@ -825,13 +825,11 @@ def user_profile_fallback(rec, profile: dict, result_limit: int) -> list:
 def load_vector_artifacts(rec) -> None:
     """Load FAISS index, SBERT embeddings, movie ID map, and pipeline manifest."""
     import json as _json
-
     import numpy as _np
-    import torch as _torch
-
-    from backend.diffusion_recommender import LatentDiffusionRecommender
-    from backend.feature_store import feature_store
     from backend.model_loader import ensure_model_files
+    from backend.feature_store import feature_store
+    from backend.diffusion_recommender import LatentDiffusionRecommender
+    import torch as _torch
 
     MODELS_DIR = rec.__class__.__module__ and __import__('pathlib').Path(__file__).parent.parent / "models"
     # Re-resolve MODELS_DIR from the recommender's module path
@@ -911,9 +909,8 @@ def load_vector_artifacts(rec) -> None:
 
 def load_movie_catalog(rec) -> None:
     """Load movie metadata parquet and build lookup maps."""
-    import pathlib as _pathlib
-
     import pandas as _pd
+    import pathlib as _pathlib
     DATA_DIR = _pathlib.Path(__file__).parent.parent / "data" / "processed"
 
     movies_path = DATA_DIR / "movies_transformed.parquet"
@@ -945,7 +942,6 @@ def load_ranker_and_behavior(rec) -> None:
     """Load learned ranker, build sparse index, and warm behavior features."""
     import os as _os
     import pathlib as _pathlib
-
     from backend.ranker import load_ranker
     MODELS_DIR = _pathlib.Path(__file__).parent.parent / "models"
 
@@ -968,9 +964,7 @@ def load_ranker_and_behavior(rec) -> None:
 def load_optional_models(rec) -> None:
     """Load multi-modal index, KG, Two-Tower fine-tune, and RL policy."""
     import pathlib as _pathlib
-
     import torch as _torch
-
     from backend.multimodal_fusion import MultiModalFusionIndex
     MODELS_DIR = _pathlib.Path(__file__).parent.parent / "models"
 
@@ -1061,9 +1055,8 @@ def wire_pipelines(rec, is_tier3: bool) -> None:
 
 def refresh_behavior_features(rec, force: bool = False) -> dict:
     """Refresh aggregated behavior features (thread-safe, TTL-cached)."""
-    from datetime import UTC
-    from datetime import datetime as _datetime
     import os as _os
+    from datetime import UTC, datetime as _datetime
     ttl_seconds = int(_os.getenv("BEHAVIOR_FEATURE_TTL_SECONDS", "60"))
     now = _datetime.now(UTC)
     if (
@@ -1113,7 +1106,6 @@ def optimize_movie_frame(rec) -> None:
 def build_sparse_retrieval_index(rec) -> None:
     """Build a TF-IDF recall index for hybrid search and cold-start resilience."""
     import os as _os
-
     import numpy as _np
     import pandas as _pd
     from sklearn.feature_extraction.text import TfidfVectorizer
@@ -1144,7 +1136,6 @@ def build_sparse_retrieval_index(rec) -> None:
 def build_item_retrieval_index(rec) -> None:
     """Build a plot/genre-focused sparse index for item-to-item recommendations."""
     import os as _os
-
     import numpy as _np
     from sklearn.feature_extraction.text import TfidfVectorizer
 
@@ -1247,9 +1238,8 @@ def genre_affinity_from_profile(rec, profile: dict) -> dict:
 
 def visual_search(rec, movie_id: int, n: int = 10) -> list:
     """Multi-Modal similarity search using Text + Visual (Poster) embeddings."""
-    import pathlib as _pathlib
-
     import numpy as _np
+    import pathlib as _pathlib
     MODELS_DIR = _pathlib.Path(__file__).parent.parent / "models"
 
     if rec.multimodal_index is None or rec.multimodal_index.index is None:
@@ -1312,7 +1302,6 @@ def candidate_to_dict(rec, item) -> dict:
 def popularity_quality_score(movie: dict) -> float:
     """Small bounded business score from popularity and quality."""
     import math as _math
-
     import numpy as _np
     if movie.get("content_quality_score") is not None:
         try:
@@ -1334,7 +1323,6 @@ def popularity_quality_score(movie: dict) -> float:
 def semantic_affinity_for_indices(rec, query_idx: int, candidate_idx: int) -> dict:
     """Compare query/candidate semantic twins and return serializable signals."""
     import contextlib as _contextlib
-
     from backend.semantic_twin import compare_semantic_twins
     if not hasattr(rec, "_affinity_cache"):
         rec._affinity_cache = {}
@@ -1403,7 +1391,6 @@ def safe_float(val, default: float = 0.0) -> float:
 def build_rl_state(behavior_profile: dict, als_user_embedding, state_dim: int = 20):
     """Build a fixed-length RL state vector from user behavior profile."""
     import math as _math
-
     import numpy as _np
     import torch as _torch
 

@@ -3,9 +3,9 @@ Property-based test for ablation report serialization round-trip.
 # Feature: architecture-design-perfection, Property 11: Ablation Report Serialization Round-Trip
 """
 import json
-from pathlib import Path
 import sys
 import tempfile
+from pathlib import Path
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -86,7 +86,7 @@ def test_ablation_report_serialization_roundtrip(report):
         f"models length mismatch: {len(loaded['models'])} != {len(report.models)}"
     )
 
-    for orig, loaded_m in zip(report.models, loaded["models"], strict=False):
+    for orig, loaded_m in zip(report.models, loaded["models"]):
         assert orig.model == loaded_m["model"], (
             f"model name mismatch: {orig.model!r} != {loaded_m['model']!r}"
         )

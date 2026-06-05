@@ -6,11 +6,12 @@ Property-based tests for backend/serving_tier.py.
 
 from __future__ import annotations
 
+import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
-import pytest
 
 from backend.serving_tier import HardwareProfile, TierDetector
+
 
 # ---------------------------------------------------------------------------
 # Property 1 — HardwareProfile type invariants
