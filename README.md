@@ -14,12 +14,19 @@ APEX is an API that gives any streaming or media platform personalized, explaina
 **HR@10 = 0.785 · NDCG@10 = 0.542 · Semantic HR@10 = 1.0**
 
 ```bash
-# Get your first recommendation in one call
-curl "https://your-apex-api.onrender.com/v1/recommendations/id/550?n=10&explain=true" \
-  -H "X-Nova-API-Key: YOUR_KEY"
+# Clone and run locally (see Quick Start below)
+git clone https://github.com/pavanpajjuri/Movie-Recommendation-System.git
+cd apex-recommendation-system
+pip install -r requirements.txt
+uvicorn backend.main:app --host 0.0.0.0 --port 8000
+
+# Then call the API
+curl "http://localhost:8000/v1/recommendations/id/550?n=10&explain=true"
 ```
 
-**[View Live Demo](https://your-apex-api.onrender.com/docs) · [Quick Start](docs/QUICKSTART.md) · [API Reference](docs/API_REFERENCE.md) · [Pricing](#-deployment-tiers)**
+> **Deployment:** Follow the [Quick Start](docs/QUICKSTART.md) to run locally, or [DEPLOYMENT.md](DEPLOYMENT.md) to deploy on Render, Docker, or Kubernetes. The live demo URL will appear here once deployed.
+
+**[Quick Start](docs/QUICKSTART.md) · [API Reference](docs/API_REFERENCE.md) · [Deployment Guide](DEPLOYMENT.md) · [Pricing](#-deployment-tiers)**
 
 ---
 
@@ -44,6 +51,7 @@ APEX is structured into 18 systematic phases across 4 intelligence layers:
 * **Vector Search (FAISS)**: Sub-millisecond ANN (Approximate Nearest Neighbor) retrieval across millions of dense vectors.
 * **Multi-Task Learning (MMoE)**: A Multi-gate Mixture-of-Experts (MMoE) ranker that simultaneously predicts click-through rate (CTR) and user rating, dynamically weighting the loss.
 * **LightGBM Ranker**: High-speed gradient boosting tree used as a fast fallback ranker.
+* **Closed Online Learning Loop**: All three highest-weighted ensemble models receive incremental gradient updates from live events via `OnlineLearningCoordinator` — a unified fan-out layer that routes every click and rating to independent daemon threads for LightGCN (BPR embedding updates), SASRec (attention + item embedding fine-tuning), and KAN (Fourier coefficient updates) without blocking inference.
 
 ### Layer 3: Advanced Aesthetics & Multi-Modal Understanding
 * **Visual Encoders (CLIP)**: Uses OpenAI's CLIP model to extract 512-dimensional aesthetic embeddings from movie posters.
@@ -52,11 +60,13 @@ APEX is structured into 18 systematic phases across 4 intelligence layers:
 
 ### Layer 4: Cognitive Intelligence & Compliance
 * **Reinforcement Learning (A2C)**: An Actor-Critic neural network optimizing for long-term retention (7-day return probability) rather than cheap clickbait, trained via Conservative Q-Learning (CQL).
+* **Long-Horizon RL**: Extends A2C to 30/90-day windows with churn risk estimation (`estimate_churn_risk`) and preference stability scoring (`compute_preference_stability`). At-risk users receive quality-boosted recommendations; shifting users receive genre-diverse candidates. Applied at every scoring call via `long_horizon_score_adjustment`.
 * **Deep Content Understanding (NLP)**: Uses HuggingFace Zero-Shot classification (`nli-distilroberta-base`) to extract abstract human concepts (Moral Dilemmas, Moods) and NER for entities.
 * **Semantic Knowledge Graphs**: NetworkX-powered multi-hop reasoning (`User -> Liked Theme -> New Movie`).
 * **LLM Personalization**: OpenRouter integration (GPT-4o / Llama 3) to dynamically generate personalized 1-sentence explanations ("Because you loved X, you'll enjoy Y").
-* **Differential Privacy**: Mathematical bounding (Laplace/Gaussian noise) on user embeddings to guarantee GDPR / EU AI Act compliance.
+* **Differential Privacy**: Gaussian (ε, δ)-DP noise injected into user embeddings at every recommendation request (`privatize_user_embedding`), guaranteeing GDPR / EU AI Act compliance. ε configurable via `APEX_DP_EPSILON` env var.
 * **Counterfactual Evaluation**: Inverse Propensity Scoring (IPS) to mathematically simulate model deployments offline before exposing them to users.
+* **Cold-Start Intelligence**: `cold_start_boost` from the uncertainty estimator applies content-quality and popularity signals for users with < 5 interactions, preventing the cold-start problem from surfacing low-quality results.
 
 </details>
 
@@ -105,7 +115,7 @@ flowchart TD
         MT --> Artifacts[Serving Artifacts\nFAISS + ONNX + Weights]
     end
 
-    subgraph Compliance["Compliance & Fairness\nbackend.privacy · backend.metrics"]
+    subgraph Compliance["Compliance & Fairness\nbackend.privacy.privacy · backend.metrics"]
         DP[Differential Privacy\nLaplace/Gaussian ε-DP]
         IPS[IPS Debiasing\nDoubly Robust weights]
         FA[Fairness Auditor\nGini + KL divergence]
@@ -312,7 +322,7 @@ To run locally:
 
 ```bash
 pip install mutmut
-mutmut run --paths-to-mutate backend/serving_tier.py,backend/onnx_engine.py
+mutmut run --paths-to-mutate backend/serving/serving_tier.py,backend/serving/onnx_engine.py
 mutmut results
 ```
 
@@ -334,9 +344,12 @@ The weekly CI workflow (`.github/workflows/mutation-tests.yml`) runs every Monda
 | [docs/API_CHANGELOG.md](docs/API_CHANGELOG.md) | API version history and deprecation notices |
 | [docs/openapi.json](docs/openapi.json) | Machine-readable OpenAPI 3.1 spec (52 endpoints, 19 schemas) |
 | [docs/swagger-ui.html](docs/swagger-ui.html) | Static Swagger UI — browse the full API without running the server |
-| [docs/MODEL_CARDS.md](docs/MODEL_CARDS.md) | Model cards for all 6 ensemble models (architecture, metrics, limitations) |
-| [docs/ARCHITECTURE_DECISIONS.md](docs/ARCHITECTURE_DECISIONS.md) | Architecture Decision Records (ADRs) — why the system is built this way |
+| [docs/MODEL_CARDS.md](docs/MODEL_CARDS.md) | Model cards for all 6 ensemble models (architecture, metrics, online learning, limitations) |
+| [docs/ONLINE_LEARNING.md](docs/ONLINE_LEARNING.md) | Online learning coordinator — SASRec + KAN + LightGCN live feedback loop |
+| [docs/ARCHITECTURE_DECISIONS.md](docs/ARCHITECTURE_DECISIONS.md) | Architecture Decision Records (ADRs 001–010) — why the system is built this way |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | High-level system architecture overview |
+| [docs/PACKAGE_STRUCTURE.md](docs/PACKAGE_STRUCTURE.md) | Complete module map, subpackage API surfaces, contribution guide |
 | [docs/ENTERPRISE_GUIDE.md](docs/ENTERPRISE_GUIDE.md) | Multi-tenancy, B2B SaaS features, and enterprise deployment |
 | [docs/APEX_WHITEPAPER.md](docs/APEX_WHITEPAPER.md) | Technical whitepaper — full system design and research context |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Common issues and diagnostic runbook |
 | [frontend/README.md](frontend/README.md) | Frontend setup, test coverage, deployment |

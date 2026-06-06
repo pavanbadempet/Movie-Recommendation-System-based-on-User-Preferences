@@ -6,22 +6,34 @@ This document provides model cards for each of the 6 ensemble models in the APEX
 
 ## Ensemble Summary
 
-The APEX ensemble combines 6 complementary architectures. Weights are determined by **Doubly Robust IPS grid search** (200 Dirichlet-sampled candidates) to correct for popularity bias in the training signal.
+The APEX ensemble combines 6 complementary architectures. Weights are determined by **Doubly Robust IPS grid search** (200 Dirichlet-sampled candidates) to correct for popularity bias in the training signal. See [ADR-007](ARCHITECTURE_DECISIONS.md#adr-007-doubly-robust-ips-for-ensemble-weight-selection) for full rationale.
 
 | Model | HR@10 | NDCG@10 | DR-Optimized Weight | Paradigm |
 |---|---|---|---|---|
 | **Ensemble** | **0.785** | **0.542** | — | Weighted blend |
-| SASRec | 0.761 | 0.520 | 0.659 | Sequential Transformer |
-| KAN | 0.694 | 0.439 | 0.298 | Kolmogorov-Arnold Network |
+| SASRec | 0.761 | 0.520 | **0.659** | Sequential Transformer |
+| KAN | 0.694 | 0.439 | **0.298** | Kolmogorov-Arnold Network |
 | LightGCN | 0.672 | 0.411 | 0.005 | Graph Collaborative Filtering |
-| Quantum-Fluid | 0.583 | 0.354 | 0.010 | Neural ODE + Complex Embeddings |
 | Diffusion | 0.521 | 0.309 | 0.024 | Generative Latent Diffusion |
+| Quantum-Fluid | 0.583 | 0.354 | 0.010 | Neural ODE + Complex Embeddings |
 | Hyperbolic | 0.498 | 0.287 | 0.004 | Poincaré Ball Manifold |
 
 **Ensemble lift over best individual model (SASRec): +4.3% NDCG@10**
 
+> **Note on weights:** The DR optimization runs against real interaction data, so weights evolve as the event store grows. The current run reflects relatively sparse event data — LightGCN's near-zero weight is expected to increase as the online learner accumulates interactions. Hot-reload via `ApexEnsembleEngine.reload_weights()` (no restart required).
+
 Evaluation protocol: leave-one-out, 200 users, 100 candidates per user.  
 Semantic benchmark (17 curated intent cases): HR@10 = 1.0, bad-hit rate = 0.0.
+
+### Online Learning Status
+
+All three highest-weighted models now receive incremental gradient updates from live events via `OnlineLearningCoordinator`. See [ONLINE_LEARNING.md](ONLINE_LEARNING.md) for full details.
+
+| Model | Learner | What Updates | LR | Checkpoint |
+|---|---|---|---|---|
+| SASRec (0.659) | `SASRecOnlineLearner` | Item embeddings + last attention block | 5e-5 | Every 500 events |
+| KAN (0.298) | `KANOnlineLearner` | Fourier sin/cos coefficients | 1e-4 | Every 750 events |
+| LightGCN (0.005) | `OnlineLearner` | User + item embeddings (BPR) | 1e-4 | Every 1000 events |
 
 ---
 
@@ -46,6 +58,13 @@ Semantic benchmark (17 curated intent cases): HR@10 = 1.0, bad-hit rate = 0.0.
 ### Evaluation
 - HR@10: 0.672 | NDCG@10: 0.411 (individual)
 - DR-optimized ensemble weight: 0.005 (low in current run; expected to increase as live events accumulate via online learner)
+
+### Online Learning
+- **Learner:** `OnlineLearner` (`backend/online_learner.py`)
+- **What updates:** User embedding table + item embedding table (BPR loss)
+- **Trigger:** Every click (weight=0.3) and rating ≥4.0 (weight=1.0) or ≤2.5 (weight=-0.5, reversed BPR)
+- **Checkpoint:** `models/lightgcn_online.pth` every 1,000 processed events
+- **Thread:** Independent daemon thread with bounded queue (10,000 events max)
 
 ### Intended Use
 Multi-hop collaborative filtering. Captures "users who liked A also liked B" patterns that content-based models miss. Most valuable for users with rich interaction history.
@@ -79,6 +98,14 @@ Multi-hop collaborative filtering. Captures "users who liked A also liked B" pat
 - HR@10: 0.761 | NDCG@10: 0.520 (individual, highest single model)
 - DR-optimized ensemble weight: 0.659 (dominant model — real session sequences provide strong signal)
 
+### Online Learning
+- **Learner:** `SASRecOnlineLearner` (`backend/learning/sasrec_online_learner.py`)
+- **What updates:** Item embedding table + last Transformer attention block + last feed-forward block
+- **Why partial update:** Full backprop through all blocks would exceed online latency budget; last block captures the most recent representation
+- **Session context:** User's current session sequence fetched from real-time feature updater cache for accurate positional context
+- **Checkpoint:** `models/sasrec_online.pth` every 500 processed events
+- **Thread:** Independent daemon thread with bounded queue (5,000 events max)
+
 ### Intended Use
 Sequential intent modeling. Predicts the next item based on the user's exact chronological watch history. Most valuable for active users with recent session data.
 
@@ -108,6 +135,13 @@ Sequential intent modeling. Predicts the next item based on the user's exact chr
 ### Evaluation
 - HR@10: 0.694 | NDCG@10: 0.439 (individual, second-best)
 - DR-optimized ensemble weight: 0.298 (second-highest — validates meaningful contribution)
+
+### Online Learning
+- **Learner:** `KANOnlineLearner` (`backend/learning/kan_online_learner.py`)
+- **What updates:** Fourier sin/cos coefficient tensors (`fourier_coeffs_sin`, `fourier_coeffs_cos`) and base weights in all three KAN layers
+- **Embedding source:** LightGCN user/item embeddings passed as `detach()`ed tensors — no gradient flows back into LightGCN, preventing conflicting updates
+- **Checkpoint:** `models/kan_online.pth` every 750 processed events
+- **Thread:** Independent daemon thread with bounded queue (5,000 events max)
 
 ### Intended Use
 High-precision ranking of pre-retrieved candidates. The Fourier basis functions capture non-linear interaction patterns between user and item features that MLPs approximate less efficiently.

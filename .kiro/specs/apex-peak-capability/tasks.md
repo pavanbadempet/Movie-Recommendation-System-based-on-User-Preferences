@@ -89,7 +89,7 @@ they validate so regressions are caught early.
 
 - [x] 4. Add `POST /v1/admin/reload-ensemble-weights` endpoint to `main.py`
   - [x] 4.1 Import `get_apex_engine` and add the admin endpoint
-    - Add `from backend.ensemble_engine import get_apex_engine` to `main.py` imports
+    - Add `from backend.models.ensemble_engine import get_apex_engine` to `main.py` imports
     - Implement `POST /v1/admin/reload-ensemble-weights` handler that calls `get_apex_engine().reload_weights()`
     - Protect with existing admin-token auth (`resolve_admin_token` dependency)
     - Return `{"status": "ok", "weights": {...}, "source": "file" | "defaults"}`
@@ -120,7 +120,7 @@ they validate so regressions are caught early.
 
 - [x] 6. Wire `OnlineLearner` into `main.py`
   - [x] 6.1 Instantiate `OnlineLearner` in the `lifespan` context manager
-    - Import `OnlineLearner` from `backend.online_learner`
+    - Import `OnlineLearner` from `backend.learning.online_learner`
     - After `get_apex_engine()` is initialised in `lifespan`, create `online_learner = OnlineLearner(lightgcn=get_apex_engine().lightgcn)`
     - Call `online_learner.start()`; store as module-level singleton `_online_learner`
     - On `lifespan` shutdown, call `_online_learner.stop()`
@@ -184,7 +184,7 @@ they validate so regressions are caught early.
     - _Requirements: 5.8, 5.9_
 
   - [x] 10.2 Load `ActorCriticPolicy` in `Recommender.load`
-    - Import `ActorCriticPolicy` from `backend.rl_policy`
+    - Import `ActorCriticPolicy` from `backend.learning.rl_policy`
     - After existing model loading, attempt to load `models/rl_policy.pth` with `state_dim=20, action_dim=16`
     - If file absent: log `DEBUG`; set `self._rl_policy = None`
     - If `state_dim` mismatch on `load_state_dict`: log `WARNING`; set `self._rl_policy = None`
@@ -201,7 +201,7 @@ they validate so regressions are caught early.
     - _Requirements: 5.1, 5.2_
 
   - [x] 10.4 Apply `RLSafetyFilter` before response serialisation
-    - Import `RLSafetyFilter` from `backend.rl_policy`
+    - Import `RLSafetyFilter` from `backend.learning.rl_policy`
     - After final ranking, extract `negative_movie_ids` from `behavior_profile`
     - Call `RLSafetyFilter.apply_hard_constraints(candidate_ids, negative_ids)`
     - If filter removes all candidates: log `WARNING`; revert to pre-filter list (existing fallback behaviour)
@@ -220,7 +220,7 @@ they validate so regressions are caught early.
 
 - [ ] 11. Wire Active Inference into `main.py` event-write endpoint
   - [x] 11.1 Add `_trigger_active_inference` helper and `get_active_inference_engine` singleton
-    - Import `ActiveInferenceEngine` from `backend.active_inference_engine`
+    - Import `ActiveInferenceEngine` from `backend.intelligence.active_inference_engine`
     - Add module-level singleton `_active_inference_engine: ActiveInferenceEngine | None = None` and `get_active_inference_engine()` getter (lazy-init)
     - Implement `async def _trigger_active_inference(movie_id: int, reward: float) -> None` that retrieves the movie embedding from the feature store (or uses a random proxy) and calls `engine.self_heal(movie_emb, reward)`; swallow all exceptions with `WARNING` log
     - _Requirements: 5.4, 5.5, 5.6, 5.7_

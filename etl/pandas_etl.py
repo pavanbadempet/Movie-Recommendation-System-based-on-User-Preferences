@@ -16,7 +16,7 @@ import re
 import time
 import uuid
 
-import faiss
+from turbovec import TurboQuantIndex
 import numpy as np
 import pandas as pd
 import pandera.pandas as pa
@@ -405,23 +405,22 @@ def transform(df: pd.DataFrame | None = None) -> tuple[pd.DataFrame, np.ndarray]
 # ==========================================
 
 
-def build_faiss_index(vectors: np.ndarray) -> faiss.Index:
-    """Build FAISS HNSW index (matches Kaggle pipeline)."""
-    n_samples, n_features = vectors.shape
-    logger.info(f"Building FAISS HNSW index for {n_samples:,} vectors...")
-
+def build_turbovec_index(vectors: np.ndarray) -> TurboQuantIndex:
+    """Build a TurboQuantIndex from a float32 embedding matrix."""
     vectors = np.ascontiguousarray(vectors.astype(np.float32))
-
-    # HNSW: best for <1M vectors, no training needed, ~0.95+ recall
-    index = faiss.IndexHNSWFlat(n_features, 32, faiss.METRIC_INNER_PRODUCT)
-    index.hnsw.efConstruction = 200  # higher = better quality, slower build
-    index.hnsw.efSearch = 128  # higher = better recall at search time
-
-    index.add(vectors)
+    n_samples, n_features = vectors.shape
+    logger.info(f"Building TurboQuantIndex for {n_samples:,} x {n_features}d vectors...")
+    index = TurboQuantIndex(n_features, bit_width=4)
+    if n_samples > 0:
+        index.add(vectors)
+        if len(index) != n_samples:
+            raise ValueError(
+                f"TurboVec len ({len(index)}) != vectors added ({n_samples})"
+            )
     return index
 
 
-def build_index(vectors: np.ndarray | None = None) -> faiss.Index:
+def build_index(vectors: np.ndarray | None = None) -> TurboQuantIndex:
     """Main indexing pipeline."""
     logger.info("Starting indexing...")
 
@@ -432,8 +431,8 @@ def build_index(vectors: np.ndarray | None = None) -> faiss.Index:
         norms[norms == 0] = 1
         vectors = vectors / norms
 
-    index = build_faiss_index(vectors)
-    atomic_write_faiss_index(index, paths.models / "faiss.index")
+    index = build_turbovec_index(vectors)
+    atomic_write_turbovec_index(index, paths.models / "turbovec.tq")
 
     logger.info("Indexing complete")
     return index
@@ -518,14 +517,14 @@ def atomic_save_npy(array: np.ndarray, output_path: Path | str) -> Path:
     return output_path
 
 
-def atomic_write_faiss_index(index: faiss.Index, output_path: Path | str) -> Path:
-    """Write a FAISS index atomically."""
+def atomic_write_turbovec_index(index: TurboQuantIndex, output_path: Path | str) -> Path:
+    """Write a TurboVec index atomically (write to temp, then rename)."""
     output_path = _ensure_local_path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = _temp_artifact_path(output_path)
 
     try:
-        faiss.write_index(index, str(temp_path))
+        index.write(str(temp_path))
         temp_path.replace(output_path)
     except Exception:
         _cleanup_temp_file(temp_path)
@@ -553,11 +552,11 @@ def movie_id_sha256(movie_ids: np.ndarray) -> str:
 def build_serving_contract(
     df: pd.DataFrame,
     vectors: np.ndarray,
-    index: faiss.Index | None = None,
+    index: TurboQuantIndex | None = None,
     movie_ids: np.ndarray | None = None,
     model_name: str = "all-mpnet-base-v2",
 ) -> dict:
-    """Build the artifact contract that serving validates before trusting FAISS rows."""
+    """Build the artifact contract that serving validates before trusting TurboVec rows."""
     movie_ids = movie_id_vector(df) if movie_ids is None else np.asarray(movie_ids, dtype=np.int64)
     gate = assert_batch_invariants(
         df,
@@ -572,7 +571,7 @@ def build_serving_contract(
         "movie_rows": int(len(df)),
         "embedding_rows": int(vectors.shape[0]),
         "embedding_dimensions": int(vectors.shape[1]) if len(vectors.shape) > 1 else 0,
-        "faiss_index_size": int(index.ntotal) if index is not None else None,
+        "turbovec_index_size": len(index) if index is not None else None,
         "movie_id_map_rows": int(len(movie_ids)),
         "movie_id_sha256": movie_id_sha256(movie_ids),
         "quality_gate": gate,
@@ -636,7 +635,7 @@ def persist_movie_scd_snapshot(
 def assert_batch_invariants(
     df: pd.DataFrame | None,
     vectors: np.ndarray | None = None,
-    index: faiss.Index | None = None,
+    index: TurboQuantIndex | None = None,
     movie_ids: np.ndarray | None = None,
     stage: str = "batch",
 ) -> dict:
@@ -665,9 +664,9 @@ def assert_batch_invariants(
         result["vector_dimensions"] = int(vectors.shape[1]) if len(vectors.shape) > 1 else 0
 
     if index is not None:
-        if index.ntotal != len(df):
+        if len(index) != len(df):
             raise ValueError(f"{stage} index size does not match row count")
-        result["index_size"] = int(index.ntotal)
+        result["index_size"] = len(index)
 
     if movie_ids is not None:
         movie_ids = np.asarray(movie_ids, dtype=np.int64)
@@ -807,6 +806,22 @@ def run_pipeline(
     logger.info("STARTING PANDAS ETL PIPELINE")
 
     try:
+        # Load baseline datasets (if they exist) before they get overwritten by this run
+        baseline_df = None
+        baseline_embeds = None
+        existing_movies_path = paths.processed_data / "movies_transformed.parquet"
+        existing_embeds_path = paths.models / "sbert_embeddings.npy"
+        if existing_movies_path.exists():
+            try:
+                baseline_df = pd.read_parquet(existing_movies_path)
+            except Exception as exc:
+                logger.warning("Could not load baseline DataFrame for MLOps validation: %s", exc)
+        if existing_embeds_path.exists():
+            try:
+                baseline_embeds = np.load(existing_embeds_path)
+            except Exception as exc:
+                logger.warning("Could not load baseline embeddings for MLOps validation: %s", exc)
+
         curated_df = None
         # 1. Ingest
         if not skip_ingest:
@@ -879,7 +894,7 @@ def run_pipeline(
         # 3. Index
         with PipelineStage("INDEX"):
             index = build_index(vectors)
-            metrics["index_size"] = index.ntotal
+            metrics["index_size"] = len(index)
             metrics["quality_gates"]["serving"] = assert_batch_invariants(
                 df,
                 vectors=vectors,
@@ -894,6 +909,29 @@ def run_pipeline(
                 movie_ids=movie_ids,
             )
 
+        # 4. MLOps Validation & Run Registration
+        try:
+            from backend.serving.mlops_engine import MLOpsEngine
+            mlops = MLOpsEngine(paths.models / "run_lineage_registry.json")
+            mlops_report = mlops.validate_and_register_run(
+                run_id=run_id,
+                new_df=df,
+                new_embeds=vectors,
+                turbovec_path=paths.models / "turbovec.tq",
+                baseline_df=baseline_df,
+                baseline_embeds=baseline_embeds,
+            )
+            metrics["mlops_promotion_status"] = mlops_report["promotion_status"]
+            metrics["drift_analysis"] = mlops_report["drift_analysis"]
+            metrics["quality_gates"]["mlops_drift_gate"] = {
+                "stage": "mlops_drift_gate",
+                "drift_detected": mlops_report["drift_analysis"]["drift_detected"],
+                "drift_reasons": mlops_report["drift_analysis"]["drift_reasons"],
+                "promotion_status": mlops_report["promotion_status"],
+            }
+        except Exception as exc:
+            logger.warning("MLOps drift check or lineage logging failed: %s", exc)
+
         metrics["success"] = True
         metrics["finished_at"] = _utc_now().isoformat()
         metrics["duration_seconds"] = round(time.time() - start_time, 3)
@@ -902,7 +940,7 @@ def run_pipeline(
             "semantic_twins": describe_file(paths.processed_data / "semantic_twins.parquet"),
             "semantic_twin_summary": describe_file(paths.processed_data / "semantic_twin_summary.json"),
             "embeddings": describe_file(paths.models / "sbert_embeddings.npy"),
-            "faiss_index": describe_file(paths.models / "faiss.index"),
+            "turbovec_index": describe_file(paths.models / "turbovec.tq"),
             "movie_ids": describe_file(paths.models / "movie_ids.npy"),
         }
 

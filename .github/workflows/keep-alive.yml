@@ -3,90 +3,52 @@
 
 name: Keep Services Alive
 
+# Pings all hosted services to prevent free-tier cold starts.
+# Playwright is NOT installed here — curl is sufficient for health checks and
+# avoids the 60–90 second Playwright install cost on every 5-minute run.
+# The Streamlit wake-up button click is handled by synthetic-monitoring.yml
+# which runs on a longer schedule with full browser tooling.
+
 on:
   schedule:
-    # Run every 5 minutes (fastest allowed by GitHub Actions) to guarantee no cold starts
     - cron: '*/5 * * * *'
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch:
 
 jobs:
   ping-services:
     runs-on: ubuntu-latest
-    
+
     steps:
-      - name: Ping Backends (Hugging Face & Render)
+      - name: Ping Hugging Face Space
         run: |
           echo "Pinging Hugging Face Space..."
           if curl -sf --max-time 30 "https://pavanbadempet-movie-rec-api.hf.space/"; then
-            echo "✅ Hugging Face Space is alive!"
+            echo "HF Space is alive."
           else
-            echo "❌ Hugging Face Space ping failed."
+            echo "HF Space ping failed (may be cold-starting)."
           fi
 
+      - name: Ping Render backend
+        run: |
           echo "Pinging Render backend..."
-          # Render free tier can take up to 2 minutes to spin up
-          for i in {1..15}; do
+          # Render free tier can take up to 2 minutes to spin up — retry with backoff.
+          for i in $(seq 1 15); do
             if curl -sf --max-time 30 "https://movie-recs-api-5qvy.onrender.com/health"; then
-              echo "✅ Render backend is alive!"
+              echo "Render backend is alive."
               exit 0
-            else
-              echo "Attempt $i failed... waiting for service to wake up."
-              sleep 10
             fi
+            echo "Attempt $i/15 failed — waiting 10 s..."
+            sleep 10
           done
-          echo "❌ Render backend failed to respond after 15 attempts. (Render might be suspended)"
+          echo "Render backend did not respond after 15 attempts (may be suspended)."
           exit 0
-      
-      - name: Setup Python for Playwright
-        if: always()
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          
-      - name: Install Playwright
-        if: always()
+
+      - name: Ping Streamlit app
         run: |
-          pip install playwright
-          playwright install --with-deps chromium
-          
-      - name: Ping and Wake Streamlit App
-        if: always()
-        run: |
-          echo "Checking Streamlit app status using Playwright..."
-          python -c '
-          from playwright.sync_api import sync_playwright
-          import time
-          
-          def keep_awake():
-              with sync_playwright() as p:
-                  print("Launching headless browser...")
-                  browser = p.chromium.launch(headless=True)
-                  page = browser.new_page()
-                  
-                  # The correct URL based on the README
-                  url = "https://a-movie-recommendation-system.streamlit.app/"
-                  print(f"Navigating to {url}...")
-                  page.goto(url)
-                  
-                  # Wait a few seconds to let the exact state render
-                  page.wait_for_timeout(5000)
-                  
-                  # Check if the "Yes, get this app back up!" button exists
-                  button = page.locator("button:has-text(\"Yes, get this app back up!\")")
-                  if button.is_visible():
-                      print("App is sleeping! Clicking the wake-up button...")
-                      button.click()
-                      # Wait to allow the boot process to register
-                      page.wait_for_timeout(15000)
-                      print("Wake-up signal sent successfully.")
-                  else:
-                      print("No sleep screen detected. App is awake and websocket connected!")
-                      
-                  browser.close()
-          
-          try:
-              keep_awake()
-          except Exception as e:
-              print(f"Playwright ping failed: {e}")
-              exit(1)
-          '
+          echo "Pinging Streamlit app..."
+          # Simple HTTP probe — full wake-up click is handled by synthetic-monitoring.yml
+          if curl -sf --max-time 30 "https://a-movie-recommendation-system.streamlit.app/"; then
+            echo "Streamlit app is alive."
+          else
+            echo "Streamlit ping failed (may be sleeping — synthetic-monitoring will wake it)."
+          fi

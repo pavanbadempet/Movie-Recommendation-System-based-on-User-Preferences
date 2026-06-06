@@ -1,6 +1,6 @@
 import json
 
-from backend.search_benchmark import evaluate_search_benchmark, load_search_benchmark
+from backend.metrics.search_benchmark import evaluate_search_benchmark, load_search_benchmark
 
 
 def test_load_search_benchmark_reads_cases(tmp_path):

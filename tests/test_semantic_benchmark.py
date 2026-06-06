@@ -4,7 +4,7 @@ import json
 
 import pandas as pd
 
-from backend.semantic_benchmark import evaluate_semantic_benchmark
+from backend.metrics.semantic_benchmark import evaluate_semantic_benchmark
 from scripts.evaluate_semantic_benchmark import build_offline_recommender
 
 

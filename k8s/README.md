@@ -1,172 +1,166 @@
-# APEX — Kubernetes Deployment
+# APEX Kubernetes Deployment
 
-This guide covers deploying APEX to any Kubernetes cluster using the bundled Helm chart.
+This directory contains the Helm chart for deploying APEX to any Kubernetes cluster.
 
----
+## Chart Structure
+
+```
+k8s/helm/apex/
+├── Chart.yaml               # Chart metadata (name, version, appVersion)
+├── values.yaml              # Default values — override for your environment
+└── templates/
+    ├── deployment.yaml      # Main app deployment with startup/liveness/readiness probes
+    ├── service.yaml         # ClusterIP service (port 8000)
+    ├── ingress.yaml         # Optional ingress (disabled by default)
+    ├── hpa.yaml             # HorizontalPodAutoscaler (2–10 replicas @ 70% CPU)
+    ├── pdb.yaml             # PodDisruptionBudget (minAvailable: 1)
+    ├── configmap.yaml       # Non-secret environment variables
+    ├── servicemonitor.yaml  # Prometheus ServiceMonitor (disabled by default)
+    └── NOTES.txt            # Post-install instructions
+```
 
 ## Prerequisites
 
-- `kubectl >= 1.28`
-- `helm >= 3.x` (tested with 3.16)
-- A running Kubernetes cluster (minikube, kind, EKS, GKE, AKS, etc.)
+- Kubernetes 1.25+
+- Helm 3.10+
+- Container registry access (default: `ghcr.io/pavanpajjuri/apex-backend`)
+- A Kubernetes Secret named `apex-secrets` with sensitive keys (see below)
 
----
+## Quick Start
 
-## Quick Install
-
-```bash
-helm install apex ./k8s/helm/apex \
-  --namespace apex \
-  --create-namespace
-```
-
-This deploys APEX with default values (Tier 2 — ONNX CPU, 1 replica, no ingress).
-
----
-
-## Configure Serving Tier
-
-Override the serving tier at install time using `--set`:
-
-```bash
-# Tier 2: ONNX CPU (default)
-helm install apex ./k8s/helm/apex --set servingTier=tier2
-
-# Tier 1: Full ensemble with GPU
-helm install apex ./k8s/helm/apex --set servingTier=tier1
-
-# Tier 3: Lite (FAISS + TF-IDF only)
-helm install apex ./k8s/helm/apex --set servingTier=tier3
-```
-
-| Tier | Hardware Condition | Active Models | Typical Latency |
-|---|---|---|---|
-| **Tier 1** | GPU present + RAM ≥ 16 GB | Full 6-model ensemble + RL + Active Inference | 50–200 ms |
-| **Tier 2** | No GPU + RAM ≥ 8 GB | ONNX-quantized ensemble | 200–800 ms |
-| **Tier 3** | RAM < 8 GB | FAISS + TF-IDF only | 800–2000 ms |
-
----
-
-## Set Secrets
-
-### Option 1 — Via `--set` (simple, non-production)
-
-```bash
-helm install apex ./k8s/helm/apex \
-  --set secretRefs.jwtSecretKey=jwt-secret-key
-```
-
-### Option 2 — Via a Kubernetes Secret (recommended for production)
-
-First, create the secret in the cluster:
+### 1. Create the secrets
 
 ```bash
 kubectl create secret generic apex-secrets \
-  --from-literal=jwt-secret-key=<your-jwt-secret> \
-  --from-literal=tmdb-api-key=<your-tmdb-key> \
-  --namespace apex
+  --from-literal=jwt-secret-key="$(openssl rand -hex 32)" \
+  --from-literal=tmdb-api-key="your-tmdb-key" \
+  --from-literal=admin-token="$(openssl rand -hex 16)"
 ```
 
-Then reference the secret keys during install:
+### 2. Install the chart
 
 ```bash
+# Tier 2 (ONNX CPU — default)
 helm install apex ./k8s/helm/apex \
   --set secretRefs.jwtSecretKey=jwt-secret-key \
   --set secretRefs.tmdbApiKey=tmdb-api-key \
-  --namespace apex
+  --set secretRefs.adminToken=admin-token
+
+# Tier 3 (FAISS only — minimal resources)
+helm install apex ./k8s/helm/apex \
+  --set servingTier=tier3 \
+  --set servingProfile=lite \
+  --set resources.requests.memory=512Mi \
+  --set resources.limits.memory=1Gi
 ```
 
-The deployment mounts each referenced key as an environment variable via `secretKeyRef`. Leaving a `secretRefs.*` value empty (`""`) skips mounting that secret.
-
----
-
-## Upgrade
+### 3. Verify deployment
 
 ```bash
-helm upgrade apex ./k8s/helm/apex --namespace apex
-```
-
-Pass additional `--set` flags to change values at upgrade time (e.g., `--set replicaCount=3`).
-
----
-
-## Uninstall
-
-```bash
-helm uninstall apex --namespace apex
-```
-
-This removes all Kubernetes resources created by the chart. The namespace is not deleted automatically — remove it manually if no longer needed:
-
-```bash
-kubectl delete namespace apex
-```
-
----
-
-## Verify
-
-Check that pods are running and the service is available:
-
-```bash
-kubectl get pods -n apex
-kubectl get svc -n apex
-kubectl logs -n apex -l app.kubernetes.io/name=apex --tail=50
-```
-
-Once the service is up, forward the port and hit the health endpoint:
-
-```bash
-kubectl port-forward svc/apex 8000:8000 -n apex
+kubectl get pods -l app.kubernetes.io/name=apex
+kubectl port-forward svc/apex-apex 8000:8000
 curl http://localhost:8000/health
 ```
 
-Expected response:
+## Tier Configuration
 
-```json
-{
-  "status": "ok",
-  "movie_count": 10000,
-  "serving_tier": "tier2",
-  "app_version": "2.0.0"
-}
-```
+| Tier | `servingTier` | `servingProfile` | Memory | Use Case |
+|---|---|---|---|---|
+| **Tier 1** | `tier1` | `full` | ≥16Gi | GPU server, full 6-model ensemble + online learning |
+| **Tier 2** | `tier2` | `full` | 4–8Gi | CPU server, ONNX quantized inference (default) |
+| **Tier 3** | `tier3` | `lite` | 0.5–2Gi | Low-memory, FAISS + TF-IDF only |
 
----
-
-## Enable Ingress
+### Upgrading to Tier 1 (GPU)
 
 ```bash
 helm upgrade apex ./k8s/helm/apex \
-  --set ingress.enabled=true \
-  --set ingress.host=api.yourdomain.com
+  --set servingTier=tier1 \
+  --set resources.requests.memory=16Gi \
+  --set resources.limits.memory=24Gi \
+  --set replicaCount=1
 ```
 
-To add TLS, pass a values file:
+Add GPU resource requests if your cluster has GPU nodes:
+```yaml
+# values-gpu.yaml
+resources:
+  limits:
+    nvidia.com/gpu: 1
+```
+
+## Scaling
+
+The chart ships with a HorizontalPodAutoscaler enabled by default:
 
 ```yaml
-# myvalues.yaml
-ingress:
+autoscaling:
   enabled: true
-  host: api.yourdomain.com
-  tls:
-    - secretName: apex-tls
-      hosts:
-        - api.yourdomain.com
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
 ```
+
+Scale-up is aggressive (0s stabilization window, 2 pods/minute).
+Scale-down is conservative (5-minute stabilization window, 1 pod/2 minutes).
+This prevents recommendation latency spikes during traffic bursts.
+
+## Probes
+
+The deployment uses three probes tuned for APEX's warmup characteristics:
+
+| Probe | Path | Purpose |
+|---|---|---|
+| **Startup** | `/health` | Allows up to ~130s for model artifact loading before liveness kicks in |
+| **Liveness** | `/health` | Restarts containers that become unresponsive (PyTorch deadlock, OOM) |
+| **Readiness** | `/v1/platform/readiness` | Removes pods from service until artifacts are loaded and validated |
+
+The startup probe is critical — without it, the liveness probe would kill the container
+during the 30–60s model warmup on cold start.
+
+## Observability
+
+### Prometheus metrics
+
+APEX exposes metrics at `/metrics`. Enable the ServiceMonitor (requires prometheus-operator):
 
 ```bash
-helm upgrade apex ./k8s/helm/apex -f myvalues.yaml --namespace apex
+helm upgrade apex ./k8s/helm/apex \
+  --set serviceMonitor.enabled=true \
+  --set serviceMonitor.namespace=monitoring \
+  --set serviceMonitor.labels.release=prometheus
 ```
 
----
+### SLO endpoint
 
-## Notes
+```bash
+kubectl port-forward svc/apex-apex 8000:8000
+curl http://localhost:8000/v1/platform/slo | jq .
+```
 
-- The HPA requires `metrics-server` to be installed in the cluster. Install it with:
-  ```bash
-  kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
-  ```
-- The `autoscaling/v2` API requires Kubernetes >= 1.23
-- Resource limits default to 2 CPU / 4Gi RAM; increase for Tier 1 GPU workloads
-- The chart does not create a `PersistentVolumeClaim` — APEX uses an in-memory FAISS index loaded at startup. For artifact persistence across restarts, mount a PVC at `/app/models/` and pre-populate it with serving artifacts
+Returns real-time p50/p95/p99 latency, error rates, and online learning coordinator status.
+
+## Security
+
+The deployment template enforces:
+- `runAsNonRoot: true` (user 1000)
+- `allowPrivilegeEscalation: false`
+- `capabilities: drop: [ALL]`
+
+All sensitive environment variables are sourced from Kubernetes Secrets, never
+stored in the ConfigMap or values.yaml.
+
+## Values Reference
+
+See [`values.yaml`](helm/apex/values.yaml) for all configurable values with inline documentation.
+
+Key values:
+
+| Value | Default | Description |
+|---|---|---|
+| `replicaCount` | `2` | Pod replicas |
+| `servingTier` | `tier2` | ML serving tier |
+| `dpEpsilon` | `1.0` | Differential privacy budget |
+| `autoscaling.enabled` | `true` | Enable HPA |
+| `podDisruptionBudget.enabled` | `true` | Enable PDB |
+| `serviceMonitor.enabled` | `false` | Enable Prometheus scraping |
+| `terminationGracePeriodSeconds` | `60` | Graceful shutdown window |

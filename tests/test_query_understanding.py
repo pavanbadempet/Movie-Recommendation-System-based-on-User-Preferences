@@ -2,7 +2,7 @@
 Tests for lightweight search intent extraction.
 """
 
-from backend.query_understanding import intent_score, parse_query_intent
+from backend.intelligence.query_understanding import intent_score, parse_query_intent
 
 
 def test_parse_query_intent_extracts_genre_and_recency():

@@ -15,8 +15,8 @@ import torch
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from backend.hyperbolic_recommender import HyperbolicRecommender
-from backend.neural_ode_recommender import QuantumFluidRecommender
+from backend.models.hyperbolic_recommender import HyperbolicRecommender
+from backend.models.neural_ode_recommender import QuantumFluidRecommender
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)

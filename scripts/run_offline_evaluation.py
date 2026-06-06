@@ -368,7 +368,7 @@ def main() -> None:
     # Load recommender
     sys.path.insert(0, str(Path(__file__).parent.parent))
     try:
-        from backend.recommender import get_recommender
+        from backend.pipeline.recommender import get_recommender
 
         rec = get_recommender()
         logger.info("Recommender loaded successfully.")

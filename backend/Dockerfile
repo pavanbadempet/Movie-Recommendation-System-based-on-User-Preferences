@@ -2,8 +2,8 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+# Install system dependencies — no-install-recommends keeps the layer lean
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
     && rm -rf /var/lib/apt/lists/*
@@ -19,7 +19,10 @@ COPY backend ./backend
 COPY data/processed ./data/processed
 COPY data/evaluation ./data/evaluation
 COPY models ./models
-COPY REVISION ./REVISION
+
+# Create a non-root user and hand over ownership before switching
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
 
 # Expose FastAPI port
 EXPOSE 8000

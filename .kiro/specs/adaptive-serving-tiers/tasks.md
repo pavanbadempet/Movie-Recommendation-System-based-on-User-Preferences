@@ -84,7 +84,7 @@ Implement hardware-aware serving tier selection by creating `backend/serving_tie
 
 - [ ] 6. Modify `backend/recommender.py` — skip neural models on tier3
   - [~] 6.1 Read active tier in `Recommender.load()` and apply tier3 constraints
-    - Import `resolve_serving_tier` from `backend.serving_tier` at the top of `load()`
+    - Import `resolve_serving_tier` from `backend.serving.serving_tier` at the top of `load()`
     - Set `self._low_memory = self._low_memory or (active_tier == "tier3")`
     - Skip diffusion model loading when `is_tier3` is True
     - When `is_tier3`, cap `NOVA_TFIDF_MAX_FEATURES` at 12000 if currently higher

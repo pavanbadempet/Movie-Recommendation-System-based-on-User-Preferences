@@ -2,7 +2,6 @@
 
 import json
 
-import faiss
 import numpy as np
 import pandas as pd
 
@@ -37,7 +36,7 @@ def test_build_backfill_artifacts_creates_alignment_contract(tmp_path):
     assert manifest["serving_contract"]["movie_id_map_rows"] == 2
     assert manifest["serving_contract"]["movie_id_sha256"] == result["movie_id_sha256"]
     assert "embedding_rows" not in manifest["serving_contract"]
-    assert "faiss_index_size" not in manifest["serving_contract"]
+    assert "turbovec_index_size" not in manifest["serving_contract"]
     assert semantic_summary["row_count"] == 2
     assert result["paths"]["semantic_twins"].exists()
 
@@ -60,27 +59,30 @@ def test_build_backfill_artifacts_can_include_heavy_artifact_contract(tmp_path):
     )
     movies.to_parquet(movies_path, index=False)
 
-    embeddings = np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32)
+    embeddings = np.zeros((2, 8), dtype=np.float32)
+    embeddings[0, 0] = 1.0
+    embeddings[1, 1] = 1.0
     embeddings_path = tmp_path / "sbert_embeddings.npy"
     np.save(embeddings_path, embeddings)
 
-    index = faiss.IndexFlatIP(embeddings.shape[1])
+    from turbovec import TurboQuantIndex
+    index = TurboQuantIndex(embeddings.shape[1], bit_width=4)
     index.add(embeddings)
-    faiss_path = tmp_path / "faiss.index"
-    faiss.write_index(index, str(faiss_path))
+    turbovec_path = tmp_path / "turbovec.tq"
+    index.write(str(turbovec_path))
 
     result = build_backfill_artifacts(
         movies,
         movies_path,
         tmp_path / "out",
         embeddings_path=embeddings_path,
-        faiss_path=faiss_path,
+        turbovec_path=turbovec_path,
     )
 
     manifest = json.loads(result["paths"]["pipeline_manifest"].read_text(encoding="utf-8"))
 
     assert manifest["serving_contract"]["embedding_rows"] == 2
-    assert manifest["serving_contract"]["embedding_dimensions"] == 2
-    assert manifest["serving_contract"]["faiss_index_size"] == 2
+    assert manifest["serving_contract"]["embedding_dimensions"] == 8
+    assert manifest["serving_contract"]["turbovec_index_size"] == 2
     assert "sbert_embeddings.npy" in manifest["artifact_checksums"]
-    assert "faiss.index" in manifest["artifact_checksums"]
+    assert "turbovec.tq" in manifest["artifact_checksums"]

@@ -17,8 +17,8 @@ import numpy as np
 import pytest
 import torch
 
-from backend.recommender import _build_rl_state
-from backend.rl_policy import ActorCriticPolicy, RLSafetyFilter
+from backend.pipeline.recommender import _build_rl_state
+from backend.learning.rl_policy import ActorCriticPolicy, RLSafetyFilter
 
 # ---------------------------------------------------------------------------
 # Strategies
@@ -196,8 +196,8 @@ class TestRLPolicyAbsent:
         absent_path = tmp_path / "rl_policy.pth"
         assert not absent_path.exists()
 
-        with patch("backend.recommender.MODELS_DIR", tmp_path):
-            from backend.rl_policy import ActorCriticPolicy as _ACP  # noqa: F401
+        with patch("backend.pipeline.recommender.MODELS_DIR", tmp_path):
+            from backend.learning.rl_policy import ActorCriticPolicy as _ACP  # noqa: F401
 
             # Simulate the load logic directly (avoids loading all heavy artifacts)
             rl_policy = None
@@ -286,7 +286,7 @@ class TestActiveInferenceDispatch:
         mock_engine.emb_dim = 16
         mock_engine.self_heal = MagicMock(return_value=0.5)
 
-        with patch("backend.active_inference_engine.get_active_inference_engine", return_value=mock_engine):
+        with patch("backend.intelligence.active_inference_engine.get_active_inference_engine", return_value=mock_engine):
             # Run the async function synchronously
             asyncio.run(_trigger_active_inference(movie_id=42, reward=1.0))
 
@@ -308,7 +308,7 @@ class TestActiveInferenceDispatch:
         mock_engine.emb_dim = 16
         mock_engine.self_heal = MagicMock(return_value=0.5)
 
-        with patch("backend.active_inference_engine.get_active_inference_engine", return_value=mock_engine):
+        with patch("backend.intelligence.active_inference_engine.get_active_inference_engine", return_value=mock_engine):
             asyncio.run(_trigger_active_inference(movie_id=99, reward=-1.0))
 
         mock_engine.self_heal.assert_called_once()
@@ -326,6 +326,6 @@ class TestActiveInferenceDispatch:
         mock_engine.emb_dim = 16
         mock_engine.self_heal = MagicMock(side_effect=RuntimeError("engine failure"))
 
-        with patch("backend.active_inference_engine.get_active_inference_engine", return_value=mock_engine):
+        with patch("backend.intelligence.active_inference_engine.get_active_inference_engine", return_value=mock_engine):
             # Should not raise
             asyncio.run(_trigger_active_inference(movie_id=7, reward=1.0))

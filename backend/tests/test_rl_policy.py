@@ -1,7 +1,7 @@
 import torch
 
-from backend.rl_policy import ActorCriticPolicy, RLSafetyFilter
-from backend.rl_reward import RLRewardEngine
+from backend.learning.rl_policy import ActorCriticPolicy, RLSafetyFilter
+from backend.learning.rl_reward import RLRewardEngine
 
 
 def test_actor_critic_forward_pass():

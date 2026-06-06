@@ -10,10 +10,10 @@ info:
     **Interactive docs:** `/docs` (Swagger UI) · `/redoc` (ReDoc)
 
 
-    **Full API reference:** [docs/API_REFERENCE.md](https://github.com/your-username/Movie-Recommendation-System/blob/main/docs/API_REFERENCE.md)'
+    **Full API reference:** [docs/API_REFERENCE.md](https://github.com/pavanpajjuri/Movie-Recommendation-System/blob/main/docs/API_REFERENCE.md)'
   contact:
     name: APEX Project
-    url: https://github.com/your-username/Movie-Recommendation-System
+    url: https://github.com/pavanpajjuri/Movie-Recommendation-System
   license:
     name: MIT
     url: https://opensource.org/licenses/MIT

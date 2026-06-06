@@ -37,7 +37,7 @@ Thanks for your interest. This document covers everything you need to get from z
 
 ```bash
 # 1. Clone and create a virtual environment
-git clone https://github.com/your-username/Movie-Recommendation-System.git
+git clone https://github.com/pavanpajjuri/Movie-Recommendation-System.git
 cd Movie-Recommendation-System
 python -m venv venv
 venv\Scripts\activate      # Windows
@@ -73,7 +73,7 @@ Services:
 | React Frontend | http://localhost:5173 |
 | API Docs | http://localhost:8000/docs |
 | Prometheus | http://localhost:9090 |
-| Grafana | http://localhost:3000 (admin/admin — APEX Overview dashboard auto-provisioned) |
+| Grafana | http://localhost:3000 (password from `GF_ADMIN_PASSWORD` in `.env`, default `change-me-in-env`) |
 | Spark UI | http://localhost:8080 |
 
 ### Frontend only
@@ -143,6 +143,23 @@ python -m ruff format backend/ tests/ scripts/ etl/
 
 The CI pipeline runs `ruff check` and `ruff format --check` as a gate before any tests. A PR with lint errors will not be merged.
 
+### Pre-commit hooks (recommended)
+
+Install once and all quality gates run automatically on every `git commit`:
+
+```bash
+pip install -r requirements-dev.txt
+pre-commit install
+```
+
+This runs ruff, secret detection (gitleaks), large-file checks, and Dockerfile linting locally — the same checks CI runs. You will never push a commit that fails CI lint.
+
+To run all hooks against all files manually:
+
+```bash
+pre-commit run --all-files
+```
+
 Key rules:
 - Line length: 120 characters
 - Imports: sorted (isort-compatible), one import per line
@@ -189,7 +206,7 @@ npm run test:coverage     # With coverage report (80% threshold)
 
 ```bash
 pip install mutmut
-mutmut run --paths-to-mutate backend/serving_tier.py,backend/onnx_engine.py
+mutmut run --paths-to-mutate backend/serving/serving_tier.py,backend/serving/onnx_engine.py
 mutmut results
 ```
 

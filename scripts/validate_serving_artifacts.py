@@ -16,7 +16,7 @@ import pandas as pd
 REQUIRED_FILES = {
     "movies_transformed.parquet",
     "sbert_embeddings.npy",
-    "faiss.index",
+    "turbovec.tq",
     "movie_ids.npy",
     "pipeline_manifest.json",
     "semantic_twins.parquet",
@@ -25,7 +25,7 @@ REQUIRED_FILES = {
 
 HEAVY_ARTIFACT_CONTRACTS = {
     "embedding_rows": "sbert_embeddings.npy",
-    "faiss_index_size": "faiss.index",
+    "turbovec_index_size": "turbovec.tq",
 }
 
 
@@ -139,7 +139,7 @@ def validate(
     )
     expected_movie_rows = contract_value(manifest, "movie_rows") or contract_value(manifest, "serving_rows")
     expected_embedding_rows = contract_value(manifest, "embedding_rows")
-    expected_index_size = contract_value(manifest, "faiss_index_size")
+    expected_index_size = contract_value(manifest, "turbovec_index_size") or contract_value(manifest, "faiss_index_size")
     expected_id_rows = contract_value(manifest, "movie_id_map_rows")
     expected_id_hash = contract_value(manifest, "movie_id_sha256")
 
@@ -148,7 +148,7 @@ def validate(
         "movie_id_map_rows": int(len(movie_ids)),
         "manifest_movie_rows": int(expected_movie_rows) if expected_movie_rows is not None else None,
         "manifest_embedding_rows": int(expected_embedding_rows) if expected_embedding_rows is not None else None,
-        "manifest_faiss_index_size": int(expected_index_size) if expected_index_size is not None else None,
+        "manifest_turbovec_index_size": int(expected_index_size) if expected_index_size is not None else None,
         "manifest_movie_id_map_rows": int(expected_id_rows) if expected_id_rows is not None else None,
         "movie_id_sha256": movie_id_sha256(movie_ids),
         "manifest_movie_id_sha256": expected_id_hash,
@@ -166,7 +166,7 @@ def validate(
     count_expectations = {
         "movie_rows": expected_movie_rows,
         "embedding_rows": expected_embedding_rows,
-        "faiss_index_size": expected_index_size,
+        "turbovec_index_size": expected_index_size,
         "movie_id_map_rows": expected_id_rows,
     }
     for name, expected in count_expectations.items():

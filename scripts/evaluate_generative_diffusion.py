@@ -19,7 +19,7 @@ import torch
 # Fix python path for module resolution
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from backend.diffusion_recommender import LatentDiffusionRecommender
+from backend.models.diffusion_recommender import LatentDiffusionRecommender
 from scripts.train_generative_diffusion import build_synthetic_experiment_data
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -47,15 +47,15 @@ def evaluate_models():
     np.random.seed(42)
     item_embeddings, test_histories = build_synthetic_experiment_data(num_items=1000, emb_dim=emb_dim, num_users=500)
 
-    # Initialize FAISS index for retrieval
+    # Initialize TurboVec index for retrieval
     try:
-        import faiss
+        from turbovec import TurboQuantIndex
 
-        logger.info("Initializing FAISS Index for Sub-Millisecond Retrieval...")
-        index = faiss.IndexFlatIP(emb_dim)  # Inner Product for cosine similarity (since vectors are normalized)
+        logger.info("Initializing TurboVec Index for Sub-Millisecond Retrieval...")
+        index = TurboQuantIndex(emb_dim, bit_width=4)
         index.add(item_embeddings)
     except ImportError:
-        logger.error("FAISS not installed. Cannot perform retrieval evaluation.")
+        logger.error("TurboVec not installed. Cannot perform retrieval evaluation.")
         return
 
     # Load trained model

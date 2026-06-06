@@ -2,38 +2,57 @@
 ML model implementations for the APEX ensemble.
 
 Models:
-    LightGCN              — Graph collaborative filtering (backend/lightgcn.py)
-    SASRec                — Sequential Transformer (backend/sasrec.py)
-    KANRanker             — Kolmogorov-Arnold Network (backend/kan_ranker.py)
-    QuantumFluidRecommender — Neural ODE + complex embeddings (backend/neural_ode_recommender.py)
-    HyperbolicRecommender — Poincaré ball manifold (backend/hyperbolic_recommender.py)
-    LatentDiffusionRecommender — Generative DDPM (backend/diffusion_recommender.py)
-    TwoTowerModel         — Dual-encoder retrieval (backend/two_tower.py)
-    MMoERanker            — Multi-gate Mixture-of-Experts (backend/mmoe_ranker.py)
-    ActorCriticPolicy     — A2C reinforcement learning (backend/rl_policy.py)
+    LightGCN              — Graph collaborative filtering (backend/models/lightgcn.py)
+    SASRec                — Sequential Transformer (backend/models/sasrec.py)
+    KANRanker             — Kolmogorov-Arnold Network (backend/models/kan_ranker.py)
+    QuantumFluidRecommender — Neural ODE + complex embeddings (backend/models/neural_ode_recommender.py)
+    HyperbolicRecommender — Poincaré ball manifold (backend/models/hyperbolic_recommender.py)
+    LatentDiffusionRecommender — Generative DDPM (backend/models/diffusion_recommender.py)
+    TwoTowerModel         — Dual-encoder retrieval (backend/models/two_tower.py)
+    MMoERanker            — Multi-gate Mixture-of-Experts (backend/models/mmoe_ranker.py)
+    ActorCriticPolicy     — A2C reinforcement learning (backend/learning/rl_policy.py)
 
-Note: Models live in the parent backend/ directory for backward compatibility.
-This sub-package provides a logical grouping and documentation anchor.
+Training & optimization:
+    ApexEnsembleEngine    — 6-model weighted ensemble engine (backend/models/ensemble_engine.py)
+    ContextualWeightNetwork — Context-dependent ensemble weights (backend/models/neural_weight_optimizer.py)
+    OnlineLearner         — LightGCN online BPR updates (backend/learning/online_learner.py)
 """
 
-from backend.diffusion_recommender import LatentDiffusionRecommender
-from backend.hyperbolic_recommender import HyperbolicRecommender
-from backend.kan_ranker import KANRanker
-from backend.lightgcn import LightGCN
-from backend.mmoe_ranker import MMoERanker
-from backend.neural_ode_recommender import QuantumFluidRecommender
-from backend.rl_policy import ActorCriticPolicy
-from backend.sasrec import SASRec
-from backend.two_tower import TwoTowerModel
+from backend.models.diffusion_recommender import LatentDiffusionRecommender
+from backend.models.ensemble_engine import ApexEnsembleEngine, get_apex_engine
+from backend.models.hyperbolic_recommender import HyperbolicRecommender
+from backend.models.kan_ranker import KANRanker
+from backend.models.lightgcn import LightGCN
+from backend.models.mmoe_ranker import MMoERanker
+from backend.models.neural_ode_recommender import QuantumFluidRecommender
+from backend.models.neural_weight_optimizer import ContextualWeightNetwork, get_contextual_weights
+from backend.learning.online_learner import OnlineLearner
+from backend.learning.rl_policy import ActorCriticPolicy, RLSafetyFilter
+from backend.learning.rl_reward import RLRewardEngine
+from backend.models.sasrec import SASRec
+from backend.models.two_tower import TwoTowerModel
 
 __all__ = [
+    # 6-model ensemble
     "LightGCN",
     "SASRec",
     "KANRanker",
     "QuantumFluidRecommender",
     "HyperbolicRecommender",
     "LatentDiffusionRecommender",
+    # Retrieval + ranking
     "TwoTowerModel",
     "MMoERanker",
+    # RL
     "ActorCriticPolicy",
+    "RLSafetyFilter",
+    "RLRewardEngine",
+    # Ensemble engine
+    "ApexEnsembleEngine",
+    "get_apex_engine",
+    # Contextual weights
+    "ContextualWeightNetwork",
+    "get_contextual_weights",
+    # Online learning (base)
+    "OnlineLearner",
 ]

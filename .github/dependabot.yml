@@ -36,27 +36,21 @@ updates:
           - "prometheus-client*"
           - "sentry-sdk*"
           - "slowapi*"
+      etl:
+        patterns:
+          - "pyspark*"
+          - "delta*"
+          - "pyarrow*"
+          - "kaggle*"
+          - "jupytext*"
+          - "huggingface_hub*"
     labels:
       - "dependencies"
       - "python"
     commit-message:
       prefix: "chore(deps)"
-
-  # ---------------------------------------------------------------------------
-  # Python ETL dependencies
-  # ---------------------------------------------------------------------------
-  - package-ecosystem: "pip"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "08:00"
-      timezone: "UTC"
-    open-pull-requests-limit: 3
+    # Route all Python dependency PRs to develop so they go through CI before main
     target-branch: "develop"
-    labels:
-      - "dependencies"
-      - "etl"
 
   # ---------------------------------------------------------------------------
   # npm (frontend)

@@ -222,7 +222,7 @@ Extract all admin-only endpoints from `backend/main.py` into a new `APIRouter`. 
 **Module structure:**
 ```python
 from fastapi import APIRouter, Depends
-from backend.auth import resolve_admin_token
+from backend.data.auth import resolve_admin_token
 
 def create_admin_router(
     *,
@@ -240,7 +240,7 @@ The router uses the factory pattern (matching `create_evaluation_router`) to avo
 
 **Registration in main.py:**
 ```python
-from backend.admin_routes import create_admin_router
+from backend.api.admin_routes import create_admin_router
 admin_router = create_admin_router(
     get_apex_engine=get_apex_engine,
     reload_local_recommender=_reload_local_recommender,

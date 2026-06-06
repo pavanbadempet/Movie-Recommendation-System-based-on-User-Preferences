@@ -351,7 +351,7 @@ class AblationStudy:
 
         # Try the module-level singleton as a last resort
         try:
-            from backend.ensemble_engine import get_apex_engine
+            from backend.models.ensemble_engine import get_apex_engine
 
             return get_apex_engine()
         except Exception as exc:
@@ -638,7 +638,7 @@ def main() -> None:
 
     # Load the recommender
     try:
-        from backend.recommender import get_recommender
+        from backend.pipeline.recommender import get_recommender
 
         recommender = get_recommender()
         logger.info("Recommender loaded successfully.")

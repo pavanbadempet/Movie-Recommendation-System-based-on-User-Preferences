@@ -30,7 +30,7 @@ def _utc_now() -> str:
 
 
 def run() -> dict:
-    from backend.experiments import summarize_experiment_metrics
+    from backend.data.experiments import summarize_experiment_metrics
 
     logger.info("Summarising experiment metrics from event store...")
     summary = summarize_experiment_metrics()

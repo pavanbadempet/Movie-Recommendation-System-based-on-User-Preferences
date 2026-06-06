@@ -74,7 +74,7 @@ This produces:
 At startup, `TierDetector` inspects the hardware and selects the appropriate serving mode:
 
 ```python
-from backend.serving_tier import resolve_serving_tier
+from backend.serving.serving_tier import resolve_serving_tier
 tier, reason = resolve_serving_tier()
 # e.g., ("tier3", "legacy_profile_mapping")
 ```

@@ -23,9 +23,9 @@ import torch
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from backend.diffusion_recommender import LatentDiffusionRecommender
-from backend.hyperbolic_recommender import HyperbolicRecommender
-from backend.kan_ranker import KANRanker
+from backend.models.diffusion_recommender import LatentDiffusionRecommender
+from backend.models.hyperbolic_recommender import HyperbolicRecommender
+from backend.models.kan_ranker import KANRanker
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)

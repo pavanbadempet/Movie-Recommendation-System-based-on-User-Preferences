@@ -26,18 +26,18 @@ ApexEnsembleEngine.reload_weights().
 # ---------------------------------------------------------------------------
 # Pipeline types — stable public API, safe to import anywhere
 # ---------------------------------------------------------------------------
-from backend.pipeline_types import CandidateItem, FinalItem, RankedItem
+from backend.pipeline.pipeline_types import CandidateItem, FinalItem, RankedItem
 
 # ---------------------------------------------------------------------------
 # Pipeline stages — import on demand to avoid heavy ML deps at package import
 # ---------------------------------------------------------------------------
-# from backend.retrieval_pipeline import RetrievalPipeline, RetrievalConfig
-# from backend.ranking_pipeline import RankingPipeline, RankingConfig
-# from backend.reranking_pipeline import RerankingPipeline, RerankingConfig
+# from backend.pipeline.retrieval_pipeline import RetrievalPipeline, RetrievalConfig
+# from backend.pipeline.ranking_pipeline import RankingPipeline, RankingConfig
+# from backend.pipeline.reranking_pipeline import RerankingPipeline, RerankingConfig
 # ---------------------------------------------------------------------------
 # Serving tier detection — lightweight, no ML deps
 # ---------------------------------------------------------------------------
-from backend.serving_tier import TierDetector, resolve_serving_tier
+from backend.serving.serving_tier import TierDetector, resolve_serving_tier
 
 # ---------------------------------------------------------------------------
 # Package metadata

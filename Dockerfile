@@ -30,14 +30,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy source code
 COPY etl/ ./etl/
 COPY backend/ ./backend/
-COPY streamlit_app.py .
-COPY REVISION ./REVISION
+COPY frontend/streamlit_app.py ./frontend/streamlit_app.py
 
 # Fail image builds early if synced Python source has a syntax error.
-RUN python -m compileall backend etl streamlit_app.py
+RUN python -m compileall backend etl frontend/streamlit_app.py
 
-# Copy Pre-computed Models and Data
-COPY models/ ./models/
+# Copy Pre-computed Models and Data (present in production builds; skipped in CI)
+# Use COPY with a wildcard so the layer is a no-op when the directories are absent
+# rather than failing with "no source files were specified".
+RUN mkdir -p models data/processed data/evaluation
+COPY models/*.json models/*.joblib models/*.joblib.metadata.json models/.gitkeep* ./models/ 2>/dev/null || true
 COPY data/processed/ ./data/processed/
 COPY data/evaluation/ ./data/evaluation/
 

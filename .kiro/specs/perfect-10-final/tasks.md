@@ -124,7 +124,7 @@ All five tracks are independent and can execute in parallel.
 
 - [x] 5. Create `tests/test_serving_tier_properties.py`
   - [x] 5.1 Implement Property 1 — HardwareProfile type invariants
-    - Import `HardwareProfile` from `backend.serving_tier`
+    - Import `HardwareProfile` from `backend.serving.serving_tier`
     - `@given(st.booleans(), st.floats(min_value=0.1, max_value=1000.0, allow_nan=False, allow_infinity=False), st.integers(min_value=1, max_value=256))`
     - Construct `HardwareProfile(gpu_available=gpu, ram_gb=ram, cpu_cores=cores)` directly
     - Assert `isinstance(h.gpu_available, bool)` is True
@@ -135,7 +135,7 @@ All five tracks are independent and can execute in parallel.
     - _Requirements: 2.1_
 
   - [x] 5.2 Implement Property 2 — Tier resolution totality
-    - Import `TierDetector`, `HardwareProfile` from `backend.serving_tier`
+    - Import `TierDetector`, `HardwareProfile` from `backend.serving.serving_tier`
     - `@given(st.floats(min_value=0.0, max_value=1000.0, allow_nan=False, allow_infinity=False), st.booleans())`
     - Construct `HardwareProfile(gpu_available=gpu, ram_gb=ram, cpu_cores=4)`
     - Call `TierDetector()._auto_select(profile)` — unpack `(tier, _reason)`
@@ -157,7 +157,7 @@ All five tracks are independent and can execute in parallel.
 
 - [x] 6. Create `tests/test_onnx_thread_count.py`
   - [x] 6.1 Implement Property 4 — ONNX thread count binding
-    - Import `unittest.mock`, `hypothesis`, `ONNXEngine` from `backend.onnx_engine`
+    - Import `unittest.mock`, `hypothesis`, `ONNXEngine` from `backend.serving.onnx_engine`
     - `@given(st.integers(min_value=1, max_value=256))`
     - Use `unittest.mock.patch("onnxruntime.InferenceSession")` as context manager
     - Use `unittest.mock.patch("onnxruntime.SessionOptions")` to capture `intra_op_num_threads` assignment
@@ -297,7 +297,7 @@ All five tracks are independent and can execute in parallel.
     - Row for `backend.models`: `lightgcn, sasrec, kan_ranker, neural_ode_recommender, hyperbolic_recommender, diffusion_recommender, two_tower, mmoe_ranker, rl_policy` | `LightGCN, SASRec, KANRanker, QuantumFluidRecommender, HyperbolicRecommender, LatentDiffusionRecommender, TwoTowerModel, MMoERanker, ActorCriticPolicy` | Groups all 6 ensemble model implementations + retrieval/ranking models
     - Row for `backend.pipeline`: `pipeline_types, retrieval_pipeline, ranking_pipeline, reranking_pipeline` | `CandidateItem, RankedItem, FinalItem, RetrievalPipeline, RetrievalConfig, RankingPipeline, RankingConfig, RerankingPipeline, RerankingConfig` | The 3-stage pipeline (retrieve → rank → rerank) with typed interfaces
     - Row for `backend.serving`: `serving_tier, onnx_engine, online_learner, active_inference_engine, realtime_feature_updater` | `TierDetector, HardwareProfile, resolve_serving_tier` | Hardware-adaptive tier selection + runtime serving infrastructure
-    - Row for `backend.privacy`: `privacy, privacy_preserving_ml` | `add_laplace_noise, add_gaussian_noise, privatize_user_embedding, k_anonymize_profile, federated_average_gradients` | GDPR/EU AI Act differential privacy mechanisms
+    - Row for `backend.privacy.privacy`: `privacy, privacy_preserving_ml` | `add_laplace_noise, add_gaussian_noise, privatize_user_embedding, k_anonymize_profile, federated_average_gradients` | GDPR/EU AI Act differential privacy mechanisms
     - Row for `backend.metrics`: `debiased_metrics` | `compute_item_popularity` (+ others) | IPS-debiased evaluation metrics
     - Row for `backend.middleware`: `rate_limiter, plan_enforcer` | (direct use, not re-exported) | HTTP middleware for B2B SaaS rate limiting and plan enforcement
     - Section: Import Graph — ASCII or Mermaid diagram showing `pipeline_types ← retrieval_pipeline, ranking_pipeline, reranking_pipeline ← recommender ← main`
@@ -333,7 +333,7 @@ All five tracks are independent and can execute in parallel.
     - Run: `python -c "from backend.models import LightGCN, SASRec; print('models OK')"`
     - Run: `python -c "from backend.pipeline import RetrievalPipeline, RankingPipeline, RerankingPipeline; print('pipeline OK')"`
     - Run: `python -c "from backend.serving import TierDetector, resolve_serving_tier; print('serving OK')"`
-    - Run: `python -c "from backend.privacy import add_laplace_noise; print('privacy OK')"`
+    - Run: `python -c "from backend.privacy.privacy import add_laplace_noise; print('privacy OK')"`
     - Run: `python -c "from backend.metrics import compute_item_popularity; print('metrics OK')"`
     - All five must print their OK message without errors
     - _Requirements: 5.3_

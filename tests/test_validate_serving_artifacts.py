@@ -32,14 +32,14 @@ def test_heavy_artifact_contract_can_allow_metadata_only_manifest():
     )
 
     assert checks["sbert_embeddings.npy"]["contract_rows"] is None
-    assert checks["faiss.index"]["contract_rows"] is None
+    assert checks["turbovec.tq"]["contract_rows"] is None
 
 
 def test_heavy_artifact_contract_requires_checksum_when_rows_are_declared():
     manifest = {
         "serving_contract": {
             "embedding_rows": 2,
-            "faiss_index_size": 2,
+            "turbovec_index_size": 2,
         },
         "artifact_checksums": {},
     }
@@ -52,11 +52,11 @@ def test_heavy_artifact_contract_rejects_remote_size_mismatch():
     manifest = {
         "serving_contract": {
             "embedding_rows": 2,
-            "faiss_index_size": 2,
+            "turbovec_index_size": 2,
         },
         "artifact_checksums": {
             "sbert_embeddings.npy": {"size_bytes": 100},
-            "faiss.index": {"size_bytes": 200},
+            "turbovec.tq": {"size_bytes": 200},
         },
     }
 
@@ -65,7 +65,7 @@ def test_heavy_artifact_contract_rejects_remote_size_mismatch():
             manifest,
             remote_sizes={
                 "sbert_embeddings.npy": 101,
-                "faiss.index": 200,
+                "turbovec.tq": 200,
             },
         )
 
@@ -74,11 +74,11 @@ def test_heavy_artifact_contract_accepts_declared_rows_with_matching_sizes():
     manifest = {
         "serving_contract": {
             "embedding_rows": 2,
-            "faiss_index_size": 2,
+            "turbovec_index_size": 2,
         },
         "artifact_checksums": {
             "sbert_embeddings.npy": {"size_bytes": 100},
-            "faiss.index": {"size_bytes": 200},
+            "turbovec.tq": {"size_bytes": 200},
         },
     }
 
@@ -86,9 +86,9 @@ def test_heavy_artifact_contract_accepts_declared_rows_with_matching_sizes():
         manifest,
         remote_sizes={
             "sbert_embeddings.npy": 100,
-            "faiss.index": 200,
+            "turbovec.tq": 200,
         },
     )
 
     assert checks["sbert_embeddings.npy"]["contract_rows"] == 2
-    assert checks["faiss.index"]["contract_rows"] == 2
+    assert checks["turbovec.tq"]["contract_rows"] == 2

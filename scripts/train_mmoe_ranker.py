@@ -21,7 +21,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
-from backend.mmoe_ranker import MMoERanker
+from backend.models.mmoe_ranker import MMoERanker
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

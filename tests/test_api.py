@@ -15,7 +15,7 @@ import pytest
 @pytest.fixture
 def mock_artifacts(tmp_path, monkeypatch):
     """Set up mock model artifacts for testing."""
-    import faiss
+    from turbovec import TurboQuantIndex
 
     # Mock movies
     movies = pd.DataFrame(
@@ -53,10 +53,10 @@ def mock_artifacts(tmp_path, monkeypatch):
     np.save(tmp_path / "sbert_embeddings.npy", vecs)
     np.save(tmp_path / "movie_ids.npy", movies["id"].astype("int64").to_numpy())
 
-    # FAISS index
-    idx = faiss.IndexFlatIP(vecs.shape[1])
+    # TurboVec index
+    idx = TurboQuantIndex(vecs.shape[1], bit_width=4)
     idx.add(vecs)
-    faiss.write_index(idx, str(tmp_path / "faiss.index"))
+    idx.write(str(tmp_path / "turbovec.tq"))
     (tmp_path / "pipeline_manifest.json").write_text(
         json.dumps(
             {
@@ -66,7 +66,7 @@ def mock_artifacts(tmp_path, monkeypatch):
                     "movie_rows": 3,
                     "embedding_rows": 3,
                     "embedding_dimensions": 768,
-                    "faiss_index_size": 3,
+                    "turbovec_index_size": 3,
                     "movie_id_map_rows": 3,
                 },
             }
@@ -75,7 +75,7 @@ def mock_artifacts(tmp_path, monkeypatch):
     )
 
     # Patch paths
-    import backend.recommender as rec
+    import backend.pipeline.recommender as rec
 
     monkeypatch.setattr(rec, "MODELS_DIR", tmp_path)
     monkeypatch.setattr(rec, "DATA_DIR", tmp_path)
@@ -88,7 +88,19 @@ def mock_artifacts(tmp_path, monkeypatch):
     if "backend.main" in sys.modules:
         sys.modules["backend.main"]._recommender = None
 
-    return tmp_path
+    from backend.main import app
+    from backend.data.auth import get_current_user
+
+    class MockUser:
+        def __init__(self):
+            self.external_user_id = "user-1"
+            self.tenant_id = "demo-media-co"
+
+    app.dependency_overrides[get_current_user] = lambda: MockUser()
+
+    yield tmp_path
+
+    app.dependency_overrides.clear()
 
 
 class TestHealthEndpoint:
@@ -249,7 +261,7 @@ class TestPlatformEndpoint:
     def test_platform_readiness_can_proxy_to_remote_service(self, mock_artifacts, monkeypatch):
         import backend.main as main
         from backend.main import app
-        from backend.remote_recommender import RemoteResponse
+        from backend.data.remote_recommender import RemoteResponse
 
         async def fake_remote_get_json(path, params=None, context=None):
             assert path == "/v1/platform/readiness"
@@ -274,7 +286,7 @@ class TestPlatformEndpoint:
     def test_platform_status_can_proxy_to_remote_service(self, mock_artifacts, monkeypatch):
         import backend.main as main
         from backend.main import app
-        from backend.remote_recommender import RemoteResponse
+        from backend.data.remote_recommender import RemoteResponse
 
         async def fake_remote_get_json(path, params=None, context=None):
             assert path == "/v1/platform/status"
@@ -357,7 +369,7 @@ class TestPlatformEndpoint:
     ):
         import backend.main as main
         from backend.main import app
-        from backend.remote_recommender import RemoteResponse
+        from backend.data.remote_recommender import RemoteResponse
 
         calls = []
 
@@ -551,7 +563,7 @@ class TestSearchEndpoint:
     def test_v1_search_sanitizes_nan_optional_fields(self, monkeypatch):
         import backend.main as main
         from backend.main import app
-        from backend.recommender import Recommender
+        from backend.pipeline.recommender import Recommender
 
         rec = Recommender()
         rec._movies = pd.DataFrame(
@@ -593,7 +605,7 @@ class TestSearchEndpoint:
     def test_v1_ai_search_can_proxy_to_remote_recommender(self, mock_artifacts, monkeypatch):
         import backend.main as main
         from backend.main import app
-        from backend.remote_recommender import RemoteResponse
+        from backend.data.remote_recommender import RemoteResponse
 
         async def fake_remote_get_json(path, params=None, context=None):
             assert path == "/v1/search/ai"

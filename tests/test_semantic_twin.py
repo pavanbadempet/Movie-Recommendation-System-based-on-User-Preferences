@@ -1,6 +1,6 @@
 """Tests for deterministic semantic item twins."""
 
-from backend.semantic_twin import build_semantic_twin, compare_semantic_twins
+from backend.intelligence.semantic_twin import build_semantic_twin, compare_semantic_twins
 
 
 def test_semantic_twin_extracts_structured_signals():

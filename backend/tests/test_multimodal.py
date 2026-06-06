@@ -2,8 +2,8 @@ import numpy as np
 import pytest
 import torch
 
-from backend.multimodal_fusion import MultiModalFusionIndex
-from backend.vision_encoder import VisionEncoder
+from backend.intelligence.multimodal_fusion import MultiModalFusionIndex
+from backend.intelligence.vision_encoder import VisionEncoder
 
 
 @pytest.fixture

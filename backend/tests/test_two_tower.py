@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from backend.two_tower import ItemTower, TwoTowerModel, UserTower
+from backend.models.two_tower import ItemTower, TwoTowerModel, UserTower
 
 
 class TestTwoTowerArchitecture:
@@ -90,8 +90,8 @@ class TestTrainedModel:
     def test_trained_weights_exist(self):
         assert (self.MODELS_DIR / "two_tower.pth").exists(), "Trained weights not found"
 
-    def test_faiss_index_exists(self):
-        assert (self.MODELS_DIR / "two_tower_faiss.index").exists(), "FAISS index not found"
+    def test_turbovec_index_exists(self):
+        assert (self.MODELS_DIR / "two_tower_turbovec.tq").exists(), "TurboVec index not found"
 
     def test_id_map_exists(self):
         assert (self.MODELS_DIR / "two_tower_item_ids.npy").exists(), "ID map not found"
@@ -109,18 +109,20 @@ class TestTrainedModel:
 
         assert not torch.allclose(trained_w, random_w, atol=1e-3), "Trained weights match random init!"
 
-    def test_faiss_retrieval_returns_results(self):
-        import faiss
+    def test_turbovec_retrieval_returns_results(self):
+        from turbovec import TurboQuantIndex
 
-        index = faiss.read_index(str(self.MODELS_DIR / "two_tower_faiss.index"))
+        index = TurboQuantIndex.load(str(self.MODELS_DIR / "two_tower_turbovec.tq"))
         item_ids = np.load(str(self.MODELS_DIR / "two_tower_item_ids.npy"))
 
-        assert index.ntotal > 0
-        assert len(item_ids) == index.ntotal
+        assert len(index) > 0
+        assert len(item_ids) == len(index)
 
         # Query with a random vector
         query = np.random.randn(1, 128).astype(np.float32)
-        faiss.normalize_L2(query)
+        norm = np.linalg.norm(query, axis=1, keepdims=True)
+        norm[norm == 0] = 1
+        query = query / norm
         distances, indices = index.search(query, 10)
 
         assert indices.shape == (1, 10)

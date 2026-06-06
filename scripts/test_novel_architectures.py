@@ -20,10 +20,10 @@ import torch.nn.functional as F
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from backend.hyperbolic_recommender import HyperbolicRecommender
-from backend.kan_ranker import KANRanker
-from backend.lightgcn import LightGCN
-from backend.sasrec import SASRec
+from backend.models.hyperbolic_recommender import HyperbolicRecommender
+from backend.models.kan_ranker import KANRanker
+from backend.models.lightgcn import LightGCN
+from backend.models.sasrec import SASRec
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)

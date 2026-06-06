@@ -5,7 +5,7 @@ import json
 import numpy as np
 import pandas as pd
 
-from backend.artifact_health import evaluate_artifact_health, movie_id_sha256
+from backend.serving.artifact_health import evaluate_artifact_health, movie_id_sha256
 
 
 def test_artifact_health_reports_ready_when_catalog_ids_and_semantic_twins_align(tmp_path):
@@ -19,7 +19,7 @@ def test_artifact_health_reports_ready_when_catalog_ids_and_semantic_twins_align
     movie_ids = np.array([10, 20], dtype=np.int64)
     np.save(tmp_path / "movie_ids.npy", movie_ids)
     (tmp_path / "sbert_embeddings.npy").write_bytes(b"embedding-bytes")
-    (tmp_path / "faiss.index").write_bytes(b"faiss-bytes")
+    (tmp_path / "turbovec.tq").write_bytes(b"turbovec-bytes")
     (tmp_path / "pipeline_manifest.json").write_text(
         json.dumps(
             {

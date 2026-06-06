@@ -1,0 +1,53 @@
+# docker-compose.override.yml — Development overrides
+#
+# This file is automatically merged by `docker compose up` when present.
+# It overrides production settings with developer-friendly configuration:
+#   - Hot-reload via mounted source code (no rebuild needed on code change)
+#   - Tier3 serving profile (fast startup, no GPU/ONNX required)
+#   - Debug logging enabled
+#   - Smaller Spark worker (conserves local RAM)
+#   - Removes restart:unless-stopped so Ctrl-C works cleanly
+#
+# Usage:
+#   docker compose up              # uses this file automatically
+#   docker compose -f docker-compose.yml up   # production config only
+#
+# Do NOT commit secrets to this file. Use a .env file instead.
+
+services:
+  nova-backend:
+    restart: "no"
+    environment:
+      - ENVIRONMENT=development
+      - NOVA_SERVING_PROFILE=lite
+      - NOVA_SERVING_TIER=tier3
+      - NOVA_HEALTH_LOAD_RECOMMENDER=false
+      - NOVA_BACKGROUND_RECOMMENDER_WARMUP=false
+      - APEX_DP_EPSILON=1.0
+      - LOG_LEVEL=debug
+    volumes:
+      # Mount source code for hot-reload (no rebuild needed)
+      - ./backend:/app/backend
+      - ./data:/app/data
+      - ./models:/app/models
+    command: >
+      uvicorn backend.main:app
+        --host 0.0.0.0
+        --port 8000
+        --reload
+        --reload-dir /app/backend
+
+  nova-frontend:
+    restart: "no"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+
+  spark-worker:
+    environment:
+      - SPARK_WORKER_MEMORY=2G
+      - SPARK_WORKER_CORES=1
+
+  # Disable heavy services in dev by default
+  # Uncomment to enable locally:
+  # kafka: {}
+  # zookeeper: {}

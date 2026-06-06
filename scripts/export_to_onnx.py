@@ -26,15 +26,15 @@ from pathlib import Path
 
 import torch
 
-from backend.diffusion_recommender import LatentDiffusionRecommender
-from backend.hyperbolic_recommender import HyperbolicRecommender
-from backend.kan_ranker import KANRanker
-from backend.lightgcn import LightGCN
+from backend.models.diffusion_recommender import LatentDiffusionRecommender
+from backend.models.hyperbolic_recommender import HyperbolicRecommender
+from backend.models.kan_ranker import KANRanker
+from backend.models.lightgcn import LightGCN
 
 # Import the neural architectures
-from backend.mmoe_ranker import MMoERanker
-from backend.neural_ode_recommender import QuantumFluidRecommender
-from backend.sasrec import SASRec
+from backend.models.mmoe_ranker import MMoERanker
+from backend.models.neural_ode_recommender import QuantumFluidRecommender
+from backend.models.sasrec import SASRec
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

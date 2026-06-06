@@ -6,8 +6,8 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from backend.pipeline_types import RankedItem
-from backend.reranking_pipeline import RerankingConfig, RerankingPipeline
+from backend.pipeline.pipeline_types import RankedItem
+from backend.pipeline.reranking_pipeline import RerankingConfig, RerankingPipeline
 
 
 def _ranked_item_strategy():

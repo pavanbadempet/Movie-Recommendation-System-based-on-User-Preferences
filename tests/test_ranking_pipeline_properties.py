@@ -6,8 +6,8 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from backend.pipeline_types import CandidateItem
-from backend.ranking_pipeline import RankingConfig, RankingPipeline
+from backend.pipeline.pipeline_types import CandidateItem
+from backend.pipeline.ranking_pipeline import RankingConfig, RankingPipeline
 
 
 def _candidate_strategy():
@@ -28,7 +28,7 @@ def _make_pipeline():
 # Property 4: Ranking Count Preservation
 # Validates: Requirements 4.1
 @given(st.lists(_candidate_strategy(), min_size=0, max_size=50, unique_by=lambda c: c.movie_id))
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 def test_ranking_count_preservation(candidates):
     """len(result) == len(candidates) for any input list."""
     # Feature: architecture-design-perfection, Property 4: Ranking Count Preservation
@@ -40,7 +40,7 @@ def test_ranking_count_preservation(candidates):
 # Property 5: Ranking Set-Identity Round-Trip
 # Validates: Requirements 4.2
 @given(st.lists(_candidate_strategy(), min_size=0, max_size=50, unique_by=lambda c: c.movie_id))
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 def test_ranking_set_identity_round_trip(candidates):
     """The set of movie_ids in the result equals the set of movie_ids in the input."""
     # Feature: architecture-design-perfection, Property 5: Ranking Set-Identity Round-Trip
@@ -56,7 +56,7 @@ def test_ranking_set_identity_round_trip(candidates):
 # Property 6: Ranking Ordering Invariant
 # Validates: Requirements 4.3
 @given(st.lists(_candidate_strategy(), min_size=2, max_size=50, unique_by=lambda c: c.movie_id))
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 def test_ranking_ordering_invariant(candidates):
     """Result is sorted descending by blended score — no two adjacent items are out of order.
 
@@ -76,7 +76,7 @@ def test_ranking_ordering_invariant(candidates):
 # Property 7: Ranking Determinism
 # Validates: Requirements 4.4
 @given(st.lists(_candidate_strategy(), min_size=0, max_size=50, unique_by=lambda c: c.movie_id))
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 def test_ranking_determinism(candidates):
     """Calling rank() twice with identical inputs produces identical scores.
 

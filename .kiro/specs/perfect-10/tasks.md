@@ -94,7 +94,7 @@ Track 4 must run last.
     - `_platform_readiness_report` (lines 650–831, ~182 lines) and
       `_combine_readiness_status` (lines 636–649, ~14 lines) are currently defined inline in `main.py`
     - Move both functions; update all imports in `main.py` to import them from
-      `backend.platform_readiness`
+      `backend.serving.platform_readiness`
     - The function signatures must not change — callers in `main.py` must work without modification
     - _Requirements: main.py < 800 lines_
 
@@ -102,7 +102,7 @@ Track 4 must run last.
     - `backend/recommendation_events.py` already exists — append these two functions to it
     - `record_recommendation_events` (lines 832–900, ~69 lines) and
       `remote_payload_or_raise` (lines 901–920, ~20 lines) are currently inline in `main.py`
-    - Move both; update `main.py` to import them from `backend.recommendation_events`
+    - Move both; update `main.py` to import them from `backend.events.recommendation_events`
     - _Requirements: main.py < 800 lines_
 
   - [x] 2.3 Verify `main.py` is under 800 lines

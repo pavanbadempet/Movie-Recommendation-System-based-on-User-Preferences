@@ -12,7 +12,28 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # 0. Lint & format gate (fast — runs before any tests)
+  # 0. Pre-commit hooks (fastest gate — catches formatting/secret issues first)
+  # ---------------------------------------------------------------------------
+  pre-commit:
+    name: Pre-commit Hooks
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # full history for gitleaks
+
+    - name: Set up Python ${{ env.PYTHON_VERSION }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: Run pre-commit
+      uses: pre-commit/action@v3.0.1
+
+  # ---------------------------------------------------------------------------
+  # 0.1 Lint & format gate (fast — runs before any tests)
   # ---------------------------------------------------------------------------
   lint:
     name: Ruff Lint & Format Check
@@ -27,14 +48,46 @@ jobs:
         python-version: ${{ env.PYTHON_VERSION }}
         cache: 'pip'
 
-    - name: Install ruff
-      run: pip install ruff==0.15.12
+    - name: Install dev tooling
+      run: pip install -r requirements-dev.txt
 
     - name: Lint (ruff check)
       run: python -m ruff check backend/ tests/ scripts/ etl/
 
     - name: Format check (ruff format --check)
       run: python -m ruff format --check backend/ tests/ scripts/ etl/
+
+  # ---------------------------------------------------------------------------
+  # 0.5 Static type checking (mypy)
+  # ---------------------------------------------------------------------------
+  type-check:
+    name: Mypy Static Type Check
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ env.PYTHON_VERSION }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: Install mypy and type stubs
+      run: |
+        pip install -r requirements-dev.txt
+        pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+        pip install -r requirements.txt
+
+    - name: Run mypy on backend
+      # Use --ignore-missing-imports for third-party libs without stubs
+      # (already declared in pyproject.toml [[tool.mypy.overrides]]).
+      # --no-error-summary keeps output concise in CI logs.
+      run: |
+        python -m mypy backend/ \
+          --config-file pyproject.toml \
+          --no-error-summary \
+          --pretty
 
   # ---------------------------------------------------------------------------
   # Helm chart lint
@@ -60,7 +113,7 @@ jobs:
   unit-tests:
     name: Unit & Property-Based Tests
     runs-on: ubuntu-latest
-    needs: [lint]
+    needs: [lint, type-check, pre-commit]
 
     steps:
     - uses: actions/checkout@v4
@@ -74,7 +127,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pytest pytest-cov hypothesis
+        pip install -r requirements-dev.txt
         pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
         pip install -r requirements.txt
 
@@ -105,6 +158,10 @@ jobs:
           tests/test_ranking_pipeline_properties.py \
           tests/test_reranking_pipeline_properties.py \
           tests/test_ablation_serialization_property.py \
+          tests/test_online_learning_coordinator.py \
+          tests/test_dp_thread_safety.py \
+          tests/test_serving_tier_vram.py \
+          tests/test_cold_start_properties.py \
           backend/tests/test_ensemble_math.py \
           backend/tests/test_multimodal.py \
           backend/tests/test_rl_policy.py \
@@ -130,7 +187,7 @@ jobs:
   api-tests:
     name: API Integration Tests
     runs-on: ubuntu-latest
-    needs: [lint]
+    needs: [lint, type-check, pre-commit]
 
     steps:
     - uses: actions/checkout@v4
@@ -144,7 +201,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pytest httpx
+        pip install -r requirements-dev.txt
         pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
         pip install -r requirements.txt
 
@@ -168,7 +225,7 @@ jobs:
   data-pipeline-tests:
     name: Data Pipeline & PySpark Tests
     runs-on: ubuntu-latest
-    needs: [lint]
+    needs: [lint, type-check, pre-commit]
 
     steps:
     - uses: actions/checkout@v4
@@ -187,7 +244,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pytest
+        pip install -r requirements-dev.txt
         pip install -r requirements.txt
         pip install -r requirements-etl.txt
 
@@ -211,7 +268,7 @@ jobs:
   ml-tests:
     name: ML Model & Benchmark Tests
     runs-on: ubuntu-latest
-    needs: [lint]
+    needs: [lint, type-check, pre-commit]
 
     steps:
     - uses: actions/checkout@v4
@@ -225,7 +282,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pytest
+        pip install -r requirements-dev.txt
         pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
         pip install -r requirements.txt
 
@@ -286,7 +343,7 @@ jobs:
   openapi-export:
     name: Export OpenAPI Spec
     runs-on: ubuntu-latest
-    needs: [lint]
+    needs: [lint, type-check, pre-commit]
 
     steps:
     - uses: actions/checkout@v4
@@ -302,6 +359,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
         pip install -r requirements.txt
+        pip install -r requirements-dev.txt
         pip install pyyaml
 
     - name: Export OpenAPI spec
@@ -332,7 +390,7 @@ jobs:
   # ---------------------------------------------------------------------------
   docker-integration:
     name: Docker Compose Integration Build
-    needs: [lint, unit-tests, api-tests, frontend-tests]
+    needs: [lint, type-check, unit-tests, api-tests, frontend-tests]
     runs-on: ubuntu-latest
 
     steps:
@@ -347,4 +405,10 @@ jobs:
       uses: hadolint/hadolint-action@v3.1.0
       with:
         dockerfile: Dockerfile
+        failure-threshold: warning
+
+    - name: Verify backend/Dockerfile syntax (hadolint)
+      uses: hadolint/hadolint-action@v3.1.0
+      with:
+        dockerfile: backend/Dockerfile
         failure-threshold: warning

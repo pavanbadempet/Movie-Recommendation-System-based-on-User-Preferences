@@ -34,7 +34,7 @@ import torch
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 if TYPE_CHECKING:
-    from backend.lightgcn import LightGCN
+    from backend.models.lightgcn import LightGCN
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -146,7 +146,7 @@ def write_events(ratings_with_tmdb: pd.DataFrame, batch_size: int = 5000) -> int
 
 def train_lightgcn(ratings_with_tmdb: pd.DataFrame) -> None:
     """Train LightGCN on the real MovieLens bipartite graph."""
-    from backend.lightgcn import LightGCN
+    from backend.models.lightgcn import LightGCN
 
     logger.info("Training LightGCN on MovieLens interaction graph...")
 

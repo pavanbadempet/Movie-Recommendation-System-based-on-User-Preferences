@@ -22,7 +22,7 @@ import torch
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from backend.ensemble_engine import ApexEnsembleEngine
+from backend.models.ensemble_engine import ApexEnsembleEngine
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

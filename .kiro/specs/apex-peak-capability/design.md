@@ -345,7 +345,7 @@ async def _trigger_active_inference(movie_id: int, reward: float) -> None:
 At the end of the recommendation assembly in `main.py`, before serialising the response:
 
 ```python
-from backend.rl_policy import RLSafetyFilter
+from backend.learning.rl_policy import RLSafetyFilter
 negative_ids = set(behavior_profile.get("negative_movie_ids", []))
 safe_candidates = RLSafetyFilter.apply_hard_constraints(candidate_ids, negative_ids)
 ```
