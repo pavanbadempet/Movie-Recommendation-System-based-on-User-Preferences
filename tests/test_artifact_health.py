@@ -5,7 +5,7 @@ import json
 import numpy as np
 import pandas as pd
 
-from backend.artifact_health import evaluate_artifact_health, movie_id_sha256
+from backend.serving.artifact_health import evaluate_artifact_health, movie_id_sha256
 
 
 def test_artifact_health_reports_ready_when_catalog_ids_and_semantic_twins_align(tmp_path):

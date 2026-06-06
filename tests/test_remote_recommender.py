@@ -24,7 +24,7 @@ def reset_remote_state(remote):
 
 
 def test_remote_get_json_uses_fresh_cache(monkeypatch):
-    import backend.remote_recommender as remote
+    import backend.data.remote_recommender as remote
 
     reset_remote_state(remote)
     monkeypatch.setenv("NOVA_RECOMMENDER_SERVICE_URL", "https://vector.example")
@@ -59,7 +59,7 @@ def test_remote_get_json_uses_fresh_cache(monkeypatch):
 
 
 def test_remote_get_json_serves_stale_cache_on_failure(monkeypatch):
-    import backend.remote_recommender as remote
+    import backend.data.remote_recommender as remote
 
     reset_remote_state(remote)
     monkeypatch.setenv("NOVA_RECOMMENDER_SERVICE_URL", "https://vector.example")
@@ -109,7 +109,7 @@ def test_remote_get_json_serves_stale_cache_on_failure(monkeypatch):
 
 
 def test_remote_circuit_opens_after_repeated_failures(monkeypatch):
-    import backend.remote_recommender as remote
+    import backend.data.remote_recommender as remote
 
     reset_remote_state(remote)
     monkeypatch.setenv("NOVA_RECOMMENDER_SERVICE_URL", "https://vector.example")
@@ -145,7 +145,7 @@ def test_remote_circuit_opens_after_repeated_failures(monkeypatch):
 
 
 def test_remote_429_uses_stale_cache_instead_of_client_error(monkeypatch):
-    import backend.remote_recommender as remote
+    import backend.data.remote_recommender as remote
 
     reset_remote_state(remote)
     monkeypatch.setenv("NOVA_RECOMMENDER_SERVICE_URL", "https://vector.example")
@@ -182,7 +182,7 @@ def test_remote_429_uses_stale_cache_instead_of_client_error(monkeypatch):
 
 
 def test_remote_get_json_uses_distributed_cache(monkeypatch):
-    import backend.remote_recommender as remote
+    import backend.data.remote_recommender as remote
 
     reset_remote_state(remote)
     monkeypatch.setenv("NOVA_RECOMMENDER_SERVICE_URL", "https://vector.example")
@@ -228,7 +228,7 @@ def test_remote_get_json_uses_distributed_cache(monkeypatch):
 
 
 def test_remote_get_json_uses_stale_distributed_cache_on_failure(monkeypatch):
-    import backend.remote_recommender as remote
+    import backend.data.remote_recommender as remote
 
     reset_remote_state(remote)
     monkeypatch.setenv("NOVA_RECOMMENDER_SERVICE_URL", "https://vector.example")

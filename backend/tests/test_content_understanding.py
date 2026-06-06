@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock
 
-from backend.content_understanding import ContentUnderstandingEngine
-from backend.knowledge_graph import KnowledgeGraphEngine
+from backend.intelligence.content_understanding import ContentUnderstandingEngine
+from backend.intelligence.knowledge_graph import KnowledgeGraphEngine
 
 
 def test_content_understanding_mocked():

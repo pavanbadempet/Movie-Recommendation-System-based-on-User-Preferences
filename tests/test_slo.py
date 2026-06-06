@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 
 
 def test_slo_report_detects_latency_or_error_violation(monkeypatch):
-    from backend.slo import RequestSloTracker, build_slo_report
+    from backend.serving.slo import RequestSloTracker, build_slo_report
 
     monkeypatch.setenv("NOVA_SLO_MIN_REQUESTS", "2")
     monkeypatch.setenv("NOVA_SLO_MIN_ROUTE_REQUESTS", "1")
@@ -31,7 +31,7 @@ def test_slo_report_detects_latency_or_error_violation(monkeypatch):
 
 
 def test_internal_quality_routes_are_excluded_from_serving_slo(monkeypatch):
-    from backend.slo import should_track_request
+    from backend.serving.slo import should_track_request
 
     monkeypatch.delenv("NOVA_SLO_EXCLUDED_ROUTE_PREFIXES", raising=False)
 
@@ -45,6 +45,8 @@ def test_internal_quality_routes_are_excluded_from_serving_slo(monkeypatch):
 
 def test_platform_slo_endpoint_is_lightweight(monkeypatch):
     import backend.main as main
+    import backend.serving.artifact_health as artifact_health_mod
+    import backend.data.remote_recommender as remote_rec_mod
 
     main._slo_tracker.clear()
     main._slo_tracker.record(
@@ -57,7 +59,7 @@ def test_platform_slo_endpoint_is_lightweight(monkeypatch):
     monkeypatch.setenv("NOVA_SLO_MIN_REQUESTS", "1")
     monkeypatch.setenv("NOVA_SLO_MIN_ROUTE_REQUESTS", "1")
     monkeypatch.setattr(
-        main,
+        artifact_health_mod,
         "evaluate_artifact_health",
         lambda **kwargs: {
             "status": "ready",
@@ -66,7 +68,7 @@ def test_platform_slo_endpoint_is_lightweight(monkeypatch):
         },
     )
     monkeypatch.setattr(
-        main,
+        remote_rec_mod,
         "remote_recommender_status",
         lambda: {"configured": False, "circuit": {"state": "closed"}},
     )

@@ -584,7 +584,7 @@ The project already uses Hypothesis (`.hypothesis/` directory present). Property
 # tests/test_pipeline_properties.py
 from hypothesis import given, settings, strategies as st
 from backend.pipeline_types import CandidateItem, RankedItem
-from backend.ranking_pipeline import RankingPipeline, RankingConfig
+from backend.pipeline.ranking_pipeline import RankingPipeline, RankingConfig
 
 # Feature: architecture-design-perfection, Property 4: Ranking Count Preservation
 @given(

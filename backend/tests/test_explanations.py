@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
-from backend.llm_explanations import _explanation_cache, _generate_cache_key, generate_explanation
+from backend.intelligence.llm_explanations import _explanation_cache, _generate_cache_key, generate_explanation
 
 
 @pytest.fixture(autouse=True)
@@ -23,8 +23,8 @@ def dummy_movie():
     }
 
 
-@patch("backend.llm_explanations.openrouter_api_key")
-@patch("backend.llm_explanations.chat_completion")
+@patch("backend.intelligence.llm_explanations.openrouter_api_key")
+@patch("backend.intelligence.llm_explanations.chat_completion")
 def test_generate_explanation_success(mock_chat, mock_api_key, dummy_movie):
     """Test that the explanation generation correctly formats the prompt and returns the LLM response."""
     # Mock LLM response
@@ -44,8 +44,8 @@ def test_generate_explanation_success(mock_chat, mock_api_key, dummy_movie):
     assert "user loves Sci-Fi" in user_prompt
 
 
-@patch("backend.llm_explanations.openrouter_api_key")
-@patch("backend.llm_explanations.chat_completion")
+@patch("backend.intelligence.llm_explanations.openrouter_api_key")
+@patch("backend.intelligence.llm_explanations.chat_completion")
 def test_generate_explanation_fallback(mock_chat, mock_api_key, dummy_movie):
     """Test that it gracefully degrades to a template if the LLM fails or times out."""
     # Simulate a timeout or OpenRouter failure

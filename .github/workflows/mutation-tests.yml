@@ -10,7 +10,7 @@ env:
 
 jobs:
   mutation-tests:
-    name: Mutation Tests (serving_tier + onnx_engine)
+    name: Mutation Tests (serving_tier + onnx_engine + online_learners)
     runs-on: ubuntu-latest
 
     steps:
@@ -29,14 +29,41 @@ jobs:
         pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
         pip install -r requirements.txt
 
-    - name: Run mutation tests
+    - name: Run mutation tests — serving tier + ONNX engine
       env:
         JWT_SECRET_KEY: test-jwt-secret-key-for-ci-only
         NOVA_DISABLE_MODEL_DOWNLOADS: "1"
       run: |
         mutmut run \
-          --paths-to-mutate backend/serving_tier.py,backend/onnx_engine.py \
-          --runner "python -m pytest tests/test_serving_tier_properties.py tests/test_onnx_thread_count.py -x -q"
+          --paths-to-mutate backend/serving/serving_tier.py,backend/serving/onnx_engine.py \
+          --runner "python -m pytest tests/test_serving_tier_properties.py tests/test_serving_tier_vram.py tests/test_onnx_thread_count.py -x -q"
+
+    - name: Run mutation tests — differential privacy
+      env:
+        JWT_SECRET_KEY: test-jwt-secret-key-for-ci-only
+        NOVA_DISABLE_MODEL_DOWNLOADS: "1"
+      run: |
+        mutmut run \
+          --paths-to-mutate backend/privacy/privacy_preserving_ml.py \
+          --runner "python -m pytest tests/test_dp_thread_safety.py -x -q"
+
+    - name: Run mutation tests — cold-start intelligence
+      env:
+        JWT_SECRET_KEY: test-jwt-secret-key-for-ci-only
+        NOVA_DISABLE_MODEL_DOWNLOADS: "1"
+      run: |
+        mutmut run \
+          --paths-to-mutate backend/intelligence/uncertainty_estimator.py \
+          --runner "python -m pytest tests/test_cold_start_properties.py -x -q"
+
+    - name: Run mutation tests — online learner coordinator
+      env:
+        JWT_SECRET_KEY: test-jwt-secret-key-for-ci-only
+        NOVA_DISABLE_MODEL_DOWNLOADS: "1"
+      run: |
+        mutmut run \
+          --paths-to-mutate backend/learning/online_learning_coordinator.py,backend/learning/sasrec_online_learner.py,backend/learning/kan_online_learner.py \
+          --runner "python -m pytest tests/test_online_learning_coordinator.py -x -q"
 
     - name: Print mutation score
       run: mutmut results

@@ -116,7 +116,7 @@ def sample_negatives(user_idx: int, num_items: int, user_interactions: dict, k: 
 
 def train_sasrec(data: dict):
     """Train Self-Attentive Sequential Recommendation model."""
-    from backend.sasrec import SASRec
+    from backend.models.sasrec import SASRec
 
     logger.info("=" * 50)
     logger.info("Training SASRec (Transformer Sequential)")
@@ -190,7 +190,7 @@ def train_sasrec(data: dict):
 
 def train_lightgcn(data: dict):
     """Train LightGCN graph collaborative filtering model."""
-    from backend.lightgcn import LightGCN
+    from backend.models.lightgcn import LightGCN
 
     logger.info("=" * 50)
     logger.info("Training LightGCN (Graph Neural Network)")
@@ -276,7 +276,7 @@ def train_lightgcn(data: dict):
 
 def train_quantum(data: dict):
     """Train Quantum Fluid Neural ODE model."""
-    from backend.neural_ode_recommender import QuantumFluidRecommender
+    from backend.models.neural_ode_recommender import QuantumFluidRecommender
 
     logger.info("=" * 50)
     logger.info("Training Quantum Fluid ODE")
@@ -343,7 +343,7 @@ def train_quantum(data: dict):
 
 def train_hyperbolic(data: dict):
     """Train Hyperbolic Poincaré manifold embeddings."""
-    from backend.hyperbolic_recommender import HyperbolicRecommender
+    from backend.models.hyperbolic_recommender import HyperbolicRecommender
 
     logger.info("=" * 50)
     logger.info("Training Hyperbolic Poincaré Manifold")
@@ -412,7 +412,7 @@ def train_hyperbolic(data: dict):
 
 def train_kan(data: dict):
     """Train Kolmogorov-Arnold B-Spline ranker."""
-    from backend.kan_ranker import KANRanker
+    from backend.models.kan_ranker import KANRanker
 
     logger.info("=" * 50)
     logger.info("Training KAN B-Spline Ranker")

@@ -20,7 +20,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from torch.utils.data import DataLoader, Dataset
 
-from backend.diffusion_recommender import LatentDiffusionRecommender
+from backend.models.diffusion_recommender import LatentDiffusionRecommender
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)

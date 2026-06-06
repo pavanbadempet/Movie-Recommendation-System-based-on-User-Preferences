@@ -146,7 +146,7 @@ def run_app():
         log("React node_modules not found. Run 'cd frontend && npm install' first.", Colors.WARNING)
         log("Falling back to Streamlit frontend on http://localhost:8501 ...", Colors.WARNING)
         frontend = run_cmd(
-            f"{sys.executable} -m streamlit run streamlit_app.py",
+            f"{sys.executable} -m streamlit run frontend/streamlit_app.py",
             background=True,
         )
         log("App running!", Colors.OKGREEN)

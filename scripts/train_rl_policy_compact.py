@@ -42,7 +42,7 @@ import torch.optim as optim
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from backend.events import iter_events
-from backend.rl_policy import ActorCriticPolicy
+from backend.learning.rl_policy import ActorCriticPolicy
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

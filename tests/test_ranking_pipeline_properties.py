@@ -6,8 +6,8 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from backend.pipeline_types import CandidateItem
-from backend.ranking_pipeline import RankingConfig, RankingPipeline
+from backend.pipeline.pipeline_types import CandidateItem
+from backend.pipeline.ranking_pipeline import RankingConfig, RankingPipeline
 
 
 def _candidate_strategy():

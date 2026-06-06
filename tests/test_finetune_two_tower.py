@@ -280,7 +280,7 @@ class TestNaNLossGuard:
         When training produces NaN loss, finetune() calls sys.exit(1)
         and does NOT write the output model file.
         """
-        from backend.two_tower import TwoTowerModel
+        from backend.models.two_tower import TwoTowerModel
         from scripts.finetune_two_tower import finetune
 
         events = [_make_event("click", movie_id=i, user_id=f"u{i}") for i in range(1, 121)]

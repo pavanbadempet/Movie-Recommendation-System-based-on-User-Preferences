@@ -277,7 +277,7 @@ Close the four remaining gaps (ML completeness, testing completeness, frontend c
 
 - [x] 18. Add Tier 3 constraints to `backend/recommender.py`
   - [x] 18.1 Import `resolve_serving_tier` and read active tier at start of `load()`
-    - Add `from backend.serving_tier import resolve_serving_tier` import
+    - Add `from backend.serving.serving_tier import resolve_serving_tier` import
     - At the top of `load()`, call `active_tier = resolve_serving_tier()`
     - _Requirements: 15.1_
 

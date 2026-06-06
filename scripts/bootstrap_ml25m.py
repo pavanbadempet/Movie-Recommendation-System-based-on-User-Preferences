@@ -162,7 +162,7 @@ def train_lightgcn(ratings: pd.DataFrame, epochs: int = 200, emb_dim: int = 32) 
     """Train LightGCN with more epochs and larger embeddings on ML-25M."""
     import scipy.sparse as sp
 
-    from backend.lightgcn import LightGCN
+    from backend.models.lightgcn import LightGCN
 
     logger.info("Building LightGCN interaction graph...")
     positives = ratings[ratings["rating"] >= 3.5].copy()
@@ -266,7 +266,7 @@ def train_lightgcn(ratings: pd.DataFrame, epochs: int = 200, emb_dim: int = 32) 
 
 def train_sasrec(ratings: pd.DataFrame, epochs: int = 50, max_users: int = 50000) -> None:
     """Train SASRec on real ML-25M watch sequences ordered by timestamp."""
-    from backend.sasrec import SASRec
+    from backend.models.sasrec import SASRec
 
     logger.info("Building SASRec training sequences...")
 
@@ -367,7 +367,7 @@ def train_two_tower_enriched(ratings: pd.DataFrame, tmdb_meta: pd.DataFrame, epo
     """Fine-tune Two-Tower using LightGCN embeddings + TMDB metadata as item features."""
     from torch.utils.data import DataLoader, Dataset
 
-    from backend.two_tower import TwoTowerModel
+    from backend.models.two_tower import TwoTowerModel
 
     logger.info("Building enriched Two-Tower training data...")
 

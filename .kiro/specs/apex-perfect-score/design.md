@@ -416,7 +416,7 @@ No code changes needed — just verification and test coverage.
 Add at the start of `Recommender.load()`:
 
 ```python
-from backend.serving_tier import resolve_serving_tier
+from backend.serving.serving_tier import resolve_serving_tier
 
 def load(self) -> "Recommender":
     active_tier = resolve_serving_tier()

@@ -2,7 +2,7 @@
 Tests for Nova experiment assignment and metrics.
 """
 
-from backend.experiments import assign_experiment, attach_experiment, summarize_experiment_metrics
+from backend.data.experiments import assign_experiment, attach_experiment, summarize_experiment_metrics
 
 
 def test_assignment_is_stable_for_same_subject():

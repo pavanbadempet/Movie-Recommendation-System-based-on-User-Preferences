@@ -75,7 +75,7 @@ def mock_artifacts(tmp_path, monkeypatch):
     )
 
     # Patch paths
-    import backend.recommender as rec
+    import backend.pipeline.recommender as rec
 
     monkeypatch.setattr(rec, "MODELS_DIR", tmp_path)
     monkeypatch.setattr(rec, "DATA_DIR", tmp_path)
@@ -249,7 +249,7 @@ class TestPlatformEndpoint:
     def test_platform_readiness_can_proxy_to_remote_service(self, mock_artifacts, monkeypatch):
         import backend.main as main
         from backend.main import app
-        from backend.remote_recommender import RemoteResponse
+        from backend.data.remote_recommender import RemoteResponse
 
         async def fake_remote_get_json(path, params=None, context=None):
             assert path == "/v1/platform/readiness"
@@ -274,7 +274,7 @@ class TestPlatformEndpoint:
     def test_platform_status_can_proxy_to_remote_service(self, mock_artifacts, monkeypatch):
         import backend.main as main
         from backend.main import app
-        from backend.remote_recommender import RemoteResponse
+        from backend.data.remote_recommender import RemoteResponse
 
         async def fake_remote_get_json(path, params=None, context=None):
             assert path == "/v1/platform/status"
@@ -357,7 +357,7 @@ class TestPlatformEndpoint:
     ):
         import backend.main as main
         from backend.main import app
-        from backend.remote_recommender import RemoteResponse
+        from backend.data.remote_recommender import RemoteResponse
 
         calls = []
 
@@ -551,7 +551,7 @@ class TestSearchEndpoint:
     def test_v1_search_sanitizes_nan_optional_fields(self, monkeypatch):
         import backend.main as main
         from backend.main import app
-        from backend.recommender import Recommender
+        from backend.pipeline.recommender import Recommender
 
         rec = Recommender()
         rec._movies = pd.DataFrame(
@@ -593,7 +593,7 @@ class TestSearchEndpoint:
     def test_v1_ai_search_can_proxy_to_remote_recommender(self, mock_artifacts, monkeypatch):
         import backend.main as main
         from backend.main import app
-        from backend.remote_recommender import RemoteResponse
+        from backend.data.remote_recommender import RemoteResponse
 
         async def fake_remote_get_json(path, params=None, context=None):
             assert path == "/v1/search/ai"

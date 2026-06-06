@@ -59,13 +59,13 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from backend import recommender_helpers
-from backend.app_info import app_metadata, public_base_url
-from backend.artifact_health import evaluate_artifact_health
-from backend.artifact_routes import create_artifact_router
-from backend.auth import TenantContext, enforce_payload_context, resolve_admin_token, resolve_tenant_context
-from backend.auth_routes import router as auth_router
-from backend.benchmark_cache import (
+from backend.pipeline import recommender_helpers
+from backend.serving.app_info import app_metadata, public_base_url
+from backend.serving.artifact_health import evaluate_artifact_health
+from backend.api.artifact_routes import create_artifact_router
+from backend.data.auth import TenantContext, enforce_payload_context, resolve_admin_token, resolve_tenant_context
+from backend.api.auth_routes import router as auth_router
+from backend.metrics.benchmark_cache import (
     compute_recommendation_benchmark_cached,
     compute_semantic_benchmark_cached,
     get_cached_recommendation_benchmark,
@@ -75,14 +75,14 @@ from backend.benchmark_cache import (
     warming_recommendation_benchmark_report,
     warming_semantic_benchmark_report,
 )
-from backend.browse_routes import create_browse_router
-from backend.catalog_routes import create_catalog_router
-from backend.catalogs import persist_catalog_upload, profile_catalog_csv
-from backend.chat import generate_chat_response
-from backend.database import get_db
-from backend.ensemble_engine import get_apex_engine
-from backend.evaluation import evaluate_recommendation_quality
-from backend.evaluation_routes import create_evaluation_router
+from backend.api.browse_routes import create_browse_router
+from backend.api.catalog_routes import create_catalog_router
+from backend.data.catalogs import persist_catalog_upload, profile_catalog_csv
+from backend.api.chat import generate_chat_response
+from backend.data.database import get_db
+from backend.models.ensemble_engine import get_apex_engine
+from backend.metrics.evaluation import evaluate_recommendation_quality
+from backend.api.evaluation_routes import create_evaluation_router
 from backend.events import (
     aggregate_behavior_features,
     append_event,
@@ -91,43 +91,46 @@ from backend.events import (
     get_events_path,
     summarize_recommendation_events,
 )
-from backend.experiment_routes import create_experiment_router
-from backend.experiments import assign_experiment, attach_experiment, summarize_experiment_metrics
-from backend.frontend_failover import configured_frontends, frontend_status_report
-from backend.online_learner import OnlineLearner
-from backend.platform_readiness import (
+from backend.api.experiment_routes import create_experiment_router
+from backend.data.experiments import assign_experiment, attach_experiment, summarize_experiment_metrics
+from backend.data.frontend_failover import configured_frontends, frontend_status_report
+from backend.learning.online_learner import OnlineLearner
+from backend.serving.app_startup import env_truthy as _env_truthy
+from backend.serving.app_startup import shutdown as _app_shutdown
+from backend.serving.app_startup import startup as _app_startup
+from backend.serving.platform_readiness import (
     _combine_readiness_status,
     _platform_readiness_report,
     platform_readiness_report as _platform_readiness_report_fn,  # noqa: F401 — available for external callers
 )
-from backend.ranker import load_ranker
-from backend.recommender import Recommender, get_recommender
-from backend.recommender_helpers import (
+from backend.pipeline.ranker import load_ranker
+from backend.pipeline.recommender import Recommender, get_recommender
+from backend.pipeline.recommender_helpers import (
     event_logging_enabled as _event_logging_enabled,
 )
-from backend.recommender_helpers import (
+from backend.pipeline.recommender_helpers import (
     refresh_artifact_files as _refresh_artifact_files,
 )
-from backend.recommender_helpers import (
+from backend.pipeline.recommender_helpers import (
     reload_local_recommender as _reload_local_recommender,
 )
-from backend.recommender_helpers import (
+from backend.pipeline.recommender_helpers import (
     safe_float as _safe_float,
 )
-from backend.remote_recommender import remote_get_json, remote_recommender_status, remote_recommender_url
-from backend.search_benchmark import evaluate_search_benchmark
-from backend.slo import RequestSloTracker, build_slo_report, should_track_request
-from backend.usage import record_usage, summarize_usage
+from backend.data.remote_recommender import remote_get_json, remote_recommender_status, remote_recommender_url
+from backend.metrics.search_benchmark import evaluate_search_benchmark
+from backend.serving.slo import RequestSloTracker, build_slo_report, should_track_request
+from backend.data.usage import record_usage, summarize_usage
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-SENTRY_DSN = os.getenv("SENTRY_DSN")
-if SENTRY_DSN:
+_SENTRY_DSN = os.getenv("SENTRY_DSN")
+if _SENTRY_DSN:
     try:
         sentry_sdk.init(
-            dsn=SENTRY_DSN,
+            dsn=_SENTRY_DSN,
             traces_sample_rate=1.0,
             profiles_sample_rate=1.0,
         )
@@ -145,111 +148,53 @@ APP_VERSION = "2.0.0"
 REVISION_FILE = Path(__file__).resolve().parent.parent / "REVISION"
 FRONTEND_DIST_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 
-# Async HTTP client (initialized via lifespan)
+# Runtime singletons — initialised in lifespan, read-only after startup.
 http_client: httpx.AsyncClient | None = None
 _online_learner: OnlineLearner | None = None
-_tier_detector = None  # TierDetector singleton — set in lifespan
+_online_learning_coordinator = None
+_tier_detector = None
 _slo_tracker = RequestSloTracker()
 
 
 async def _trigger_active_inference(movie_id: int, reward: float) -> None:
-    """Dispatch Active Inference self-heal as a background task (Requirement 5.7)."""
+    """Dispatch Active Inference self-heal as a background task."""
     try:
         import torch
 
-        from backend.active_inference_engine import get_active_inference_engine
+        from backend.intelligence.active_inference_engine import get_active_inference_engine
 
         engine = get_active_inference_engine()
-        # Use a random proxy embedding if we can't retrieve the real one
         movie_emb = torch.randn(1, engine.emb_dim)
         engine.self_heal(movie_emb, reward)
     except Exception as exc:
         logger.warning("Active Inference self_heal failed for movie_id=%s: %s", movie_id, exc)
 
 
-def _env_truthy(name: str) -> bool:
-    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Manage async resources for app lifetime."""
-    global http_client, _online_learner, _tier_detector
+    """Delegate startup/shutdown to ``backend.serving.app_startup``."""
+    global http_client, _online_learner, _online_learning_coordinator, _tier_detector
 
-    # --- Wire recommender_helpers singleton accessors ---
     def _set_recommender(r):
         global _recommender
         _recommender = r
 
-    recommender_helpers.configure(get_rec=lambda: _recommender, set_rec=_set_recommender)
+    state = await _app_startup(
+        recommender_get_fn=lambda: _recommender,
+        recommender_set_fn=_set_recommender,
+    )
 
-    # --- Resolve serving tier before any model loading ---
-    try:
-        from backend.serving_tier import get_tier_detector
+    http_client = state["http_client"]
+    _online_learner = state["online_learner"]
+    _online_learning_coordinator = state["online_learning_coordinator"]
+    _tier_detector = state["tier_detector"]
 
-        _tier_detector = get_tier_detector()
-        active_tier, tier_reason = _tier_detector.resolve()
-        logger.info("Active serving tier: %s (%s)", active_tier, tier_reason)
-    except Exception as exc:
-        logger.warning("Tier detection failed: %s; defaulting to tier2", exc)
-        active_tier = "tier2"
-
-    http_client = httpx.AsyncClient(timeout=10.0)
     if _env_truthy("NOVA_BACKGROUND_RECOMMENDER_WARMUP"):
         _start_background_recommender_warmup()
 
-    # --- Tier-specific engine startup ---
-    if active_tier == "tier1":
-        # Full ensemble + GPU + OnlineLearner
-        try:
-            gpu = _tier_detector._profile.gpu_available if _tier_detector and _tier_detector._profile else False
-            device = "cuda" if gpu else "cpu"
-            engine = get_apex_engine(device=device)
-            _online_learner = OnlineLearner(lightgcn=engine.lightgcn)
-            _online_learner.start()
-            if _online_learner._thread is None or not _online_learner._thread.is_alive():
-                logger.warning("OnlineLearner thread failed to start; attempting restart...")
-                _online_learner.start()
-                if _online_learner._thread is None or not _online_learner._thread.is_alive():
-                    logger.critical("OnlineLearner thread could not be started. Online learning disabled.")
-                    _online_learner = None
-        except Exception as exc:
-            logger.critical("Failed to initialise Tier1 engine: %s", exc)
-            _online_learner = None
-
-    elif active_tier == "tier2":
-        # ONNX CPU engine
-        try:
-            from backend.onnx_engine import get_onnx_engine
-
-            cpu_cores = _tier_detector._profile.cpu_cores if _tier_detector and _tier_detector._profile else 0
-            onnx_engine = get_onnx_engine(cpu_cores=cpu_cores)
-            if not onnx_engine.has_any_onnx_models():
-                logger.warning("No ONNX models found; falling back to tier3 behavior")
-                if _tier_detector:
-                    _tier_detector._tier = "tier3"
-                    _tier_detector._reason = "onnx_fallback"
-        except Exception as exc:
-            logger.warning("Failed to initialise Tier2 ONNX engine: %s", exc)
-
-    # tier3: no engine pre-loading; recommender loads lazily on first request
-
-    # Pre-load real-time feature index from event store for instant session sequences
-    try:
-        import asyncio
-
-        from backend.realtime_feature_updater import preload_from_event_store
-
-        asyncio.get_event_loop().run_in_executor(None, preload_from_event_store, 10000)
-    except Exception as exc:
-        logger.warning("Real-time index pre-load failed: %s", exc)
-
     yield
 
-    # Shutdown
-    if _online_learner is not None:
-        _online_learner.stop()
-    await http_client.aclose()
+    await _app_shutdown(state)
 
 
 # Create FastAPI app
@@ -262,7 +207,7 @@ app = FastAPI(
         "and adaptive 3-tier serving (GPU / ONNX CPU / FAISS lite).\n\n"
         "**Interactive docs:** `/docs` (Swagger UI) · `/redoc` (ReDoc)\n\n"
         "**Full API reference:** [docs/API_REFERENCE.md]"
-        "(https://github.com/your-username/Movie-Recommendation-System/blob/main/docs/API_REFERENCE.md)"
+        "(https://github.com/pavanpajjuri/Movie-Recommendation-System/blob/main/docs/API_REFERENCE.md)"
     ),
     version=APP_VERSION,
     lifespan=lifespan,
@@ -306,7 +251,7 @@ app = FastAPI(
     ],
     contact={
         "name": "APEX Project",
-        "url": "https://github.com/your-username/Movie-Recommendation-System",
+        "url": "https://github.com/pavanpajjuri/Movie-Recommendation-System",
     },
     license_info={
         "name": "MIT",
@@ -314,7 +259,7 @@ app = FastAPI(
     },
 )
 
-from backend.admin_tests import router as admin_router
+from backend.api.admin_tests import router as admin_router
 
 app.include_router(admin_router)
 app.include_router(auth_router)
@@ -425,7 +370,7 @@ except ImportError:
     logger.warning("PlanEnforcerMiddleware could not be loaded. Running without plan enforcement.")
 
 # Billing routes (Stripe Checkout, Portal, Webhook, Usage)
-from backend.billing_routes import router as billing_router
+from backend.api.billing_routes import router as billing_router
 
 app.include_router(billing_router)
 
@@ -498,30 +443,19 @@ def _start_background_recommender_warmup() -> None:
     recommender_helpers.start_background_recommender_warmup()
 
 
-# Moved to backend/recommendation_events.py (task 6.3)
-# Moved to backend/platform_readiness.py (task 6.3)
-from backend.platform_readiness import (
+from backend.serving.platform_readiness import (
     _benchmark_readiness_component,
     _readiness_component,
 )
-from backend.recommendation_events import (
+from backend.events.recommendation_events import (
     _candidate_event_summary,
     _serving_lineage,
     record_recommendation_events,
     remote_payload_or_raise,
 )
-
-# Moved to backend/recommendation_routes.py (task 6.3)
-from backend.recommendation_routes import (
+from backend.api.recommendation_routes import (
     _recommendation_diagnostic_report,
 )
-
-
-# Moved to backend/platform_readiness.py (task 2.1)
-# _combine_readiness_status and _platform_readiness_report are imported above.
-
-# Moved to backend/recommendation_events.py (task 2.2)
-# record_recommendation_events and remote_payload_or_raise are imported above.
 
 
 app.include_router(
@@ -544,7 +478,7 @@ app.include_router(
     )
 )
 
-from backend.admin_routes import create_admin_router
+from backend.api.admin_routes import create_admin_router
 
 app.include_router(
     create_admin_router(
@@ -597,10 +531,10 @@ app.include_router(
 # ===== RECOMMENDATION, SEARCH, MOVIE, EVENTS & CHAT ROUTES =====
 # Extracted to backend/recommendation_routes.py to keep this file under 1500 lines.
 
-from backend.recommendation_routes import (
+from backend.api.recommendation_routes import (
     configure as _configure_rec_routes,
 )
-from backend.recommendation_routes import (
+from backend.api.recommendation_routes import (
     create_core_router,
     create_rec_engine_router,
     create_recommendation_router,
@@ -613,6 +547,7 @@ _configure_rec_routes(
     frontend_dist_dir=FRONTEND_DIST_DIR,
     http_client_getter=lambda: http_client,
     online_learner_getter=lambda: _online_learner,
+    online_learning_coordinator_getter=lambda: _online_learning_coordinator,
     recommender_getter=lambda: _recommender,
     slo_tracker_getter=lambda: _slo_tracker,
     tier_detector_getter=lambda: _tier_detector,

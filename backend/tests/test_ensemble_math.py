@@ -1,7 +1,7 @@
 import torch
 
-from backend.active_inference_engine import ActiveInferenceEngine
-from backend.ensemble_engine import ApexEnsembleEngine
+from backend.intelligence.active_inference_engine import ActiveInferenceEngine
+from backend.models.ensemble_engine import ApexEnsembleEngine
 
 
 def test_apex_ensemble_initialization():

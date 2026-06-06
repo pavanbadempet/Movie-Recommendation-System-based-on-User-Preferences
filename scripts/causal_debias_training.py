@@ -43,7 +43,7 @@ import torch.nn.functional as F
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from backend.events import iter_events
-from backend.lightgcn import LightGCN
+from backend.models.lightgcn import LightGCN
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -310,7 +310,7 @@ def select_weights_doubly_robust(
     propensities = estimate_item_propensities(all_events)
 
     # Load ensemble engine
-    from backend.ensemble_engine import ApexEnsembleEngine
+    from backend.models.ensemble_engine import ApexEnsembleEngine
 
     engine = ApexEnsembleEngine()
 

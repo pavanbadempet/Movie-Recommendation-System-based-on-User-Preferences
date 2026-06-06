@@ -6,8 +6,8 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from backend.auth import get_password_hash, verify_password
-from backend.database import APIKey, Base, Tenant, User, UserEvent
+from backend.data.auth import get_password_hash, verify_password
+from backend.data.database import APIKey, Base, Tenant, User, UserEvent
 
 # Use an in-memory SQLite database for fast unit testing without needing the Docker container
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"

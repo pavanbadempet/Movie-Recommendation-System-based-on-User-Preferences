@@ -1,4 +1,4 @@
-from backend.recommendation_benchmark import (
+from backend.metrics.recommendation_benchmark import (
     evaluate_recommendation_benchmark,
     evaluate_recommendation_case,
     find_recommendation_benchmark_case,

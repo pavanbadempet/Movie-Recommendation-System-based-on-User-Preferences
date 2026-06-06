@@ -19,7 +19,7 @@ import torch
 # Fix python path for module resolution
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from backend.diffusion_recommender import LatentDiffusionRecommender
+from backend.models.diffusion_recommender import LatentDiffusionRecommender
 from scripts.train_generative_diffusion import build_synthetic_experiment_data
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")

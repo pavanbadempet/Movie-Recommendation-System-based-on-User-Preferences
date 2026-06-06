@@ -32,17 +32,17 @@ DEFAULT_WEIGHTS = {
 def _make_engine(tmp_path: Path):
     """Return a small ApexEnsembleEngine with MODELS_DIR patched to tmp_path."""
     with (
-        patch("backend.ensemble_engine.QuantumFluidRecommender"),
-        patch("backend.ensemble_engine.HyperbolicRecommender"),
-        patch("backend.ensemble_engine.KANRanker"),
-        patch("backend.ensemble_engine.LatentDiffusionRecommender"),
-        patch("backend.ensemble_engine.SASRec"),
-        patch("backend.ensemble_engine.LightGCN"),
-        patch("backend.ensemble_engine.ApexEnsembleEngine._inject_pyspark_priors"),
-        patch("backend.ensemble_engine.ApexEnsembleEngine._load_trained_weights"),
-        patch("backend.ensemble_engine.MODELS_DIR", tmp_path),
+        patch("backend.models.ensemble_engine.QuantumFluidRecommender"),
+        patch("backend.models.ensemble_engine.HyperbolicRecommender"),
+        patch("backend.models.ensemble_engine.KANRanker"),
+        patch("backend.models.ensemble_engine.LatentDiffusionRecommender"),
+        patch("backend.models.ensemble_engine.SASRec"),
+        patch("backend.models.ensemble_engine.LightGCN"),
+        patch("backend.models.ensemble_engine.ApexEnsembleEngine._inject_pyspark_priors"),
+        patch("backend.models.ensemble_engine.ApexEnsembleEngine._load_trained_weights"),
+        patch("backend.models.ensemble_engine.MODELS_DIR", tmp_path),
     ):
-        from backend.ensemble_engine import ApexEnsembleEngine
+        from backend.models.ensemble_engine import ApexEnsembleEngine
 
         engine = ApexEnsembleEngine(num_users=10, num_items=100, emb_dim=4)
     return engine
@@ -72,18 +72,18 @@ def test_weights_sum_to_one(tmp_path, vals):
     weights_file = tmp_path / "ensemble_weights.json"
     weights_file.write_text(json.dumps(dict(zip(WEIGHT_KEYS, vals, strict=False))), encoding="utf-8")
 
-    with patch("backend.ensemble_engine.MODELS_DIR", tmp_path):
-        from backend.ensemble_engine import ApexEnsembleEngine
+    with patch("backend.models.ensemble_engine.MODELS_DIR", tmp_path):
+        from backend.models.ensemble_engine import ApexEnsembleEngine
 
         with (
-            patch("backend.ensemble_engine.QuantumFluidRecommender"),
-            patch("backend.ensemble_engine.HyperbolicRecommender"),
-            patch("backend.ensemble_engine.KANRanker"),
-            patch("backend.ensemble_engine.LatentDiffusionRecommender"),
-            patch("backend.ensemble_engine.SASRec"),
-            patch("backend.ensemble_engine.LightGCN"),
-            patch("backend.ensemble_engine.ApexEnsembleEngine._inject_pyspark_priors"),
-            patch("backend.ensemble_engine.ApexEnsembleEngine._load_trained_weights"),
+            patch("backend.models.ensemble_engine.QuantumFluidRecommender"),
+            patch("backend.models.ensemble_engine.HyperbolicRecommender"),
+            patch("backend.models.ensemble_engine.KANRanker"),
+            patch("backend.models.ensemble_engine.LatentDiffusionRecommender"),
+            patch("backend.models.ensemble_engine.SASRec"),
+            patch("backend.models.ensemble_engine.LightGCN"),
+            patch("backend.models.ensemble_engine.ApexEnsembleEngine._inject_pyspark_priors"),
+            patch("backend.models.ensemble_engine.ApexEnsembleEngine._load_trained_weights"),
         ):
             engine = ApexEnsembleEngine(num_users=10, num_items=100, emb_dim=4)
             loaded = engine._load_weights()
@@ -101,7 +101,7 @@ def test_weights_sum_to_one(tmp_path, vals):
 class TestEnsembleWeightsUnit:
     def test_load_valid_file(self, tmp_path, monkeypatch):
         """Valid file with weights summing to 1.0 → exact values returned."""
-        import backend.ensemble_engine as ee_mod
+        import backend.models.ensemble_engine as ee_mod
 
         monkeypatch.setattr(ee_mod, "MODELS_DIR", tmp_path)
         weights = dict(zip(WEIGHT_KEYS, [0.4, 0.2, 0.2, 0.1, 0.05, 0.05], strict=False))
@@ -113,7 +113,7 @@ class TestEnsembleWeightsUnit:
 
     def test_missing_file_returns_defaults(self, tmp_path, monkeypatch):
         """No file → hard-coded defaults returned."""
-        import backend.ensemble_engine as ee_mod
+        import backend.models.ensemble_engine as ee_mod
 
         monkeypatch.setattr(ee_mod, "MODELS_DIR", tmp_path)
         engine = _make_engine(tmp_path)
@@ -124,7 +124,7 @@ class TestEnsembleWeightsUnit:
 
     def test_malformed_json_returns_defaults(self, tmp_path, monkeypatch):
         """Invalid JSON → defaults returned."""
-        import backend.ensemble_engine as ee_mod
+        import backend.models.ensemble_engine as ee_mod
 
         monkeypatch.setattr(ee_mod, "MODELS_DIR", tmp_path)
         (tmp_path / "ensemble_weights.json").write_text("not valid json {{{")
@@ -134,7 +134,7 @@ class TestEnsembleWeightsUnit:
 
     def test_missing_key_returns_defaults(self, tmp_path, monkeypatch):
         """JSON missing 'kan' key → defaults returned."""
-        import backend.ensemble_engine as ee_mod
+        import backend.models.ensemble_engine as ee_mod
 
         monkeypatch.setattr(ee_mod, "MODELS_DIR", tmp_path)
         weights = {k: 1 / 5 for k in WEIGHT_KEYS if k != "kan"}
@@ -145,7 +145,7 @@ class TestEnsembleWeightsUnit:
 
     def test_unnormalised_weights_are_renormalised(self, tmp_path, monkeypatch):
         """Weights summing to 2.0 → returned weights sum to 1.0."""
-        import backend.ensemble_engine as ee_mod
+        import backend.models.ensemble_engine as ee_mod
 
         monkeypatch.setattr(ee_mod, "MODELS_DIR", tmp_path)
         weights = {k: v * 2 for k, v in DEFAULT_WEIGHTS.items()}
@@ -156,7 +156,7 @@ class TestEnsembleWeightsUnit:
 
     def test_reload_weights_updates_engine_weights(self, tmp_path, monkeypatch):
         """reload_weights() updates engine._weights in place."""
-        import backend.ensemble_engine as ee_mod
+        import backend.models.ensemble_engine as ee_mod
 
         monkeypatch.setattr(ee_mod, "MODELS_DIR", tmp_path)
         engine = _make_engine(tmp_path)

@@ -326,7 +326,7 @@ class TestRecommender:
 
     def test_recommender_load(self, mock_recommender, monkeypatch):
         """Recommender loads all artifacts."""
-        import backend.recommender as rec
+        import backend.pipeline.recommender as rec
 
         monkeypatch.setattr(rec, "MODELS_DIR", mock_recommender)
         monkeypatch.setattr(rec, "DATA_DIR", mock_recommender)
@@ -340,7 +340,7 @@ class TestRecommender:
 
     def test_search_movies(self, mock_recommender, monkeypatch):
         """search_movies finds by title."""
-        import backend.recommender as rec
+        import backend.pipeline.recommender as rec
 
         monkeypatch.setattr(rec, "MODELS_DIR", mock_recommender)
         monkeypatch.setattr(rec, "DATA_DIR", mock_recommender)
@@ -352,7 +352,7 @@ class TestRecommender:
 
     def test_search_movies_handles_minimal_catalog_columns(self):
         """Search should degrade gracefully when optional serving columns are absent."""
-        import backend.recommender as rec
+        import backend.pipeline.recommender as rec
 
         r = rec.Recommender()
         r._movies = pd.DataFrame(
@@ -371,7 +371,7 @@ class TestRecommender:
 
     def test_search_promotes_canonical_franchise_over_weak_duplicate_titles(self):
         """Exact-title duplicates should not bury high-signal franchise continuations."""
-        import backend.recommender as rec
+        import backend.pipeline.recommender as rec
 
         r = rec.Recommender()
         r._movies = pd.DataFrame(
@@ -399,7 +399,7 @@ class TestRecommender:
 
     def test_search_normalizes_title_punctuation(self):
         """Search should match user punctuation to catalog punctuation variants."""
-        import backend.recommender as rec
+        import backend.pipeline.recommender as rec
 
         r = rec.Recommender()
         r._movies = pd.DataFrame(
@@ -421,7 +421,7 @@ class TestRecommender:
 
     def test_quality_gate_drops_low_rated_recommendation_drift(self):
         """MMR should not rescue weak low-rated candidates when enough strong matches exist."""
-        import backend.recommender as rec
+        import backend.pipeline.recommender as rec
 
         r = rec.Recommender()
         query = {"title": "Avatar", "genres": "Science Fiction, Action, Adventure"}
@@ -458,7 +458,7 @@ class TestRecommender:
 
     def test_recommend_by_id(self, mock_recommender, monkeypatch):
         """recommend_by_id returns similar movies."""
-        import backend.recommender as rec
+        import backend.pipeline.recommender as rec
 
         monkeypatch.setattr(rec, "MODELS_DIR", mock_recommender)
         monkeypatch.setattr(rec, "DATA_DIR", mock_recommender)
@@ -470,7 +470,7 @@ class TestRecommender:
 
     def test_llm_rerank_is_disabled_by_default(self, mock_recommender, monkeypatch):
         """OpenRouter reranking must not run unless explicitly enabled."""
-        import backend.recommender as rec
+        import backend.pipeline.recommender as rec
 
         monkeypatch.setattr(rec, "MODELS_DIR", mock_recommender)
         monkeypatch.setattr(rec, "DATA_DIR", mock_recommender)
@@ -491,7 +491,7 @@ class TestRecommender:
         """Serving must not trust FAISS vectors when row counts differ from the catalog."""
         import faiss
 
-        import backend.recommender as rec
+        import backend.pipeline.recommender as rec
 
         monkeypatch.setattr(rec, "MODELS_DIR", mock_recommender)
         monkeypatch.setattr(rec, "DATA_DIR", mock_recommender)
@@ -515,7 +515,7 @@ class TestRecommender:
 
     def test_vector_artifacts_require_movie_id_map(self, mock_recommender, monkeypatch):
         """Serving must not trust row-position vectors without an explicit movie id map."""
-        import backend.recommender as rec
+        import backend.pipeline.recommender as rec
 
         monkeypatch.setattr(rec, "MODELS_DIR", mock_recommender)
         monkeypatch.setattr(rec, "DATA_DIR", mock_recommender)

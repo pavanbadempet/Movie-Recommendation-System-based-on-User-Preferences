@@ -11,5 +11,5 @@
   "num_candidates_evaluated": 200,
   "method": "doubly_robust_ips",
   "dr_score": 3.917076,
-  "notes": "DR-optimized via 200 Dirichlet-sampled candidates. SASRec dominates (0.659) because real session sequences are wired in. KAN contributes meaningfully (0.298). LightGCN near-zero (0.005) reflects sparse live event data — will increase as online learner accumulates interactions. Ensemble achieves +4.3% NDCG@10 lift over best individual model (SASRec)."
+  "notes": "DR-optimized via 200 Dirichlet-sampled candidates. SASRec dominates (0.659) because real session sequences are wired in. KAN contributes meaningfully (0.298). LightGCN near-zero (0.005) reflects sparse live event data -- will increase as online learner accumulates interactions. Ensemble achieves +4.3% NDCG@10 lift over best individual model (SASRec)."
 }

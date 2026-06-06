@@ -7,7 +7,7 @@ import numpy as np
 
 def test_ensure_model_files_accepts_small_valid_npy_fixture(tmp_path, monkeypatch):
     """Small test ID maps are valid .npy files and must not be overwritten."""
-    import backend.model_loader as loader
+    import backend.models.model_loader as loader
 
     calls = []
     np.save(tmp_path / "movie_ids.npy", np.array([1, 2, 3], dtype=np.int64))
@@ -22,7 +22,7 @@ def test_ensure_model_files_accepts_small_valid_npy_fixture(tmp_path, monkeypatc
 
 def test_ensure_model_files_can_disable_external_downloads(tmp_path, monkeypatch):
     """Tests and offline runs can prevent accidental network artifact pulls."""
-    import backend.model_loader as loader
+    import backend.models.model_loader as loader
 
     monkeypatch.setenv("NOVA_DISABLE_MODEL_DOWNLOADS", "1")
 
@@ -38,7 +38,7 @@ def test_ensure_model_files_can_disable_external_downloads(tmp_path, monkeypatch
 
 def test_low_memory_profile_still_downloads_serving_metadata(monkeypatch):
     """Lite hosts still need small alignment and semantic health artifacts."""
-    import backend.model_loader as loader
+    import backend.models.model_loader as loader
 
     monkeypatch.setenv("NOVA_SERVING_PROFILE", "lite")
 
@@ -54,7 +54,7 @@ def test_low_memory_profile_still_downloads_serving_metadata(monkeypatch):
 
 def test_ensure_model_files_redownloads_vectors_when_manifest_rows_do_not_match(tmp_path, monkeypatch):
     """Stale vector files must be refreshed when the manifest contract disagrees."""
-    import backend.model_loader as loader
+    import backend.models.model_loader as loader
 
     np.save(tmp_path / "sbert_embeddings.npy", np.ones((2, 4), dtype=np.float32))
     (tmp_path / "pipeline_manifest.json").write_text(
@@ -82,7 +82,7 @@ def test_ensure_model_files_redownloads_faiss_when_manifest_rows_do_not_match(tm
     """Stale FAISS indices must be refreshed when the manifest contract disagrees."""
     import faiss
 
-    import backend.model_loader as loader
+    import backend.models.model_loader as loader
 
     index = faiss.IndexFlatIP(4)
     index.add(np.ones((2, 4), dtype=np.float32))
@@ -110,7 +110,7 @@ def test_ensure_model_files_redownloads_faiss_when_manifest_rows_do_not_match(tm
 
 def test_force_refresh_downloads_when_manifest_checksum_does_not_match(tmp_path, monkeypatch):
     """Manifest checksum mismatches must not be bypassed by same-size remote files."""
-    import backend.model_loader as loader
+    import backend.models.model_loader as loader
 
     local_ids = np.array([1, 2, 3], dtype=np.int64)
     np.save(tmp_path / "movie_ids.npy", local_ids)

@@ -245,7 +245,7 @@ These four gaps are addressed as a single cohesive feature set so that every dim
 
 #### Acceptance Criteria
 
-1. WHEN `Recommender.load()` is called, THE Recommender SHALL call `resolve_serving_tier()` from `backend.serving_tier` to determine the active tier.
+1. WHEN `Recommender.load()` is called, THE Recommender SHALL call `resolve_serving_tier()` from `backend.serving.serving_tier` to determine the active tier.
 2. WHEN the active tier is `tier3`, THE Recommender SHALL set `self._low_memory = True` regardless of the `NOVA_LOW_MEMORY` environment variable; this override SHALL NOT be suppressible by any environment variable.
 3. WHEN the active tier is `tier3`, THE Recommender SHALL cap the TF-IDF vocabulary at 12,000 features by setting `NOVA_TFIDF_MAX_FEATURES` to `"12000"` if the current value is higher.
 4. WHEN the active tier is `tier3`, THE Recommender SHALL defer building the sparse retrieval index (not call `_build_sparse_retrieval_index()` at load time).

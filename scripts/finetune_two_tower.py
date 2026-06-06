@@ -37,7 +37,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from backend.events import iter_events
-from backend.two_tower import TwoTowerModel
+from backend.models.two_tower import TwoTowerModel
 
 # Re-use dataset and feature helpers from the base training script
 from scripts.train_two_tower import (
