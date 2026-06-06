@@ -205,17 +205,17 @@ class TestTransform:
 
 
 class TestIndex:
-    def test_build_faiss_index(self):
-        """build_faiss_index creates index with correct count."""
+    def test_build_turbovec_index(self):
+        """build_turbovec_index creates index with correct count."""
 
-        from etl.pandas_etl import build_faiss_index
+        from etl.pandas_etl import build_turbovec_index
 
-        # Override data_config for test if needed, but build_faiss_index uses it
+        # Override data_config for test if needed, but build_turbovec_index uses it
         # Just ensure we test logic
 
         vecs = np.random.rand(50, 128).astype(np.float32)
-        idx = build_faiss_index(vecs)
-        assert idx.ntotal == 50
+        idx = build_turbovec_index(vecs)
+        assert len(idx) == 50
 
     def test_atomic_parquet_write_replaces_existing_file(self, tmp_path):
         """atomic_write_parquet replaces only after a complete write."""
@@ -271,7 +271,7 @@ class TestRecommender:
     @pytest.fixture
     def mock_recommender(self, tmp_path):
         """Create recommender with mock data."""
-        import faiss
+        from turbovec import TurboQuantIndex
 
         # Create mock data
         movies = pd.DataFrame(
@@ -292,7 +292,7 @@ class TestRecommender:
         movies.to_parquet(tmp_path / "movies_transformed.parquet")
 
         # Create random vectors
-        vecs = np.random.rand(5, 384).astype(np.float32)
+        vecs = np.random.rand(5, 768).astype(np.float32)
         norms = np.linalg.norm(vecs, axis=1, keepdims=True)
         vecs = vecs / norms
 
@@ -302,9 +302,9 @@ class TestRecommender:
         # As recommender uses SBERT now, we skip scaler/tfidf
 
         # Build Index
-        idx = faiss.IndexFlatIP(vecs.shape[1])
+        idx = TurboQuantIndex(vecs.shape[1], bit_width=4)
         idx.add(vecs)
-        faiss.write_index(idx, str(tmp_path / "faiss.index"))
+        idx.write(str(tmp_path / "turbovec.tq"))
         (tmp_path / "pipeline_manifest.json").write_text(
             json.dumps(
                 {
@@ -313,8 +313,8 @@ class TestRecommender:
                         "version": 1,
                         "movie_rows": 5,
                         "embedding_rows": 5,
-                        "embedding_dimensions": 384,
-                        "faiss_index_size": 5,
+                        "embedding_dimensions": 768,
+                        "turbovec_index_size": 5,
                         "movie_id_map_rows": 5,
                     },
                 }
@@ -336,7 +336,7 @@ class TestRecommender:
         assert r._movies is not None
         assert len(r.movies) == 5
         assert r._vectors is not None
-        assert r._vectors.shape == (5, 384)
+        assert r._vectors.shape == (5, 768)
 
     def test_search_movies(self, mock_recommender, monkeypatch):
         """search_movies finds by title."""
@@ -488,20 +488,20 @@ class TestRecommender:
         assert len(recs) >= 1
 
     def test_mismatched_vector_artifacts_fall_back_to_sparse_content(self, mock_recommender, monkeypatch):
-        """Serving must not trust FAISS vectors when row counts differ from the catalog."""
-        import faiss
+        """Serving must not trust TurboVec vectors when row counts differ from the catalog."""
+        from turbovec import TurboQuantIndex
 
         import backend.pipeline.recommender as rec
 
         monkeypatch.setattr(rec, "MODELS_DIR", mock_recommender)
         monkeypatch.setattr(rec, "DATA_DIR", mock_recommender)
 
-        bad_vecs = np.random.rand(6, 384).astype(np.float32)
+        bad_vecs = np.random.rand(6, 768).astype(np.float32)
         bad_vecs = bad_vecs / np.linalg.norm(bad_vecs, axis=1, keepdims=True)
         np.save(mock_recommender / "sbert_embeddings.npy", bad_vecs)
-        bad_index = faiss.IndexFlatIP(bad_vecs.shape[1])
+        bad_index = TurboQuantIndex(bad_vecs.shape[1], bit_width=4)
         bad_index.add(bad_vecs)
-        faiss.write_index(bad_index, str(mock_recommender / "faiss.index"))
+        bad_index.write(str(mock_recommender / "turbovec.tq"))
 
         r = rec.Recommender().load()
         recs = r.recommend_by_id(1, n=2)

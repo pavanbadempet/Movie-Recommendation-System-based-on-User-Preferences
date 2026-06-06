@@ -89,10 +89,10 @@ def migrate(faiss_path: Path, output_path: Path) -> dict:
         tq_index.add(vectors)
 
     # --- Verify row count ---
-    if tq_index.ntotal != n:
+    if len(tq_index) != n:
         raise ValueError(
             f"Row count mismatch after migration: "
-            f"faiss.ntotal={n}, turbovec.ntotal={tq_index.ntotal}"
+            f"faiss.ntotal={n}, turbovec.len={len(tq_index)}"
         )
 
     # --- Persist TurboVec index ---

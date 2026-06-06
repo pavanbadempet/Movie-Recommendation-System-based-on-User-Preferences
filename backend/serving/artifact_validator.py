@@ -231,7 +231,7 @@ class ArtifactValidator:
         m = len(movie_df)
 
         if n != m:
-            msg = f"Row alignment mismatch: embeddings has {n} rows but movie_df has {m} rows"
+            msg = f"Row alignment mismatch: vector embeddings has {n} rows but movie_df has {m} rows"
             logger.error(msg)
             raise ValueError(msg)
 

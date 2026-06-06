@@ -91,7 +91,8 @@ def test_property3_auto_selection_boundary_conditions(ram_gb, gpu, expected):
     exact boundary values.
     """
     # Feature: perfect-10-final, Property 3: Auto-selection boundary conditions
-    profile = HardwareProfile(gpu_available=gpu, ram_gb=ram_gb, cpu_cores=4)
+    vram = 8.0 if gpu else 0.0
+    profile = HardwareProfile(gpu_available=gpu, ram_gb=ram_gb, cpu_cores=4, gpu_vram_gb=vram)
     tier, _reason = TierDetector()._auto_select(profile)
 
     assert tier == expected

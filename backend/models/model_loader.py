@@ -40,11 +40,11 @@ MODEL_FILES = {
         ),
         "dest": "sbert_embeddings.npy",
     },
-    "faiss.index": {
+    "turbovec.tq": {
         "url": os.getenv(
-            "FAISS_INDEX_URL", "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/faiss.index"
+            "TURBOVEC_INDEX_URL", "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/turbovec.tq"
         ),
-        "dest": "faiss.index",
+        "dest": "turbovec.tq",
     },
     "movie_ids.npy": {
         "url": os.getenv(
@@ -184,7 +184,7 @@ def _load_manifest_contract(models_dir: Path) -> dict[str, object]:
 
     contract = dict(manifest.get("serving_contract") or {})
     quality = manifest.get("quality") or {}
-    for key in ("movie_rows", "embedding_rows", "faiss_index_size", "movie_id_map_rows", "movie_id_sha256"):
+    for key in ("movie_rows", "embedding_rows", "faiss_index_size", "turbovec_index_size", "movie_id_map_rows", "movie_id_sha256"):
         if contract.get(key) is None and quality.get(key) is not None:
             contract[key] = quality.get(key)
     return contract
@@ -234,16 +234,16 @@ def _manifest_contract_matches(
                 return False, f"pipeline manifest embedding_rows ({expected_rows}) != local rows ({actual_rows})"
             return True, None
 
-        if filename == "faiss.index":
-            expected_rows = manifest_contract.get("faiss_index_size")
+        if filename == "turbovec.tq":
+            expected_rows = manifest_contract.get("turbovec_index_size") or manifest_contract.get("faiss_index_size")
             if expected_rows is None:
                 return True, None
-            import faiss
+            from turbovec import TurboQuantIndex
 
-            index = faiss.read_index(str(file_path))
-            actual_rows = int(index.ntotal)
+            index = TurboQuantIndex.load(str(file_path))
+            actual_rows = len(index)
             if actual_rows != int(expected_rows):
-                return False, f"pipeline manifest faiss_index_size ({expected_rows}) != local rows ({actual_rows})"
+                return False, f"pipeline manifest turbovec_index_size ({expected_rows}) != local rows ({actual_rows})"
             return True, None
     except Exception as exc:
         return False, f"could not validate {filename} against the pipeline manifest: {exc}"

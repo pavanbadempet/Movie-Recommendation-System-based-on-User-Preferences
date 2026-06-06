@@ -1044,7 +1044,7 @@ def run_spark_etl(
 
         rows = serving_df.select("id", "vector").collect()
 
-        import faiss
+        from turbovec import TurboQuantIndex
         import numpy as np
 
         # COMPRESSION (Precision Engineering):
@@ -1060,22 +1060,17 @@ def run_spark_etl(
         np.save(str(paths.models / "movie_ids.npy"), movie_ids)
         logger.info(f"Saved {paths.models / 'sbert_embeddings.npy'} (Size: {vectors.nbytes / 1024 / 1024:.2f} MB)")
 
-        # Build FAISS Index with Quantization
-        # Use SQfp16 (Scalar Quantizer Float16) to match the storage format
-        # This reduces index size by 50% with negligible accuracy loss
+        # Build TurboQuantIndex
         d = vectors.shape[1]
-
-        # Note: FAISS training/adding usually expects float32 input,
-        # but stores internally as defined by factory string.
         vectors_f32 = vectors.astype("float32")
 
-        index = faiss.index_factory(d, "SQfp16", faiss.METRIC_INNER_PRODUCT)
-        index.train(vectors_f32)
-        index.add(vectors_f32)
-        if index.ntotal != len(movie_ids):
-            raise ValueError(f"FAISS index rows ({index.ntotal}) != movie id rows ({len(movie_ids)})")
+        index = TurboQuantIndex(d, bit_width=4)
+        if len(vectors_f32) > 0:
+            index.add(vectors_f32)
+            if len(index) != len(movie_ids):
+                raise ValueError(f"TurboVec index rows ({len(index)}) != movie id rows ({len(movie_ids)})")
 
-        faiss.write_index(index, str(paths.models / "faiss.index"))
+        index.write(str(paths.models / "turbovec.tq"))
         manifest = {
             "run_date": run_date,
             "pipeline": "nova-pyspark-etl",
@@ -1085,7 +1080,7 @@ def run_spark_etl(
                 "movie_rows": int(len(movie_ids)),
                 "embedding_rows": int(vectors.shape[0]),
                 "embedding_dimensions": int(vectors.shape[1]) if len(vectors.shape) > 1 else 0,
-                "faiss_index_size": int(index.ntotal),
+                "turbovec_index_size": len(index),
                 "movie_id_map_rows": int(len(movie_ids)),
                 "movie_id_sha256": movie_id_hash,
             },
@@ -1094,7 +1089,7 @@ def run_spark_etl(
                 "semantic_twins": "semantic_twins.parquet",
                 "semantic_twin_summary": "semantic_twin_summary.json",
                 "embeddings": "sbert_embeddings.npy",
-                "faiss_index": "faiss.index",
+                "turbovec_index": "turbovec.tq",
                 "movie_ids": "movie_ids.npy",
             },
             "semantic_twins": semantic_artifacts["summary"],
@@ -1103,7 +1098,7 @@ def run_spark_etl(
             json.dumps(manifest, indent=2, sort_keys=True),
             encoding="utf-8",
         )
-        logger.info(f"Saved {paths.models / 'faiss.index'} (Compressed SQfp16)")
+        logger.info(f"Saved {paths.models / 'turbovec.tq'} (bit_width=4)")
 
     except Exception as e:
         logger.warning(f"Could not build local artifacts (maybe running on pure cluster without shared FS?): {e}")

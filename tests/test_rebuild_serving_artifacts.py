@@ -10,10 +10,10 @@ from scripts.rebuild_serving_artifacts import rebuild_serving_artifacts
 
 class FakeEncoder:
     def encode(self, texts, **kwargs):
-        vectors = np.zeros((len(texts), 4), dtype=np.float32)
+        vectors = np.zeros((len(texts), 8), dtype=np.float32)
         for idx, _ in enumerate(texts):
-            vectors[idx, idx % 4] = 1.0
-            vectors[idx, (idx + 1) % 4] = 0.5
+            vectors[idx, idx % 8] = 1.0
+            vectors[idx, (idx + 1) % 8] = 0.5
         return vectors
 
 
@@ -50,9 +50,9 @@ def test_rebuild_serving_artifacts_writes_aligned_outputs(tmp_path):
 
     assert result["row_count"] == 3
     assert movie_ids.tolist() == [10, 20, 30]
-    assert vectors.shape == (3, 4)
+    assert vectors.shape == (3, 8)
     assert manifest["serving_contract"]["movie_rows"] == 3
     assert manifest["serving_contract"]["embedding_rows"] == 3
-    assert manifest["serving_contract"]["faiss_index_size"] == 3
+    assert manifest["serving_contract"]["turbovec_index_size"] == 3
     assert manifest["serving_contract"]["movie_id_map_rows"] == 3
     assert (processed_dir / "semantic_twins.parquet").exists()

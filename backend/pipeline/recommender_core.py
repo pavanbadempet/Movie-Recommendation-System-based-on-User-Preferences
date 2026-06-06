@@ -971,21 +971,33 @@ def load_vector_artifacts(rec) -> None:
         "nova_ranker.joblib", "nova_ranker.joblib.metadata.json",
     }
     if not rec._low_memory or _os.getenv("NOVA_FORCE_VECTOR_ARTIFACTS", "").lower() in {"1", "true", "yes", "on"}:
-        selected_artifacts.update({"sbert_embeddings.npy", "faiss.index", "movie_ids.npy"})
+        selected_artifacts.update({"sbert_embeddings.npy", "turbovec.tq", "movie_ids.npy"})
     ensure_model_files(MODELS_DIR, selected_files=selected_artifacts)
 
     def _env_truthy(name):
         return _os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
-    index_path = MODELS_DIR / "faiss.index"
+    turbovec_path = MODELS_DIR / "turbovec.tq"
+    faiss_path = MODELS_DIR / "faiss.index"
+
     if rec._low_memory and not _env_truthy("NOVA_FORCE_VECTOR_ARTIFACTS"):
-        logger.info("Skipping FAISS index load in low-memory serving profile.")
-    elif not index_path.exists():
-        raise FileNotFoundError(f"FAISS index not found at {index_path}. Run the ETL pipeline first.")
+        logger.info("Skipping TurboVec index load in low-memory serving profile.")
+    elif turbovec_path.exists():
+        from turbovec import TurboQuantIndex
+        rec._index = TurboQuantIndex.load(str(turbovec_path))
+        logger.info("Loaded TurboVec index with %s vectors", f"{len(rec._index):,}")
+    elif faiss_path.exists():
+        logger.warning(
+            "turbovec.tq not found at %s; faiss.index found but will not be loaded. "
+            "Run scripts/migrate_faiss_to_turbovec.py to migrate. "
+            "Falling back to metadata-only serving.",
+            turbovec_path,
+        )
+        rec._artifact_status["vector_artifacts_ready"] = False
     else:
-        import faiss
-        rec._index = faiss.read_index(str(index_path))
-        logger.info("Loaded FAISS index with %s vectors", f"{rec._index.ntotal:,}")
+        raise FileNotFoundError(
+            f"turbovec.tq not found at {turbovec_path}. Run the ETL pipeline first."
+        )
 
     vectors_path = MODELS_DIR / "sbert_embeddings.npy"
     if rec._low_memory and not _env_truthy("NOVA_FORCE_VECTOR_ARTIFACTS"):

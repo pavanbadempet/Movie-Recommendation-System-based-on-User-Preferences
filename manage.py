@@ -189,7 +189,7 @@ def deploy():
     artifacts = [
         "data/processed/movies_transformed.parquet", 
         "models/sbert_embeddings.npy", 
-        "models/faiss.index"
+        "models/turbovec.tq"
     ]
     for art in artifacts:
         if os.path.exists(art):

@@ -114,7 +114,7 @@ def evaluate_recall(
     # --- Load the TurboVec production index ---
     logger.info("Loading TurboVec index from %s ...", turbovec_path)
     index = TurboQuantIndex.load(str(turbovec_path))
-    logger.info("TurboVec index loaded: %s vectors", f"{index.ntotal:,}")
+    logger.info("TurboVec index loaded: %s vectors", f"{len(index):,}")
 
     # --- Compute Recall@K for each requested K ---
     recall: dict[int, float] = {}

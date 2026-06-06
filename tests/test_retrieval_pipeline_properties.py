@@ -11,12 +11,15 @@ from backend.pipeline.pipeline_types import CandidateItem
 from backend.pipeline.retrieval_pipeline import RetrievalConfig, RetrievalPipeline
 
 
-def _make_mock_faiss(n_items: int):
-    """Create a minimal mock FAISS index backed by numpy."""
-    class MockFaissIndex:
+def _make_mock_turbovec(n_items: int):
+    """Create a minimal mock TurboVec index backed by numpy."""
+    class MockTurboVecIndex:
         def __init__(self, n):
             self.ntotal = n
             self._vecs = np.random.rand(n, 64).astype(np.float32)
+
+        def __len__(self):
+            return self.ntotal
 
         def search(self, query, k):
             k = min(k, self.ntotal)
@@ -24,7 +27,7 @@ def _make_mock_faiss(n_items: int):
             idxs = np.random.choice(self.ntotal, size=k, replace=False).reshape(1, k).astype(np.int64)
             return dists, idxs
 
-    return MockFaissIndex(n_items)
+    return MockTurboVecIndex(n_items)
 
 
 def _make_mock_movie_df(n_items: int):
@@ -50,7 +53,7 @@ def test_retrieval_bounds_guarantee(n):
     # Feature: architecture-design-perfection, Property 1: Retrieval Bounds Guarantee
     """
     n_items = max(n + 10, 20)
-    faiss_idx = _make_mock_faiss(n_items)
+    faiss_idx = _make_mock_turbovec(n_items)
     movie_df = _make_mock_movie_df(n_items)
     config = RetrievalConfig(
         faiss_k=min(n * 2, n_items),
@@ -101,18 +104,21 @@ def test_retrieval_deduplication_invariant(n):
 
     # Mock FAISS index that always returns the SAME first min(n, n_items) indices
     # — guarantees overlap with TF-IDF which also returns the same indices.
-    class OverlappingFaissIndex:
+    class OverlappingTurboVecIndex:
         def __init__(self, total):
             self.ntotal = total
 
+        def __len__(self):
+            return self.ntotal
+
         def search(self, query, k):
             k = min(k, self.ntotal)
-            # Always return indices 0..k-1 so FAISS and TF-IDF fully overlap.
+            # Always return indices 0..k-1 so TurboVec and TF-IDF fully overlap.
             idxs = np.arange(k, dtype=np.int64).reshape(1, k)
             dists = np.ones((1, k), dtype=np.float32)
             return dists, idxs
 
-    faiss_idx = OverlappingFaissIndex(n_items)
+    faiss_idx = OverlappingTurboVecIndex(n_items)
 
     # Mock TF-IDF index: a sparse identity-like matrix so cosine similarity
     # returns non-zero scores for the same first n_items rows.
@@ -164,7 +170,7 @@ def test_retrieval_source_tagging(n):
     """
     VALID_SOURCES = {"faiss", "tfidf", "knowledge_graph", "hybrid"}
     n_items = max(n + 10, 20)
-    faiss_idx = _make_mock_faiss(n_items)
+    faiss_idx = _make_mock_turbovec(n_items)
     movie_df = _make_mock_movie_df(n_items)
     config = RetrievalConfig(faiss_k=min(n * 2, n_items), tfidf_k=0, kg_k=0, enable_kg=False)
     pipeline = RetrievalPipeline(

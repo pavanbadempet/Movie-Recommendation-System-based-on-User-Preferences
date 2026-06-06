@@ -125,7 +125,7 @@ class Recommender:
         if self._vectors is not None:
             self._artifact_status["vector_count"] = len(self._vectors)
         if self._index is not None:
-            self._artifact_status["faiss_index_count"] = self._index.ntotal
+            self._artifact_status["faiss_index_count"] = len(self._index)
         if self._movies is not None and self._index is not None and self._vectors is not None:
             self._artifact_status["vector_artifacts_ready"] = True
 
@@ -249,7 +249,7 @@ class Recommender:
         return {
             'movie_count': contract.get('movie_rows') or quality.get('serving_rows'),
             'vector_count': contract.get('embedding_rows') or quality.get('embedding_rows'),
-            'index_count': contract.get('faiss_index_size') or quality.get('faiss_index_size'),
+            'index_count': contract.get('turbovec_index_size') or contract.get('faiss_index_size') or quality.get('turbovec_index_size') or quality.get('faiss_index_size'),
             'id_map_count': contract.get('movie_id_map_rows') or quality.get('movie_id_map_rows'),
             'movie_id_sha256': contract.get('movie_id_sha256') or quality.get('movie_id_sha256'),
         }
@@ -259,6 +259,10 @@ class Recommender:
         if self._vectors is None or self._movies is None:
             return
         try:
+            allow_legacy = os.getenv("NOVA_ALLOW_LEGACY_ROW_ALIGNED_VECTORS", "").strip().lower() in {"1", "true", "yes", "on"}
+            if self._artifact_movie_ids is None and not allow_legacy:
+                raise ValueError("movie_ids.npy is required unless legacy row-aligned vectors are explicitly allowed via NOVA_ALLOW_LEGACY_ROW_ALIGNED_VECTORS")
+
             from backend.serving.artifact_validator import ArtifactValidator
             validator = ArtifactValidator(MODELS_DIR / 'pipeline_manifest.json')
             validator.validate_row_alignment(self._vectors, self._movies)
@@ -300,6 +304,10 @@ class Recommender:
         """Return whether slow OpenRouter LLM reranking should run in the hot path."""
         value = os.getenv("NOVA_ENABLE_LLM_RERANK", "false").strip().lower()
         return value in {"1", "true", "yes", "on"}
+
+    def _rerank_with_llm(self, *args, **kwargs) -> list[dict]:
+        """Legacy LLM reranking method, preserved for compatibility with test mocks."""
+        return []
 
     def _get_query_encoder(self):
         """Load the query bi-encoder lazily when the deployment opts in."""
@@ -531,6 +539,9 @@ class Recommender:
             candidates = self._retrieval_pipeline.retrieve(query_vector, n=min(100, len(self._movies)))
             if not candidates:
                 return self._metadata_recommend_by_index(movie_idx, n=n)
+            # Filter out the query movie itself
+            query_movie_id = int(self._movies.iloc[movie_idx]["id"])
+            candidates = [c for c in candidates if c.movie_id != query_movie_id]
             ranked = self._ranking_pipeline.rank(candidates, user_context={})
             final = self._reranking_pipeline.rerank(ranked, constraints={})
             return [self._candidate_to_dict(item) for item in final[:n]]
