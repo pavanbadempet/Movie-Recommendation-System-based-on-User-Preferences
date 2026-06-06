@@ -15,13 +15,14 @@ Implements GDPR / EU AI Act compliance mechanisms:
           from Decentralized Data" (AISTATS 2017) — Federated Averaging
 """
 
-from backend.privacy_preserving_ml import (
+from backend.privacy.privacy_preserving_ml import (
     add_gaussian_noise,
     add_laplace_noise,
     federated_average_gradients,
     k_anonymize_profile,
     privatize_user_embedding,
 )
+from backend.privacy.engine import DifferentialPrivacyEngine, anonymize_telemetry
 
 __all__ = [
     "add_laplace_noise",
@@ -29,4 +30,6 @@ __all__ = [
     "privatize_user_embedding",
     "k_anonymize_profile",
     "federated_average_gradients",
+    "DifferentialPrivacyEngine",
+    "anonymize_telemetry",
 ]

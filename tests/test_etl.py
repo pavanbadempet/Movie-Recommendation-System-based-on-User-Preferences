@@ -292,7 +292,7 @@ class TestRecommender:
         movies.to_parquet(tmp_path / "movies_transformed.parquet")
 
         # Create random vectors
-        vecs = np.random.rand(5, 384).astype(np.float32)
+        vecs = np.random.rand(5, 768).astype(np.float32)
         norms = np.linalg.norm(vecs, axis=1, keepdims=True)
         vecs = vecs / norms
 
@@ -336,7 +336,7 @@ class TestRecommender:
         assert r._movies is not None
         assert len(r.movies) == 5
         assert r._vectors is not None
-        assert r._vectors.shape == (5, 384)
+        assert r._vectors.shape == (5, 768)
 
     def test_search_movies(self, mock_recommender, monkeypatch):
         """search_movies finds by title."""
@@ -480,7 +480,8 @@ class TestRecommender:
         def fail_if_called(*args, **kwargs):
             raise AssertionError("LLM reranking should be opt-in")
 
-        monkeypatch.setattr(rec.Recommender, "_rerank_with_llm", fail_if_called)
+        import backend.reranking_pipeline as rp
+        monkeypatch.setattr(rp.RerankingPipeline, "_apply_llm_reranking", fail_if_called)
 
         r = rec.Recommender().load()
         recs = r.recommend_by_id(1, n=2)
@@ -496,7 +497,7 @@ class TestRecommender:
         monkeypatch.setattr(rec, "MODELS_DIR", mock_recommender)
         monkeypatch.setattr(rec, "DATA_DIR", mock_recommender)
 
-        bad_vecs = np.random.rand(6, 384).astype(np.float32)
+        bad_vecs = np.random.rand(6, 768).astype(np.float32)
         bad_vecs = bad_vecs / np.linalg.norm(bad_vecs, axis=1, keepdims=True)
         np.save(mock_recommender / "sbert_embeddings.npy", bad_vecs)
         bad_index = faiss.IndexFlatIP(bad_vecs.shape[1])
@@ -509,7 +510,7 @@ class TestRecommender:
         assert r._vectors is None
         assert r._index is None
         assert r._artifact_status["vector_artifacts_ready"] is False
-        assert "vector" in r._artifact_status["disabled_reason"]
+        assert "mismatch" in r._artifact_status["disabled_reason"]
         assert len(recs) >= 1
         assert all(item["retrieval_stage"] == "content_sparse_fallback" for item in recs)
 

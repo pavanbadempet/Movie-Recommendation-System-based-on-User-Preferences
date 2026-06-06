@@ -344,7 +344,7 @@ class RetrievalPipeline:
 
         The query movie is identified by finding the FAISS nearest neighbour
         (if available) or by falling back to the first row of ``movie_df``.
-        The KG engine's ``get_neighbors(movie_id, n=kg_k)`` method is called
+        The KG engine's ``find_thematically_similar(movie_id, top_k=kg_k)`` method is called
         to obtain related movie IDs.
 
         Parameters
@@ -367,7 +367,8 @@ class RetrievalPipeline:
                 logger.warning("Could not determine seed movie_id for KG traversal; skipping KG source.")
                 return []
 
-            neighbor_ids: list[int] = self.kg_engine.get_neighbors(seed_movie_id, n=k)
+            neighbors = self.kg_engine.find_thematically_similar(seed_movie_id, top_k=k)
+            neighbor_ids: list[int] = [m_id for m_id, _ in neighbors]
 
             candidates: list[CandidateItem] = []
             for rank, movie_id in enumerate(neighbor_ids):
