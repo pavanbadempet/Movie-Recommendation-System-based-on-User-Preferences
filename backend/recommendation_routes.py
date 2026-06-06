@@ -42,7 +42,6 @@ class ChatResponse(_BaseModel):
     role: str
     content: str
 
-
 # ---------------------------------------------------------------------------
 # Module-level config (resolved at import time from environment / main.py)
 # ---------------------------------------------------------------------------
@@ -1335,6 +1334,7 @@ def create_rec_engine_router(
         request_id: str | None = Query(default=None),
         session_id: str | None = Query(default=None),
         context=Depends(resolve_tenant_context),
+        current_user=Depends(get_current_user),
     ):
         result_limit = top_k or limit or n
         resolved_request_id = request_id or str(uuid.uuid4())
@@ -1416,7 +1416,7 @@ def create_rec_engine_router(
 # Diagnostic helpers — moved from backend/main.py (task 6.3)
 # ---------------------------------------------------------------------------
 from backend.app_info import app_metadata
-from backend.auth import TenantContext
+from backend.auth import TenantContext, get_current_user
 from backend.recommendation_benchmark import (
     evaluate_recommendation_case,
     find_recommendation_benchmark_case,

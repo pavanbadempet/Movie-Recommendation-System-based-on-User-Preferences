@@ -50,7 +50,7 @@ def _json_loads(s):
     return _json_lib.loads(s)
 
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import httpx
@@ -316,7 +316,7 @@ app = FastAPI(
 
 from backend.admin_tests import router as admin_router
 
-app.include_router(admin_router)
+app.include_router(admin_router, dependencies=[Depends(resolve_admin_token)])
 app.include_router(auth_router)
 
 # =====================================================================
