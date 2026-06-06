@@ -806,6 +806,22 @@ def run_pipeline(
     logger.info("STARTING PANDAS ETL PIPELINE")
 
     try:
+        # Load baseline datasets (if they exist) before they get overwritten by this run
+        baseline_df = None
+        baseline_embeds = None
+        existing_movies_path = paths.processed_data / "movies_transformed.parquet"
+        existing_embeds_path = paths.models / "sbert_embeddings.npy"
+        if existing_movies_path.exists():
+            try:
+                baseline_df = pd.read_parquet(existing_movies_path)
+            except Exception as exc:
+                logger.warning("Could not load baseline DataFrame for MLOps validation: %s", exc)
+        if existing_embeds_path.exists():
+            try:
+                baseline_embeds = np.load(existing_embeds_path)
+            except Exception as exc:
+                logger.warning("Could not load baseline embeddings for MLOps validation: %s", exc)
+
         curated_df = None
         # 1. Ingest
         if not skip_ingest:
@@ -892,6 +908,29 @@ def run_pipeline(
                 index=index,
                 movie_ids=movie_ids,
             )
+
+        # 4. MLOps Validation & Run Registration
+        try:
+            from backend.serving.mlops_engine import MLOpsEngine
+            mlops = MLOpsEngine(paths.models / "run_lineage_registry.json")
+            mlops_report = mlops.validate_and_register_run(
+                run_id=run_id,
+                new_df=df,
+                new_embeds=vectors,
+                turbovec_path=paths.models / "turbovec.tq",
+                baseline_df=baseline_df,
+                baseline_embeds=baseline_embeds,
+            )
+            metrics["mlops_promotion_status"] = mlops_report["promotion_status"]
+            metrics["drift_analysis"] = mlops_report["drift_analysis"]
+            metrics["quality_gates"]["mlops_drift_gate"] = {
+                "stage": "mlops_drift_gate",
+                "drift_detected": mlops_report["drift_analysis"]["drift_detected"],
+                "drift_reasons": mlops_report["drift_analysis"]["drift_reasons"],
+                "promotion_status": mlops_report["promotion_status"],
+            }
+        except Exception as exc:
+            logger.warning("MLOps drift check or lineage logging failed: %s", exc)
 
         metrics["success"] = True
         metrics["finished_at"] = _utc_now().isoformat()
