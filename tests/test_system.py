@@ -82,10 +82,12 @@ def test_full_system_flow(monkeypatch):
                 pass
 
             def encode(self, texts, **kwargs):
-                vectors = np.zeros((len(texts), 8), dtype=np.float32)
+                # Give every movie a shared base component so all pairs have
+                # non-zero cosine similarity (above the 0.3 quality gate).
+                vectors = np.full((len(texts), 8), 0.5, dtype=np.float32)
                 for idx, _ in enumerate(texts):
-                    vectors[idx, idx % 8] = 1.0
-                    vectors[idx, (idx + 1) % 8] = 0.5
+                    vectors[idx, idx % 8] += 1.0
+                    vectors[idx, (idx + 1) % 8] += 0.5
                 return vectors
 
         monkeypatch.setattr(pandas_etl, "SentenceTransformer", FakeSentenceTransformer)
@@ -115,7 +117,7 @@ def test_full_system_flow(monkeypatch):
         assert (processed_dir / "semantic_twins.parquet").exists()
         assert (processed_dir / "semantic_twin_summary.json").exists()
         assert (models_dir / "sbert_embeddings.npy").exists()
-        assert (models_dir / "faiss.index").exists()
+        assert (models_dir / "turbovec.tq").exists()
         assert (quality_dir / "test-run.json").exists()
         assert (manifest_dir / "test-run.json").exists()
         assert (bronze_dir / "run_id=test-run" / "movies_raw.parquet").exists()
@@ -129,7 +131,7 @@ def test_full_system_flow(monkeypatch):
         assert manifest["run_id"] == "test-run"
         assert manifest["row_counts"]["raw_rows"] == 3
         assert manifest["row_counts"]["serving_rows"] == 3
-        assert manifest["artifacts"]["faiss_index"]["exists"] is True
+        assert manifest["artifacts"]["turbovec_index"]["exists"] is True
         assert manifest["artifacts"]["semantic_twins"]["exists"] is True
         assert manifest["quality_gates"]["semantic_twins"]["semantic_twin_rows"] == 3
         assert manifest["stage_artifacts"]["bronze"]["exists"] is True
@@ -162,7 +164,7 @@ def test_full_system_flow(monkeypatch):
         # Should recommend Inception or Interstellar (same genre)
         assert results[0]["title"] in ["Inception", "Interstellar"]
 
-        print("\n✅ System Flow Verified: ETL -> Artifacts -> Recommender -> Output")
+        print("\n[PASS] System Flow Verified: ETL -> Artifacts -> Recommender -> Output")
 
     finally:
         # Cleanup with error ignore for Windows file locks

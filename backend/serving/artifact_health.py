@@ -78,7 +78,7 @@ def evaluate_artifact_health(models_dir: Path, data_dir: Path) -> dict[str, Any]
         "semantic_twins": data_dir / "semantic_twins.parquet",
         "semantic_twin_summary": data_dir / "semantic_twin_summary.json",
         "embeddings": models_dir / "sbert_embeddings.npy",
-        "faiss_index": models_dir / "faiss.index",
+        "turbovec_index": models_dir / "turbovec.tq",
         "movie_ids": models_dir / "movie_ids.npy",
         "pipeline_manifest": models_dir / "pipeline_manifest.json",
     }
@@ -90,7 +90,7 @@ def evaluate_artifact_health(models_dir: Path, data_dir: Path) -> dict[str, Any]
         "metadata_ready": files["movies"]["exists"],
         "movie_id_map_ready": files["movie_ids"]["exists"],
         "manifest_ready": files["pipeline_manifest"]["exists"] and "_error" not in manifest,
-        "vector_files_ready": files["embeddings"]["exists"] and files["faiss_index"]["exists"],
+        "vector_files_ready": files["embeddings"]["exists"] and files["turbovec_index"]["exists"],
         "semantic_files_ready": files["semantic_twins"]["exists"] and files["semantic_twin_summary"]["exists"],
         "catalog_vector_aligned": None,
         "semantic_catalog_aligned": None,
@@ -175,7 +175,7 @@ def evaluate_artifact_health(models_dir: Path, data_dir: Path) -> dict[str, Any]
             "Run the updated Kaggle refresh so semantic_twin_summary.json is published to Hugging Face."
         )
     if not checks["vector_files_ready"]:
-        recommendations.append("Vector artifacts are missing; full FAISS serving will fall back or be unavailable.")
+        recommendations.append("Vector artifacts are missing; full TurboVec serving will fall back or be unavailable.")
     if not checks["manifest_ready"]:
         recommendations.append("pipeline_manifest.json is missing or invalid; artifact cache validation is weaker.")
 

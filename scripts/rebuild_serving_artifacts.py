@@ -18,8 +18,8 @@ if str(REPO_ROOT) not in sys.path:
 
 from etl.pandas_etl import (
     atomic_save_npy,
-    atomic_write_faiss_index,
-    build_faiss_index,
+    atomic_write_turbovec_index,
+    build_turbovec_index,
     movie_id_vector,
 )
 from scripts.backfill_serving_metadata_artifacts import build_backfill_artifacts, upload_artifacts
@@ -68,7 +68,7 @@ def rebuild_serving_artifacts(
     batch_size: int = 32,
     encoder: Any | None = None,
 ) -> dict[str, Any]:
-    """Rebuild embeddings, FAISS, ids, semantic twins, and manifest from one catalog snapshot."""
+    """Rebuild embeddings, TurboVec, ids, semantic twins, and manifest from one catalog snapshot."""
     movies_path = Path(movies_path)
     models_dir = Path(models_dir)
     processed_dir = Path(processed_dir)
@@ -84,12 +84,12 @@ def rebuild_serving_artifacts(
 
     embeddings_path = models_dir / "sbert_embeddings.npy"
     movie_ids_path = models_dir / "movie_ids.npy"
-    faiss_path = models_dir / "faiss.index"
+    turbovec_path = models_dir / "turbovec.tq"
 
     atomic_save_npy(vectors, embeddings_path)
     atomic_save_npy(movie_ids, movie_ids_path)
-    index = build_faiss_index(vectors)
-    atomic_write_faiss_index(index, faiss_path)
+    index = build_turbovec_index(vectors)
+    atomic_write_turbovec_index(index, turbovec_path)
 
     artifacts = build_backfill_artifacts(
         movies=movies,
@@ -97,7 +97,7 @@ def rebuild_serving_artifacts(
         output_dir=models_dir,
         semantic_output_dir=processed_dir,
         embeddings_path=embeddings_path,
-        faiss_path=faiss_path,
+        turbovec_path=turbovec_path,
     )
     return {
         **artifacts,

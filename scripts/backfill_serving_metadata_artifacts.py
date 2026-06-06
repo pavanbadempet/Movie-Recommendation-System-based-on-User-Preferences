@@ -61,13 +61,13 @@ def describe_embedding_artifact(path: Path) -> dict[str, Any]:
     }
 
 
-def describe_faiss_artifact(path: Path) -> dict[str, Any]:
-    import faiss
+def describe_turbovec_artifact(path: Path) -> dict[str, Any]:
+    from turbovec import TurboQuantIndex
 
-    index = faiss.read_index(str(path))
+    index = TurboQuantIndex.load(str(path))
     return {
         **describe_file(path),
-        "rows": int(index.ntotal),
+        "rows": len(index),
     }
 
 
@@ -91,7 +91,7 @@ def build_backfill_artifacts(
     *,
     semantic_output_dir: Path | None = None,
     embeddings_path: Path | None = None,
-    faiss_path: Path | None = None,
+    turbovec_path: Path | None = None,
 ) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     semantic_output_dir = semantic_output_dir or output_dir
@@ -150,13 +150,13 @@ def build_backfill_artifacts(
             "size_bytes": embedding_info["size_bytes"],
         }
 
-    if faiss_path is not None:
-        faiss_info = describe_faiss_artifact(faiss_path)
-        quality_report["faiss_index_size"] = faiss_info["rows"]
-        serving_contract["faiss_index_size"] = faiss_info["rows"]
-        artifact_checksums[faiss_path.name] = {
-            "sha256": faiss_info["sha256"],
-            "size_bytes": faiss_info["size_bytes"],
+    if turbovec_path is not None:
+        turbovec_info = describe_turbovec_artifact(turbovec_path)
+        quality_report["turbovec_index_size"] = turbovec_info["rows"]
+        serving_contract["turbovec_index_size"] = turbovec_info["rows"]
+        artifact_checksums[turbovec_path.name] = {
+            "sha256": turbovec_info["sha256"],
+            "size_bytes": turbovec_info["size_bytes"],
         }
 
     quality_path = output_dir / "quality_report.json"
@@ -172,7 +172,7 @@ def build_backfill_artifacts(
         "artifacts": {
             "movies": "movies_transformed.parquet",
             "embeddings": "sbert_embeddings.npy",
-            "faiss_index": "faiss.index",
+            "turbovec_index": "turbovec.tq",
             "movie_ids": movie_ids_path.name,
             "quality_report": quality_path.name,
             "semantic_twins": semantic_twins_path.name,
@@ -194,7 +194,7 @@ def build_backfill_artifacts(
         "paths": {
             "movies": movies_path,
             "embeddings": embeddings_path,
-            "faiss_index": faiss_path,
+            "turbovec_index": turbovec_path,
             "movie_ids": movie_ids_path,
             "semantic_twins": semantic_twins_path,
             "semantic_twin_summary": semantic_summary_path,

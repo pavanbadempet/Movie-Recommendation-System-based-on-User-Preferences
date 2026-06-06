@@ -19,7 +19,7 @@ def test_artifact_health_reports_ready_when_catalog_ids_and_semantic_twins_align
     movie_ids = np.array([10, 20], dtype=np.int64)
     np.save(tmp_path / "movie_ids.npy", movie_ids)
     (tmp_path / "sbert_embeddings.npy").write_bytes(b"embedding-bytes")
-    (tmp_path / "faiss.index").write_bytes(b"faiss-bytes")
+    (tmp_path / "turbovec.tq").write_bytes(b"turbovec-bytes")
     (tmp_path / "pipeline_manifest.json").write_text(
         json.dumps(
             {

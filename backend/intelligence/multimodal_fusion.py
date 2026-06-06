@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 
-import faiss
+from turbovec import TurboQuantIndex
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -13,7 +13,7 @@ class MultiModalFusionIndex:
     """
     Fuses textual SBERT embeddings (768d) with visual CLIP embeddings (512d)
     into a unified multi-modal latent space (1280d) using L2 normalization
-    and concatenation. Builds and serves a FAISS index.
+    and concatenation. Builds and serves a TurboVec index.
     """
 
     def __init__(self):
@@ -33,7 +33,7 @@ class MultiModalFusionIndex:
     def build_fusion_index(self):
         """
         Loads independent text and vision embeddings, joins them on movie_id,
-        fuses the vectors, and builds `multimodal_faiss.index`.
+        fuses the vectors, and builds `multimodal_turbovec.tq`.
         """
         logger.info("Building Multi-Modal Fusion Index...")
 
@@ -98,27 +98,27 @@ class MultiModalFusionIndex:
         # Final L2 normalization of the fused 1280d vector for cosine similarity search
         fused_vectors = self._normalize(fused_vectors)
 
-        # Build FAISS Index
-        logger.info("Initializing FAISS IndexFlatIP (Inner Product = Cosine Similarity for normalized vectors)")
-        self.index = faiss.IndexFlatIP(self.total_dim)
+        # Build TurboQuantIndex
+        logger.info("Initializing TurboQuantIndex (bit_width=4)")
+        self.index = TurboQuantIndex(self.total_dim, bit_width=4)
         self.index.add(fused_vectors)
 
         # Save artifacts
-        faiss.write_index(self.index, str(MODELS_DIR / "multimodal_faiss.index"))
+        self.index.write(str(MODELS_DIR / "multimodal_turbovec.tq"))
         np.save(str(MODELS_DIR / "multimodal_movie_ids.npy"), fused_ids)
 
-        logger.info("Multi-Modal FAISS Index built and saved successfully!")
+        logger.info("Multi-Modal TurboVec Index built and saved successfully!")
         return True
 
     def load_fusion_index(self):
         """Load the pre-built multi-modal index for serving."""
-        index_path = MODELS_DIR / "multimodal_faiss.index"
+        index_path = MODELS_DIR / "multimodal_turbovec.tq"
         ids_path = MODELS_DIR / "multimodal_movie_ids.npy"
 
         if not index_path.exists() or not ids_path.exists():
             return False
 
-        self.index = faiss.read_index(str(index_path))
+        self.index = TurboQuantIndex.load(str(index_path))
         self.movie_ids = np.load(ids_path)
         return True
 
@@ -128,7 +128,7 @@ class MultiModalFusionIndex:
         Requires the query to have both text and vision representations.
         """
         if self.index is None and not self.load_fusion_index():
-            raise RuntimeError("Multi-modal FAISS index not found.")
+            raise RuntimeError("Multi-modal TurboVec index not found.")
 
         # L2 Normalize inputs
         t_norm = query_text_vector / (np.linalg.norm(query_text_vector) + 1e-10)

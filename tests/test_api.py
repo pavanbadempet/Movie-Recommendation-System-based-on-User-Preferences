@@ -15,7 +15,7 @@ import pytest
 @pytest.fixture
 def mock_artifacts(tmp_path, monkeypatch):
     """Set up mock model artifacts for testing."""
-    import faiss
+    from turbovec import TurboQuantIndex
 
     # Mock movies
     movies = pd.DataFrame(
@@ -53,10 +53,10 @@ def mock_artifacts(tmp_path, monkeypatch):
     np.save(tmp_path / "sbert_embeddings.npy", vecs)
     np.save(tmp_path / "movie_ids.npy", movies["id"].astype("int64").to_numpy())
 
-    # FAISS index
-    idx = faiss.IndexFlatIP(vecs.shape[1])
+    # TurboVec index
+    idx = TurboQuantIndex(vecs.shape[1], bit_width=4)
     idx.add(vecs)
-    faiss.write_index(idx, str(tmp_path / "faiss.index"))
+    idx.write(str(tmp_path / "turbovec.tq"))
     (tmp_path / "pipeline_manifest.json").write_text(
         json.dumps(
             {
@@ -66,7 +66,7 @@ def mock_artifacts(tmp_path, monkeypatch):
                     "movie_rows": 3,
                     "embedding_rows": 3,
                     "embedding_dimensions": 768,
-                    "faiss_index_size": 3,
+                    "turbovec_index_size": 3,
                     "movie_id_map_rows": 3,
                 },
             }

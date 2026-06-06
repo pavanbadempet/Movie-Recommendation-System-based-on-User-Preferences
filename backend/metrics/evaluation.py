@@ -70,7 +70,13 @@ def evaluate_recommendation_quality(recommender: Any, sample_size: int = 25, k: 
         }
         return metrics
 
-    vector_count = int(getattr(index, "ntotal", 0))
+    if hasattr(index, "ntotal"):
+        vector_count = int(index.ntotal)
+    else:
+        try:
+            vector_count = len(index)
+        except Exception:
+            vector_count = 0
     vector_dim = int(vectors.shape[1]) if len(vectors.shape) == 2 else None
     norm_sample = np.asarray(vectors[: min(len(vectors), 1000)], dtype=np.float32)
     norms = np.linalg.norm(norm_sample, axis=1) if len(norm_sample) else np.array([])

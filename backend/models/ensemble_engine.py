@@ -478,15 +478,17 @@ class ApexEnsembleEngine(nn.Module):
         if not candidate_item_ids:
             return {}
 
-        # Try ONNX-accelerated path first (Tier 2)
-        try:
-            from backend.serving.onnx_engine import get_onnx_engine
+        # Try ONNX-accelerated path first (Tier 2) when no user embedding override is requested.
+        # This ensures DP overrides (which are processed in PyTorch) are respected.
+        if user_emb_override is None:
+            try:
+                from backend.serving.onnx_engine import get_onnx_engine
 
-            onnx = get_onnx_engine()
-            if onnx.has_any_onnx_models():
-                return self._predict_ensemble_onnx(user_id, candidate_item_ids, onnx, session_sequence)
-        except Exception as exc:
-            logger.debug("ONNX ensemble path unavailable; falling back to PyTorch: %s", exc)
+                onnx = get_onnx_engine()
+                if onnx.has_any_onnx_models():
+                    return self._predict_ensemble_onnx(user_id, candidate_item_ids, onnx, session_sequence)
+            except Exception as exc:
+                logger.debug("ONNX ensemble path unavailable; falling back to PyTorch: %s", exc)
 
         return self._predict_ensemble_pytorch(user_id, candidate_item_ids, session_sequence, user_emb_override)
 

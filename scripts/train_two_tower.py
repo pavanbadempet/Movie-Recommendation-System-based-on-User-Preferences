@@ -9,7 +9,7 @@ Data flow:
   2. Load ratings + movie metadata
   3. Build (user, positive_item, negative_items) training triplets
   4. Train with InfoNCE contrastive loss
-  5. Export trained item embeddings to FAISS index
+  5. Export trained item embeddings to TurboVec index
 
 Usage:
     python scripts/train_two_tower.py
@@ -24,7 +24,7 @@ import logging
 from pathlib import Path
 import time
 
-import faiss
+from turbovec import TurboQuantIndex
 import numpy as np
 import pandas as pd
 import torch
@@ -249,19 +249,18 @@ def train(
     return losses
 
 
-# ============================================================
-# FAISS Index Export
+# TurboVec Index Export
 # ============================================================
 
 
-def export_to_faiss(
+def export_to_turbovec(
     model: TwoTowerModel,
     item_features: dict[int, np.ndarray],
     output_path: Path,
     id_map_path: Path,
 ) -> None:
-    """Encode all items and build a FAISS index for ANN retrieval."""
-    logger.info("Exporting item embeddings to FAISS index...")
+    """Encode all items and build a TurboVec index for ANN retrieval."""
+    logger.info("Exporting item embeddings to TurboVec index...")
 
     item_ids = sorted(item_features.keys())
     item_feats = np.array([item_features[iid] for iid in item_ids], dtype=np.float32)
@@ -279,17 +278,17 @@ def export_to_faiss(
             embeddings.append(emb)
         all_embeddings = np.vstack(embeddings).astype(np.float32)
 
-    # Build FAISS index (Inner Product = cosine similarity since vectors are L2-normalized)
+    # Build TurboQuantIndex
     dim = all_embeddings.shape[1]
-    index = faiss.IndexFlatIP(dim)
+    index = TurboQuantIndex(dim, bit_width=4)
     index.add(all_embeddings)
 
-    faiss.write_index(index, str(output_path))
+    index.write(str(output_path))
 
     # Save ID mapping
     np.save(str(id_map_path), np.array(item_ids))
 
-    logger.info(f"  FAISS index: {index.ntotal} items, {dim}d → {output_path}")
+    logger.info(f"  TurboVec index: {len(index)} items, {dim}d → {output_path}")
     logger.info(f"  ID map: {id_map_path}")
 
 
@@ -356,10 +355,10 @@ def main():
     torch.save(model.state_dict(), model_path)
     logger.info(f"  Model saved to {model_path}")
 
-    # 8. Export to FAISS
-    faiss_path = MODELS_DIR / "two_tower_faiss.index"
+    # 8. Export to TurboVec
+    turbovec_path = MODELS_DIR / "two_tower_turbovec.tq"
     id_map_path = MODELS_DIR / "two_tower_item_ids.npy"
-    export_to_faiss(model, item_features, faiss_path, id_map_path)
+    export_to_turbovec(model, item_features, turbovec_path, id_map_path)
 
     # 9. Summary
     elapsed = time.time() - start_time
@@ -370,7 +369,7 @@ def main():
     logger.info(f"  Loss reduction: {((losses[0] - losses[-1]) / losses[0]) * 100:.1f}%")
     logger.info(f"  Total time: {elapsed:.1f}s")
     logger.info(f"  Model: {model_path}")
-    logger.info(f"  FAISS index: {faiss_path}")
+    logger.info(f"  TurboVec index: {turbovec_path}")
     logger.info("=" * 60)
 
 
