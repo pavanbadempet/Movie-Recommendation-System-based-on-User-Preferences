@@ -364,6 +364,8 @@ def _platform_readiness_report(
     k: int,
 ) -> dict:
     """Private alias for the inline readiness report builder — moved from backend/main.py."""
+    import os
+
     from backend.app_info import app_metadata
     from backend.benchmark_cache import (
         get_cached_recommendation_benchmark,
@@ -372,8 +374,6 @@ def _platform_readiness_report(
         start_background_semantic_benchmark,
     )
     from backend.recommendation_events import _serving_lineage
-
-    import os
 
     def _env_truthy(name: str) -> bool:
         return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}

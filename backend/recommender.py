@@ -7,11 +7,9 @@ of making recommendations feel personalized.
 from datetime import UTC, datetime
 import gc
 import hashlib
-import json
 import logging
 import os
 from pathlib import Path
-import re
 from threading import Lock
 from typing import Any
 
@@ -19,7 +17,6 @@ import numpy as np
 import pandas as pd
 
 # Import model loader to handle external model downloads
-from backend.model_loader import ensure_model_files
 
 try:
     from backend.serving_tier import resolve_serving_tier as _resolve_serving_tier
@@ -29,14 +26,8 @@ import contextlib
 
 import torch
 
-from backend.diffusion_recommender import LatentDiffusionRecommender
-from backend.feature_store import feature_store
 from backend.knowledge_graph import KnowledgeGraphEngine
-from backend.multimodal_fusion import MultiModalFusionIndex
-from backend.openrouter_client import chat_completion, configured_models, openrouter_api_key
-from backend.query_understanding import intent_score, parse_query_intent
-from backend.ranker import load_ranker
-from backend.semantic_twin import build_semantic_twin, compare_semantic_twins
+from backend.semantic_twin import build_semantic_twin
 
 logger = logging.getLogger(__name__)
 

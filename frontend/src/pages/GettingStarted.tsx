@@ -18,7 +18,7 @@ import {
   Upload,
   BarChart3,
 } from "lucide-react";
-import { apiGet, apiPost, API_BASES } from "../api";
+import { apiGet, API_BASES } from "../api";
 
 interface GettingStartedProps {
   onNavigate: (page: string) => void;
@@ -73,11 +73,9 @@ recommendations.forEach(r =>
 // ---------------------------------------------------------------------------
 function StepIndicator({
   current,
-  total,
   onStep,
 }: {
   current: StepId;
-  total: number;
   onStep: (step: StepId) => void;
 }) {
   const labels = ["API key", "Upload catalog", "First call", "Dashboard"];
@@ -211,7 +209,7 @@ export function GettingStartedPage({ onNavigate }: GettingStartedProps) {
         <p>Follow these four steps to make your first recommendation call.</p>
       </header>
 
-      <StepIndicator current={step} total={4} onStep={setStep} />
+      <StepIndicator current={step} onStep={setStep} />
 
       {/* ── Step 1: API Key ─────────────────────────────────────────────── */}
       {step === 1 && (
