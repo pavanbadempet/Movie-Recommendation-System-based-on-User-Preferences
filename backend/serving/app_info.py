@@ -17,6 +17,13 @@ REVISION_FILE = Path(__file__).resolve().parent.parent / "REVISION"
 
 def app_metadata() -> dict[str, str | None]:
     """Return deploy lineage without loading the recommender."""
+    import sys
+    revision_file = REVISION_FILE
+    if "backend.main" in sys.modules:
+        main_mod = sys.modules["backend.main"]
+        if hasattr(main_mod, "REVISION_FILE"):
+            revision_file = getattr(main_mod, "REVISION_FILE")
+
     commit = None
     source = None
     for env_name in (
@@ -29,9 +36,9 @@ def app_metadata() -> dict[str, str | None]:
             commit = value
             source = env_name
             break
-    if not commit and REVISION_FILE.exists():
+    if not commit and revision_file.exists():
         try:
-            value = REVISION_FILE.read_text(encoding="utf-8").strip()
+            value = revision_file.read_text(encoding="utf-8").strip()
         except OSError:
             value = ""
         else:

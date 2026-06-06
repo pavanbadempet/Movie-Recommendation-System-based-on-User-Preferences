@@ -119,6 +119,16 @@ class Recommender:
         self._load_ranker_and_behavior()
         self._load_optional_models()
         self._wire_pipelines(is_tier3)
+
+        if self._movies is not None:
+            self._artifact_status["movie_count"] = len(self._movies)
+        if self._vectors is not None:
+            self._artifact_status["vector_count"] = len(self._vectors)
+        if self._index is not None:
+            self._artifact_status["faiss_index_count"] = self._index.ntotal
+        if self._movies is not None and self._index is not None and self._vectors is not None:
+            self._artifact_status["vector_artifacts_ready"] = True
+
         return self
 
     def _resolve_active_tier(self) -> str:
@@ -430,7 +440,11 @@ class Recommender:
             candidates = self._retrieval_pipeline.retrieve(query_vector, n=min(100, len(self._movies)))
             ranked = self._ranking_pipeline.rank(candidates, user_context={"profile": profile})
             final = self._reranking_pipeline.rerank(ranked, constraints={})
-            return [self._candidate_to_dict(item) for item in final[:result_limit]]
+            results = [self._candidate_to_dict(item) for item in final[:result_limit]]
+            for r in results:
+                if "retrieval_stage" in r:
+                    r["retrieval_stage"] = f"personalized_v2_{r['retrieval_stage']}"
+            return results
         from backend.pipeline.recommender_core import user_profile_fallback
         return user_profile_fallback(self, profile, result_limit)
 

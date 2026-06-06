@@ -88,7 +88,19 @@ def mock_artifacts(tmp_path, monkeypatch):
     if "backend.main" in sys.modules:
         sys.modules["backend.main"]._recommender = None
 
-    return tmp_path
+    from backend.main import app
+    from backend.data.auth import get_current_user
+
+    class MockUser:
+        def __init__(self):
+            self.external_user_id = "user-1"
+            self.tenant_id = "demo-media-co"
+
+    app.dependency_overrides[get_current_user] = lambda: MockUser()
+
+    yield tmp_path
+
+    app.dependency_overrides.clear()
 
 
 class TestHealthEndpoint:

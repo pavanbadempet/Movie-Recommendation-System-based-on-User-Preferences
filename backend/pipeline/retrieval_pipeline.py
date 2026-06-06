@@ -262,7 +262,7 @@ class RetrievalPipeline:
                     # FAISS returns -1 for padding when fewer than k results exist.
                     continue
                 row = self.movie_df.iloc[idx]
-                movie_id = int(row.get("movie_id", idx))
+                movie_id = int(row.get("id", idx))
                 candidates.append(
                     CandidateItem(
                         movie_id=movie_id,
@@ -318,7 +318,7 @@ class RetrievalPipeline:
                 if score <= 0.0:
                     continue
                 row = self.movie_df.iloc[idx]
-                movie_id = int(row.get("movie_id", idx))
+                movie_id = int(row.get("id", idx))
                 candidates.append(
                     CandidateItem(
                         movie_id=movie_id,
@@ -425,7 +425,7 @@ class RetrievalPipeline:
                 idx = int(indices[0][0])
                 if 0 <= idx < len(self.movie_df):
                     row = self.movie_df.iloc[idx]
-                    return int(row.get("movie_id", idx))
+                    return int(row.get("id", idx))
             except Exception as exc:  # noqa: BLE001
                 logger.debug(
                     "FAISS seed lookup failed (%s: %s); falling back to movie_df[0].",
@@ -436,7 +436,7 @@ class RetrievalPipeline:
         # Fallback: use the first movie in the DataFrame.
         if len(self.movie_df) > 0:
             row = self.movie_df.iloc[0]
-            return int(row.get("movie_id", 0))
+            return int(row.get("id", 0))
 
         return None
 

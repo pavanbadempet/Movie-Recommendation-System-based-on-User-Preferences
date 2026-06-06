@@ -50,7 +50,7 @@ def _json_loads(s):
     return _json_lib.loads(s)
 
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import httpx
@@ -66,6 +66,8 @@ from backend.api.artifact_routes import create_artifact_router
 from backend.data.auth import TenantContext, enforce_payload_context, resolve_admin_token, resolve_tenant_context
 from backend.api.auth_routes import router as auth_router
 from backend.metrics.benchmark_cache import (
+    _recommendation_benchmark_cache,
+    _semantic_benchmark_cache,
     compute_recommendation_benchmark_cached,
     compute_semantic_benchmark_cached,
     get_cached_recommendation_benchmark,
@@ -75,6 +77,10 @@ from backend.metrics.benchmark_cache import (
     warming_recommendation_benchmark_report,
     warming_semantic_benchmark_report,
 )
+from backend.metrics.recommendation_benchmark import load_recommendation_benchmark
+
+_start_background_recommendation_benchmark = start_background_recommendation_benchmark
+_start_background_semantic_benchmark = start_background_semantic_benchmark
 from backend.api.browse_routes import create_browse_router
 from backend.api.catalog_routes import create_catalog_router
 from backend.data.catalogs import persist_catalog_upload, profile_catalog_csv
@@ -261,7 +267,7 @@ app = FastAPI(
 
 from backend.api.admin_tests import router as admin_router
 
-app.include_router(admin_router)
+app.include_router(admin_router, dependencies=[Depends(resolve_admin_token)])
 app.include_router(auth_router)
 
 # =====================================================================
@@ -433,6 +439,15 @@ def get_rec() -> Recommender:
     return _recommender
 
 
+def set_rec(r: Recommender) -> None:
+    """Set global recommender instance."""
+    global _recommender
+    _recommender = r
+
+
+recommender_helpers.configure(get_rec, set_rec)
+
+
 def _background_recommender_warmup() -> None:
     """Warm the recommender after startup without blocking health probes (delegates to recommender_helpers)."""
     recommender_helpers.background_recommender_warmup()
@@ -461,9 +476,9 @@ from backend.api.recommendation_routes import (
 app.include_router(
     create_evaluation_router(
         resolve_tenant_context=resolve_tenant_context,
-        remote_payload_or_raise=remote_payload_or_raise,
-        record_usage=record_usage,
-        get_rec=get_rec,
+        remote_payload_or_raise=lambda *a, **kw: remote_payload_or_raise(*a, **kw),
+        record_usage=lambda *a, **kw: record_usage(*a, **kw),
+        get_rec=lambda: get_rec(),
         evaluate_recommendation_quality=evaluate_recommendation_quality,
         evaluate_search_benchmark=evaluate_search_benchmark,
         get_cached_semantic_benchmark=get_cached_semantic_benchmark,
@@ -492,7 +507,7 @@ app.include_router(
         resolve_tenant_context=resolve_tenant_context,
         resolve_admin_token=resolve_admin_token,
         evaluate_artifact_health=evaluate_artifact_health,
-        record_usage=record_usage,
+        record_usage=lambda *a, **kw: record_usage(*a, **kw),
         reload_local_recommender=_reload_local_recommender,
         refresh_artifact_files=_refresh_artifact_files,
         serving_lineage=_serving_lineage,
@@ -505,7 +520,7 @@ app.include_router(
         resolve_tenant_context=resolve_tenant_context,
         assign_experiment=assign_experiment,
         summarize_experiment_metrics=summarize_experiment_metrics,
-        record_usage=record_usage,
+        record_usage=lambda *a, **kw: record_usage(*a, **kw),
     )
 )
 
@@ -514,16 +529,16 @@ app.include_router(
         resolve_tenant_context=resolve_tenant_context,
         profile_catalog_csv=profile_catalog_csv,
         persist_catalog_upload=persist_catalog_upload,
-        record_usage=record_usage,
+        record_usage=lambda *a, **kw: record_usage(*a, **kw),
     )
 )
 
 app.include_router(
     create_browse_router(
         resolve_tenant_context=resolve_tenant_context,
-        remote_payload_or_raise=remote_payload_or_raise,
-        get_rec=get_rec,
-        record_usage=record_usage,
+        remote_payload_or_raise=lambda *a, **kw: remote_payload_or_raise(*a, **kw),
+        get_rec=lambda: get_rec(),
+        record_usage=lambda *a, **kw: record_usage(*a, **kw),
     )
 )
 
@@ -565,10 +580,10 @@ _configure_rec_routes(
 
 app.include_router(
     create_recommendation_router(
-        get_rec=get_rec,
-        record_usage=record_usage,
-        remote_payload_or_raise=remote_payload_or_raise,
-        record_recommendation_events=record_recommendation_events,
+        get_rec=lambda: get_rec(),
+        record_usage=lambda *a, **kw: record_usage(*a, **kw),
+        remote_payload_or_raise=lambda *a, **kw: remote_payload_or_raise(*a, **kw),
+        record_recommendation_events=lambda *a, **kw: record_recommendation_events(*a, **kw),
         resolve_tenant_context=resolve_tenant_context,
         build_user_behavior_profile=build_user_behavior_profile,
         assign_experiment=assign_experiment,
@@ -603,10 +618,10 @@ app.include_router(
 
 app.include_router(
     create_core_router(
-        get_rec=get_rec,
-        record_usage=record_usage,
-        remote_payload_or_raise=remote_payload_or_raise,
-        record_recommendation_events=record_recommendation_events,
+        get_rec=lambda: get_rec(),
+        record_usage=lambda *a, **kw: record_usage(*a, **kw),
+        remote_payload_or_raise=lambda *a, **kw: remote_payload_or_raise(*a, **kw),
+        record_recommendation_events=lambda *a, **kw: record_recommendation_events(*a, **kw),
         resolve_tenant_context=resolve_tenant_context,
         build_user_behavior_profile=build_user_behavior_profile,
         assign_experiment=assign_experiment,
@@ -637,10 +652,10 @@ app.include_router(
 
 app.include_router(
     create_search_movie_router(
-        get_rec=get_rec,
-        record_usage=record_usage,
-        remote_payload_or_raise=remote_payload_or_raise,
-        record_recommendation_events=record_recommendation_events,
+        get_rec=lambda: get_rec(),
+        record_usage=lambda *a, **kw: record_usage(*a, **kw),
+        remote_payload_or_raise=lambda *a, **kw: remote_payload_or_raise(*a, **kw),
+        record_recommendation_events=lambda *a, **kw: record_recommendation_events(*a, **kw),
         resolve_tenant_context=resolve_tenant_context,
         build_user_behavior_profile=build_user_behavior_profile,
         assign_experiment=assign_experiment,
@@ -666,10 +681,10 @@ app.include_router(
 
 app.include_router(
     create_rec_engine_router(
-        get_rec=get_rec,
-        record_usage=record_usage,
-        remote_payload_or_raise=remote_payload_or_raise,
-        record_recommendation_events=record_recommendation_events,
+        get_rec=lambda: get_rec(),
+        record_usage=lambda *a, **kw: record_usage(*a, **kw),
+        remote_payload_or_raise=lambda *a, **kw: remote_payload_or_raise(*a, **kw),
+        record_recommendation_events=lambda *a, **kw: record_recommendation_events(*a, **kw),
         resolve_tenant_context=resolve_tenant_context,
         build_user_behavior_profile=build_user_behavior_profile,
         assign_experiment=assign_experiment,
