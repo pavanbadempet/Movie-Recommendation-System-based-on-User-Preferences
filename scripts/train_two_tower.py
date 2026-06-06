@@ -30,7 +30,7 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader, Dataset
 
-from backend.two_tower import TwoTowerModel
+from backend.models.two_tower import TwoTowerModel
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

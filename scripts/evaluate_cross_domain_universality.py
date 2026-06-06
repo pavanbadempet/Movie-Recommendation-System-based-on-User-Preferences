@@ -23,8 +23,8 @@ import torch
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from backend.diffusion_recommender import LatentDiffusionRecommender
-from backend.hyperbolic_recommender import HyperbolicRecommender
+from backend.models.diffusion_recommender import LatentDiffusionRecommender
+from backend.models.hyperbolic_recommender import HyperbolicRecommender
 from scripts.evaluate_novel_quality import compute_metrics
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")

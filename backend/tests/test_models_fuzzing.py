@@ -12,10 +12,10 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 import torch
 
-from backend.hyperbolic_recommender import HyperbolicRecommender
-from backend.kan_ranker import KANRanker
-from backend.neural_ode_recommender import QuantumFluidRecommender
-from backend.sasrec import SASRec
+from backend.models.hyperbolic_recommender import HyperbolicRecommender
+from backend.models.kan_ranker import KANRanker
+from backend.models.neural_ode_recommender import QuantumFluidRecommender
+from backend.models.sasrec import SASRec
 
 
 # FAANG limits: Fuzz with up to 100 random configurations per test

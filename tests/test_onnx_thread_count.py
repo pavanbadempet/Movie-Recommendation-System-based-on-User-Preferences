@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from backend.onnx_engine import ONNXEngine
+from backend.serving.onnx_engine import ONNXEngine
 
 
 @given(st.integers(min_value=1, max_value=256))
@@ -33,8 +33,8 @@ def test_onnx_thread_count_binding(n: int) -> None:
     # Patch ort.InferenceSession so no real ONNX file is needed.
     # Patch Path.exists to return True so the if path.exists() branch runs.
     with (
-        patch("backend.onnx_engine.ort.SessionOptions", return_value=mock_options),
-        patch("backend.onnx_engine.ort.InferenceSession", return_value=MagicMock()),
+        patch("backend.serving.onnx_engine.ort.SessionOptions", return_value=mock_options),
+        patch("backend.serving.onnx_engine.ort.InferenceSession", return_value=MagicMock()),
         patch.object(Path, "exists", return_value=True),
     ):
         ONNXEngine(cpu_cores=n)

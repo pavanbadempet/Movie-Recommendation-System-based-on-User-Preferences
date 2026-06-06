@@ -147,7 +147,7 @@ Close the four remaining gaps to bring the APEX Movie Recommendation System to a
     - _Requirements: 10.1_
 
   - [x] 8.2 Update `backend/main.py` to import from `benchmark_cache`
-    - Add `from backend.benchmark_cache import (get_cached_semantic_benchmark, compute_semantic_benchmark_cached, start_background_semantic_benchmark, warming_semantic_benchmark_report, get_cached_recommendation_benchmark, compute_recommendation_benchmark_cached, start_background_recommendation_benchmark, warming_recommendation_benchmark_report)` to `main.py`
+    - Add `from backend.metrics.benchmark_cache import (get_cached_semantic_benchmark, compute_semantic_benchmark_cached, start_background_semantic_benchmark, warming_semantic_benchmark_report, get_cached_recommendation_benchmark, compute_recommendation_benchmark_cached, start_background_recommendation_benchmark, warming_recommendation_benchmark_report)` to `main.py`
     - Remove the extracted functions and state from `main.py`
     - Update the `create_evaluation_router(...)` call in `main.py` to pass the imported functions
     - _Requirements: 10.2_
@@ -161,7 +161,7 @@ Close the four remaining gaps to bring the APEX Movie Recommendation System to a
     - _Requirements: 11.1_
 
   - [x] 9.2 Update `backend/main.py` to import from `recommender_helpers`
-    - Add import of all extracted functions from `backend.recommender_helpers`
+    - Add import of all extracted functions from `backend.pipeline.recommender_helpers`
     - Call `recommender_helpers.configure(lambda: _recommender, lambda r: globals().__setitem__('_recommender', r))` in the lifespan startup
     - Remove the extracted functions from `main.py`
     - _Requirements: 11.2_
@@ -176,7 +176,7 @@ Close the four remaining gaps to bring the APEX Movie Recommendation System to a
     - _Requirements: 9.1, 9.2, 9.4_
 
   - [x] 10.2 Register the admin router in `backend/main.py`
-    - Add `from backend.admin_routes import create_admin_router`
+    - Add `from backend.api.admin_routes import create_admin_router`
     - Instantiate and register: `app.include_router(create_admin_router(get_apex_engine=get_apex_engine, reload_local_recommender=reload_local_recommender, ...))`
     - Remove the extracted admin endpoints from `main.py`
     - _Requirements: 9.3_

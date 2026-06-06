@@ -13,7 +13,7 @@ from backend.events import (
     normalize_event,
     summarize_recommendation_events,
 )
-from backend.recommender import Recommender
+from backend.pipeline.recommender import Recommender
 
 
 def test_append_event_and_aggregate_features(tmp_path):

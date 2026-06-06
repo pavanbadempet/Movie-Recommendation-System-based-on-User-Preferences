@@ -13,7 +13,7 @@ import tempfile
 import numpy as np
 import pandas as pd
 
-from backend.recommender import Recommender
+from backend.pipeline.recommender import Recommender
 from etl import pandas_etl
 
 
@@ -148,10 +148,10 @@ def test_full_system_flow(monkeypatch):
         assert len(scd_snapshot) == 3
 
         # 4. Update Recommender to use these paths and Test
-        import backend.recommender
+        import backend.pipeline.recommender
 
-        backend.recommender.MODELS_DIR = models_dir
-        backend.recommender.DATA_DIR = processed_dir
+        backend.pipeline.recommender.MODELS_DIR = models_dir
+        backend.pipeline.recommender.DATA_DIR = processed_dir
 
         rec = Recommender().load()
         assert len(rec.movies) == 3

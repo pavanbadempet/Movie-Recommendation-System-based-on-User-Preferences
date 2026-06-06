@@ -28,7 +28,7 @@ import torch
 import torch.nn as nn
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from backend.neural_ode_recommender import QuantumFluidRecommender
+from backend.models.neural_ode_recommender import QuantumFluidRecommender
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)

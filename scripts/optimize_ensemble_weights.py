@@ -35,7 +35,7 @@ if str(_REPO_ROOT) not in sys.path:
 from backend import events as event_module
 
 if TYPE_CHECKING:
-    from backend.ensemble_engine import ApexEnsembleEngine
+    from backend.models.ensemble_engine import ApexEnsembleEngine
 
 logger = logging.getLogger(__name__)
 
@@ -283,11 +283,11 @@ def run_dirichlet_grid_search(
 
     if engine is None:
         logger.info("Initialising ApexEnsembleEngine …")
-        from backend.ensemble_engine import ApexEnsembleEngine
+        from backend.models.ensemble_engine import ApexEnsembleEngine
 
         # Use catalog size to ensure embedding tables cover all item IDs
         try:
-            from backend.recommender import get_recommender
+            from backend.pipeline.recommender import get_recommender
 
             rec = get_recommender()
             num_items = len(rec.movies) if rec._movies is not None else 50000

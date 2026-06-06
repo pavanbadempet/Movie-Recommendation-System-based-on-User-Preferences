@@ -2,139 +2,165 @@
 
 ## Overview
 
-The APEX backend uses a **flat source layout with logical sub-package namespaces**. All implementation modules live directly in `backend/` — a deliberate choice that preserves backward compatibility with every existing import statement across the codebase. Sub-packages (`models`, `pipeline`, `serving`, `privacy`, `metrics`, `middleware`) sit alongside the flat modules and act purely as re-export surfaces: each sub-package `__init__.py` imports from the flat `backend/` modules and publishes a curated public API via `__all__`. No implementation code ever lives inside a sub-package directory.
+The APEX backend uses a **flat source layout with logical sub-package namespaces**.
+All implementation modules live directly in `backend/` — a deliberate choice that
+preserves backward compatibility with every existing import statement across the
+codebase. Sub-packages sit alongside the flat modules and act as re-export surfaces:
+each `__init__.py` imports from the flat `backend/` modules and publishes a curated
+public API via `__all__`.
 
-This re-export pattern means that existing code referencing `from backend.lightgcn import LightGCN` continues to work without any changes, while new callers and documentation can use the cleaner namespaced form `from backend.models import LightGCN`. The sub-packages are documentation anchors as much as they are import shortcuts — each `__init__.py` docstring explains the sub-package's purpose and the modules it groups. Zero migration risk: no import path changes are needed anywhere in the existing codebase.
-
-The result is the best of both worlds: a flat, easy-to-navigate source tree with no deeply nested package hierarchies, combined with a clean, discoverable API surface that groups related symbols under meaningful namespaces. Downstream consumers (API handlers, notebooks, tests) can import from either path; internal modules always use direct flat imports to keep the dependency graph simple and acyclic.
+This means existing code using `from backend.models.lightgcn import LightGCN` continues
+to work unchanged, while new callers can use the cleaner `from backend.models import LightGCN`.
+Sub-packages are documentation anchors as much as import shortcuts — zero migration risk.
 
 ---
 
 ## Sub-Package Reference
 
-| Sub-package | Source Modules | Public Exports | Design Rationale |
-|---|---|---|---|
-| `backend.models` | `lightgcn`, `sasrec`, `kan_ranker`, `neural_ode_recommender`, `hyperbolic_recommender`, `diffusion_recommender`, `two_tower`, `mmoe_ranker`, `rl_policy` | `LightGCN`, `SASRec`, `KANRanker`, `QuantumFluidRecommender`, `HyperbolicRecommender`, `LatentDiffusionRecommender`, `TwoTowerModel`, `MMoERanker`, `ActorCriticPolicy` | Groups all 6 ensemble model implementations + retrieval/ranking models under a single logical namespace |
-| `backend.pipeline` | `pipeline_types`, `retrieval_pipeline`, `ranking_pipeline`, `reranking_pipeline` | `CandidateItem`, `RankedItem`, `FinalItem`, `RetrievalPipeline`, `RetrievalConfig`, `RankingPipeline`, `RankingConfig`, `RerankingPipeline`, `RerankingConfig` | The 3-stage pipeline (retrieve → rank → rerank) with typed interfaces between stages |
-| `backend.serving` | `serving_tier`, `onnx_engine`, `online_learner`, `active_inference_engine`, `realtime_feature_updater` | `TierDetector`, `HardwareProfile`, `resolve_serving_tier` | Hardware-adaptive tier selection (Tier1/GPU, Tier2/ONNX, Tier3/FAISS) + runtime serving infrastructure |
-| `backend.privacy` | `privacy`, `privacy_preserving_ml` | `add_laplace_noise`, `add_gaussian_noise`, `privatize_user_embedding`, `k_anonymize_profile`, `federated_average_gradients` | GDPR/EU AI Act differential privacy mechanisms (Laplace, Gaussian, k-anonymity, federated DP) |
-| `backend.metrics` | `debiased_metrics`, `evaluation` | `compute_item_popularity`, `ips_ndcg_at_k`, `beyond_accuracy_metrics`, `calibration_score`, `evaluate_recommendation_quality` | IPS-debiased evaluation metrics correcting for popularity bias in offline evaluation |
-| `backend.middleware` | `rate_limiter`, `plan_enforcer` | (used directly, not re-exported) | HTTP middleware for B2B SaaS rate limiting and plan enforcement; registered directly on the FastAPI `app` instance |
+| Sub-package | Key Source Modules | Design Rationale |
+|---|---|---|
+| `backend.models` | `lightgcn`, `sasrec`, `kan_ranker`, `neural_ode_recommender`, `hyperbolic_recommender`, `diffusion_recommender`, `two_tower`, `mmoe_ranker`, `rl_policy`, `ensemble_engine`, `neural_weight_optimizer`, `online_learner` | All 6 ensemble model implementations + retrieval/ranking models + ensemble engine |
+| `backend.pipeline` | `pipeline_types`, `retrieval_pipeline`, `ranking_pipeline`, `reranking_pipeline`, `diversity_reranker`, `ranker` | 3-stage pipeline (retrieve → rank → rerank) with typed interfaces |
+| `backend.serving` | `serving_tier`, `onnx_engine`, `online_learner`, `sasrec_online_learner`, `kan_online_learner`, `online_learning_coordinator`, `active_inference_engine`, `realtime_feature_updater`, `slo` | Hardware-adaptive tier selection + ONNX inference + online learning coordinator |
+| `backend.privacy.privacy` | `privacy`, `privacy_preserving_ml` | GDPR/EU AI Act differential privacy (Laplace, Gaussian, k-anonymity, federated DP) |
+| `backend.metrics` | `debiased_metrics`, `evaluation`, `uncertainty_estimator` | IPS-debiased evaluation metrics + uncertainty quantification |
+| `backend.intelligence` | `knowledge_graph`, `cross_domain_kg`, `semantic_twin`, `content_understanding`, `query_understanding`, `llm_explanations`, `openrouter_client`, `multimodal_fusion`, `long_horizon_rl`, `temporal_preference`, `contextual_bandit`, `exploration_engine`, `attention_user_model` | Layer 4 cognitive stack — reasoning, personalization, long-horizon RL |
+| `backend.data` | `events`, `recommendation_events`, `feature_store`, `realtime_feature_updater`, `experiments`, `usage`, `cache`, `slo` | Layer 1 data platform — event streaming, feature store, A/B experiments, SLO |
+| `backend.middleware` | `rate_limiter`, `plan_enforcer` | HTTP middleware for B2B SaaS rate limiting and plan enforcement |
+
+---
+
+## Complete Module Map
+
+Every flat `backend/` module and its logical home:
+
+### backend.models
+`lightgcn` · `sasrec` · `kan_ranker` · `neural_ode_recommender` · `hyperbolic_recommender`
+`diffusion_recommender` · `two_tower` · `mmoe_ranker` · `rl_policy` · `rl_reward`
+`ensemble_engine` · `neural_weight_optimizer` · `online_learner`
+`sasrec_online_learner` · `kan_online_learner` · `online_learning_coordinator`
+`attention_user_model` · `multi_objective_ranker`
+
+### backend.pipeline
+`pipeline_types` · `retrieval_pipeline` · `ranking_pipeline` · `reranking_pipeline`
+`diversity_reranker` · `ranker` · `ranker_training`
+
+### backend.serving
+`serving_tier` · `onnx_engine` · `active_inference_engine` · `realtime_feature_updater`
+`slo` · `model_loader` · `artifact_health` · `artifact_validator`
+
+### backend.privacy.privacy
+`privacy` · `privacy_preserving_ml`
+
+### backend.metrics
+`debiased_metrics` · `evaluation` · `uncertainty_estimator`
+`recommendation_benchmark` · `search_benchmark` · `semantic_benchmark`
+`benchmark_cache` · `debiased_metrics`
+
+### backend.intelligence
+`knowledge_graph` · `cross_domain_kg` · `semantic_twin` · `content_understanding`
+`query_understanding` · `llm_explanations` · `openrouter_client`
+`multimodal_fusion` · `vision_encoder` · `long_horizon_rl` · `temporal_preference`
+`contextual_bandit` · `exploration_engine` · `attention_user_model`
+
+### backend.data
+`events` · `recommendation_events` · `feature_store` · `realtime_feature_updater`
+`experiments` · `usage` · `cache` · `slo`
+
+### API / routing (entry points — not imported by anything)
+`main` · `recommendation_routes` · `admin_routes` · `auth_routes` · `billing_routes`
+`browse_routes` · `catalog_routes` · `evaluation_routes` · `experiment_routes`
+`artifact_routes` · `recommendation_events` · `platform_readiness`
+
+### Infrastructure (shared utilities)
+`auth` · `database` · `response_models` · `router_deps` · `app_info`
+`remote_recommender` · `frontend_failover` · `chat` · `recommender_helpers`
+`recommender` · `recommender_core` · `billing` · `catalogs`
 
 ---
 
 ## Import Graph
 
-The following diagram shows the dependency flow between sub-packages and key backend modules. All edges are one-directional — there are no circular imports.
-
 ```mermaid
 graph TD
     subgraph "Entry Points"
         MAIN[backend/main.py]
-        REC[backend/recommender.py]
+        ROUTES[backend/*_routes.py]
     end
 
     subgraph "Sub-packages"
         MODELS[backend.models]
         PIPELINE[backend.pipeline]
         SERVING[backend.serving]
-        PRIVACY[backend.privacy]
+        PRIVACY[backend.privacy.privacy]
         METRICS[backend.metrics]
-        MIDDLEWARE[backend.middleware]
+        INTEL[backend.intelligence]
+        DATA[backend.data]
+        MW[backend.middleware]
     end
 
-    subgraph "Pipeline Internals"
-        PT[pipeline_types]
-        RETR[retrieval_pipeline]
-        RANK[ranking_pipeline]
-        RERANK[reranking_pipeline]
-    end
-
-    subgraph "Source Modules"
-        TIER[serving_tier]
-        ONNX[onnx_engine]
-        DM[debiased_metrics]
-        PPM[privacy_preserving_ml]
+    subgraph "Core"
+        REC[recommender.py]
+        CORE[recommender_core.py]
     end
 
     MAIN --> REC
     MAIN --> SERVING
-    MAIN --> MIDDLEWARE
-
+    MAIN --> MW
+    ROUTES --> REC
     REC --> PIPELINE
     REC --> MODELS
-
-    PIPELINE --> PT
-    PT --> RETR
-    PT --> RANK
-    PT --> RERANK
-
-    SERVING --> TIER
-    SERVING --> ONNX
-
-    PRIVACY --> PPM
-    METRICS --> DM
-
-    MODELS -.->|"re-exports from"| MAIN
-    PIPELINE -.->|"re-exports from"| REC
+    CORE --> MODELS
+    CORE --> INTEL
+    CORE --> PRIVACY
+    PIPELINE --> MODELS
+    SERVING --> MODELS
+    METRICS --> DATA
 ```
 
 **Strict layering rules:**
-1. `pipeline_types` has no local imports — it only defines dataclasses
-2. `retrieval_pipeline`, `ranking_pipeline`, `reranking_pipeline` import from `pipeline_types` only
+1. `pipeline_types` has zero local imports — only dataclasses
+2. Retrieval/ranking/reranking pipelines import from `pipeline_types` only
 3. `recommender.py` orchestrates all three pipeline stages
-4. `main.py` is the top-level entry point — nothing imports from it except tests
-5. Sub-packages (`models`, `pipeline`, etc.) never import from each other
+4. `main.py` is the top-level entry point — nothing imports from it
+5. Sub-packages never import from each other
 
 ---
 
 ## Adding a New Module
 
-### Step 1 — Place the source file
-
-Add your implementation file to the flat `backend/` directory:
+### Step 1 — Place the source file in `backend/`
 
 ```
-backend/
-  my_new_module.py    ← your implementation here
+backend/my_new_module.py
 ```
 
-This keeps the source layout consistent and avoids introducing nested package imports.
+### Step 2 — Identify the right sub-package
 
-### Step 2 — Determine which sub-package it belongs to
-
-| Your module type | Sub-package to update |
+| Module type | Sub-package |
 |---|---|
 | New recommendation model | `backend/models/__init__.py` |
-| New pipeline stage or datatype | `backend/pipeline/__init__.py` |
-| New serving infrastructure component | `backend/serving/__init__.py` |
+| New pipeline stage / datatype | `backend/pipeline/__init__.py` |
+| New serving infrastructure | `backend/serving/__init__.py` |
 | New privacy/compliance mechanism | `backend/privacy/__init__.py` |
 | New evaluation metric | `backend/metrics/__init__.py` |
-| New HTTP middleware | `backend/middleware/` (add directly, no `__init__.py` re-export) |
+| New cognitive/intelligence feature | `backend/intelligence/__init__.py` |
+| New event/data platform feature | `backend/data/__init__.py` |
+| New HTTP middleware | `backend/middleware/` directly |
 
 ### Step 3 — Update the sub-package `__init__.py`
 
-Add an import and update `__all__`:
-
 ```python
-# In backend/models/__init__.py (example)
-from backend.my_new_module import MyNewModel  # add import
-
-__all__ = [
-    ...,
-    "MyNewModel",  # add to __all__
-]
+from backend.my_new_module import MyNewClass  # add import
+__all__ = [..., "MyNewClass"]                 # add to __all__
 ```
 
-Update the module docstring to document the new export.
-
-### Step 4 — Update this document and verify
-
-Add a row to the [Sub-Package Reference](#sub-package-reference) table above with the module filename, all newly exported public symbols, and a one-sentence design rationale. Then verify the import chain to confirm no circular imports were introduced:
+### Step 4 — Verify
 
 ```bash
-python -c "from backend.models import MyNewModel; print('OK')"
-python -c "from backend.<subpackage> import <Symbol>; print('OK')"
+python -c "from backend.<subpackage> import MyNewClass; print('OK')"
 ```
 
-If you see `ImportError: cannot import name` or a circular import error, check that your module does not import from `backend/recommender.py` or `backend/main.py` — those are top-level entry points and must remain leaf consumers, not dependencies.
+### Step 5 — Update this document
+
+Add the module filename to the relevant section in the **Complete Module Map** above.

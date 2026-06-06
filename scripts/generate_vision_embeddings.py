@@ -8,7 +8,7 @@ from tqdm import tqdm
 # Setup path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from backend.vision_encoder import VisionEncoder
+from backend.intelligence.vision_encoder import VisionEncoder
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

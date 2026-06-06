@@ -408,7 +408,7 @@ curl "/v1/recommendations/id/550?explain=true" \\
             Status
           </button>
           <a
-            href="https://github.com/your-username/Movie-Recommendation-System"
+            href="https://github.com/pavanpajjuri/Movie-Recommendation-System"
             target="_blank"
             rel="noreferrer"
             aria-label="APEX source code on GitHub (opens in new tab)"

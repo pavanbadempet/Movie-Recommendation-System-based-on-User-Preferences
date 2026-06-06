@@ -9,7 +9,7 @@ from typing import Any
 
 import pandas as pd
 
-from backend.semantic_twin import build_semantic_twin
+from backend.intelligence.semantic_twin import build_semantic_twin
 
 SEMANTIC_TWIN_ARTIFACT_VERSION = 1
 

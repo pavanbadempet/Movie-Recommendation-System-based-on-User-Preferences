@@ -170,7 +170,7 @@ The deliverables are: an ADR-style architecture decisions document, a controlled
 
 #### Acceptance Criteria
 
-1. THE Orchestrator SHALL expose the `Recommender` class at `backend.recommender.Recommender` so that all existing import statements remain valid.
+1. THE Orchestrator SHALL expose the `Recommender` class at `backend.pipeline.recommender.Recommender` so that all existing import statements remain valid.
 2. WHEN `backend/main.py` is updated with import path corrections, THE System SHALL start without import errors.
 3. WHEN the full test suite (`backend/tests/`) is executed after decomposition, THE System SHALL pass all tests that passed before decomposition.
 4. IF a test imports a symbol that has moved to a new module, THEN THE Orchestrator module SHALL re-export that symbol so that the import continues to resolve without modification to the test file.

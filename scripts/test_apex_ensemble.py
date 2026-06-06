@@ -5,7 +5,7 @@ import sys
 # Add root to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.ensemble_engine import get_apex_engine
+from backend.models.ensemble_engine import get_apex_engine
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 logger = logging.getLogger(__name__)

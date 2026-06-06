@@ -524,7 +524,7 @@ All services share the `nova-net` bridge network.
 | Primary API | `https://pavanbadempet-movie-rec-api.hf.space` | HuggingFace Spaces |
 | Gateway | `https://movie-recs-api-5qvy.onrender.com` | Render.com |
 | Frontend | Cloudflare Pages | React SPA |
-| Backup UI | Streamlit Cloud | `streamlit_app.py` |
+| Backup UI | Streamlit Cloud | `frontend/streamlit_app.py` |
 
 
 ---

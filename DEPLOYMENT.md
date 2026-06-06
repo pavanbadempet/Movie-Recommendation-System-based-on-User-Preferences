@@ -165,10 +165,10 @@ Zero-cost static hosting via GitHub Actions.
 
 ## Backup Frontend: Streamlit Cloud
 
-The Streamlit app (`streamlit_app.py`) provides a lightweight fallback UI.
+The Streamlit app (`frontend/streamlit_app.py`) provides a lightweight fallback UI.
 
 1. Go to [share.streamlit.io](https://share.streamlit.io) → **New app**.
-2. Repository: your repo. Branch: `main`. Main file: `streamlit_app.py`.
+2. Repository: your repo. Branch: `main`. Main file: `frontend/streamlit_app.py`.
 3. In **Advanced settings** → **Secrets**, add:
    ```toml
    API_URL = "https://your-api.onrender.com"

@@ -26,16 +26,16 @@ EMB_DIM = 4
 def _make_engine():
     """Return a small ApexEnsembleEngine with mocked sub-models."""
     with (
-        patch("backend.ensemble_engine.QuantumFluidRecommender"),
-        patch("backend.ensemble_engine.HyperbolicRecommender"),
-        patch("backend.ensemble_engine.KANRanker"),
-        patch("backend.ensemble_engine.LatentDiffusionRecommender"),
-        patch("backend.ensemble_engine.SASRec"),
-        patch("backend.ensemble_engine.LightGCN"),
-        patch("backend.ensemble_engine.ApexEnsembleEngine._inject_pyspark_priors"),
-        patch("backend.ensemble_engine.ApexEnsembleEngine._load_trained_weights"),
+        patch("backend.models.ensemble_engine.QuantumFluidRecommender"),
+        patch("backend.models.ensemble_engine.HyperbolicRecommender"),
+        patch("backend.models.ensemble_engine.KANRanker"),
+        patch("backend.models.ensemble_engine.LatentDiffusionRecommender"),
+        patch("backend.models.ensemble_engine.SASRec"),
+        patch("backend.models.ensemble_engine.LightGCN"),
+        patch("backend.models.ensemble_engine.ApexEnsembleEngine._inject_pyspark_priors"),
+        patch("backend.models.ensemble_engine.ApexEnsembleEngine._load_trained_weights"),
     ):
-        from backend.ensemble_engine import ApexEnsembleEngine
+        from backend.models.ensemble_engine import ApexEnsembleEngine
 
         engine = ApexEnsembleEngine(num_users=NUM_USERS, num_items=NUM_ITEMS, emb_dim=EMB_DIM)
     return engine
@@ -103,7 +103,7 @@ class TestSessionSequenceUnit:
         cached_ids = [1, 2, 3]
         engine._session_cache["42"] = (time.time(), cached_ids)
 
-        with patch("backend.ensemble_engine.iter_events") as mock_iter:
+        with patch("backend.models.ensemble_engine.iter_events") as mock_iter:
             result = engine._get_session_sequence(42)
             mock_iter.assert_not_called()
 
@@ -115,7 +115,7 @@ class TestSessionSequenceUnit:
     def test_cold_start_returns_zeros(self):
         """No cache, no events → zero tensor."""
         engine = _make_engine()
-        with patch("backend.ensemble_engine.iter_events", return_value=iter([])):
+        with patch("backend.models.ensemble_engine.iter_events", return_value=iter([])):
             result = engine._get_session_sequence(999)
         assert result.shape == (1, 50)
         assert result.sum().item() == 0
@@ -123,7 +123,7 @@ class TestSessionSequenceUnit:
     def test_io_error_fallback_returns_zeros(self):
         """Event store I/O error → zero tensor, WARNING logged."""
         engine = _make_engine()
-        with patch("backend.ensemble_engine.iter_events", side_effect=OSError("disk error")):
+        with patch("backend.models.ensemble_engine.iter_events", side_effect=OSError("disk error")):
             result = engine._get_session_sequence(7)
         assert result.shape == (1, 50)
         assert result.sum().item() == 0
@@ -132,7 +132,7 @@ class TestSessionSequenceUnit:
         """override=[1,2,3] → those IDs appear in tensor, shape [1,50]."""
         engine = _make_engine()
         override = [1, 2, 3]
-        with patch("backend.ensemble_engine.iter_events") as mock_iter:
+        with patch("backend.models.ensemble_engine.iter_events") as mock_iter:
             result = engine._get_session_sequence(0, override=override)
             mock_iter.assert_not_called()
 

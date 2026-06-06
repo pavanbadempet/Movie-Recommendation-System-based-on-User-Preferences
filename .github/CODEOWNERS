@@ -1,0 +1,39 @@
+# CODEOWNERS — auto-request review from the right person per changed path.
+# Format: <pattern>  <@user or @org/team>
+# Patterns are matched in order; the last matching rule wins.
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default: repo owner reviews everything not matched below
+*                                   @pavanpajjuri
+
+# ML models and pipeline — ML team review required
+backend/models/                     @pavanpajjuri
+backend/pipeline/                   @pavanpajjuri
+backend/learning/                   @pavanpajjuri
+backend/intelligence/               @pavanpajjuri
+scripts/train_*.py                  @pavanpajjuri
+scripts/causal_debias_training.py   @pavanpajjuri
+
+# Security-sensitive code — requires owner sign-off
+backend/privacy/                    @pavanpajjuri
+backend/middleware/                 @pavanpajjuri
+backend/data/auth.py                @pavanpajjuri
+backend/api/auth_routes.py          @pavanpajjuri
+
+# CI/CD and infrastructure — devops review
+.github/                            @pavanpajjuri
+Dockerfile                          @pavanpajjuri
+backend/Dockerfile                  @pavanpajjuri
+docker-compose*.yml                 @pavanpajjuri
+k8s/                                @pavanpajjuri
+render.yaml                         @pavanpajjuri
+
+# Dependencies — review all dep bumps
+requirements.txt                    @pavanpajjuri
+requirements-etl.txt                @pavanpajjuri
+frontend/package.json               @pavanpajjuri
+frontend/package-lock.json          @pavanpajjuri
+
+# Docs
+docs/                               @pavanpajjuri
+README.md                           @pavanpajjuri

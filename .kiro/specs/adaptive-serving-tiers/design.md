@@ -312,7 +312,7 @@ def get_onnx_engine(cpu_cores: int = 0) -> ONNXEngine:
 
 ```python
 def load(self) -> "Recommender":
-    from backend.serving_tier import resolve_serving_tier
+    from backend.serving.serving_tier import resolve_serving_tier
     active_tier, _ = resolve_serving_tier()
     is_tier3 = (active_tier == "tier3")
 
@@ -393,7 +393,7 @@ async def lifespan(app: FastAPI):
     global http_client, _online_learner, _tier_detector
 
     # --- NEW: resolve serving tier before any model loading ---
-    from backend.serving_tier import get_tier_detector
+    from backend.serving.serving_tier import get_tier_detector
     _tier_detector = get_tier_detector()
     active_tier, tier_reason = _tier_detector.resolve()
 
@@ -403,7 +403,7 @@ async def lifespan(app: FastAPI):
         device = "cuda" if _tier_detector._profile.gpu_available else "cpu"
         engine = get_apex_engine(device=device)
     elif active_tier == "tier2":
-        from backend.onnx_engine import get_onnx_engine
+        from backend.serving.onnx_engine import get_onnx_engine
         onnx_engine = get_onnx_engine(cpu_cores=_tier_detector._profile.cpu_cores)
         if not onnx_engine.has_any_onnx_models():
             logger.warning("No ONNX models loaded; falling back to tier3 behavior")

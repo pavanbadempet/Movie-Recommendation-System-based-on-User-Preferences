@@ -19,7 +19,7 @@ import pandas as pd
 import torch
 from tqdm import tqdm
 
-from backend.ensemble_engine import get_apex_engine
+from backend.models.ensemble_engine import get_apex_engine
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

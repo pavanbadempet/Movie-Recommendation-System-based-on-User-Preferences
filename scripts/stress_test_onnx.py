@@ -9,8 +9,8 @@ import time
 import numpy as np
 import torch
 
-from backend.mmoe_ranker import MMoERanker
-from backend.onnx_engine import get_onnx_engine
+from backend.models.mmoe_ranker import MMoERanker
+from backend.serving.onnx_engine import get_onnx_engine
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)

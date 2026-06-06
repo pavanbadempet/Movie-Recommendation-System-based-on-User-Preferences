@@ -7,8 +7,8 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from backend.pipeline_types import CandidateItem
-from backend.retrieval_pipeline import RetrievalConfig, RetrievalPipeline
+from backend.pipeline.pipeline_types import CandidateItem
+from backend.pipeline.retrieval_pipeline import RetrievalConfig, RetrievalPipeline
 
 
 def _make_mock_faiss(n_items: int):

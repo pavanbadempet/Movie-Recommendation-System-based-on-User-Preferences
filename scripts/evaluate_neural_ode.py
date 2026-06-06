@@ -14,7 +14,7 @@ import torch
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from backend.neural_ode_recommender import QuantumFluidRecommender
+from backend.models.neural_ode_recommender import QuantumFluidRecommender
 from scripts.evaluate_novel_quality import compute_metrics
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")

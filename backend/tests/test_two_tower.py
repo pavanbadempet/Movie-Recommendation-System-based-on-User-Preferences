@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from backend.two_tower import ItemTower, TwoTowerModel, UserTower
+from backend.models.two_tower import ItemTower, TwoTowerModel, UserTower
 
 
 class TestTwoTowerArchitecture:

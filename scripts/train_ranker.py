@@ -22,8 +22,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from backend.events import iter_events
-from backend.ranker import default_ranker_path
-from backend.ranker_training import train_nova_ranker
+from backend.pipeline.ranker import default_ranker_path
+from backend.pipeline.ranker_training import train_nova_ranker
 
 DATA_DIR = REPO_ROOT / "data" / "processed"
 MODELS_DIR = REPO_ROOT / "models"

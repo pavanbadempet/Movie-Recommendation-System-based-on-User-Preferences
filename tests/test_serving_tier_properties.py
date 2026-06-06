@@ -10,7 +10,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from backend.serving_tier import HardwareProfile, TierDetector
+from backend.serving.serving_tier import HardwareProfile, TierDetector
 
 
 # ---------------------------------------------------------------------------

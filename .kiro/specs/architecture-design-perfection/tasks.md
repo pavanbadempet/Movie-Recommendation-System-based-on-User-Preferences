@@ -179,13 +179,13 @@ This plan decomposes the five structural improvements into four ordered tracks. 
 - [x] 6. Track 4 — main.py Reduction
   - [x] 6.1 Create `backend/cache.py` — extract `AsyncLRUCache`
     - Move the `AsyncLRUCache` class (currently in `main.py`) into a new `backend/cache.py` module
-    - Update `main.py` to import `AsyncLRUCache` from `backend.cache`
+    - Update `main.py` to import `AsyncLRUCache` from `backend.serving.cache`
     - Verify no other callers are broken
     - _Requirements: 5.1, 5.2, 5.4_
 
   - [x] 6.2 Create `backend/app_info.py` — extract app metadata helpers
     - Move `app_metadata()` and `public_base_url()` functions from `main.py` into a new `backend/app_info.py` module
-    - Update `main.py` to import these functions from `backend.app_info`
+    - Update `main.py` to import these functions from `backend.serving.app_info`
     - _Requirements: 5.1, 5.2_
 
   - [x] 6.3 Consolidate diagnostic and readiness helpers into existing modules

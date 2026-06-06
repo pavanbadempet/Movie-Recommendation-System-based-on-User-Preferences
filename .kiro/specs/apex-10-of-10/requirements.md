@@ -77,7 +77,7 @@ This spec closes all five gaps to bring APEX to a verifiable 10/10.
 3. THE Backend_Package SHALL migrate the following files from `backend/` (flat level) into `backend/serving/`: `serving_tier.py`, `onnx_engine.py`, `model_loader.py`, and `ensemble_engine.py`.
 4. THE Backend_Package SHALL migrate the following files from `backend/` (flat level) into `backend/privacy/`: `privacy.py` and `privacy_preserving_ml.py`.
 5. WHEN any module is migrated, THE Backend_Package SHALL update `backend/models/__init__.py`, `backend/pipeline/__init__.py`, `backend/serving/__init__.py`, and `backend/privacy/__init__.py` to re-export all public symbols from the migrated modules so that existing `from backend.X import Y` call sites continue to work without modification.
-6. WHEN migration is complete, THE Backend_Package SHALL have zero import errors when all public symbols are imported from their original paths (e.g., `from backend.serving_tier import TierDetector` resolves via `backend.serving.__init__` re-export).
+6. WHEN migration is complete, THE Backend_Package SHALL have zero import errors when all public symbols are imported from their original paths (e.g., `from backend.serving.serving_tier import TierDetector` resolves via `backend.serving.__init__` re-export).
 7. WHEN migration is complete, THE CI unit-tests job SHALL pass without modification to any test file import paths.
 
 ---

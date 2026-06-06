@@ -1,0 +1,67 @@
+# Pre-commit hooks for APEX — run automatically on every `git commit`.
+# Install once: pip install pre-commit && pre-commit install
+# Run manually against all files: pre-commit run --all-files
+#
+# Hook order mirrors CI gate order so local failures match CI failures exactly.
+
+repos:
+  # ---------------------------------------------------------------------------
+  # 1. General hygiene (fast, no deps required)
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=500]          # Block accidental model/binary commits
+      - id: detect-private-key       # Catch raw private keys before they land in git
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: no-commit-to-branch
+        args: [--branch=main]        # Force all work through develop → PR workflow
+
+  # ---------------------------------------------------------------------------
+  # 2. Secret detection (dual-scanner — same as CI)
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  # ---------------------------------------------------------------------------
+  # 3. Python: ruff lint + format (mirrors CI gate exactly)
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.12
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        types_or: [python, pyi]
+      - id: ruff-format
+        types_or: [python, pyi]
+
+  # ---------------------------------------------------------------------------
+  # 4. Docker: hadolint on all Dockerfiles
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.13.1-beta
+    hooks:
+      - id: hadolint
+        args: [--failure-threshold=warning]
+
+  # ---------------------------------------------------------------------------
+  # 5. YAML: yamllint for GitHub Actions and compose files
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        args: [-d, relaxed]
+        files: \.(yml|yaml)$
+        exclude: ^(frontend/|\.kiro/)

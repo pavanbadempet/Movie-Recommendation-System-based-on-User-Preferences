@@ -23,7 +23,10 @@ line-length = 120
 #   C4   — flake8-comprehensions (unnecessary comprehensions)
 #   SIM  — flake8-simplify
 #   I    — isort
-select = ["E", "W", "F", "N", "UP", "B", "C4", "SIM", "I"]
+#   S    — flake8-bandit (security checks)
+#   T20  — flake8-print (no stray print statements in production code)
+#   RUF  — Ruff-native rules
+select = ["E", "W", "F", "N", "UP", "B", "C4", "SIM", "I", "S", "T20", "RUF"]
 
 ignore = [
     # E402: module-level import not at top — intentional in main.py (orjson fallback)
@@ -45,6 +48,14 @@ ignore = [
     "SIM102",
     # B904: raise from — not always applicable in exception handlers
     "B904",
+    # S101: assert used — pytest tests use assert extensively (overridden per-file below)
+    # S311: pseudo-random — ML code uses random for data shuffling, not security
+    "S311",
+    # S603/S607: subprocess calls in scripts are intentional (data pipeline orchestration)
+    "S603",
+    "S607",
+    # RUF012: mutable class attributes — common in PyTorch nn.Module subclasses
+    "RUF012",
 ]
 
 # Files/directories to exclude from linting
@@ -63,21 +74,23 @@ exclude = [
 
 [tool.ruff.lint.per-file-ignores]
 # Test files: allow assert statements, magic values, and broad exception catches
-"tests/**/*.py" = ["S101", "PLR2004", "BLE001"]
-"backend/tests/**/*.py" = ["S101", "PLR2004", "BLE001"]
+"tests/**/*.py" = ["S101", "S105", "S106", "PLR2004", "BLE001", "T20"]
+"backend/tests/**/*.py" = ["S101", "S105", "S106", "PLR2004", "BLE001", "T20"]
 # Delta lakehouse test mocks PySpark's camelCase API (partitionBy) — N802 is intentional
 "tests/test_delta_lakehouse.py" = ["S101", "PLR2004", "BLE001", "N802"]
 # RL wiring test imports ActorCriticPolicy as _ACP to trigger import side-effects — N814 intentional
 "tests/test_rl_wiring.py" = ["S101", "PLR2004", "BLE001", "N814"]
-# Scripts: allow print statements and broad exception handling
-"scripts/**/*.py" = ["T201", "BLE001"]
+# Scripts: allow print statements, broad exception handling, and subprocess use
+"scripts/**/*.py" = ["T201", "T20", "BLE001", "S603", "S607", "S101"]
 # Main entry point: allow complex imports due to orjson fallback pattern
 "backend/main.py" = ["E402", "F401"]
 # Router factory: imports inside function body are intentional;
 # Pydantic model classes passed as factory args are PascalCase by convention (N803)
-"backend/recommendation_routes.py" = ["E402", "N803"]
+"backend/api/recommendation_routes.py" = ["E402", "N803"]
 # Browse routes: same factory pattern
-"backend/browse_routes.py" = ["N803"]
+"backend/api/browse_routes.py" = ["N803"]
+# ETL modules use subprocess and shell invocations intentionally
+"etl/**/*.py" = ["S603", "S607", "T20"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["backend", "etl", "scripts"]
@@ -93,13 +106,18 @@ skip-magic-trailing-comma = false
 # ---------------------------------------------------------------------------
 [tool.mypy]
 python_version = "3.11"
-# Strict mode components — enabled selectively to avoid overwhelming noise
+# Strict mode components — enabled selectively to keep the codebase clean
+# without overwhelming noise from third-party stubs.
 warn_return_any = true
 warn_unused_configs = true
 warn_redundant_casts = true
 warn_unused_ignores = true
 no_implicit_optional = true
 strict_equality = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
 
 # Ignore missing stubs for third-party libraries that don't ship them
 [[tool.mypy.overrides]]
@@ -148,7 +166,7 @@ testpaths = ["tests", "backend/tests"]
 source = ["backend"]
 omit = [
     "backend/tests/*",
-    "backend/admin_tests.py",
+    "backend/api/admin_tests.py",
     "*/__pycache__/*",
 ]
 
