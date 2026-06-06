@@ -938,10 +938,14 @@ def load_vector_artifacts(rec) -> None:
     from backend.models.diffusion_recommender import LatentDiffusionRecommender
     import torch as _torch
 
-    MODELS_DIR = rec.__class__.__module__ and __import__('pathlib').Path(__file__).parent.parent / "models"
-    # Re-resolve MODELS_DIR from the recommender's module path
+    import sys as _sys
     import pathlib as _pathlib
-    MODELS_DIR = _pathlib.Path(__file__).parent.parent / "models"
+    recommender_module = _sys.modules.get(rec.__class__.__module__)
+    MODELS_DIR = (
+        (recommender_module and getattr(recommender_module, "MODELS_DIR", None))
+        or getattr(rec, "MODELS_DIR", None)
+        or _pathlib.Path(__file__).parent.parent / "models"
+    )
 
     try:
         feature_store.load()
@@ -1017,8 +1021,14 @@ def load_vector_artifacts(rec) -> None:
 def load_movie_catalog(rec) -> None:
     """Load movie metadata parquet and build lookup maps."""
     import pandas as _pd
+    import sys as _sys
     import pathlib as _pathlib
-    DATA_DIR = _pathlib.Path(__file__).parent.parent / "data" / "processed"
+    recommender_module = _sys.modules.get(rec.__class__.__module__)
+    DATA_DIR = (
+        (recommender_module and getattr(recommender_module, "DATA_DIR", None))
+        or getattr(rec, "DATA_DIR", None)
+        or _pathlib.Path(__file__).parent.parent / "data" / "processed"
+    )
 
     movies_path = DATA_DIR / "movies_transformed.parquet"
     if not movies_path.exists():
@@ -1048,9 +1058,15 @@ def load_movie_catalog(rec) -> None:
 def load_ranker_and_behavior(rec) -> None:
     """Load learned ranker, build sparse index, and warm behavior features."""
     import os as _os
+    import sys as _sys
     import pathlib as _pathlib
     from backend.pipeline.ranker import load_ranker
-    MODELS_DIR = _pathlib.Path(__file__).parent.parent / "models"
+    recommender_module = _sys.modules.get(rec.__class__.__module__)
+    MODELS_DIR = (
+        (recommender_module and getattr(recommender_module, "MODELS_DIR", None))
+        or getattr(rec, "MODELS_DIR", None)
+        or _pathlib.Path(__file__).parent.parent / "models"
+    )
 
     def _env_truthy(name):
         return _os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
@@ -1070,10 +1086,16 @@ def load_ranker_and_behavior(rec) -> None:
 
 def load_optional_models(rec) -> None:
     """Load multi-modal index, KG, Two-Tower fine-tune, and RL policy."""
+    import sys as _sys
     import pathlib as _pathlib
     import torch as _torch
     from backend.intelligence.multimodal_fusion import MultiModalFusionIndex
-    MODELS_DIR = _pathlib.Path(__file__).parent.parent / "models"
+    recommender_module = _sys.modules.get(rec.__class__.__module__)
+    MODELS_DIR = (
+        (recommender_module and getattr(recommender_module, "MODELS_DIR", None))
+        or getattr(rec, "MODELS_DIR", None)
+        or _pathlib.Path(__file__).parent.parent / "models"
+    )
 
     try:
         rec.multimodal_index = MultiModalFusionIndex()
@@ -1345,9 +1367,15 @@ def genre_affinity_from_profile(rec, profile: dict) -> dict:
 
 def visual_search(rec, movie_id: int, n: int = 10) -> list:
     """Multi-Modal similarity search using Text + Visual (Poster) embeddings."""
+    import sys as _sys
     import numpy as _np
     import pathlib as _pathlib
-    MODELS_DIR = _pathlib.Path(__file__).parent.parent / "models"
+    recommender_module = _sys.modules.get(rec.__class__.__module__)
+    MODELS_DIR = (
+        (recommender_module and getattr(recommender_module, "MODELS_DIR", None))
+        or getattr(rec, "MODELS_DIR", None)
+        or _pathlib.Path(__file__).parent.parent / "models"
+    )
 
     if rec.multimodal_index is None or rec.multimodal_index.index is None:
         logger.warning("Visual search requested, but multimodal index is not loaded.")

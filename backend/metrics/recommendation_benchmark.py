@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any
 
 DEFAULT_RECOMMENDATION_BENCHMARK_PATH = (
-    Path(__file__).resolve().parent.parent / "data" / "evaluation" / "recommendation_quality_benchmark.json"
+    Path(__file__).resolve().parent.parent.parent / "data" / "evaluation" / "recommendation_quality_benchmark.json"
 )
 
 

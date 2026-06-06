@@ -610,6 +610,14 @@ def create_core_router(
     # ── /v1/platform/status ──────────────────────────────────────────────────
     @router.get("/v1/platform/status")
     async def platform_status(context=Depends(resolve_tenant_context)):
+        from backend.data.remote_recommender import remote_recommender_status as _default_remote_rec_status
+        import sys
+        _remote_recommender_status = _default_remote_rec_status
+        if "backend.main" in sys.modules:
+            main_mod = sys.modules["backend.main"]
+            if hasattr(main_mod, "remote_recommender_status"):
+                _remote_recommender_status = getattr(main_mod, "remote_recommender_status")
+
         remote_payload = await remote_payload_or_raise("/v1/platform/status", context=context)
         if remote_payload is not None:
             behavior = await run_in_threadpool(lambda: aggregate_behavior_features(limit=5))
@@ -634,7 +642,7 @@ def create_core_router(
                         "event_table": behavior.get("event_table"),
                         "total_events": behavior.get("total_events"),
                     },
-                    "remote_recommender": {},
+                    "remote_recommender": _remote_recommender_status(),
                     "experimentation": {"enabled": True, "default_assignment": assignment},
                 }
                 return payload
@@ -656,6 +664,12 @@ def create_core_router(
             "tenant_id": context.tenant_id,
             "catalog_id": context.catalog_id,
             "movie_count": len(rec.movies),
+            "capabilities": [
+                "personalization_v2",
+                "recommendation_benchmark",
+                "semantic_benchmark",
+                "hybrid_search"
+            ],
             "event_store": {
                 "mode": behavior.get("event_store"),
                 "durable": behavior.get("durable"),
@@ -1350,6 +1364,7 @@ def create_rec_engine_router(
         request_id: str | None = Query(default=None),
         session_id: str | None = Query(default=None),
         context=Depends(resolve_tenant_context),
+        current_user=Depends(get_current_user),
     ):
         result_limit = top_k or limit or n
         resolved_request_id = request_id or str(uuid.uuid4())
@@ -1431,7 +1446,7 @@ def create_rec_engine_router(
 # Diagnostic helpers — moved from backend/main.py (task 6.3)
 # ---------------------------------------------------------------------------
 from backend.serving.app_info import app_metadata
-from backend.data.auth import TenantContext
+from backend.data.auth import TenantContext, get_current_user
 from backend.metrics.recommendation_benchmark import (
     evaluate_recommendation_case,
     find_recommendation_benchmark_case,
@@ -1473,9 +1488,16 @@ def _recommendation_diagnostic_report(
     explained_count = sum(1 for item in diagnostic_items if item.get("explanation") or item.get("explanation_text"))
     scores = [item["score"] for item in diagnostic_items if item.get("score") is not None]
 
+    import sys
+    _load_recommendation_benchmark = load_recommendation_benchmark
+    if "backend.main" in sys.modules:
+        main_mod = sys.modules["backend.main"]
+        if hasattr(main_mod, "load_recommendation_benchmark"):
+            _load_recommendation_benchmark = getattr(main_mod, "load_recommendation_benchmark")
+
     benchmark_case = find_recommendation_benchmark_case(
         query_movie,
-        cases=load_recommendation_benchmark(),
+        cases=_load_recommendation_benchmark(),
     )
     benchmark_summary = None
     if benchmark_case is not None:
