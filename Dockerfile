@@ -39,7 +39,7 @@ RUN python -m compileall backend etl frontend/streamlit_app.py
 # Use COPY with a wildcard so the layer is a no-op when the directories are absent
 # rather than failing with "no source files were specified".
 RUN mkdir -p models data/processed data/evaluation
-COPY models/*.json models/*.joblib models/*.joblib.metadata.json models/.gitkeep* ./models/ 2>/dev/null || true
+COPY models/ ./models/
 COPY data/processed/ ./data/processed/
 COPY data/evaluation/ ./data/evaluation/
 
