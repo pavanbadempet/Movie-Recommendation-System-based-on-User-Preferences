@@ -1,3 +1,12 @@
+---
+title: Movie Rec Api
+emoji: 🎬
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
+
 # APEX — Recommendation API
 
 > Netflix-quality recommendations for your platform. No ML team required.
