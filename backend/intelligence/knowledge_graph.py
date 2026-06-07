@@ -123,3 +123,10 @@ class KnowledgeGraphEngine:
         # Sort by score descending
         sorted_movies = sorted(movie_scores.items(), key=lambda item: item[1], reverse=True)
         return sorted_movies[:top_k]
+
+    def get_neighbors(self, movie_id: int, n: int = 10) -> list[int]:
+        """
+        Get thematically similar movie IDs for retrieval pipeline compatibility.
+        """
+        results = self.find_thematically_similar(movie_id, top_k=n)
+        return [m_id for m_id, _score in results]
