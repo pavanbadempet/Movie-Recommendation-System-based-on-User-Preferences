@@ -51,7 +51,6 @@ jobs:
                   'models/*.joblib',
                   'models/*.joblib.metadata.json',
                   'models/pipeline_manifest.json',
-                  'backend/models/*.gpickle',
                   'backend/models/*.index',
                   'backend/models/*.npy',
                   'backend/models/*.joblib',
