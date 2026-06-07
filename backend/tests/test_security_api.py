@@ -142,12 +142,12 @@ def test_datetime_utc_not_deprecated():
     Verify create_access_token uses timezone-aware UTC datetimes.
     Regression test for the datetime.utcnow() deprecation fix.
     """
-    from backend.data.auth import create_access_token
+    from backend.data.auth import SECRET_KEY, create_access_token
 
     token = create_access_token({"sub": "test-user"})
     decoded = jwt.decode(
         token,
-        "test-jwt-secret-key-for-ci-only",
+        SECRET_KEY,
         algorithms=["HS256"],
         options={"verify_exp": False},
     )

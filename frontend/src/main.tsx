@@ -4,7 +4,6 @@ import {
   Activity,
   AlertTriangle,
   BarChart3,
-  ChevronDown,
   CheckCircle2,
   Clock3,
   Database,
@@ -72,6 +71,13 @@ const imageBase = import.meta.env.VITE_TMDB_IMAGE_BASE || "https://image.tmdb.or
 const RECENT_STORAGE_KEY = "nova_recent_movies_v2";
 const SESSION_STORAGE_KEY = "nova_session_id_v1";
 const TITLE_CATALOG_LIMIT = 5000;
+
+const isEmbedded = typeof window !== "undefined" && (
+  window.self !== window.top ||
+  window.location.hostname.includes("hf.space") ||
+  window.location.hostname.includes("huggingface.co") ||
+  window.location.search.includes("embed=true")
+);
 
 type AppPage = "home" | "search" | "profile" | "dashboard" | "knowledge-graph" | "evaluation" | "admin" | "landing" | "signup" | "pricing" | "getting-started" | "status";
 type SearchMode = "title" | "semantic";
@@ -916,27 +922,7 @@ function MovieDialog({ movie, onClose }: { movie: Movie; onClose: () => void }) 
   );
 }
 
-function HomeNavCard({
-  icon,
-  title,
-  description,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  onClick: () => void;
-}) {
-  return (
-    <button className="home-nav-card" type="button" onClick={onClick}>
-      <span className="home-nav-icon">{icon}</span>
-      <span>
-        <strong>{title}</strong>
-        <small>{description}</small>
-      </span>
-    </button>
-  );
-}
+
 
 function HomePage({
   movies,
@@ -944,14 +930,7 @@ function HomePage({
   loading,
   error,
   onHeroIndex,
-  onSearch,
   onOpenMovie,
-  onDashboard,
-  onEvaluation,
-  onProfile,
-  onAdmin,
-  onSignIn,
-  username,
   recentMovies,
   forYouMovies,
   forYouLoading,
@@ -965,14 +944,7 @@ function HomePage({
   loading: boolean;
   error: string;
   onHeroIndex: (index: number) => void;
-  onSearch: (mode?: "title" | "semantic") => void;
   onOpenMovie: (movie: Movie) => void;
-  onDashboard: () => void;
-  onEvaluation: () => void;
-  onProfile: () => void;
-  onAdmin: () => void;
-  onSignIn: () => void;
-  username: string | null;
   recentMovies: Movie[];
   forYouMovies: Movie[];
   forYouLoading: boolean;
@@ -997,131 +969,47 @@ function HomePage({
     : "";
 
   return (
-    <main className="home-shell">
-      <section className="home-layout">
-        <div className="home-copy">
-          <h1>
-            Movie
-            <br />
-            Recommendation
-            <br />
-            System
-          </h1>
-          <p>AI-powered curator | Deep search | Semantic analysis</p>
-
-          <div className="home-nav-grid" aria-label="Application navigation">
-            <HomeNavCard
-              icon={<Search size={22} />}
-              title="Search Movies"
-              description="Title, plot, or genre"
-              onClick={() => onSearch("title")}
-            />
-            <HomeNavCard
-              icon={<Sparkles size={22} />}
-              title="AI Discovery"
-              description="Semantic deep search"
-              onClick={() => onSearch("semantic")}
-            />
-            <HomeNavCard
-              icon={<Activity size={22} />}
-              title="Dashboard"
-              description="System health & SLO"
-              onClick={() => onDashboard()}
-            />
-            <HomeNavCard
-              icon={<BarChart3 size={22} />}
-              title="Evaluation"
-              description="Benchmark metrics"
-              onClick={() => onEvaluation()}
-            />
-            <HomeNavCard
-              icon={<User size={22} />}
-              title={username ? `Hi, ${username}` : "Profile"}
-              description={username ? "Your recommendations" : "Sign in to personalise"}
-              onClick={() => username ? onProfile() : onSignIn()}
-            />
-            <HomeNavCard
-              icon={<Server size={22} />}
-              title="Admin"
-              description="Ensemble weights"
-              onClick={() => onAdmin()}
-            />
-          </div>
-          {!username && (
-            <button
-              className="home-signin-btn"
-              type="button"
-              onClick={onSignIn}
-              aria-label="Sign in to your account"
-            >
-              <User size={16} aria-hidden="true" />
-              Sign In
-            </button>
-          )}
-        </div>
-
-        <div className="home-showcase">
-          {/* Toggle: For You / Latest / Popular */}
-          <div className="home-toggle-row">
-            {hasForYou && (
-              <button
-                className={`home-toggle-btn ${homeMode === "foryou" ? "active" : ""}`}
-                type="button"
-                onClick={() => onToggleMode("foryou")}
-              >
-                <Sparkles size={14} />
-                For You
+    <main className="home-shell full-width-layout">
+      {hero ? (
+        <div className="home-showcase full-width">
+          {/* Widescreen Hero Billboard */}
+          <section className="billboard-container">
+            <div className="billboard-video">
+              <TrailerFrame movie={hero} />
+            </div>
+            <div className="billboard-info">
+              <h2>{hero.title}</h2>
+              <div className="bb-meta">{heroMeta}</div>
+              <p>{heroOverview}</p>
+              <div className="bb-credits">
+                {directorLabel(hero) && (
+                  <span>
+                    Directed by <strong>{directorLabel(hero)}</strong>
+                  </span>
+                )}
+              </div>
+              <button className="bb-details-button" type="button" onClick={() => onOpenMovie(hero)}>
+                <Play size={14} />
+                View details
               </button>
-            )}
-            <button
-              className={`home-toggle-btn ${homeMode === "latest" ? "active" : ""}`}
-              type="button"
-              onClick={() => onToggleMode("latest")}
-            >
-              <Clock3 size={14} />
-              Latest
-            </button>
-            <button
-              className={`home-toggle-btn ${homeMode === "trending" ? "active" : ""}`}
-              type="button"
-              onClick={() => onToggleMode("trending")}
-            >
-              <TrendingUp size={14} />
-              Popular
-            </button>
-          </div>
+            </div>
+          </section>
 
-          {hero ? (
-            <>
-              <section className="billboard-container">
-                <div className="billboard-video">
-                  <TrailerFrame movie={hero} />
-                </div>
-                <div className="billboard-info">
-                  <h2>{hero.title}</h2>
-                  <div className="bb-meta">{heroMeta}</div>
-                  <p>{heroOverview}</p>
-                  <div className="bb-credits">
-                    {directorLabel(hero) && (
-                      <span>
-                        Directed by <strong>{directorLabel(hero)}</strong>
-                      </span>
-                    )}
-                  </div>
-                  <button className="bb-details-button" type="button" onClick={() => onOpenMovie(hero)}>
-                    <Play size={14} />
-                    View details
-                  </button>
-                </div>
-              </section>
-
+          {/* Cinematic Scrolling Rows (Netflix/Prime Style) */}
+          <div className="category-rows">
+            {/* Row 1: Popular & Trending */}
+            <div className="category-row">
+              <h3 className="category-title">Popular & Trending</h3>
               <div className="trending-strip">
-                {activeMovies.slice(0, 7).map((movie, index) => (
+                {movies.slice(0, 10).map((movie, index) => (
                   <button
-                    className={index === heroIndex ? "active" : ""}
+                    className={movie.id === hero.id ? "active" : ""}
                     type="button"
-                    key={`${movie.id}-${movie.title}`}
-                    onClick={() => onHeroIndex(index)}
+                    key={`trending-${movie.id}`}
+                    onClick={() => {
+                      onToggleMode("trending");
+                      onHeroIndex(index);
+                    }}
                     onDoubleClick={() => onOpenMovie(movie)}
                     title={movie.title}
                   >
@@ -1129,18 +1017,64 @@ function HomePage({
                   </button>
                 ))}
               </div>
-            </>
-          ) : (
-            <section className="billboard-container empty">
-              <div>
-                <Loader2 className={isLoading ? "spin" : undefined} size={28} />
-                <h2>{isLoading ? "Loading" : "Unavailable"}</h2>
-                <p>{error || "The recommendation service is warming up."}</p>
+            </div>
+
+            {/* Row 2: Personalized For You recommendations */}
+            {hasForYou && (
+              <div className="category-row">
+                <h3 className="category-title">Recommended For You</h3>
+                <div className="trending-strip">
+                  {forYouMovies.slice(0, 10).map((movie, index) => (
+                    <button
+                      className={movie.id === hero.id ? "active" : ""}
+                      type="button"
+                      key={`foryou-${movie.id}`}
+                      onClick={() => {
+                        onToggleMode("foryou");
+                        onHeroIndex(index);
+                      }}
+                      onDoubleClick={() => onOpenMovie(movie)}
+                      title={movie.title}
+                    >
+                      <img src={posterUrl(movie.poster_path)} alt={movie.title} loading="lazy" />
+                    </button>
+                  ))}
+                </div>
               </div>
-            </section>
-          )}
+            )}
+
+            {/* Row 3: Latest Releases */}
+            <div className="category-row">
+              <h3 className="category-title">Latest Releases</h3>
+              <div className="trending-strip">
+                {latestMovies.slice(0, 10).map((movie, index) => (
+                  <button
+                    className={movie.id === hero.id ? "active" : ""}
+                    type="button"
+                    key={`latest-${movie.id}`}
+                    onClick={() => {
+                      onToggleMode("latest");
+                      onHeroIndex(index);
+                    }}
+                    onDoubleClick={() => onOpenMovie(movie)}
+                    title={movie.title}
+                  >
+                    <img src={posterUrl(movie.poster_path)} alt={movie.title} loading="lazy" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
-      </section>
+      ) : (
+        <section className="billboard-container empty">
+          <div>
+            <Loader2 className={isLoading ? "spin" : undefined} size={28} />
+            <h2>{isLoading ? "Loading Showcase" : "Unavailable"}</h2>
+            <p>{error || "The recommendation service is warming up."}</p>
+          </div>
+        </section>
+      )}
     </main>
   );
 }
@@ -1217,7 +1151,6 @@ function App() {
   const [showAuthModal, setShowAuthModal] = React.useState(false);
   const [titles, setTitles] = React.useState<MovieTitle[]>([]);
   const [titleQuery, setTitleQuery] = React.useState("");
-  const [semanticQuery, setSemanticQuery] = React.useState("");
   const [mode, setMode] = React.useState<SearchMode>("title");
   const [selectedMovie, setSelectedMovie] = React.useState<Movie | null>(null);
   const [results, setResults] = React.useState<Movie[]>([]);
@@ -1258,13 +1191,12 @@ function App() {
   const loadedHomeShowcase = React.useRef(false);
   const _loadedForYou = React.useRef(false);
   const userStarted = React.useRef(false);
-
-  const activeQuery = mode === "title" ? titleQuery : semanticQuery;
+  const activeQuery = titleQuery;
   const hasTitleQuery = titleQuery.trim().length > 0;
   const selectedTitleLabel = selectedMovie ? selectTitleLabel(selectedMovie) : "";
   const isSelectedTitleQuery = Boolean(selectedMovie && titleQuery === selectedTitleLabel);
   const isEditingTitle = Boolean(selectedMovie && hasTitleQuery && !isSelectedTitleQuery);
-  const showTitleSuggestions = titleSelectOpen || (hasTitleQuery && !isSelectedTitleQuery);
+  const showTitleSuggestions = titleSelectOpen && hasTitleQuery && !isSelectedTitleQuery;
   const showNotice = catalogState !== "ready";
 
   const filteredTitles = React.useMemo(() => {
@@ -1539,6 +1471,26 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [catalogState]);
 
+  React.useEffect(() => {
+    if (mode !== "title") return;
+    const query = titleQuery.trim();
+    if (!query) {
+      setResults([]);
+      setResultsKind("idle");
+      return;
+    }
+    if (selectedMovie && query === selectTitleLabel(selectedMovie)) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void runSearch("title");
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [titleQuery, mode]);
+
   async function chooseTitle(
     item: MovieTitle,
     options: { track?: boolean; autoRecommend?: boolean } = {},
@@ -1570,19 +1522,13 @@ function App() {
   }
 
   async function runSearch(searchMode: SearchMode = mode, queryOverride?: string) {
-    const query = (queryOverride ?? (searchMode === "title" ? titleQuery : semanticQuery)).trim();
+    const query = (queryOverride ?? titleQuery).trim();
     if (!query) return;
 
     if (searchMode === "title" && !queryOverride && isSelectedTitleQuery && selectedMovie) {
       await recommend(selectedMovie);
       return;
     }
-
-    if (searchMode === "title" && !queryOverride && filteredTitles.length > 0) {
-      await chooseTitle(filteredTitles[0]);
-      return;
-    }
-
     setIsSearching(true);
     setNotice(searchMode === "semantic" ? "Searching by intent" : "Searching catalog");
     setResults([]);
@@ -1692,64 +1638,10 @@ function App() {
 
   const catalogValue = platform?.movie_count || titles.length;
   const rankerValue = platform?.ranker?.available ? "Learned" : "Hybrid";
-
-  if (page === "home") {
-    return (
-      <>
-        <div style={{ position: "absolute", top: "24px", right: "32px", zIndex: 1000 }}>
-          {username && (
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#e5e7eb", background: "rgba(0,0,0,0.6)", padding: "4px 12px", borderRadius: "20px", border: "1px solid rgba(255,255,255,0.1)", fontSize: "0.85rem", backdropFilter: "blur(10px)" }}>
-              <button onClick={() => setPage("profile")} style={{ background: "transparent", border: "none", color: "white", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", padding: 0 }}>
-                <User size={14} /> Hi, <strong>{username}</strong>
-              </button>
-              <button className="icon-button" onClick={() => {
-                  window.localStorage.removeItem("nova_jwt_token");
-                  window.localStorage.removeItem("nova_username");
-                  setToken(null);
-                  setUsername(null);
-              }} title="Logout" style={{ marginLeft: "4px", opacity: 0.7, background: "transparent", border: "none", color: "white", cursor: "pointer" }}>
-                <LogOut size={14} />
-              </button>
-            </div>
-          )}
-        </div>
-        <HomePage
-          movies={homeMovies}
-          heroIndex={homeHeroIndex}
-          loading={homeLoading}
-          error={homeError}
-          onHeroIndex={setHomeHeroIndex}
-          onSearch={openSearch}
-          onOpenMovie={setDialogMovie}
-          onDashboard={() => setPage("dashboard")}
-          onEvaluation={() => setPage("evaluation")}
-          onProfile={() => setPage("profile")}
-          onAdmin={() => setPage("admin")}
-          onSignIn={() => setShowAuthModal(true)}
-          username={username}
-          recentMovies={recentMovies}
-          forYouMovies={forYouMovies}
-          forYouLoading={forYouLoading}
-          latestMovies={latestMovies}
-          latestLoading={latestLoading}
-          homeMode={homeMode}
-          onToggleMode={(mode) => { setHomeMode(mode); setHomeHeroIndex(0); }}
-        />
-        {dialogMovie && <MovieDialog movie={dialogMovie} onClose={() => setDialogMovie(null)} />}
-        {showAuthModal && (
-          <AuthModal
-            onLogin={(tok, user) => { setToken(tok); setUsername(user); setShowAuthModal(false); }}
-            onClose={() => setShowAuthModal(false)}
-          />
-        )}
-      </>
-    );
-  }
-
-  // ── Shared inner-page shell (Dashboard / KG / Evaluation / Profile / Admin) ──
   const innerPages: AppPage[] = ["dashboard", "knowledge-graph", "evaluation", "profile", "admin"];
+  const isAppPage = ["home", "search", ...innerPages].includes(page);
 
-  // ── Full-screen pages (no tab shell) ────────────────────────────────────
+  // ── Full-screen marketing pages (no app shell) ───────────────────────────
   if (page === "landing") {
     return <LandingPage onNavigate={(p) => setPage(p as AppPage)} />;
   }
@@ -1771,146 +1663,58 @@ function App() {
     return <StatusPage />;
   }
 
-  if (innerPages.includes(page)) {
-    const tabs: { id: AppPage; label: string; icon: React.ReactNode }[] = [
-      { id: "dashboard", label: "Dashboard", icon: <Activity size={14} /> },
-      { id: "knowledge-graph", label: "Knowledge Graph", icon: <Sparkles size={14} /> },
-      { id: "evaluation", label: "Evaluation", icon: <BarChart3 size={14} /> },
-      { id: "profile", label: "Profile", icon: <User size={14} /> },
-      { id: "admin", label: "Admin", icon: <Server size={14} /> },
+  // ── App Shell Pages (Browse, Search, Dashboard, KG, Eval, Profile, Admin) ─
+  if (isAppPage) {
+    const navLinks = [
+      { id: "home", label: "Browse" },
+      { id: "search", label: "Search" },
+      { id: "dashboard", label: "Dashboard" },
+      { id: "knowledge-graph", label: "Knowledge Graph" },
+      { id: "evaluation", label: "Evaluation" },
+      { id: "profile", label: "Profile" },
+      { id: "admin", label: "Admin" },
     ];
 
     return (
-      <main className="app-shell" id="main-content">
+      <div className="app-container" id="main-content">
         <a href="#main-content" className="skip-link">Skip to main content</a>
+        
+        {/* Unified Sticky top navigation header */}
         <header className="topbar">
-          <button className="home-button" type="button" onClick={openHome} aria-label="Go to home">
-            <House size={18} aria-hidden="true" /> Home
-          </button>
-          <nav className="topbar-nav" aria-label="Main navigation">
-            <button type="button" className="topbar-link" onClick={() => setPage("getting-started")}>Quickstart</button>
-            <button type="button" className="topbar-link" onClick={() => setPage("pricing")}>Pricing</button>
-            <button type="button" className="topbar-link" onClick={() => setPage("status")}>Status</button>
-          </nav>
-          <div className="topbar-actions">
-            {username && (
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#e5e7eb", background: "rgba(255,255,255,0.05)", padding: "4px 12px", borderRadius: "20px", border: "1px solid rgba(255,255,255,0.1)", fontSize: "0.85rem" }}>
-                <User size={14} aria-hidden="true" /> Hi, <strong>{username}</strong>
-                <button className="icon-button" onClick={() => {
-                  window.localStorage.removeItem("nova_jwt_token");
-                  window.localStorage.removeItem("nova_username");
-                  setToken(null); setUsername(null);
-                }} title="Logout" aria-label="Logout" style={{ marginLeft: "4px", opacity: 0.7 }}>
-                  <LogOut size={14} aria-hidden="true" />
+          <div className="topbar-left">
+            <button className="brand-logo" type="button" onClick={openHome} aria-label="NOVA Home">NOVA</button>
+            <nav className="topbar-links" aria-label="Main navigation">
+              {navLinks.map((link) => (
+                <button
+                  key={link.id}
+                  className={`topbar-link ${page === link.id ? "active" : ""}`}
+                  type="button"
+                  onClick={() => {
+                    if (link.id === "home") openHome();
+                    else if (link.id === "search") openSearch();
+                    else setPage(link.id as AppPage);
+                  }}
+                >
+                  {link.label}
                 </button>
-              </div>
-            )}
+              ))}
+            </nav>
           </div>
-        </header>
-
-        <nav className="page-tabs" aria-label="Application sections" style={{ margin: "16px 0" }}>
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              className={`page-tab ${page === tab.id ? "active" : ""}`}
-              type="button"
-              onClick={() => setPage(tab.id)}
-              aria-current={page === tab.id ? "page" : undefined}
-            >
-              {tab.icon}
-              {tab.label}
-            </button>
-          ))}
-        </nav>
-
-        {page === "dashboard" && <ErrorBoundary><Dashboard /></ErrorBoundary>}
-        {page === "knowledge-graph" && <ErrorBoundary><KnowledgeGraphPage titles={titles} /></ErrorBoundary>}
-        {page === "evaluation" && <ErrorBoundary><EvaluationPage /></ErrorBoundary>}
-        {page === "profile" && (
-          <ErrorBoundary>
-            <UserProfilePage
-              token={token}
-              username={username}
-              onRequestLogin={() => setShowAuthModal(true)}
-              onSelectMovie={(movie) => { setDialogMovie(movie); }}
-            />
-          </ErrorBoundary>
-        )}
-        {page === "admin" && <ErrorBoundary><AdminPanel token={token} /></ErrorBoundary>}
-
-        {dialogMovie && <MovieDialog movie={dialogMovie} onClose={() => setDialogMovie(null)} />}
-        {showAuthModal && (
-          <AuthModal
-            onLogin={(tok, user) => { setToken(tok); setUsername(user); setShowAuthModal(false); }}
-            onClose={() => setShowAuthModal(false)}
-          />
-        )}
-      </main>
-    );
-  }
-
-  return (
-    <main className="app-shell" id="main-content">
-      <header className="topbar">
-        <button
-          className="home-button"
-          type="button"
-          onClick={openHome}
-        >
-          <House size={18} />
-          Home
-        </button>
-        <div className="topbar-actions">
-          <StatusBadge state={catalogState} backend={backend} />
-          <button
-            className="icon-button"
-            type="button"
-            onClick={() => {
-              void bootstrap(true);
-              if (catalogState === "ready") loadOperationalSignals();
-            }}
-            title="Refresh catalog and readiness"
-          >
-            <RefreshCw size={18} />
-          </button>
-        </div>
-      </header>
-
-      <section className="metrics-strip" aria-label="Platform snapshot">
-        <MetricTile icon={<Database size={18} />} label="Catalog" value={catalogValue ? catalogValue.toLocaleString() : "Loading"} />
-        <MetricTile icon={<Server size={18} />} label="Readiness" value={readinessLabel(readinessReport)} />
-        <MetricTile icon={<BarChart3 size={18} />} label="Ranking" value={rankerValue} />
-        <MetricTile icon={<Gauge size={18} />} label="Quality" value={qualityLabel(qualityReport)} />
-        <MetricTile icon={<Activity size={18} />} label="Artifacts" value={healthLabel(artifactReport)} />
-      </section>
-
-      <section className="workspace">
-        <aside className="control-panel">
-          <div className="control-heading">
-            <Search size={54} />
-            <h1>Search & Discover</h1>
-          </div>
-
-          <label className="field-label" htmlFor="title-search">
-            Search by title
-          </label>
-          <div
-            className="title-select"
-            ref={titleSelectRef}
-            onBlur={(event) => {
-              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-                setTitleSelectOpen(false);
-              }
-            }}
-          >
-            <div className="search-box title-select-box">
+          <div className="topbar-right">
+            {/* Header Search Box */}
+            <div className="topbar-search">
+              {mode === "semantic" ? <Sparkles size={14} className="mode-icon-semantic" /> : <Search size={14} />}
               <input
-                id="title-search"
+                type="text"
+                placeholder={mode === "title" ? "Search movies..." : "Search by plot/desc..."}
                 value={titleQuery}
                 onChange={(event) => {
                   userStarted.current = true;
-                  setMode("title");
+                  setMode(mode);
                   setTitleQuery(event.target.value);
+                  if (page !== "search") {
+                    setPage("search");
+                  }
                   setTitleSelectOpen(true);
                   if (selectedMovie && event.target.value !== selectedTitleLabel) {
                     setSelectedMovie(null);
@@ -1921,7 +1725,12 @@ function App() {
                     setLastRecommendationRequestId(null);
                   }
                 }}
-                onFocus={() => setTitleSelectOpen(true)}
+                onFocus={() => {
+                  if (page !== "search") {
+                    setPage("search");
+                  }
+                  setTitleSelectOpen(true);
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Escape") {
                     setTitleSelectOpen(false);
@@ -1929,17 +1738,36 @@ function App() {
                   }
                   if (event.key === "Enter") {
                     event.preventDefault();
-                    if (filteredTitles[0]) void chooseTitle(filteredTitles[0]);
-                    else void runSearch("title");
+                    setTitleSelectOpen(false);
+                    void runSearch(mode);
                   }
                 }}
-                placeholder="e.g. Inception, Avatar, The Dark Knight..."
               />
-              {hasTitleQuery && (
+              <button
+                className={`header-mode-toggle ${mode === "semantic" ? "semantic-active" : ""}`}
+                type="button"
+                title={mode === "title" ? "Switch to AI/Plot search" : "Switch to Title search"}
+                onClick={() => {
+                  setMode(mode === "title" ? "semantic" : "title");
+                }}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: mode === "semantic" ? "#a78bfa" : "var(--quiet)",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  padding: "4px",
+                  borderRadius: "50%",
+                  transition: "all 0.2s ease"
+                }}
+              >
+                <Sparkles size={14} />
+              </button>
+              {titleQuery && (
                 <button
-                  className="clear-title"
+                  className="clear-search-btn"
                   type="button"
-                  aria-label="Clear selected title"
                   onClick={() => {
                     userStarted.current = true;
                     setTitleQuery("");
@@ -1951,155 +1779,441 @@ function App() {
                     setLastRecommendationRequestId(null);
                     setTitleSelectOpen(true);
                   }}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--quiet)",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    padding: "2px"
+                  }}
                 >
-                  <X size={16} />
+                  <X size={14} />
                 </button>
               )}
-              <button
-                className="select-chevron"
-                type="button"
-                aria-label="Open movie title options"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => setTitleSelectOpen((open) => !open)}
-              >
-                <ChevronDown size={19} />
-              </button>
             </div>
-
-            {showTitleSuggestions && (
-              <div className="title-list streamlit-title-list">
-                {titles.length === 0 && catalogState !== "ready" && <span className="quiet-line">Loading movie catalog...</span>}
-                {filteredTitles.slice(0, 12).map((item) => (
-                  <button
-                    type="button"
-                    key={`${item.id}-${item.title}`}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => void chooseTitle(item)}
-                  >
-                    {item.title}
-                  </button>
-                ))}
-                {titles.length > 0 && filteredTitles.length === 0 && <span className="quiet-line">No title match. Try semantic search below.</span>}
+            <StatusBadge state={catalogState} backend={backend} />
+            <button
+              className="icon-button"
+              type="button"
+              onClick={() => {
+                void bootstrap(true);
+                if (catalogState === "ready") loadOperationalSignals();
+              }}
+              title="Refresh catalog"
+            >
+              <RefreshCw size={16} />
+            </button>
+            {username ? (
+              <div className="user-profile-menu">
+                <button className="profile-btn" type="button" onClick={() => setPage("profile")}>
+                  <User size={14} aria-hidden="true" /> Hi, <strong>{username}</strong>
+                </button>
+                <button
+                  className="logout-btn"
+                  type="button"
+                  onClick={() => {
+                    window.localStorage.removeItem("nova_jwt_token");
+                    window.localStorage.removeItem("nova_username");
+                    setToken(null);
+                    setUsername(null);
+                    openHome();
+                  }}
+                  title="Logout"
+                  aria-label="Logout"
+                >
+                  <LogOut size={14} aria-hidden="true" />
+                </button>
               </div>
+            ) : (
+              <button className="signin-nav-btn" type="button" onClick={() => setShowAuthModal(true)}>
+                Sign In
+              </button>
             )}
           </div>
+        </header>
 
-          {showNotice && (
-            <div className={`notice ${catalogState}`}>
-              <span>{notice}</span>
-              <button type="button" onClick={() => void bootstrap(true)}>
-                Retry now
-              </button>
-            </div>
-          )}
-
-          <details className="semantic-expander">
-            <summary>
-              <Search size={18} />
-              <span>Search by plot, genre, or description</span>
-            </summary>
-            <div className="semantic-body">
-              <p>Can&apos;t find the title? Describe the movie by mood, plot, genre, or viewing intent.</p>
-              <div className="search-box">
-                <Sparkles size={18} />
-                <input
-                  id="semantic-search"
-                  value={semanticQuery}
-                  onChange={(event) => {
-                    userStarted.current = true;
-                    setMode("semantic");
-                    setSemanticQuery(event.target.value);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") void runSearch("semantic");
-                  }}
-                  placeholder="time travel heist, alien civilization, romantic comedy in Paris"
-                />
-              </div>
-              <button className="secondary-action" type="button" onClick={() => void runSearch("semantic")} disabled={isSearching || isSelecting}>
-                {isSearching || isSelecting ? <Loader2 size={18} className="spin" /> : <Sparkles size={18} />}
-                Search by intent
-              </button>
-            </div>
-          </details>
-
-          <details className="ops-details">
-            <summary>
-              <span>Platform signals</span>
-              <small>{readinessLabel(readinessReport)} readiness</small>
-            </summary>
-            <div className="ops-stack">
-              <ReadinessPanel report={readinessReport} loading={signalsLoading} onRefresh={loadOperationalSignals} />
-              <DiagnosticsPanel health={artifactReport} />
-              <QualityPanel report={qualityReport} />
-            </div>
-          </details>
-
-          {!hasTitleQuery && recentMovies.length > 0 && (
-            <div className="recent-strip">
-              <div className="section-mini-title">
-                <span>Recent picks</span>
-                <small>Seed</small>
-              </div>
-              <div className="recent-list">
-                {recentMovies.map((movie) => (
-                  <button type="button" key={`${movie.id}-${movie.title}`} onClick={() => selectMovie(movie, "recent_pick")}>
-                    <img src={posterUrl(movie.poster_path)} alt="" loading="lazy" />
-                    <span>{movie.title}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </aside>
-
-        <section className="result-panel">
-          {selectedMovie && !isEditingTitle ? (
-            <MovieSpotlight
-              movie={selectedMovie}
-              loading={loadingRecs}
-              onRecommend={() => void recommend()}
-              userId={username}
-              sessionId={sessionId}
+        <div className="app-content-area">
+          {page === "home" && (
+            <HomePage
+              movies={homeMovies}
+              heroIndex={homeHeroIndex}
+              loading={homeLoading}
+              error={homeError}
+              onHeroIndex={setHomeHeroIndex}
+              onOpenMovie={setDialogMovie}
+              recentMovies={recentMovies}
+              forYouMovies={forYouMovies}
+              forYouLoading={forYouLoading}
+              latestMovies={latestMovies}
+              latestLoading={latestLoading}
+              homeMode={homeMode}
+              onToggleMode={setHomeMode}
             />
-          ) : null}
-
-          {results.length > 0 && (
-            <section className="results-section">
-              <div className="section-title">
-                <div>
-                  <span>{resultsKind === "recommendations" ? "Ranked set" : "Catalog results"}</span>
-                  <h2>{resultHeading}</h2>
-                  {feedbackNotice && <small className="feedback-status">{feedbackNotice}</small>}
-                </div>
-                <strong>{results.length} titles</strong>
-              </div>
-              <ResultContextBar
-                kind={resultsKind}
-                backend={backend}
-                sourceMovie={recommendationSource || selectedMovie}
-                requestId={lastRecommendationRequestId}
-                query={activeQuery}
-              />
-              <div className="poster-grid">
-                {results.map((movie, index) => (
-                  <RecommendationCard
-                    key={`${movie.id}-${movie.title}`}
-                    movie={movie}
-                    rank={index + 1}
-                    onSelect={selectResultMovie}
-                    feedback={feedbackByMovieId[movie.id]}
-                    onFeedback={recordFeedback}
-                  />
-                ))}
-              </div>
-            </section>
           )}
-        </section>
-      </section>
-      {dialogMovie && <MovieDialog movie={dialogMovie} onClose={() => setDialogMovie(null)} />}
-    </main>
-  );
+
+          {page === "search" && (
+            <main className="search-page-layout">
+              <section className="metrics-strip" aria-label="Platform snapshot">
+                <MetricTile icon={<Database size={18} />} label="Catalog" value={catalogValue ? catalogValue.toLocaleString() : "Loading"} />
+                <MetricTile icon={<Server size={18} />} label="Readiness" value={readinessLabel(readinessReport)} />
+                <MetricTile icon={<BarChart3 size={18} />} label="Ranking" value={rankerValue} />
+                <MetricTile icon={<Gauge size={18} />} label="Quality" value={qualityLabel(qualityReport)} />
+                <MetricTile icon={<Activity size={18} />} label="Artifacts" value={healthLabel(artifactReport)} />
+              </section>
+
+              <section className="workspace">
+                <div className="control-panel">
+                  {isEmbedded && (
+                    <button
+                      type="button"
+                      className="back-button"
+                      onClick={openHome}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        padding: "8px 16px",
+                        background: "rgba(255, 255, 255, 0.05)",
+                        border: "1px solid rgba(255, 255, 255, 0.1)",
+                        borderRadius: "20px",
+                        color: "#e3e0f8",
+                        cursor: "pointer",
+                        marginBottom: "16px",
+                        fontFamily: "var(--font-label, sans-serif)",
+                        fontSize: "0.85rem",
+                        transition: "all 0.2s ease"
+                      }}
+                    >
+                      <House size={14} /> Back to Home
+                    </button>
+                  )}
+                  <div className="control-heading">
+                    <Search size={44} />
+                    <h1>{mode === "title" ? "Search & Discover" : "AI Semantic Search"}</h1>
+                  </div>
+
+                  <div
+                    className="title-select"
+                    ref={titleSelectRef}
+                    onBlur={(event) => {
+                      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                        setTitleSelectOpen(false);
+                      }
+                    }}
+                  >
+                    <div className="search-box title-select-box">
+                      {mode === "semantic" ? <Sparkles size={16} className="mode-icon-semantic" /> : <Search size={16} />}
+                      <input
+                        id="title-search"
+                        value={titleQuery}
+                        onChange={(event) => {
+                          userStarted.current = true;
+                          setMode(mode);
+                          setTitleQuery(event.target.value);
+                          setTitleSelectOpen(true);
+                          if (selectedMovie && event.target.value !== selectedTitleLabel) {
+                            setSelectedMovie(null);
+                            setResults([]);
+                            setResultsKind("idle");
+                            setRecommendationSource(null);
+                            setDialogMovie(null);
+                            setLastRecommendationRequestId(null);
+                          }
+                        }}
+                        onFocus={() => setTitleSelectOpen(true)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") {
+                            setTitleSelectOpen(false);
+                            return;
+                          }
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            setTitleSelectOpen(false);
+                            void runSearch(mode);
+                          }
+                        }}
+                        placeholder={mode === "title" ? "Search by title, e.g. Inception..." : "Describe a plot, mood, or genre..."}
+                      />
+                      {/* Mode Toggle Button inside Search Box */}
+                      <button
+                        className={`mode-toggle-btn ${mode === "semantic" ? "semantic-active" : ""}`}
+                        type="button"
+                        title={mode === "title" ? "Switch to AI/Plot search" : "Switch to Title search"}
+                        onClick={() => {
+                          setMode(mode === "title" ? "semantic" : "title");
+                        }}
+                      >
+                        {mode === "semantic" ? <Sparkles size={14} /> : <Search size={14} />}
+                        <span>{mode === "title" ? "Title Search" : "AI Search"}</span>
+                      </button>
+                      {hasTitleQuery && (
+                        <button
+                          className="clear-title"
+                          type="button"
+                          aria-label="Clear selected title"
+                          onClick={() => {
+                            userStarted.current = true;
+                            setTitleQuery("");
+                            setSelectedMovie(null);
+                            setResults([]);
+                            setResultsKind("idle");
+                            setRecommendationSource(null);
+                            setDialogMovie(null);
+                            setLastRecommendationRequestId(null);
+                            setTitleSelectOpen(true);
+                          }}
+                        >
+                          <X size={16} />
+                        </button>
+                      )}
+                      <button
+                        className="search-btn"
+                        type="button"
+                        onClick={() => runSearch(mode)}
+                        aria-label="Search"
+                      >
+                        <Search size={16} />
+                      </button>
+                    </div>
+
+                    {showTitleSuggestions && mode === "title" && (
+                      <div className="title-list streamlit-title-list">
+                        {titles.length === 0 && catalogState !== "ready" && <span className="quiet-line">Loading movie catalog...</span>}
+                        {filteredTitles.slice(0, 12).map((item) => (
+                          <button
+                            type="button"
+                            key={`${item.id}-${item.title}`}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => void chooseTitle(item, { autoRecommend: true })}
+                          >
+                            {item.title}
+                          </button>
+                        ))}
+                        {titles.length > 0 && filteredTitles.length === 0 && <span className="quiet-line">No title match. Try AI search mode.</span>}
+                      </div>
+                    )}
+                  </div>
+
+                  {showNotice && (
+                    <div className={`notice ${catalogState}`}>
+                      <span>{notice}</span>
+                      <button type="button" onClick={() => void bootstrap(true)}>
+                        Retry now
+                      </button>
+                    </div>
+                  )}
+
+                  <details className="ops-details">
+                    <summary>
+                      <span>Platform signals</span>
+                      <small>{readinessLabel(readinessReport)} readiness</small>
+                    </summary>
+                    <div className="ops-stack">
+                      <ReadinessPanel report={readinessReport} loading={signalsLoading} onRefresh={loadOperationalSignals} />
+                      <DiagnosticsPanel health={artifactReport} />
+                      <QualityPanel report={qualityReport} />
+                    </div>
+                  </details>
+                </div>
+
+                <div className="result-panel">
+                  {selectedMovie && !isEditingTitle ? (
+                    <MovieSpotlight
+                      movie={selectedMovie}
+                      loading={loadingRecs}
+                      onRecommend={() => void recommend()}
+                      userId={username}
+                      sessionId={sessionId}
+                    />
+                  ) : null}
+
+                  {loadingRecs ? (
+                    <section className="results-section">
+                      <div className="section-title">
+                        <div>
+                          <span>Ensemble pipeline</span>
+                          <h2>Generating recommendations...</h2>
+                        </div>
+                      </div>
+                      <div className="poster-grid">
+                        {Array.from({ length: 6 }).map((_, index) => (
+                          <div key={index} className="recommendation-card skeleton-card" style={{ height: "380px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "16px", padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                            <div className="skeleton" style={{ height: "180px", borderRadius: "12px" }}></div>
+                            <div className="skeleton" style={{ height: "24px", width: "80%", borderRadius: "6px" }}></div>
+                            <div className="skeleton" style={{ height: "16px", width: "40%", borderRadius: "4px" }}></div>
+                            <div className="skeleton" style={{ height: "48px", width: "100%", borderRadius: "8px" }}></div>
+                            <div style={{ display: "flex", gap: "8px", marginTop: "auto" }}>
+                              <div className="skeleton" style={{ height: "28px", width: "70px", borderRadius: "20px" }}></div>
+                              <div className="skeleton" style={{ height: "28px", width: "70px", borderRadius: "20px" }}></div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  ) : results.length > 0 ? (
+                    <section className="results-section">
+                      <div className="section-title">
+                        <div>
+                          <span>{resultsKind === "recommendations" ? "Ranked set" : "Catalog results"}</span>
+                          <h2>{resultHeading}</h2>
+                          {feedbackNotice && <small className="feedback-status">{feedbackNotice}</small>}
+                        </div>
+                        <strong>{results.length} titles</strong>
+                      </div>
+                      <ResultContextBar
+                        kind={resultsKind}
+                        backend={backend}
+                        sourceMovie={recommendationSource || selectedMovie}
+                        requestId={lastRecommendationRequestId}
+                        query={activeQuery}
+                      />
+                      <div className="poster-grid">
+                        {results.map((movie, index) => (
+                          <RecommendationCard
+                            key={`${movie.id}-${movie.title}`}
+                            movie={movie}
+                            rank={index + 1}
+                            onSelect={selectResultMovie}
+                            feedback={feedbackByMovieId[movie.id]}
+                            onFeedback={recordFeedback}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  ) : results.length === 0 && titleQuery.trim() && !isSearching && !isSelecting ? (
+                    <section className="results-section no-results">
+                      <div style={{ textAlign: "center", padding: "48px 24px", color: "var(--muted)" }}>
+                        <Film size={48} style={{ marginBottom: "16px", opacity: 0.5 }} />
+                        <h3>No matches found for &quot;{titleQuery}&quot;</h3>
+                        <p style={{ fontSize: "0.9rem" }}>Try checking your spelling or describe a plot using our AI Search mode!</p>
+                      </div>
+                    </section>
+                  ) : !titleQuery.trim() ? (
+                    <section className="results-section">
+                      <div className="section-title">
+                        <div>
+                          <span>Trending</span>
+                          <h2>Popular Searches</h2>
+                        </div>
+                      </div>
+                      <div className="poster-grid">
+                        {latestMovies.slice(0, 6).map((movie) => (
+                          <button
+                            type="button"
+                            key={`popular-${movie.id}`}
+                            className="popular-search-card"
+                            onClick={() => {
+                              setTitleQuery(selectTitleLabel(movie));
+                              selectMovie(movie, "title_search");
+                              void recommend(movie);
+                            }}
+                            style={{
+                              background: "rgba(255,255,255,0.02)",
+                              border: "1px solid rgba(255,255,255,0.05)",
+                              borderRadius: "16px",
+                              padding: "12px",
+                              cursor: "pointer",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "8px",
+                              textAlign: "left",
+                              transition: "all 0.2s ease"
+                            }}
+                          >
+                            <img
+                              src={posterUrl(movie.poster_path)}
+                              alt={movie.title}
+                              style={{ width: "100%", aspectRatio: "2/3", objectFit: "cover", borderRadius: "10px" }}
+                            />
+                            <strong style={{ fontSize: "0.9rem", color: "#fff", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{movie.title}</strong>
+                            <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>{movieYear(movie)}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {recentMovies.length > 0 && (
+                        <div className="recent-picks-section" style={{ marginTop: "24px" }}>
+                          <div className="section-title" style={{ marginBottom: "12px" }}>
+                            <div>
+                              <span>Recent</span>
+                              <h2>Recent Picks</h2>
+                            </div>
+                          </div>
+                          <div className="recent-list" style={{ display: "flex", gap: "12px", overflowX: "auto", paddingBottom: "8px" }}>
+                            {recentMovies.map((movie) => (
+                              <button
+                                type="button"
+                                key={`recent-${movie.id}`}
+                                onClick={() => {
+                                  setTitleQuery(selectTitleLabel(movie));
+                                  selectMovie(movie, "recent_pick");
+                                  void recommend(movie);
+                                }}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "12px",
+                                  padding: "8px 16px",
+                                  background: "rgba(255, 255, 255, 0.02)",
+                                  border: "1px solid rgba(255, 255, 255, 0.05)",
+                                  borderRadius: "12px",
+                                  cursor: "pointer",
+                                  flex: "0 0 auto",
+                                  maxWidth: "240px",
+                                  textAlign: "left"
+                                }}
+                              >
+                                <img
+                                  src={posterUrl(movie.poster_path)}
+                                  alt=""
+                                  loading="lazy"
+                                  style={{ width: "32px", aspectRatio: "2/3", objectFit: "cover", borderRadius: "4px" }}
+                                />
+                                <span style={{ fontSize: "0.85rem", color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{movie.title}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </section>
+                  ) : null}
+                </div>
+              </section>
+            </main>
+          )}
+
+          {page === "dashboard" && <main className="app-shell inner-shell"><ErrorBoundary><Dashboard /></ErrorBoundary></main>}
+          {page === "knowledge-graph" && <main className="app-shell inner-shell"><ErrorBoundary><KnowledgeGraphPage titles={titles} /></ErrorBoundary></main>}
+          {page === "evaluation" && <main className="app-shell inner-shell"><ErrorBoundary><EvaluationPage /></ErrorBoundary></main>}
+          {page === "profile" && (
+            <main className="app-shell inner-shell">
+              <ErrorBoundary>
+                <UserProfilePage
+                  token={token}
+                  username={username}
+                  onRequestLogin={() => setShowAuthModal(true)}
+                  onSelectMovie={(movie) => { setDialogMovie(movie); }}
+                />
+              </ErrorBoundary>
+            </main>
+          )}
+          {page === "admin" && <main className="app-shell inner-shell"><ErrorBoundary><AdminPanel token={token} /></ErrorBoundary></main>}
+        </div>
+
+        {dialogMovie && <MovieDialog movie={dialogMovie} onClose={() => setDialogMovie(null)} />}
+        {showAuthModal && (
+          <AuthModal
+            onLogin={(tok, user) => { setToken(tok); setUsername(user); setShowAuthModal(false); }}
+            onClose={() => setShowAuthModal(false)}
+          />
+        )}
+      </div>
+    );
+  }
+
+  return null;
 }
 
 createRoot(document.getElementById("root")!).render(

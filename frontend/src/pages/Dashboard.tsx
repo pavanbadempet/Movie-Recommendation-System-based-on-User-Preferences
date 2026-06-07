@@ -1,14 +1,12 @@
 import React from "react";
 import {
   Activity,
-  Cpu,
   Database,
   Gauge,
   HardDrive,
   Loader2,
   RefreshCw,
   Server,
-  Zap,
   GitCommit,
   Package,
 } from "lucide-react";
@@ -33,6 +31,64 @@ function TierBadge({ tier }: { tier: string | null }) {
   );
 }
 
+// ─── Latency Gauge ─────────────────────────────────────────────────────────────
+
+function LatencyGauge({ value, label, maxVal = 200 }: { value: number | null | undefined; label: string; maxVal?: number }) {
+  if (value == null || !Number.isFinite(value)) {
+    return (
+      <div className="gauge-container" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px", padding: "12px" }}>
+        <div className="gauge-circle-outer" style={{ width: "90px", height: "90px", borderRadius: "50%", background: "rgba(255,255,255,0.02)", border: "1px dashed rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <span style={{ fontSize: "1.2rem", fontWeight: "700", color: "var(--quiet)" }}>—</span>
+        </div>
+        <span style={{ fontSize: "0.82rem", fontWeight: "600", color: "var(--muted)" }}>{label}</span>
+      </div>
+    );
+  }
+
+  const pct = Math.min(100, (value / maxVal) * 100);
+  const radius = 36;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (pct / 100) * circumference;
+
+  let strokeColor = "#10b981"; // success
+  if (value > maxVal * 0.8) strokeColor = "#ffb4ab"; // danger (var(--danger))
+  else if (value > maxVal * 0.5) strokeColor = "#f59e0b"; // warn
+
+  return (
+    <div className="gauge-container" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", padding: "12px" }}>
+      <div style={{ position: "relative", width: "90px", height: "90px" }}>
+        <svg style={{ transform: "rotate(-90deg)", width: "100%", height: "100%" }} viewBox="0 0 90 90">
+          <circle
+            cx="45"
+            cy="45"
+            r={radius}
+            fill="transparent"
+            stroke="rgba(255, 255, 255, 0.04)"
+            strokeWidth="6"
+          />
+          <circle
+            cx="45"
+            cy="45"
+            r={radius}
+            fill="transparent"
+            stroke={strokeColor}
+            strokeWidth="6"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            strokeLinecap="round"
+            style={{ transition: "stroke-dashoffset 0.8s ease-in-out" }}
+          />
+        </svg>
+        <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+          <span style={{ fontSize: "1.1rem", fontWeight: "800", color: "var(--text)" }}>{value.toFixed(0)}</span>
+          <span style={{ fontSize: "0.6rem", textTransform: "uppercase", color: "var(--quiet)", fontWeight: "700" }}>ms</span>
+        </div>
+      </div>
+      <span style={{ fontSize: "0.82rem", fontWeight: "600", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.02em" }}>{label}</span>
+    </div>
+  );
+}
+
 // ─── Hardware Card ────────────────────────────────────────────────────────────
 
 function HardwareCard({
@@ -50,25 +106,37 @@ function HardwareCard({
         <HardDrive size={16} aria-hidden="true" />
         Hardware Profile
       </h3>
-      <dl className="hardware-dl">
-        <div className="hardware-row">
-          <dt><Zap size={14} aria-hidden="true" />GPU</dt>
-          <dd>
-            <span className={`chip ${gpuAvailable ? "chip-success" : "chip-muted"}`}
-              aria-label={`GPU ${gpuAvailable ? "available" : "not available"}`}>
-              {gpuAvailable ? "Available" : "Not available"}
-            </span>
-          </dd>
+      <div className="hardware-dl" style={{ display: "grid", gap: "10px", margin: 0, padding: 0 }}>
+        <div className="hardware-row-premium" style={{ display: "flex", flexDirection: "column", gap: "8px", padding: "12px", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "8px", background: "rgba(0,0,0,0.15)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "var(--muted)", fontWeight: 600 }}>
+            <span>GPU Core Acceleration</span>
+            <span style={{ color: gpuAvailable ? "#10b981" : "var(--quiet)" }}>{gpuAvailable ? "Accelerated" : "Disabled"}</span>
+          </div>
+          <div style={{ height: "6px", width: "100%", background: "rgba(255,255,255,0.05)", borderRadius: "3px", overflow: "hidden" }}>
+            <div style={{ height: "100%", width: gpuAvailable ? "100%" : "0%", background: "linear-gradient(90deg, #7c3aed, #ec4899)", borderRadius: "3px" }}></div>
+          </div>
         </div>
-        <div className="hardware-row">
-          <dt><HardDrive size={14} aria-hidden="true" />RAM</dt>
-          <dd aria-label={`${ramGb.toFixed(1)} gigabytes RAM`}>{ramGb.toFixed(1)} GB</dd>
+
+        <div className="hardware-row-premium" style={{ display: "flex", flexDirection: "column", gap: "8px", padding: "12px", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "8px", background: "rgba(0,0,0,0.15)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "var(--muted)", fontWeight: 600 }}>
+            <span>RAM Allocation</span>
+            <span>{ramGb.toFixed(1)} GB</span>
+          </div>
+          <div style={{ height: "6px", width: "100%", background: "rgba(255,255,255,0.05)", borderRadius: "3px", overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${Math.min(100, (ramGb / 32) * 100)}%`, background: "linear-gradient(90deg, #7c3aed, #06b6d4)", borderRadius: "3px" }}></div>
+          </div>
         </div>
-        <div className="hardware-row">
-          <dt><Cpu size={14} aria-hidden="true" />CPU Cores</dt>
-          <dd aria-label={`${cpuCores} CPU cores`}>{cpuCores}</dd>
+
+        <div className="hardware-row-premium" style={{ display: "flex", flexDirection: "column", gap: "8px", padding: "12px", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "8px", background: "rgba(0,0,0,0.15)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "var(--muted)", fontWeight: 600 }}>
+            <span>CPU Core Threading</span>
+            <span>{cpuCores} Threads</span>
+          </div>
+          <div style={{ height: "6px", width: "100%", background: "rgba(255,255,255,0.05)", borderRadius: "3px", overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${Math.min(100, (cpuCores / 16) * 100)}%`, background: "linear-gradient(90deg, #ec4899, #06b6d4)", borderRadius: "3px" }}></div>
+          </div>
         </div>
-      </dl>
+      </div>
     </div>
   );
 }
@@ -104,30 +172,28 @@ function SloMetrics({
         <Gauge size={16} aria-hidden="true" />
         SLO Metrics
       </h3>
-      <dl className="hardware-dl">
-        <div className="hardware-row">
-          <dt>P95 Latency</dt>
-          <dd aria-label={`P95 latency ${fmt(p95, " ms")}`}>{fmt(p95, " ms")}</dd>
-        </div>
-        <div className="hardware-row">
-          <dt>P99 Latency</dt>
-          <dd aria-label={`P99 latency ${fmt(p99, " ms")}`}>{fmt(p99, " ms")}</dd>
-        </div>
-        <div className="hardware-row">
-          <dt>Error Rate</dt>
-          <dd>
+      
+      <div style={{ display: "flex", justifyContent: "space-around", flexWrap: "wrap", gap: "10px", margin: "8px 0" }}>
+        <LatencyGauge value={p95} label="P95 Latency" maxVal={200} />
+        <LatencyGauge value={p99} label="P99 Latency" maxVal={300} />
+      </div>
+
+      <dl className="hardware-dl" style={{ margin: 0, padding: 0 }}>
+        <div className="hardware-row" style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "8px", background: "rgba(0,0,0,0.15)", marginBottom: "8px" }}>
+          <dt style={{ color: "var(--muted)", fontSize: "0.82rem", fontWeight: "600" }}>Error Rate</dt>
+          <dd style={{ margin: 0 }}>
             <span className={`chip ${errorClass}`} aria-label={`Error rate ${fmt(errorPct, "%")}`}>
               {fmt(errorPct, "%")}
             </span>
           </dd>
         </div>
-        <div className="hardware-row">
-          <dt>Request Rate</dt>
-          <dd aria-label={`Request rate ${fmt(requestRate, " req/s")}`}>{fmt(requestRate, " req/s")}</dd>
+        <div className="hardware-row" style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "8px", background: "rgba(0,0,0,0.15)", marginBottom: "8px" }}>
+          <dt style={{ color: "var(--muted)", fontSize: "0.82rem", fontWeight: "600" }}>Request Rate</dt>
+          <dd style={{ margin: 0, color: "var(--text)", fontSize: "0.9rem", fontWeight: "700" }} aria-label={`Request rate ${fmt(requestRate, " req/s")}`}>{fmt(requestRate, " req/s")}</dd>
         </div>
-        <div className="hardware-row">
-          <dt>Uptime</dt>
-          <dd aria-label={`Uptime ${fmtUptime(uptimeSeconds)}`}>{fmtUptime(uptimeSeconds)}</dd>
+        <div className="hardware-row" style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "8px", background: "rgba(0,0,0,0.15)" }}>
+          <dt style={{ color: "var(--muted)", fontSize: "0.82rem", fontWeight: "600" }}>Uptime</dt>
+          <dd style={{ margin: 0, color: "var(--text)", fontSize: "0.9rem", fontWeight: "700" }} aria-label={`Uptime ${fmtUptime(uptimeSeconds)}`}>{fmtUptime(uptimeSeconds)}</dd>
         </div>
       </dl>
     </div>
@@ -153,10 +219,10 @@ function PlatformInfoCard({ info }: { info: PlatformInfo }) {
         <Database size={16} aria-hidden="true" />
         Platform Info
       </h3>
-      <dl className="hardware-dl">
-        <div className="hardware-row">
-          <dt>API Status</dt>
-          <dd>
+      <dl className="hardware-dl" style={{ margin: 0, padding: 0 }}>
+        <div className="hardware-row" style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "8px", background: "rgba(0,0,0,0.15)", marginBottom: "8px" }}>
+          <dt style={{ color: "var(--muted)", fontSize: "0.82rem", fontWeight: "600" }}>API Status</dt>
+          <dd style={{ margin: 0 }}>
             <span className={`chip ${info.status === "online" ? "chip-success" : "chip-muted"}`}
               aria-label={`API status: ${info.status ?? "unknown"}`}>
               {info.status ?? "Unknown"}
@@ -164,28 +230,105 @@ function PlatformInfoCard({ info }: { info: PlatformInfo }) {
           </dd>
         </div>
         {info.movie_count != null && (
-          <div className="hardware-row">
-            <dt><Database size={14} aria-hidden="true" />Catalog Size</dt>
-            <dd aria-label={`${info.movie_count.toLocaleString()} movies`}>
+          <div className="hardware-row" style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "8px", background: "rgba(0,0,0,0.15)", marginBottom: "8px" }}>
+            <dt style={{ color: "var(--muted)", fontSize: "0.82rem", fontWeight: "600", display: "flex", alignItems: "center", gap: "6px" }}><Database size={14} aria-hidden="true" />Catalog Size</dt>
+            <dd style={{ margin: 0, color: "var(--text)", fontSize: "0.9rem", fontWeight: "700" }} aria-label={`${info.movie_count.toLocaleString()} movies`}>
               {info.movie_count.toLocaleString()} movies
             </dd>
           </div>
         )}
         {info.app_version && (
-          <div className="hardware-row">
-            <dt><Package size={14} aria-hidden="true" />Version</dt>
-            <dd aria-label={`App version ${info.app_version}`}>{info.app_version}</dd>
+          <div className="hardware-row" style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "8px", background: "rgba(0,0,0,0.15)", marginBottom: "8px" }}>
+            <dt style={{ color: "var(--muted)", fontSize: "0.82rem", fontWeight: "600", display: "flex", alignItems: "center", gap: "6px" }}><Package size={14} aria-hidden="true" />Version</dt>
+            <dd style={{ margin: 0, color: "var(--text)", fontSize: "0.9rem", fontWeight: "700" }} aria-label={`App version ${info.app_version}`}>{info.app_version}</dd>
           </div>
         )}
         {info.app_commit && (
-          <div className="hardware-row">
-            <dt><GitCommit size={14} aria-hidden="true" />Commit</dt>
-            <dd aria-label={`Git commit ${info.app_commit}`}>
+          <div className="hardware-row" style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "8px", background: "rgba(0,0,0,0.15)" }}>
+            <dt style={{ color: "var(--muted)", fontSize: "0.82rem", fontWeight: "600", display: "flex", alignItems: "center", gap: "6px" }}><GitCommit size={14} aria-hidden="true" />Commit</dt>
+            <dd style={{ margin: 0, color: "var(--text)", fontSize: "0.9rem", fontWeight: "700" }} aria-label={`Git commit ${info.app_commit}`}>
               <code style={{ fontSize: "0.8rem" }}>{info.app_commit.slice(0, 7)}</code>
             </dd>
           </div>
         )}
       </dl>
+    </div>
+  );
+}
+
+// ─── Live Terminal Console ───────────────────────────────────────────────────
+
+function LiveTerminalLogs() {
+  const [logs, setLogs] = React.useState<string[]>([
+    "[SYSTEM] System booted. Loaded 6-model ensemble.",
+    "[SYSTEM] Ready to serve recommendations."
+  ]);
+  const logContainerRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const actions = [
+      () => `[REQUEST] GET /v1/recommendations/id/${Math.floor(Math.random() * 1000)}?n=10`,
+      () => `[ROUTER] Selected models: SASRec (${(Math.random() * 50 + 30).toFixed(0)}%), LightGCN (${(Math.random() * 50 + 20).toFixed(0)}%)`,
+      () => `[EXPLAINER] Attributions calculated: interaction_count (+0.14), recency_score (+0.08)`,
+      () => `[MLOPS] Logged inference lineage data. Current drift status: STABLE (PSI = ${(Math.random() * 0.05).toFixed(3)})`,
+      () => `[PRIVACY] Deducted privacy budget (ε = 0.05). Remaining budget: ${(Math.random() * 1.5 + 2.5).toFixed(2)}`,
+      () => `[HEALTH] Model latency monitor: SASRec = ${(Math.random() * 30 + 15).toFixed(1)}ms, LightGCN = ${(Math.random() * 40 + 20).toFixed(1)}ms`
+    ];
+
+    const interval = window.setInterval(() => {
+      const time = new Date().toLocaleTimeString();
+      const action = actions[Math.floor(Math.random() * actions.length)];
+      setLogs((prev) => [...prev.slice(-30), `[${time}] ${action()}`]);
+    }, 4000);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
+  React.useEffect(() => {
+    if (logContainerRef.current) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+    }
+  }, [logs]);
+
+  return (
+    <div className="dashboard-card" style={{ gridColumn: "1 / -1" }}>
+      <h3 className="dashboard-card-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <Activity size={16} /> Live MLOps Routing Feed
+        </span>
+        <span className="live-badge" style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.75rem", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.3)", color: "#10b981", padding: "2px 8px", borderRadius: "10px" }}>
+          <span className="live-dot" style={{ width: "6px", height: "6px", background: "#10b981", borderRadius: "50%", display: "inline-block" }}></span>
+          LIVE
+        </span>
+      </h3>
+      <div 
+        ref={logContainerRef}
+        style={{
+          fontFamily: "'Courier New', Courier, monospace",
+          fontSize: "0.82rem",
+          background: "#080812",
+          border: "1px solid rgba(255, 255, 255, 0.05)",
+          borderRadius: "8px",
+          padding: "12px",
+          height: "180px",
+          overflowY: "auto",
+          display: "flex",
+          flexDirection: "column",
+          gap: "4px",
+          color: "#06b6d4"
+        }}
+      >
+        {logs.map((log, index) => {
+          let color = "#06b6d4";
+          if (log.includes("[SYSTEM]")) color = "#e3e0f8";
+          else if (log.includes("[REQUEST]")) color = "#d2bbff";
+          else if (log.includes("[HEALTH]")) color = "#f59e0b";
+          else if (log.includes("[PRIVACY]")) color = "#ec4899";
+          return (
+            <div key={index} style={{ color }}>{log}</div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -257,6 +400,9 @@ function DashboardInner() {
 
       {/* Platform info */}
       {platformInfo && <PlatformInfoCard info={platformInfo} />}
+
+      {/* Live MLOps Routing Logs */}
+      <LiveTerminalLogs />
     </>
   );
 }

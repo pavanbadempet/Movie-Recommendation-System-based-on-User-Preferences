@@ -299,7 +299,12 @@ app.mount("/metrics", make_asgi_app())
 
 
 @app.get("/")
-async def root():
+async def root(request: Request):
+    accept = request.headers.get("accept", "")
+    if "text/html" in accept:
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse("/ui/")
+
     metadata = app_metadata()
     frontend_available = (FRONTEND_DIST_DIR / "index.html").exists()
     frontends = configured_frontends(frontend_available=frontend_available)

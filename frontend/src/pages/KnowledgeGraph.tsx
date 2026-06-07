@@ -128,7 +128,7 @@ function ForceGraph({
       .attr("orient", "auto")
       .append("path")
       .attr("d", "M0,-5L10,0L0,5")
-      .attr("fill", "rgba(229,9,20,0.6)");
+      .attr("fill", "rgba(124,58,237,0.6)");
 
     // Clip path for circular poster thumbnails
     defs.append("clipPath")
@@ -175,7 +175,7 @@ function ForceGraph({
       .selectAll("line")
       .data(d3Links)
       .join("line")
-      .attr("stroke", "rgba(229,9,20,0.3)")
+      .attr("stroke", "rgba(124,58,237,0.3)")
       .attr("stroke-width", 1.5)
       .attr("marker-end", "url(#arrowhead)");
 
@@ -203,6 +203,52 @@ function ForceGraph({
           event.preventDefault();
           onNodeClick(d.movie);
         }
+      })
+      .on("mouseover", (_event: MouseEvent, d: D3Node) => {
+        link
+          .transition()
+          .duration(200)
+          .attr("stroke", (l) => {
+            const linkObj = l as unknown as D3Link;
+            const src = linkObj.source as D3Node;
+            const tgt = linkObj.target as D3Node;
+            return src.id === d.id || tgt.id === d.id
+              ? "#ec4899"
+              : "rgba(124,58,237,0.08)";
+          })
+          .attr("stroke-width", (l) => {
+            const linkObj = l as unknown as D3Link;
+            const src = linkObj.source as D3Node;
+            const tgt = linkObj.target as D3Node;
+            return src.id === d.id || tgt.id === d.id ? 2.5 : 1;
+          });
+
+        node
+          .transition()
+          .duration(200)
+          .style("opacity", (n: D3Node) => {
+            const isConnected = d3Links.some((l) => {
+              const src = l.source as D3Node;
+              const tgt = l.target as D3Node;
+              return (
+                (src.id === d.id && tgt.id === n.id) ||
+                (tgt.id === d.id && src.id === n.id)
+              );
+            });
+            return n.id === d.id || isConnected ? 1 : 0.3;
+          });
+      })
+      .on("mouseout", () => {
+        link
+          .transition()
+          .duration(200)
+          .attr("stroke", "rgba(124,58,237,0.3)")
+          .attr("stroke-width", 1.5);
+
+        node
+          .transition()
+          .duration(200)
+          .style("opacity", 1);
       });
 
     const drag = d3
@@ -224,8 +270,8 @@ function ForceGraph({
     // Background circle
     node.append("circle")
       .attr("r", (d: D3Node) => (d.type === "seed" ? 22 : 16))
-      .attr("fill", (d: D3Node) => d.type === "seed" ? "rgba(229,9,20,0.9)" : "rgba(22,24,34,0.95)")
-      .attr("stroke", (d: D3Node) => d.type === "seed" ? "#e50914" : "rgba(255,255,255,0.18)")
+      .attr("fill", (d: D3Node) => d.type === "seed" ? "rgba(124,58,237,0.9)" : "rgba(22,24,34,0.95)")
+      .attr("stroke", (d: D3Node) => d.type === "seed" ? "#7c3aed" : "rgba(255,255,255,0.18)")
       .attr("stroke-width", (d: D3Node) => (d.type === "seed" ? 2.5 : 1.5));
 
     // Poster thumbnail (clipped to circle)

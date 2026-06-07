@@ -115,6 +115,47 @@ const BENCHMARKS = [
 // Component
 // ---------------------------------------------------------------------------
 export function LandingPage({ onNavigate }: LandingProps) {
+  const [activeLang, setActiveLang] = React.useState<"curl" | "python" | "js">("curl");
+
+  const codeSnippets = {
+    curl: `# Get recommendations with LLM explanation
+curl "/v1/recommendations/id/550?explain=true" \\
+  -H "X-Nova-API-Key: YOUR_KEY"
+
+# Response
+{
+  "recommendations": [
+    {
+      "title": "Se7en",
+      "score": 0.94,
+      "explanation": "Both are David Fincher
+        psychological thrillers with morally
+        ambiguous protagonists and twist endings."
+    }
+  ]
+}`,
+    python: `# Fetch ensemble recommendations in Python
+import requests
+
+url = "https://api.nova.ai/v1/recommendations/id/550"
+headers = {
+    "X-Nova-API-Key": "YOUR_KEY"
+}
+params = {"explain": "true"}
+
+response = requests.get(url, headers=headers, params=params)
+recommendations = response.json()["recommendations"]
+print(f"Top recommendation: {recommendations[0]['title']}")`,
+    js: `// Fetch recommendations in Node.js
+const url = 'https://api.nova.ai/v1/recommendations/id/550?explain=true';
+const response = await fetch(url, {
+  headers: { 'X-Nova-API-Key': 'YOUR_KEY' }
+});
+
+const { recommendations } = await response.json();
+console.log(\`Top recommendation: \${recommendations[0].title}\`);`
+  };
+
   return (
     <main className="landing-page" aria-label="APEX product landing page">
       {/* ------------------------------------------------------------------ */}
@@ -168,29 +209,67 @@ export function LandingPage({ onNavigate }: LandingProps) {
         {/* Code preview */}
         <div className="hero-code" aria-label="API example code">
           <div className="code-window-chrome" aria-hidden="true">
-            <span className="dot red" />
-            <span className="dot yellow" />
-            <span className="dot green" />
-            <span className="code-filename">recommendations.sh</span>
+            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+              <span className="dot red" />
+              <span className="dot yellow" />
+              <span className="dot green" />
+            </div>
+            <div className="code-tabs" style={{ display: "flex", gap: "2px", marginLeft: "16px" }}>
+              <button 
+                type="button"
+                className={`code-tab-btn ${activeLang === "curl" ? "active" : ""}`}
+                style={{
+                  background: activeLang === "curl" ? "rgba(255,255,255,0.06)" : "transparent",
+                  border: "none",
+                  color: activeLang === "curl" ? "#e3e0f8" : "#958da1",
+                  padding: "4px 10px",
+                  borderRadius: "6px",
+                  fontSize: "0.75rem",
+                  fontWeight: "600",
+                  cursor: "pointer"
+                }}
+                onClick={() => setActiveLang("curl")}
+              >
+                cURL
+              </button>
+              <button 
+                type="button"
+                className={`code-tab-btn ${activeLang === "python" ? "active" : ""}`}
+                style={{
+                  background: activeLang === "python" ? "rgba(255,255,255,0.06)" : "transparent",
+                  border: "none",
+                  color: activeLang === "python" ? "#e3e0f8" : "#958da1",
+                  padding: "4px 10px",
+                  borderRadius: "6px",
+                  fontSize: "0.75rem",
+                  fontWeight: "600",
+                  cursor: "pointer"
+                }}
+                onClick={() => setActiveLang("python")}
+              >
+                Python
+              </button>
+              <button 
+                type="button"
+                className={`code-tab-btn ${activeLang === "js" ? "active" : ""}`}
+                style={{
+                  background: activeLang === "js" ? "rgba(255,255,255,0.06)" : "transparent",
+                  border: "none",
+                  color: activeLang === "js" ? "#e3e0f8" : "#958da1",
+                  padding: "4px 10px",
+                  borderRadius: "6px",
+                  fontSize: "0.75rem",
+                  fontWeight: "600",
+                  cursor: "pointer"
+                }}
+                onClick={() => setActiveLang("js")}
+              >
+                Node.js
+              </button>
+            </div>
           </div>
-          <pre className="code-block">
-            <code>{`# Get recommendations with LLM explanation
-curl "/v1/recommendations/id/550?explain=true" \\
-  -H "X-Nova-API-Key: YOUR_KEY"
-
-# Response
-{
-  "recommendations": [
-    {
-      "title": "Se7en",
-      "score": 0.94,
-      "explanation": "Both are David Fincher
-        psychological thrillers with morally
-        ambiguous protagonists and twist endings."
-    },
-    ...
-  ]
-}`}</code>
+          <pre className="code-block" style={{ minHeight: "260px" }}>
+            <code key={activeLang} className="fade-in-content">{codeSnippets[activeLang]}</code>
           </pre>
         </div>
       </section>

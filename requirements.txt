@@ -5,12 +5,13 @@
 # Core data processing
 pandas==3.0.2
 numpy==2.4.4
-pyarrow==14.0.1  # Parquet support — pinned to last stable 14.x for broad compat
+pyarrow>=18.0.0  # Parquet support — compatible with NumPy 2.x
 
 # Machine learning & NLP
 scikit-learn==1.8.0
 sentence-transformers==5.4.1  # Neural embeddings (SBERT)
 faiss-cpu==1.13.2             # Similarity search (swap for faiss-gpu on GPU hosts)
+turbovec==0.7.0                  # Fast quantized vector search index
 onnx==1.21.0                  # Model export
 onnxruntime==1.26.0           # Lightning-fast CPU inference
 transformers==5.7.0           # CLIP Vision Encoding

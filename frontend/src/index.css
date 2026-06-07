@@ -1,31 +1,33 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
 :root {
-  /* Core Colors */
-  --bg-primary: #0a0a0f;
-  --bg-secondary: #14141d;
-  --bg-tertiary: #1f1f2e;
+  /* Core Colors — Premium Obsidian Dark */
+  --bg-primary: #050508;
+  --bg-secondary: rgba(255, 255, 255, 0.02);
+  --bg-tertiary: rgba(255, 255, 255, 0.06);
   
-  --accent-primary: #e50914; /* Netflix Red */
-  --accent-hover: #f40612;
-  --accent-glow: rgba(229, 9, 20, 0.4);
+  --accent-primary: #6366f1; /* Premium Violet Indigo */
+  --accent-hover: #818cf8;
+  --accent-glow: rgba(99, 102, 241, 0.25);
   
-  --text-primary: #ffffff;
-  --text-secondary: #a0a0b0;
-  --text-tertiary: #6b6b7f;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-tertiary: #64748b;
   
   /* Semantic Colors */
   --success: #10b981;
   --warning: #f59e0b;
   
   /* Utilities */
-  --glass-bg: rgba(20, 20, 29, 0.7);
-  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-bg: rgba(255, 255, 255, 0.02);
+  --glass-border: rgba(255, 255, 255, 0.06);
   --radius-sm: 4px;
   --radius-md: 8px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
   
-  --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast: 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-normal: 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 * {
@@ -46,6 +48,7 @@ body {
 
 /* Typography */
 h1, h2, h3, h4, h5 {
+  font-family: 'Outfit', 'Inter', sans-serif;
   font-weight: 700;
   letter-spacing: -0.02em;
 }
@@ -98,14 +101,14 @@ h3 { font-size: 1.5rem; }
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: linear-gradient(to bottom, rgba(10, 10, 15, 0.9) 0%, rgba(10, 10, 15, 0) 100%);
+  background: linear-gradient(to bottom, rgba(10, 10, 26, 0.92) 0%, rgba(10, 10, 26, 0) 100%);
   backdrop-filter: blur(8px);
 }
 
 .logo {
   font-size: 1.75rem;
   font-weight: 800;
-  color: var(--accent-primary);
+  color: #d2bbff;
   letter-spacing: -0.05em;
   text-transform: uppercase;
 }
@@ -133,7 +136,7 @@ h3 { font-size: 1.5rem; }
 
 .search-input:focus {
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px var(--accent-glow);
+  box-shadow: 0 0 0 3px var(--accent-glow), 0 0 30px rgba(124, 58, 237, 0.1);
   background: var(--bg-tertiary);
 }
 
@@ -275,7 +278,7 @@ h3 { font-size: 1.5rem; }
 
 .movie-card:hover {
   transform: scale(1.05) translateY(-5px);
-  box-shadow: 0 15px 30px rgba(0,0,0,0.5);
+  box-shadow: 0 15px 30px rgba(0,0,0,0.5), 0 0 40px rgba(124, 58, 237, 0.15);
   z-index: 10;
 }
 
@@ -357,4 +360,63 @@ h3 { font-size: 1.5rem; }
   .row-container { padding: 1rem; }
   .main-header { padding: 1rem; }
   .hero-title { font-size: 2.5rem; }
+}
+
+/* Ambient Glow Background Orbs */
+.ambient-glow-1 {
+  position: fixed;
+  top: -15%;
+  left: -10%;
+  width: 60vw;
+  height: 60vw;
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.12) 0%, transparent 70%);
+  border-radius: 50%;
+  filter: blur(100px);
+  z-index: -2;
+  pointer-events: none;
+  animation: float-glow-1 25s infinite alternate ease-in-out;
+}
+
+.ambient-glow-2 {
+  position: fixed;
+  bottom: -10%;
+  right: -10%;
+  width: 50vw;
+  height: 50vw;
+  background: radial-gradient(circle, rgba(236, 72, 153, 0.08) 0%, transparent 70%);
+  border-radius: 50%;
+  filter: blur(100px);
+  z-index: -2;
+  pointer-events: none;
+  animation: float-glow-2 30s infinite alternate ease-in-out;
+}
+
+.ambient-glow-3 {
+  position: fixed;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40vw;
+  height: 40vw;
+  background: radial-gradient(circle, rgba(6, 182, 212, 0.06) 0%, transparent 70%);
+  border-radius: 50%;
+  filter: blur(120px);
+  z-index: -2;
+  pointer-events: none;
+  animation: float-glow-3 35s infinite alternate ease-in-out;
+}
+
+@keyframes float-glow-1 {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(12vw, 15vh) scale(1.15); }
+}
+
+@keyframes float-glow-2 {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(-10vw, -12vh) scale(0.9); }
+}
+
+@keyframes float-glow-3 {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(-15vw, 10vh) scale(1.2); }
 }
