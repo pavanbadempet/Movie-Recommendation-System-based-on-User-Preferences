@@ -73,6 +73,13 @@ const RECENT_STORAGE_KEY = "nova_recent_movies_v2";
 const SESSION_STORAGE_KEY = "nova_session_id_v1";
 const TITLE_CATALOG_LIMIT = 5000;
 
+const isEmbedded = typeof window !== "undefined" && (
+  window.self !== window.top ||
+  window.location.hostname.includes("hf.space") ||
+  window.location.hostname.includes("huggingface.co") ||
+  window.location.search.includes("embed=true")
+);
+
 type AppPage = "home" | "search" | "profile" | "dashboard" | "knowledge-graph" | "evaluation" | "admin" | "landing" | "signup" | "pricing" | "getting-started" | "status";
 type SearchMode = "title" | "semantic";
 type CatalogState = "booting" | "warming" | "ready" | "error";
@@ -1773,6 +1780,7 @@ function App() {
 
   if (innerPages.includes(page)) {
     const tabs: { id: AppPage; label: string; icon: React.ReactNode }[] = [
+      ...(isEmbedded ? [{ id: "home" as AppPage, label: "Home", icon: <House size={14} /> }] : []),
       { id: "dashboard", label: "Dashboard", icon: <Activity size={14} /> },
       { id: "knowledge-graph", label: "Knowledge Graph", icon: <Sparkles size={14} /> },
       { id: "evaluation", label: "Evaluation", icon: <BarChart3 size={14} /> },
@@ -1783,30 +1791,32 @@ function App() {
     return (
       <main className="app-shell" id="main-content">
         <a href="#main-content" className="skip-link">Skip to main content</a>
-        <header className="topbar">
-          <button className="home-button" type="button" onClick={openHome} aria-label="Go to home">
-            <House size={18} aria-hidden="true" /> Home
-          </button>
-          <nav className="topbar-nav" aria-label="Main navigation">
-            <button type="button" className="topbar-link" onClick={() => setPage("getting-started")}>Quickstart</button>
-            <button type="button" className="topbar-link" onClick={() => setPage("pricing")}>Pricing</button>
-            <button type="button" className="topbar-link" onClick={() => setPage("status")}>Status</button>
-          </nav>
-          <div className="topbar-actions">
-            {username && (
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#e5e7eb", background: "rgba(255,255,255,0.05)", padding: "4px 12px", borderRadius: "20px", border: "1px solid rgba(255,255,255,0.1)", fontSize: "0.85rem" }}>
-                <User size={14} aria-hidden="true" /> Hi, <strong>{username}</strong>
-                <button className="icon-button" onClick={() => {
-                  window.localStorage.removeItem("nova_jwt_token");
-                  window.localStorage.removeItem("nova_username");
-                  setToken(null); setUsername(null);
-                }} title="Logout" aria-label="Logout" style={{ marginLeft: "4px", opacity: 0.7 }}>
-                  <LogOut size={14} aria-hidden="true" />
-                </button>
-              </div>
-            )}
-          </div>
-        </header>
+        {!isEmbedded && (
+          <header className="topbar">
+            <button className="home-button" type="button" onClick={openHome} aria-label="Go to home">
+              <House size={18} aria-hidden="true" /> Home
+            </button>
+            <nav className="topbar-nav" aria-label="Main navigation">
+              <button type="button" className="topbar-link" onClick={() => setPage("getting-started")}>Quickstart</button>
+              <button type="button" className="topbar-link" onClick={() => setPage("pricing")}>Pricing</button>
+              <button type="button" className="topbar-link" onClick={() => setPage("status")}>Status</button>
+            </nav>
+            <div className="topbar-actions">
+              {username && (
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#e5e7eb", background: "rgba(255,255,255,0.05)", padding: "4px 12px", borderRadius: "20px", border: "1px solid rgba(255,255,255,0.1)", fontSize: "0.85rem" }}>
+                  <User size={14} aria-hidden="true" /> Hi, <strong>{username}</strong>
+                  <button className="icon-button" onClick={() => {
+                    window.localStorage.removeItem("nova_jwt_token");
+                    window.localStorage.removeItem("nova_username");
+                    setToken(null); setUsername(null);
+                  }} title="Logout" aria-label="Logout" style={{ marginLeft: "4px", opacity: 0.7 }}>
+                    <LogOut size={14} aria-hidden="true" />
+                  </button>
+                </div>
+              )}
+            </div>
+          </header>
+        )}
 
         <nav className="page-tabs" aria-label="Application sections" style={{ margin: "16px 0" }}>
           {tabs.map((tab) => (
@@ -1814,7 +1824,13 @@ function App() {
               key={tab.id}
               className={`page-tab ${page === tab.id ? "active" : ""}`}
               type="button"
-              onClick={() => setPage(tab.id)}
+              onClick={() => {
+                if (tab.id === "home") {
+                  openHome();
+                } else {
+                  setPage(tab.id);
+                }
+              }}
               aria-current={page === tab.id ? "page" : undefined}
             >
               {tab.icon}
@@ -1851,30 +1867,32 @@ function App() {
 
   return (
     <main className="app-shell" id="main-content">
-      <header className="topbar">
-        <button
-          className="home-button"
-          type="button"
-          onClick={openHome}
-        >
-          <House size={18} />
-          Home
-        </button>
-        <div className="topbar-actions">
-          <StatusBadge state={catalogState} backend={backend} />
+      {!isEmbedded && (
+        <header className="topbar">
           <button
-            className="icon-button"
+            className="home-button"
             type="button"
-            onClick={() => {
-              void bootstrap(true);
-              if (catalogState === "ready") loadOperationalSignals();
-            }}
-            title="Refresh catalog and readiness"
+            onClick={openHome}
           >
-            <RefreshCw size={18} />
+            <House size={18} />
+            Home
           </button>
-        </div>
-      </header>
+          <div className="topbar-actions">
+            <StatusBadge state={catalogState} backend={backend} />
+            <button
+              className="icon-button"
+              type="button"
+              onClick={() => {
+                void bootstrap(true);
+                if (catalogState === "ready") loadOperationalSignals();
+              }}
+              title="Refresh catalog and readiness"
+            >
+              <RefreshCw size={18} />
+            </button>
+          </div>
+        </header>
+      )}
 
       <section className="metrics-strip" aria-label="Platform snapshot">
         <MetricTile icon={<Database size={18} />} label="Catalog" value={catalogValue ? catalogValue.toLocaleString() : "Loading"} />
@@ -1886,6 +1904,30 @@ function App() {
 
       <section className="workspace">
         <aside className="control-panel">
+          {isEmbedded && (
+            <button
+              type="button"
+              className="back-button"
+              onClick={openHome}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "8px 16px",
+                background: "rgba(255, 255, 255, 0.05)",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                borderRadius: "20px",
+                color: "#e3e0f8",
+                cursor: "pointer",
+                marginBottom: "16px",
+                fontFamily: "var(--font-label, sans-serif)",
+                fontSize: "0.85rem",
+                transition: "all 0.2s ease"
+              }}
+            >
+              <House size={14} /> Back to Home
+            </button>
+          )}
           <div className="control-heading">
             <Search size={54} />
             <h1>Search & Discover</h1>
@@ -2064,7 +2106,30 @@ function App() {
             />
           ) : null}
 
-          {results.length > 0 && (
+          {loadingRecs ? (
+            <section className="results-section">
+              <div className="section-title">
+                <div>
+                  <span>Ensemble pipeline</span>
+                  <h2>Generating recommendations...</h2>
+                </div>
+              </div>
+              <div className="poster-grid">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <div key={index} className="recommendation-card skeleton-card" style={{ height: "380px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "16px", padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                    <div className="skeleton" style={{ height: "180px", borderRadius: "12px" }}></div>
+                    <div className="skeleton" style={{ height: "24px", width: "80%", borderRadius: "6px" }}></div>
+                    <div className="skeleton" style={{ height: "16px", width: "40%", borderRadius: "4px" }}></div>
+                    <div className="skeleton" style={{ height: "48px", width: "100%", borderRadius: "8px" }}></div>
+                    <div style={{ display: "flex", gap: "8px", marginTop: "auto" }}>
+                      <div className="skeleton" style={{ height: "28px", width: "70px", borderRadius: "20px" }}></div>
+                      <div className="skeleton" style={{ height: "28px", width: "70px", borderRadius: "20px" }}></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : results.length > 0 ? (
             <section className="results-section">
               <div className="section-title">
                 <div>
@@ -2094,7 +2159,7 @@ function App() {
                 ))}
               </div>
             </section>
-          )}
+          ) : null}
         </section>
       </section>
       {dialogMovie && <MovieDialog movie={dialogMovie} onClose={() => setDialogMovie(null)} />}
