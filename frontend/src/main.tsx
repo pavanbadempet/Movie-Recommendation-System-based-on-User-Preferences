@@ -1198,7 +1198,7 @@ function App() {
   const selectedTitleLabel = selectedMovie ? selectTitleLabel(selectedMovie) : "";
   const isSelectedTitleQuery = Boolean(selectedMovie && titleQuery === selectedTitleLabel);
   const isEditingTitle = Boolean(selectedMovie && hasTitleQuery && !isSelectedTitleQuery);
-  const showTitleSuggestions = titleSelectOpen || (hasTitleQuery && !isSelectedTitleQuery);
+  const showTitleSuggestions = titleSelectOpen && hasTitleQuery && !isSelectedTitleQuery;
   const showNotice = catalogState !== "ready";
 
   const filteredTitles = React.useMemo(() => {
@@ -1511,12 +1511,6 @@ function App() {
       await recommend(selectedMovie);
       return;
     }
-
-    if (searchMode === "title" && !queryOverride && filteredTitles.length > 0) {
-      await chooseTitle(filteredTitles[0]);
-      return;
-    }
-
     setIsSearching(true);
     setNotice(searchMode === "semantic" ? "Searching by intent" : "Searching catalog");
     setResults([]);
@@ -1828,8 +1822,8 @@ function App() {
                           }
                           if (event.key === "Enter") {
                             event.preventDefault();
-                            if (filteredTitles[0]) void chooseTitle(filteredTitles[0]);
-                            else void runSearch("title");
+                            setTitleSelectOpen(false);
+                            void runSearch("title");
                           }
                         }}
                         placeholder="e.g. Inception, Avatar, The Dark Knight..."
@@ -1872,7 +1866,7 @@ function App() {
                             type="button"
                             key={`${item.id}-${item.title}`}
                             onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => void chooseTitle(item)}
+                            onClick={() => void chooseTitle(item, { autoRecommend: true })}
                           >
                             {item.title}
                           </button>
