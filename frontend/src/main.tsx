@@ -1151,7 +1151,6 @@ function App() {
   const [showAuthModal, setShowAuthModal] = React.useState(false);
   const [titles, setTitles] = React.useState<MovieTitle[]>([]);
   const [titleQuery, setTitleQuery] = React.useState("");
-  const [semanticQuery, setSemanticQuery] = React.useState("");
   const [mode, setMode] = React.useState<SearchMode>("title");
   const [selectedMovie, setSelectedMovie] = React.useState<Movie | null>(null);
   const [results, setResults] = React.useState<Movie[]>([]);
@@ -1192,8 +1191,7 @@ function App() {
   const loadedHomeShowcase = React.useRef(false);
   const _loadedForYou = React.useRef(false);
   const userStarted = React.useRef(false);
-
-  const activeQuery = mode === "title" ? titleQuery : semanticQuery;
+  const activeQuery = titleQuery;
   const hasTitleQuery = titleQuery.trim().length > 0;
   const selectedTitleLabel = selectedMovie ? selectTitleLabel(selectedMovie) : "";
   const isSelectedTitleQuery = Boolean(selectedMovie && titleQuery === selectedTitleLabel);
@@ -1473,6 +1471,26 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [catalogState]);
 
+  React.useEffect(() => {
+    if (mode !== "title") return;
+    const query = titleQuery.trim();
+    if (!query) {
+      setResults([]);
+      setResultsKind("idle");
+      return;
+    }
+    if (selectedMovie && query === selectTitleLabel(selectedMovie)) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void runSearch("title");
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [titleQuery, mode]);
+
   async function chooseTitle(
     item: MovieTitle,
     options: { track?: boolean; autoRecommend?: boolean } = {},
@@ -1504,7 +1522,7 @@ function App() {
   }
 
   async function runSearch(searchMode: SearchMode = mode, queryOverride?: string) {
-    const query = (queryOverride ?? (searchMode === "title" ? titleQuery : semanticQuery)).trim();
+    const query = (queryOverride ?? titleQuery).trim();
     if (!query) return;
 
     if (searchMode === "title" && !queryOverride && isSelectedTitleQuery && selectedMovie) {
@@ -1683,6 +1701,98 @@ function App() {
             </nav>
           </div>
           <div className="topbar-right">
+            {/* Header Search Box */}
+            <div className="topbar-search">
+              {mode === "semantic" ? <Sparkles size={14} className="mode-icon-semantic" /> : <Search size={14} />}
+              <input
+                type="text"
+                placeholder={mode === "title" ? "Search movies..." : "Search by plot/desc..."}
+                value={titleQuery}
+                onChange={(event) => {
+                  userStarted.current = true;
+                  setMode(mode);
+                  setTitleQuery(event.target.value);
+                  if (page !== "search") {
+                    setPage("search");
+                  }
+                  setTitleSelectOpen(true);
+                  if (selectedMovie && event.target.value !== selectedTitleLabel) {
+                    setSelectedMovie(null);
+                    setResults([]);
+                    setResultsKind("idle");
+                    setRecommendationSource(null);
+                    setDialogMovie(null);
+                    setLastRecommendationRequestId(null);
+                  }
+                }}
+                onFocus={() => {
+                  if (page !== "search") {
+                    setPage("search");
+                  }
+                  setTitleSelectOpen(true);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    setTitleSelectOpen(false);
+                    return;
+                  }
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    setTitleSelectOpen(false);
+                    void runSearch(mode);
+                  }
+                }}
+              />
+              <button
+                className={`header-mode-toggle ${mode === "semantic" ? "semantic-active" : ""}`}
+                type="button"
+                title={mode === "title" ? "Switch to AI/Plot search" : "Switch to Title search"}
+                onClick={() => {
+                  setMode(mode === "title" ? "semantic" : "title");
+                }}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: mode === "semantic" ? "#a78bfa" : "var(--quiet)",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  padding: "4px",
+                  borderRadius: "50%",
+                  transition: "all 0.2s ease"
+                }}
+              >
+                <Sparkles size={14} />
+              </button>
+              {titleQuery && (
+                <button
+                  className="clear-search-btn"
+                  type="button"
+                  onClick={() => {
+                    userStarted.current = true;
+                    setTitleQuery("");
+                    setSelectedMovie(null);
+                    setResults([]);
+                    setResultsKind("idle");
+                    setRecommendationSource(null);
+                    setDialogMovie(null);
+                    setLastRecommendationRequestId(null);
+                    setTitleSelectOpen(true);
+                  }}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--quiet)",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    padding: "2px"
+                  }}
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
             <StatusBadge state={catalogState} backend={backend} />
             <button
               className="icon-button"
@@ -1754,7 +1864,7 @@ function App() {
               </section>
 
               <section className="workspace">
-                <aside className="control-panel">
+                <div className="control-panel">
                   {isEmbedded && (
                     <button
                       type="button"
@@ -1780,13 +1890,10 @@ function App() {
                     </button>
                   )}
                   <div className="control-heading">
-                    <Search size={54} />
-                    <h1>Search & Discover</h1>
+                    <Search size={44} />
+                    <h1>{mode === "title" ? "Search & Discover" : "AI Semantic Search"}</h1>
                   </div>
 
-                  <label className="field-label" htmlFor="title-search">
-                    Search by title
-                  </label>
                   <div
                     className="title-select"
                     ref={titleSelectRef}
@@ -1797,12 +1904,13 @@ function App() {
                     }}
                   >
                     <div className="search-box title-select-box">
+                      {mode === "semantic" ? <Sparkles size={16} className="mode-icon-semantic" /> : <Search size={16} />}
                       <input
                         id="title-search"
                         value={titleQuery}
                         onChange={(event) => {
                           userStarted.current = true;
-                          setMode("title");
+                          setMode(mode);
                           setTitleQuery(event.target.value);
                           setTitleSelectOpen(true);
                           if (selectedMovie && event.target.value !== selectedTitleLabel) {
@@ -1823,11 +1931,23 @@ function App() {
                           if (event.key === "Enter") {
                             event.preventDefault();
                             setTitleSelectOpen(false);
-                            void runSearch("title");
+                            void runSearch(mode);
                           }
                         }}
-                        placeholder="e.g. Inception, Avatar, The Dark Knight..."
+                        placeholder={mode === "title" ? "Search by title, e.g. Inception..." : "Describe a plot, mood, or genre..."}
                       />
+                      {/* Mode Toggle Button inside Search Box */}
+                      <button
+                        className={`mode-toggle-btn ${mode === "semantic" ? "semantic-active" : ""}`}
+                        type="button"
+                        title={mode === "title" ? "Switch to AI/Plot search" : "Switch to Title search"}
+                        onClick={() => {
+                          setMode(mode === "title" ? "semantic" : "title");
+                        }}
+                      >
+                        <Sparkles size={14} />
+                        <span>{mode === "title" ? "Title Search" : "AI Search"}</span>
+                      </button>
                       {hasTitleQuery && (
                         <button
                           className="clear-title"
@@ -1851,14 +1971,14 @@ function App() {
                       <button
                         className="search-btn"
                         type="button"
-                        onClick={() => runSearch("title")}
+                        onClick={() => runSearch(mode)}
                         aria-label="Search"
                       >
                         <Search size={16} />
                       </button>
                     </div>
 
-                    {showTitleSuggestions && (
+                    {showTitleSuggestions && mode === "title" && (
                       <div className="title-list streamlit-title-list">
                         {titles.length === 0 && catalogState !== "ready" && <span className="quiet-line">Loading movie catalog...</span>}
                         {filteredTitles.slice(0, 12).map((item) => (
@@ -1871,7 +1991,7 @@ function App() {
                             {item.title}
                           </button>
                         ))}
-                        {titles.length > 0 && filteredTitles.length === 0 && <span className="quiet-line">No title match. Try semantic search below.</span>}
+                        {titles.length > 0 && filteredTitles.length === 0 && <span className="quiet-line">No title match. Try AI search mode.</span>}
                       </div>
                     )}
                   </div>
@@ -1885,36 +2005,6 @@ function App() {
                     </div>
                   )}
 
-                  <details className="semantic-expander">
-                    <summary>
-                      <Search size={18} />
-                      <span>Search by plot, genre, or description</span>
-                    </summary>
-                    <div className="semantic-body">
-                      <p>Can&apos;t find the title? Describe the movie by mood, plot, genre, or viewing intent.</p>
-                      <div className="search-box">
-                        <Sparkles size={18} />
-                        <input
-                          id="semantic-search"
-                          value={semanticQuery}
-                          onChange={(event) => {
-                            userStarted.current = true;
-                            setMode("semantic");
-                            setSemanticQuery(event.target.value);
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") void runSearch("semantic");
-                          }}
-                          placeholder="time travel heist, alien civilization, romantic comedy in Paris"
-                        />
-                      </div>
-                      <button className="secondary-action" type="button" onClick={() => void runSearch("semantic")} disabled={isSearching || isSelecting}>
-                        {isSearching || isSelecting ? <Loader2 size={18} className="spin" /> : <Sparkles size={18} />}
-                        Search by intent
-                      </button>
-                    </div>
-                  </details>
-
                   <details className="ops-details">
                     <summary>
                       <span>Platform signals</span>
@@ -1926,24 +2016,7 @@ function App() {
                       <QualityPanel report={qualityReport} />
                     </div>
                   </details>
-
-                  {!hasTitleQuery && recentMovies.length > 0 && (
-                    <div className="recent-strip">
-                      <div className="section-mini-title">
-                        <span>Recent picks</span>
-                        <small>Seed</small>
-                      </div>
-                      <div className="recent-list">
-                        {recentMovies.map((movie) => (
-                          <button type="button" key={`${movie.id}-${movie.title}`} onClick={() => selectMovie(movie, "recent_pick")}>
-                            <img src={posterUrl(movie.poster_path)} alt="" loading="lazy" />
-                            <span>{movie.title}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </aside>
+                </div>
 
                 <div className="result-panel">
                   {selectedMovie && !isEditingTitle ? (
@@ -2008,6 +2081,102 @@ function App() {
                           />
                         ))}
                       </div>
+                    </section>
+                  ) : results.length === 0 && titleQuery.trim() && !isSearching && !isSelecting ? (
+                    <section className="results-section no-results">
+                      <div style={{ textAlign: "center", padding: "48px 24px", color: "var(--muted)" }}>
+                        <Film size={48} style={{ marginBottom: "16px", opacity: 0.5 }} />
+                        <h3>No matches found for &quot;{titleQuery}&quot;</h3>
+                        <p style={{ fontSize: "0.9rem" }}>Try checking your spelling or describe a plot using our AI Search mode!</p>
+                      </div>
+                    </section>
+                  ) : !titleQuery.trim() ? (
+                    <section className="results-section">
+                      <div className="section-title">
+                        <div>
+                          <span>Trending</span>
+                          <h2>Popular Searches</h2>
+                        </div>
+                      </div>
+                      <div className="poster-grid">
+                        {latestMovies.slice(0, 6).map((movie) => (
+                          <button
+                            type="button"
+                            key={`popular-${movie.id}`}
+                            className="popular-search-card"
+                            onClick={() => {
+                              setTitleQuery(selectTitleLabel(movie));
+                              selectMovie(movie, "title_search");
+                              void recommend(movie);
+                            }}
+                            style={{
+                              background: "rgba(255,255,255,0.02)",
+                              border: "1px solid rgba(255,255,255,0.05)",
+                              borderRadius: "16px",
+                              padding: "12px",
+                              cursor: "pointer",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "8px",
+                              textAlign: "left",
+                              transition: "all 0.2s ease"
+                            }}
+                          >
+                            <img
+                              src={posterUrl(movie.poster_path)}
+                              alt={movie.title}
+                              style={{ width: "100%", aspectRatio: "2/3", objectFit: "cover", borderRadius: "10px" }}
+                            />
+                            <strong style={{ fontSize: "0.9rem", color: "#fff", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{movie.title}</strong>
+                            <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>{movieYear(movie)}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {recentMovies.length > 0 && (
+                        <div className="recent-picks-section" style={{ marginTop: "24px" }}>
+                          <div className="section-title" style={{ marginBottom: "12px" }}>
+                            <div>
+                              <span>Recent</span>
+                              <h2>Recent Picks</h2>
+                            </div>
+                          </div>
+                          <div className="recent-list" style={{ display: "flex", gap: "12px", overflowX: "auto", paddingBottom: "8px" }}>
+                            {recentMovies.map((movie) => (
+                              <button
+                                type="button"
+                                key={`recent-${movie.id}`}
+                                onClick={() => {
+                                  setTitleQuery(selectTitleLabel(movie));
+                                  selectMovie(movie, "recent_pick");
+                                  void recommend(movie);
+                                }}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "12px",
+                                  padding: "8px 16px",
+                                  background: "rgba(255, 255, 255, 0.02)",
+                                  border: "1px solid rgba(255, 255, 255, 0.05)",
+                                  borderRadius: "12px",
+                                  cursor: "pointer",
+                                  flex: "0 0 auto",
+                                  maxWidth: "240px",
+                                  textAlign: "left"
+                                }}
+                              >
+                                <img
+                                  src={posterUrl(movie.poster_path)}
+                                  alt=""
+                                  loading="lazy"
+                                  style={{ width: "32px", aspectRatio: "2/3", objectFit: "cover", borderRadius: "4px" }}
+                                />
+                                <span style={{ fontSize: "0.85rem", color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{movie.title}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </section>
                   ) : null}
                 </div>
