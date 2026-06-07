@@ -1,33 +1,33 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800&display=swap');
 
 :root {
-  /* Core Colors — NOVA Cinema Dark */
-  --bg-primary: #0a0a1a;
-  --bg-secondary: #121222;
-  --bg-tertiary: #1e1e2f;
+  /* Core Colors — Premium Obsidian Dark */
+  --bg-primary: #050508;
+  --bg-secondary: rgba(255, 255, 255, 0.02);
+  --bg-tertiary: rgba(255, 255, 255, 0.06);
   
-  --accent-primary: #7c3aed; /* Electric Violet */
-  --accent-hover: #8b5cf6;
-  --accent-glow: rgba(124, 58, 237, 0.4);
+  --accent-primary: #6366f1; /* Premium Violet Indigo */
+  --accent-hover: #818cf8;
+  --accent-glow: rgba(99, 102, 241, 0.25);
   
-  --text-primary: #e3e0f8;
-  --text-secondary: #ccc3d8;
-  --text-tertiary: #958da1;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-tertiary: #64748b;
   
   /* Semantic Colors */
   --success: #10b981;
   --warning: #f59e0b;
   
   /* Utilities */
-  --glass-bg: rgba(18, 18, 34, 0.7);
-  --glass-border: rgba(210, 187, 255, 0.1);
+  --glass-bg: rgba(255, 255, 255, 0.02);
+  --glass-border: rgba(255, 255, 255, 0.06);
   --radius-sm: 4px;
   --radius-md: 8px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
   
-  --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast: 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-normal: 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 * {
