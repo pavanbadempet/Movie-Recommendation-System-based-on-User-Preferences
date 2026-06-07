@@ -303,7 +303,7 @@ async def root(request: Request):
     accept = request.headers.get("accept", "")
     if "text/html" in accept:
         from fastapi.responses import RedirectResponse
-        return RedirectResponse("/go")
+        return RedirectResponse("/ui/")
 
     metadata = app_metadata()
     frontend_available = (FRONTEND_DIST_DIR / "index.html").exists()
