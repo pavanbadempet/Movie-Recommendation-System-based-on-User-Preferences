@@ -20,6 +20,9 @@ from backend.models.lightgcn import LightGCN
 # Import all 4 Advanced Research Models
 from backend.models.neural_ode_recommender import QuantumFluidRecommender
 from backend.models.sasrec import SASRec
+from backend.models.contextual_router import ContextualRouter
+from backend.learning.adaptive_router_trainer import AdaptiveRouterTrainer
+from backend.serving.model_health_monitor import ModelHealthMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +124,18 @@ class ApexEnsembleEngine(nn.Module):
         # 6. LightGCN (Graph Networks)
         self.lightgcn = LightGCN(num_users=num_users, num_items=num_items, embedding_dim=emb_dim)
 
+        # 7. Contextual Router (MoE)
+        self.router = ContextualRouter(emb_dim=emb_dim)
+        router_path = MODELS_DIR / "contextual_router.pth"
+        if router_path.exists():
+            try:
+                self.router.load_state_dict(torch.load(router_path, map_location=self._device, weights_only=True))
+                logger.info("Loaded Contextual Router weights from %s", router_path.name)
+            except Exception as e:
+                logger.error("Failed to load Contextual Router weights: %s", e)
+        else:
+            logger.info("No Contextual Router weights found. Router will use random initialization.")
+
         # Try to load PySpark Gold Embeddings to anchor the models in reality
         self._inject_pyspark_priors()
 
@@ -140,6 +155,31 @@ class ApexEnsembleEngine(nn.Module):
             self.apply_dynamic_quantization()
 
         self.eval()  # Ensure all models are in inference mode
+
+        # Initialize Rényi Differential Privacy (RDP) Privacy Budget Accountant
+        try:
+            from backend.privacy.privacy_preserving_ml import PrivacyBudgetAccountant
+            self.privacy_accountant = PrivacyBudgetAccountant()
+        except Exception as exc:
+            logger.warning("Failed to initialize PrivacyBudgetAccountant: %s", exc)
+            self.privacy_accountant = None
+
+        # Initialize Adaptive Online Router Trainer
+        try:
+            self.router_trainer = AdaptiveRouterTrainer(router=self.router)
+            logger.info("Adaptive Router Trainer initialized (buffer_capacity=%d)", self.router_trainer.buffer_capacity)
+        except Exception as exc:
+            logger.warning("Failed to initialize AdaptiveRouterTrainer: %s", exc)
+            self.router_trainer = None
+
+        # Initialize Model Health Monitor
+        try:
+            self.health_monitor = ModelHealthMonitor()
+            logger.info("Model Health Monitor initialized")
+        except Exception as exc:
+            logger.warning("Failed to initialize ModelHealthMonitor: %s", exc)
+            self.health_monitor = None
+
 
     # ------------------------------------------------------------------ #
     # Ensemble weight loading                                              #
@@ -231,7 +271,7 @@ class ApexEnsembleEngine(nn.Module):
 
     def _move_to_device(self) -> None:
         """Move all sub-models to self._device."""
-        for name in ("quantum", "hyperbolic", "kan", "diffusion", "sasrec", "lightgcn"):
+        for name in ("quantum", "hyperbolic", "kan", "diffusion", "sasrec", "lightgcn", "router"):
             try:
                 getattr(self, name).to(self._device)
             except Exception as exc:
@@ -455,10 +495,13 @@ class ApexEnsembleEngine(nn.Module):
     def predict_ensemble(
         self, user_id: int, candidate_item_ids: list[int], session_sequence: list[int] | None = None,
         user_emb_override: "torch.Tensor | None" = None,
+        use_router: bool = True,
+        router_k: int = 2,
     ) -> dict[int, float]:
         """
-        Executes a real forward pass across all 4 architectures and returns
+        Executes a real forward pass across the architectures and returns
         the fused ensemble score for each candidate.
+        Uses Contextual Router (Mixture of Experts) to run only top-k models when enabled.
         Uses ONNX Runtime when available (Tier 2) for 2-5x faster CPU inference.
 
         Parameters
@@ -474,13 +517,17 @@ class ApexEnsembleEngine(nn.Module):
             When provided, the LightGCN user embedding table is NOT read — this tensor
             is used instead, ensuring the shared embedding table is never mutated.
             Ignored by the ONNX path (which reads embeddings internally).
+        use_router:
+            Whether to use the Contextual Router (Mixture of Experts) to prune model execution.
+        router_k:
+            Number of top models to dynamically execute.
         """
         if not candidate_item_ids:
             return {}
 
-        # Try ONNX-accelerated path first (Tier 2) when no user embedding override is requested.
-        # This ensures DP overrides (which are processed in PyTorch) are respected.
-        if user_emb_override is None:
+        # Try ONNX-accelerated path first (Tier 2) when no user embedding override is requested and router is disabled.
+        # This ensures DP overrides (which are processed in PyTorch) and MoE routing are respected.
+        if user_emb_override is None and not use_router:
             try:
                 from backend.serving.onnx_engine import get_onnx_engine
 
@@ -490,7 +537,14 @@ class ApexEnsembleEngine(nn.Module):
             except Exception as exc:
                 logger.debug("ONNX ensemble path unavailable; falling back to PyTorch: %s", exc)
 
-        return self._predict_ensemble_pytorch(user_id, candidate_item_ids, session_sequence, user_emb_override)
+        return self._predict_ensemble_pytorch(
+            user_id,
+            candidate_item_ids,
+            session_sequence,
+            user_emb_override,
+            use_router=use_router,
+            router_k=router_k,
+        )
 
     def _predict_ensemble_onnx(
         self, user_id: int, candidate_item_ids: list[int], onnx, session_sequence: list[int] | None = None
@@ -598,13 +652,44 @@ class ApexEnsembleEngine(nn.Module):
     def _predict_ensemble_pytorch(
         self, user_id: int, candidate_item_ids: list[int], session_sequence: list[int] | None = None,
         user_emb_override: "torch.Tensor | None" = None,
+        use_router: bool = True,
+        router_k: int = 2,
     ) -> dict[int, float]:
         if not candidate_item_ids:
             return {}
 
+        # Check and deduct privacy budget
+        budget_allowed = True
+        if self.privacy_accountant is not None:
+            import os
+            # If user_emb_override is provided, we deduct the budget.
+            if user_emb_override is not None:
+                dp_epsilon = float(os.getenv("APEX_DP_EPSILON", "1.0"))
+                budget_allowed, remaining = self.privacy_accountant.check_and_deduct_budget(
+                    user_id=user_id,
+                    request_epsilon=dp_epsilon,
+                    request_delta=1e-5,
+                    mechanism="gaussian"
+                )
+                if not budget_allowed:
+                    logger.warning(
+                        "Privacy budget exhausted for user %d (remaining budget: %.4f). Falling back to safe zero/dummy representations.",
+                        user_id,
+                        remaining
+                    )
+
+        if not budget_allowed:
+            # Fallback user ID to a generic user (e.g. 0)
+            safe_user_id = 0
+            if user_emb_override is not None:
+                user_emb_override = torch.zeros((self.emb_dim,), dtype=torch.float32).to(self._device)
+            session_sequence = [0] * 50
+        else:
+            safe_user_id = user_id % self.num_users
+
         # Ensure ID bounds are respected (hash to max size if unknown)
-        safe_user_id = user_id % self.num_users
         safe_item_ids = [item_id % self.num_items for item_id in candidate_item_ids]
+
 
         u_tensor = torch.tensor([safe_user_id], dtype=torch.long)
         i_tensor = torch.tensor(safe_item_ids, dtype=torch.long)
@@ -622,25 +707,27 @@ class ApexEnsembleEngine(nn.Module):
             else:
                 lgcn_u_emb = self.lightgcn.user_embedding(u_tensor).expand(len(i_tensor), -1)
             lgcn_i_emb = lgcn_all_items[i_tensor]  # lookup from cache
-            simulated_seq = self._get_session_sequence(user_id, override=session_sequence)
+            simulated_seq = self._get_session_sequence(safe_user_id, override=session_sequence)
 
         # Enrich user embedding with attention over session history
-        try:
-            from backend.models.attention_user_model import build_attended_user_embedding, get_user_attention_encoder
+        if budget_allowed:
+            try:
+                from backend.models.attention_user_model import build_attended_user_embedding, get_user_attention_encoder
 
-            seq_list = simulated_seq.squeeze().tolist()
-            if isinstance(seq_list, int):
-                seq_list = [seq_list]
-            seq_list = [s for s in seq_list if s > 0]  # Remove padding
-            if seq_list:
-                encoder = get_user_attention_encoder(emb_dim=self.emb_dim)
-                attended = build_attended_user_embedding(user_id, lgcn_all_items, seq_list, encoder)
-                if attended is not None:
-                    # Blend attended embedding with base user embedding
-                    attended_expanded = attended.expand(len(i_tensor), -1)
-                    lgcn_u_emb = 0.7 * lgcn_u_emb + 0.3 * attended_expanded
-        except Exception as exc:
-            logger.debug("Attention user embedding unavailable; using base embedding: %s", exc)
+                seq_list = simulated_seq.squeeze().tolist()
+                if isinstance(seq_list, int):
+                    seq_list = [seq_list]
+                seq_list = [s for s in seq_list if s > 0]  # Remove padding
+                if seq_list:
+                    encoder = get_user_attention_encoder(emb_dim=self.emb_dim)
+                    attended = build_attended_user_embedding(user_id, lgcn_all_items, seq_list, encoder)
+                    if attended is not None:
+                        # Blend attended embedding with base user embedding
+                        attended_expanded = attended.expand(len(i_tensor), -1)
+                        lgcn_u_emb = 0.7 * lgcn_u_emb + 0.3 * attended_expanded
+            except Exception as exc:
+                logger.debug("Attention user embedding unavailable; using base embedding: %s", exc)
+
 
         def _norm(t):
             t_min, t_max = t.min(), t.max()
@@ -692,32 +779,91 @@ class ApexEnsembleEngine(nn.Module):
                 "lightgcn": score_lightgcn,
             }
 
-            with self._weights_lock:
-                w = dict(self._weights)
+            # Run contextual router (Mixture of Experts) to determine active models
+            selected_models = None
+            routing_weights = None
+            _router_user_state = None  # Sentinel for router trainer feedback
+            if use_router:
+                try:
+                    import os
+                    from backend.models.contextual_router import build_user_state
+                    
+                    # 1. Get interaction count for user
+                    try:
+                        interaction_count = len(_get_user_event_index().get(str(safe_user_id), []))
+                    except Exception:
+                        interaction_count = 0
+                        
+                    # 2. Get base user embedding
+                    base_u_emb = lgcn_u_emb[0].detach()
+                    
+                    # 3. Build user state vector [emb_dim + 4]
+                    user_state = build_user_state(
+                        user_id=safe_user_id,
+                        user_emb=base_u_emb,
+                        session_seq=simulated_seq,
+                        item_embeddings=lgcn_all_items,
+                        interaction_count=interaction_count,
+                        inference_energy=float(os.getenv("APEX_INFERENCE_ENERGY", "0.5"))
+                    )
+                    
+                    # 4. Query router
+                    selected_models, routing_weights = self.router.route(user_state.to(self._device), k=router_k)
+                    _router_user_state = user_state  # Save for router trainer feedback
+                except Exception as router_exc:
+                    logger.warning("Dynamic router execution failed; falling back to full ensemble. Error: %s", router_exc)
+                    selected_models = None
+                    routing_weights = None
 
-            # Use contextual weights when available (context-dependent ensemble blending).
-            # Applied to both ONNX and PyTorch paths for consistency.
-            try:
-                from backend.models.neural_weight_optimizer import get_contextual_weights
+            # Filter functions based on router selections
+            if selected_models is not None:
+                active_fns = {m: model_fns[m] for m in selected_models if m in model_fns}
+            else:
+                active_fns = model_fns
 
-                contextual_w = get_contextual_weights({})
-                if contextual_w:
-                    w = contextual_w
-            except Exception as exc:
-                logger.debug("Contextual weights unavailable; using static weights: %s", exc)
+            # Apply health monitor filtering — exclude degraded models
+            if self.health_monitor is not None:
+                healthy_models = set(self.health_monitor.get_active_models())
+                active_fns = {m: fn for m, fn in active_fns.items() if m in healthy_models}
+                if not active_fns:
+                    # Safety: if health filter removed everything, fall back to all
+                    active_fns = model_fns
 
-            # Run all 6 models in parallel using the module-level thread pool.
-            # Reusing the pool avoids the ~1 ms thread-creation overhead per request.
+            if selected_models is not None and routing_weights is not None:
+                # Use normalized routing weights from router
+                w = {name: routing_weights[idx].item() for idx, name in enumerate(selected_models)}
+            else:
+                # Fallback to static or contextual weights
+                with self._weights_lock:
+                    w = dict(self._weights)
+
+                # Use contextual weights when available (context-dependent ensemble blending)
+                try:
+                    from backend.models.neural_weight_optimizer import get_contextual_weights
+
+                    contextual_w = get_contextual_weights({})
+                    if contextual_w:
+                        w = contextual_w
+                except Exception as exc:
+                    logger.debug("Contextual weights unavailable; using static weights: %s", exc)
+
+            # Run active models in parallel using the module-level thread pool
             executor = _get_model_thread_pool()
             results: dict[str, torch.Tensor] = {}
-            futures = {executor.submit(fn): name for name, fn in model_fns.items()}
+            model_latencies: dict[str, float] = {}
+            model_successes: dict[str, bool] = {}
+            futures = {executor.submit(fn): (name, time.perf_counter()) for name, fn in active_fns.items()}
             for future in as_completed(futures):
-                name = futures[future]
+                name, start_t = futures[future]
+                elapsed_ms = (time.perf_counter() - start_t) * 1000.0
+                model_latencies[name] = elapsed_ms
                 try:
                     results[name] = future.result()
+                    model_successes[name] = True
                 except Exception as exc:
                     logger.warning("Model %s failed: %s; using 0.5 fallback", name, exc)
-                    results[name] = torch.ones(len(safe_item_ids)) * 0.5
+                    results[name] = torch.ones(len(safe_item_ids), device=self._device) * 0.5
+                    model_successes[name] = False
 
             # -----------------------------------------------------------------
             # Uncertainty-gated ensemble blending
@@ -727,44 +873,82 @@ class ApexEnsembleEngine(nn.Module):
             try:
                 from backend.intelligence.uncertainty_estimator import ensemble_uncertainty
 
-                # Per-item uncertainty: variance across weighted model scores
+                active_names = list(results.keys())
                 stacked = torch.stack([
                     results[m] * w.get(m, 0.0)
-                    for m in ("lightgcn", "quantum", "sasrec", "kan", "hyperbolic", "diffusion")
-                ], dim=0)  # [6, num_items]
-                # Weighted mean and variance across models
+                    for m in active_names
+                ], dim=0)  # [num_active, num_items]
+                
+                # Weighted mean and variance across active models
                 w_tensor = torch.tensor(
-                    [w.get(m, 0.0) for m in ("lightgcn", "quantum", "sasrec", "kan", "hyperbolic", "diffusion")],
+                    [w.get(m, 0.0) for m in active_names],
                     dtype=torch.float32,
+                    device=self._device
                 )
                 w_tensor = w_tensor / (w_tensor.sum() + 1e-8)
+                w_expanded = w_tensor.unsqueeze(1)
+                weighted_mean = (stacked * w_expanded).sum(dim=0, keepdim=True)
+                
                 per_item_uncertainty = (
-                    (stacked - (stacked * w_tensor.unsqueeze(1)).sum(dim=0, keepdim=True)) ** 2
-                    * w_tensor.unsqueeze(1)
+                    (stacked - weighted_mean) ** 2
+                    * w_expanded
                 ).sum(dim=0)  # [num_items] — weighted variance per item
+                
                 # Confidence gate: items with high model disagreement get penalised
-                # Normalise variance to [0, 1] and apply soft gate: score * (1 - 0.5 * uncertainty)
                 max_var = per_item_uncertainty.max()
                 if max_var > 1e-6:
                     normalised_unc = per_item_uncertainty / max_var
                     confidence_gate = 1.0 - 0.5 * normalised_unc  # [0.5, 1.0]
                 else:
-                    confidence_gate = torch.ones(len(safe_item_ids))
+                    confidence_gate = torch.ones(len(safe_item_ids), device=self._device)
             except Exception as exc:
                 logger.debug("Uncertainty gating failed; skipping: %s", exc)
-                confidence_gate = torch.ones(len(safe_item_ids))
+                confidence_gate = torch.ones(len(safe_item_ids), device=self._device)
 
-            final_scores = (
-                results["lightgcn"] * w["lightgcn"]
-                + results["quantum"] * w["quantum"]
-                + results["sasrec"] * w["sasrec"]
-                + results["kan"] * w["kan"]
-                + results["hyperbolic"] * w["hyperbolic"]
-                + results["diffusion"] * w["diffusion"]
-            ) * confidence_gate  # Apply uncertainty gate
+            final_scores = torch.zeros(len(safe_item_ids), device=self._device)
+            for m in active_names:
+                final_scores += results[m] * w.get(m, 0.0)
+            final_scores = final_scores * confidence_gate  # Apply uncertainty gate
 
             for idx, original_item_id in enumerate(candidate_item_ids):
                 scores[original_item_id] = final_scores[idx].item()
+
+            # --- Record feedback into Health Monitor and Router Trainer ---
+            try:
+                if self.health_monitor is not None:
+                    # Compute per-model error as deviation from ensemble mean
+                    ensemble_mean = final_scores.mean().item()
+                    for m in active_names:
+                        model_mean = results[m].mean().item()
+                        error = abs(model_mean - ensemble_mean)
+                        self.health_monitor.record_prediction(
+                            model_name=m,
+                            error=error,
+                            latency_ms=model_latencies.get(m, 0.0),
+                            success=model_successes.get(m, True),
+                        )
+            except Exception as health_exc:
+                logger.debug("Health monitor recording failed: %s", health_exc)
+
+            try:
+                if self.router_trainer is not None and use_router and _router_user_state is not None:
+                    # Record model scores for online router training
+                    per_model_scores = {
+                        m: results[m].mean().item() for m in active_names
+                    }
+                    self.router_trainer.record(
+                        user_state=_router_user_state,
+                        model_scores=per_model_scores,
+                        selected_models=selected_models,
+                    )
+                    # Trigger async training step if buffer is ready
+                    if self.router_trainer.is_ready:
+                        try:
+                            executor.submit(self.router_trainer.train_step)
+                        except Exception:
+                            pass  # Non-critical: training is best-effort
+            except Exception as trainer_exc:
+                logger.debug("Router trainer recording failed: %s", trainer_exc)
 
         except Exception as e:
             logger.error(f"Ensemble prediction failed: {e}")
@@ -772,6 +956,78 @@ class ApexEnsembleEngine(nn.Module):
                 scores[idx] = 0.0
 
         return scores
+
+    def get_system_health(self) -> dict:
+        """Return a comprehensive health report for the entire ensemble system."""
+        report = {"engine": "ApexEnsembleEngine"}
+
+        # Model health
+        if self.health_monitor is not None:
+            report["model_health"] = self.health_monitor.get_health_report()
+        else:
+            report["model_health"] = {"status": "unavailable"}
+
+        # Router trainer stats
+        if self.router_trainer is not None:
+            report["router_trainer"] = self.router_trainer.get_stats()
+        else:
+            report["router_trainer"] = {"status": "unavailable"}
+
+        # Privacy budget
+        if self.privacy_accountant is not None:
+            report["privacy_budget"] = {"status": "active"}
+        else:
+            report["privacy_budget"] = {"status": "unavailable"}
+
+        return report
+
+    def explain_routing(self, user_id: int, k: int = 2) -> dict:
+        """
+        Explain why the router selected specific models for a user.
+
+        Returns feature attributions and human-readable explanations.
+        """
+        try:
+            from backend.intelligence.router_explainer import RouterExplainer
+            from backend.models.contextual_router import build_user_state
+
+            safe_user_id = user_id % self.num_users
+            u_tensor = torch.tensor([safe_user_id], dtype=torch.long)
+
+            with torch.no_grad():
+                lgcn_all_items, _ = self._get_item_embedding_cache()
+                base_u_emb = self.lightgcn.user_embedding(u_tensor).squeeze()
+                simulated_seq = self._get_session_sequence(safe_user_id)
+
+            try:
+                interaction_count = len(_get_user_event_index().get(str(safe_user_id), []))
+            except Exception:
+                interaction_count = 0
+
+            user_state = build_user_state(
+                user_id=safe_user_id,
+                user_emb=base_u_emb,
+                session_seq=simulated_seq,
+                item_embeddings=lgcn_all_items,
+                interaction_count=interaction_count,
+            )
+
+            explainer = RouterExplainer(router=self.router, emb_dim=self.emb_dim)
+            explanation = explainer.explain(user_state.to(self._device), k=k)
+
+            return {
+                "selected_models": explanation.selected_models,
+                "routing_weights": explanation.routing_weights,
+                "all_model_probabilities": explanation.all_model_probabilities,
+                "feature_attributions": explanation.feature_attributions,
+                "top_positive_features": explanation.top_positive_features,
+                "top_negative_features": explanation.top_negative_features,
+                "explanation_text": explanation.explanation_text,
+                "user_state_summary": explanation.user_state_summary,
+            }
+        except Exception as exc:
+            logger.warning("Routing explanation failed: %s", exc)
+            return {"error": str(exc)}
 
 
 # ---------------------------------------------------------------------------

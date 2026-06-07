@@ -31,6 +31,7 @@ from backend.learning.rl_policy import ActorCriticPolicy, RLSafetyFilter
 from backend.learning.rl_reward import RLRewardEngine
 from backend.models.sasrec import SASRec
 from backend.models.two_tower import TwoTowerModel
+from backend.models.contextual_router import ContextualRouter, build_user_state
 
 __all__ = [
     # 6-model ensemble
@@ -40,6 +41,8 @@ __all__ = [
     "QuantumFluidRecommender",
     "HyperbolicRecommender",
     "LatentDiffusionRecommender",
+    "ContextualRouter",
+    "build_user_state",
     # Retrieval + ranking
     "TwoTowerModel",
     "MMoERanker",
