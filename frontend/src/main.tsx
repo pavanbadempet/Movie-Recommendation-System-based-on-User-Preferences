@@ -1945,7 +1945,7 @@ function App() {
                           setMode(mode === "title" ? "semantic" : "title");
                         }}
                       >
-                        <Sparkles size={14} />
+                        {mode === "semantic" ? <Sparkles size={14} /> : <Search size={14} />}
                         <span>{mode === "title" ? "Title Search" : "AI Search"}</span>
                       </button>
                       {hasTitleQuery && (

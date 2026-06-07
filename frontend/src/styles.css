@@ -1638,18 +1638,50 @@ input:focus-visible {
   border: 1px solid var(--line);
   border-radius: 20px;
   padding: 4px 10px 4px 14px;
-  width: 180px;
+  width: 220px;
   transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   margin-right: 12px;
 }
 .topbar-search:focus-within {
-  width: 280px;
+  width: 320px;
   border-color: var(--accent);
   background: rgba(255, 255, 255, 0.08);
   box-shadow: 0 0 15px rgba(99, 102, 241, 0.15);
 }
 .topbar-search svg {
   color: var(--quiet);
+  flex-shrink: 0;
+}
+
+/* Result context bar under section titles */
+.result-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 12px 0 20px 0;
+  align-items: center;
+}
+.result-context span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 20px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-family: var(--font-label, sans-serif);
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+.result-context span:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+.result-context span svg {
+  color: var(--accent);
   flex-shrink: 0;
 }
 .topbar-search input {
