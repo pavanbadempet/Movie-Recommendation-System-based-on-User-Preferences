@@ -1,7 +1,8 @@
 # No LFS rules needed - model files are hosted on HuggingFace, not GitHub
 # GitHub repo contains code only
-*.tq filter=lfs diff=lfs merge=lfs -text
+.hadoop/bin/winutils.exe filter=lfs diff=lfs merge=lfs -text
 *.gpickle filter=lfs diff=lfs merge=lfs -text
+*.tq filter=lfs diff=lfs merge=lfs -text
 *.parquet filter=lfs diff=lfs merge=lfs -text
 *.mp4 filter=lfs diff=lfs merge=lfs -text
 data/raw/ml-25m/tags.csv filter=lfs diff=lfs merge=lfs -text
