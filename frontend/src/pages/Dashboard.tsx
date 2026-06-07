@@ -106,7 +106,7 @@ function HardwareCard({
         <HardDrive size={16} aria-hidden="true" />
         Hardware Profile
       </h3>
-      <dl className="hardware-dl" style={{ display: "grid", gap: "10px", margin: 0, padding: 0 }}>
+      <div className="hardware-dl" style={{ display: "grid", gap: "10px", margin: 0, padding: 0 }}>
         <div className="hardware-row-premium" style={{ display: "flex", flexDirection: "column", gap: "8px", padding: "12px", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "8px", background: "rgba(0,0,0,0.15)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "var(--muted)", fontWeight: 600 }}>
             <span>GPU Core Acceleration</span>
@@ -136,7 +136,7 @@ function HardwareCard({
             <div style={{ height: "100%", width: `${Math.min(100, (cpuCores / 16) * 100)}%`, background: "linear-gradient(90deg, #ec4899, #06b6d4)", borderRadius: "3px" }}></div>
           </div>
         </div>
-      </dl>
+      </div>
     </div>
   );
 }

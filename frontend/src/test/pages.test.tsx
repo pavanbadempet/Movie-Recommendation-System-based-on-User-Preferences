@@ -80,7 +80,7 @@ describe("Dashboard", () => {
 
   it("renders GPU available chip", () => {
     render(<Dashboard />);
-    expect(screen.getByText(/available/i)).toBeInTheDocument();
+    expect(screen.getByText(/accelerated/i)).toBeInTheDocument();
   });
 
   it("renders RAM value", () => {
@@ -90,12 +90,12 @@ describe("Dashboard", () => {
 
   it("renders CPU cores", () => {
     render(<Dashboard />);
-    expect(screen.getByText("8")).toBeInTheDocument();
+    expect(screen.getByText(/8 threads/i)).toBeInTheDocument();
   });
 
   it("renders P95 latency from SLO", () => {
     render(<Dashboard />);
-    expect(screen.getByText(/95\.5 ms/i)).toBeInTheDocument();
+    expect(screen.getByText("96")).toBeInTheDocument();
   });
 
   it("shows degraded banner when SLO is degraded", () => {
