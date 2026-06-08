@@ -42,7 +42,8 @@ RUN mkdir -p models data/processed data/evaluation reports
 COPY models/ ./models/
 COPY data/processed/ ./data/processed/
 COPY data/evaluation/ ./data/evaluation/
-COPY reports/ ./reports/
+# Copy only the offline eval report (other reports are for local dev only)
+COPY reports/offline_eval_report.json ./reports/offline_eval_report.json
 
 # Create other directories
 RUN mkdir -p data/raw logs
