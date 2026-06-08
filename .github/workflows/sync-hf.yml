@@ -46,22 +46,31 @@ jobs:
               ignore_patterns=[
                   '.git/*',
                   '.github/*',
-                  'models/*.npy',
-                  'models/*.index',
-                  'models/*.joblib',
-                  'models/*.joblib.metadata.json',
-                  'models/pipeline_manifest.json',
+                  # Binary model files (HF requires Xet storage for binaries)
+                  '*.onnx',
+                  '*.onnx.data',
+                  '*.tq',
+                  'models/*',
+                  'models/**/*',
                   'backend/models/*.index',
                   'backend/models/*.npy',
                   'backend/models/*.joblib',
                   'backend/models/*.joblib.metadata.json',
                   'backend/models/pipeline_manifest.json',
+                  'backend/models/onnx/*',
+                  # Large data directories
                   'data/processed/*.parquet',
                   'data/bronze/*',
                   'data/silver/*',
                   'data/gold/*',
                   'data/manifests/*',
                   'data/quality/*',
+                  # System binaries
+                  '.hadoop/*',
+                  # Database and logs
+                  '*.sqlite3',
+                  '*.log',
+                  '*.err',
               ]
           )
           print('Upload complete!')

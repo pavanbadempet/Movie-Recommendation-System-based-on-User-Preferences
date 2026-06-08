@@ -1098,8 +1098,11 @@ def create_rec_engine_router(
         if query_movie is None:
             raise HTTPException(status_code=404, detail=f"Movie with ID {movie_id} not found")
         if getattr(rec, "multimodal_index", None) is None:
-            raise HTTPException(status_code=503, detail="Visual Search is currently disabled due to missing artifacts.")
-        recommendations = await run_in_threadpool(lambda: rec.visual_search(movie_id, n=n))
+            # Fall back to content-based similarity when CLIP index is unavailable
+            logger.info("Multimodal index unavailable — falling back to content-based similarity for movie %s", movie_id)
+            recommendations = await run_in_threadpool(lambda: rec.recommend(movie_id, n=n))
+        else:
+            recommendations = await run_in_threadpool(lambda: rec.visual_search(movie_id, n=n))
         record_usage(
             "recommendations.visual",
             context.tenant_id,
@@ -1364,7 +1367,7 @@ def create_rec_engine_router(
         request_id: str | None = Query(default=None),
         session_id: str | None = Query(default=None),
         context=Depends(resolve_tenant_context),
-        current_user=Depends(get_current_user),
+        current_user=Depends(get_optional_user),
     ):
         result_limit = top_k or limit or n
         resolved_request_id = request_id or str(uuid.uuid4())
@@ -1446,7 +1449,7 @@ def create_rec_engine_router(
 # Diagnostic helpers — moved from backend/main.py (task 6.3)
 # ---------------------------------------------------------------------------
 from backend.serving.app_info import app_metadata
-from backend.data.auth import TenantContext, get_current_user
+from backend.data.auth import TenantContext, get_current_user, get_optional_user
 from backend.metrics.recommendation_benchmark import (
     evaluate_recommendation_case,
     find_recommendation_benchmark_case,
