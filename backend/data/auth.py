@@ -137,6 +137,26 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     return user
 
 
+_optional_oauth2 = OAuth2PasswordBearer(tokenUrl="/v1/auth/token", auto_error=False)
+
+
+async def get_optional_user(
+    token: str | None = Depends(_optional_oauth2),
+    db: Session = Depends(get_db),
+):
+    """Like get_current_user but returns None instead of 401 when no token is present."""
+    if token is None:
+        return None
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str | None = payload.get("sub")
+        if user_id is None:
+            return None
+    except JWTError:
+        return None
+    return db.query(User).filter(User.external_user_id == user_id).first()
+
+
 # -----------------------------------------------------------------------------
 # B2B MULTI-TENANT API KEYS
 # -----------------------------------------------------------------------------

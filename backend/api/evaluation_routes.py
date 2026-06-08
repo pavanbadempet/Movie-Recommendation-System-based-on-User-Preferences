@@ -12,7 +12,8 @@ from starlette.concurrency import run_in_threadpool
 
 from backend.data.auth import TenantContext
 
-_OFFLINE_EVAL_REPORT_PATH = Path("reports/offline_eval_report.json")
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_OFFLINE_EVAL_REPORT_PATH = _PROJECT_ROOT / "reports" / "offline_eval_report.json"
 
 
 def create_evaluation_router(
