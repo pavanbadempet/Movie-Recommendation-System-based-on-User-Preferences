@@ -1112,6 +1112,11 @@ def load_optional_models(rec) -> None:
     try:
         rec.multimodal_index = MultiModalFusionIndex()
         rec.multimodal_index.load()
+    except Exception as e:
+        rec.multimodal_index = None
+        logger.warning("Failed to load Multi-Modal index: %s", e)
+
+    try:
         rec.kg_engine.load()
         try:
             from backend.intelligence.cross_domain_kg import enrich_knowledge_graph_with_cross_domain
@@ -1119,8 +1124,7 @@ def load_optional_models(rec) -> None:
         except Exception as exc:
             logger.warning("Cross-domain KG enrichment skipped: %s", exc)
     except Exception as e:
-        rec.multimodal_index = None
-        logger.warning("Failed to load Multi-Modal/KG indexes: %s", e)
+        logger.warning("Failed to load Knowledge Graph: %s", e)
 
     try:
         from backend.models.two_tower import TwoTowerModel
