@@ -38,12 +38,10 @@ RUN python -m compileall backend etl frontend/streamlit_app.py
 # Copy Pre-computed Models and Data (present in production builds; skipped in CI)
 # Use COPY with a wildcard so the layer is a no-op when the directories are absent
 # rather than failing with "no source files were specified".
-RUN mkdir -p models data/processed data/evaluation reports
+RUN mkdir -p models data/processed data/evaluation
 COPY models/ ./models/
 COPY data/processed/ ./data/processed/
 COPY data/evaluation/ ./data/evaluation/
-# Copy only the offline eval report (other reports are for local dev only)
-COPY reports/offline_eval_report.json ./reports/offline_eval_report.json
 
 # Create other directories
 RUN mkdir -p data/raw logs
