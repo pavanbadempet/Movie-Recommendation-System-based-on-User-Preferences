@@ -1100,7 +1100,7 @@ def create_rec_engine_router(
         if getattr(rec, "multimodal_index", None) is None:
             # Fall back to content-based similarity when CLIP index is unavailable
             logger.info("Multimodal index unavailable — falling back to content-based similarity for movie %s", movie_id)
-            recommendations = await run_in_threadpool(lambda: rec.recommend(movie_id, n=n))
+            recommendations = await run_in_threadpool(lambda: rec.recommend_by_id(movie_id, n=n))
         else:
             recommendations = await run_in_threadpool(lambda: rec.visual_search(movie_id, n=n))
         record_usage(
