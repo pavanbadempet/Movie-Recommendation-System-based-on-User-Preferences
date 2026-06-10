@@ -64,4 +64,4 @@ repos:
       - id: yamllint
         args: [-d, relaxed]
         files: \.(yml|yaml)$
-        exclude: ^(frontend/|\.kiro/)
+        exclude: ^(frontend/|\.kiro/|k8s/)

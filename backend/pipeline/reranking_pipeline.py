@@ -289,7 +289,7 @@ class RerankingPipeline:
                 )
             return filtered
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning(
                 "RL safety filter failed with %s: %s — skipping step.",
                 type(exc).__name__,
@@ -334,7 +334,7 @@ class RerankingPipeline:
                 )
             return filtered
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning(
                 "Quality gate failed with %s: %s — skipping step.",
                 type(exc).__name__,
@@ -406,7 +406,7 @@ class RerankingPipeline:
             )
             return selected
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning(
                 "MMR diversity selection failed with %s: %s — skipping step.",
                 type(exc).__name__,
@@ -438,7 +438,7 @@ class RerankingPipeline:
                 explanation = self.llm_client.generate_explanation(item)
                 explanations[item.movie_id] = str(explanation) if explanation is not None else None
                 logger.debug("LLM generated explanation for movie_id=%d.", item.movie_id)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning(
                     "LLM explanation failed for movie_id=%d with %s: %s — setting explanation=None.",
                     item.movie_id,

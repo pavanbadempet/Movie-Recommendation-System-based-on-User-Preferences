@@ -1,0 +1,64 @@
+{
+  "name": "silver_movies",
+  "version": 1,
+  "description": "Curated movie contract after identity gates and coverage-first enrichment.",
+  "primary_key": ["id"],
+  "partition_keys": [],
+  "required_columns": [
+    "id",
+    "title",
+    "metadata_completeness",
+    "content_quality_score",
+    "quality_bucket",
+    "searchable",
+    "recommendable",
+    "public_demo_eligible"
+  ],
+  "columns": {
+    "id": {
+      "type": "integer",
+      "nullable": false
+    },
+    "title": {
+      "type": "string",
+      "nullable": false
+    },
+    "overview": {
+      "type": "string",
+      "nullable": true
+    },
+    "metadata_completeness": {
+      "type": "number",
+      "nullable": false,
+      "min": 0.0,
+      "max": 1.0
+    },
+    "content_quality_score": {
+      "type": "number",
+      "nullable": false,
+      "min": 0.0,
+      "max": 1.0
+    },
+    "quality_bucket": {
+      "type": "string",
+      "nullable": false,
+      "enum": ["premium", "standard", "long_tail", "thin_metadata"]
+    },
+    "searchable": {
+      "type": "boolean",
+      "nullable": false
+    },
+    "recommendable": {
+      "type": "boolean",
+      "nullable": false
+    },
+    "is_adult_content": {
+      "type": "boolean",
+      "nullable": false
+    },
+    "public_demo_eligible": {
+      "type": "boolean",
+      "nullable": false
+    }
+  }
+}

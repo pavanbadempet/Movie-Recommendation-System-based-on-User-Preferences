@@ -62,7 +62,7 @@ def summarize_semantic_twins(twins: pd.DataFrame, run_id: str, run_date: str) ->
         "artifact_version": SEMANTIC_TWIN_ARTIFACT_VERSION,
         "run_id": run_id,
         "run_date": run_date,
-        "row_count": int(len(twins)),
+        "row_count": len(twins),
         "avg_confidence": round(float(twins["confidence"].mean()), 6) if len(twins) else 0.0,
         "coverage": {
             "rows_with_concepts": int((twins["concepts"] != "[]").sum()) if "concepts" in twins else 0,
@@ -91,8 +91,8 @@ def semantic_twin_quality_gate(movies: pd.DataFrame, twins: pd.DataFrame) -> dic
         raise ValueError("semantic twin artifact contains null semantic_twin_json values")
     return {
         "stage": "semantic_twins",
-        "rows": int(len(twins)),
-        "semantic_twin_rows": int(len(twins)),
+        "rows": len(twins),
+        "semantic_twin_rows": len(twins),
         "id_order_matches_catalog": True,
     }
 

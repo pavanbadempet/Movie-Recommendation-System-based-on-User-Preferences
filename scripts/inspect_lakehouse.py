@@ -100,7 +100,7 @@ def summarize_scd_table(
     scd_summary: dict[str, Any] = {
         "current_rows": current_rows,
         "historical_versions": int(len(history) - current_rows),
-        "total_versions": int(len(history)),
+        "total_versions": len(history),
         "business_keys": int(history["id"].nunique()) if "id" in history.columns else None,
         "as_of": None,
         "comparison": None,
@@ -110,7 +110,7 @@ def summarize_scd_table(
         as_of_view = as_of_scd(history, as_of_ts)
         scd_summary["as_of"] = {
             "timestamp": as_of_ts,
-            "active_rows": int(len(as_of_view)),
+            "active_rows": len(as_of_view),
         }
 
     if compare_from and compare_to:

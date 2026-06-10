@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import argparse
 import logging
-import sys
 from pathlib import Path
+import sys
 
 import numpy as np
 
@@ -61,8 +61,8 @@ def migrate(faiss_path: Path, output_path: Path) -> dict:
     FileNotFoundError
         If ``faiss_path`` does not exist on disk.
     """
-    import faiss  # noqa: PLC0415 — imported here so the module is usable even when faiss is absent
-    from turbovec import TurboQuantIndex  # noqa: PLC0415
+    import faiss
+    from turbovec import TurboQuantIndex
 
     faiss_path = Path(faiss_path)
     output_path = Path(output_path)
@@ -90,10 +90,7 @@ def migrate(faiss_path: Path, output_path: Path) -> dict:
 
     # --- Verify row count ---
     if len(tq_index) != n:
-        raise ValueError(
-            f"Row count mismatch after migration: "
-            f"faiss.ntotal={n}, turbovec.len={len(tq_index)}"
-        )
+        raise ValueError(f"Row count mismatch after migration: faiss.ntotal={n}, turbovec.len={len(tq_index)}")
 
     # --- Persist TurboVec index ---
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -154,7 +151,7 @@ def main() -> None:
     except FileNotFoundError as exc:
         logger.error("Source file not found: %s", exc)
         sys.exit(1)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error("Migration failed: %s", exc)
         sys.exit(1)
 

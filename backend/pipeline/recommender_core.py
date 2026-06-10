@@ -187,9 +187,12 @@ def apply_learned_ranker(
             from backend.privacy.privacy_preserving_ml import privatize_user_embedding
 
             with torch.no_grad():
-                raw_user_emb = apex_engine.lightgcn.user_embedding(
-                    torch.tensor([safe_user_id_apex], dtype=torch.long)
-                ).squeeze(0).cpu().numpy()
+                raw_user_emb = (
+                    apex_engine.lightgcn.user_embedding(torch.tensor([safe_user_id_apex], dtype=torch.long))
+                    .squeeze(0)
+                    .cpu()
+                    .numpy()
+                )
 
             privatized_np = privatize_user_embedding(
                 raw_user_emb,
@@ -212,10 +215,8 @@ def apply_learned_ranker(
         user_events: list[dict] = []
         try:
             from backend.events import iter_events
-            user_events = [
-                e for e in iter_events()
-                if str(e.get("user_id", "")) == str(user_id)
-            ]
+
+            user_events = [e for e in iter_events() if str(e.get("user_id", "")) == str(user_id)]
         except Exception as evt_exc:
             logger.debug("Could not load user events for long-horizon RL: %s", evt_exc)
 
@@ -224,6 +225,7 @@ def apply_learned_ranker(
         if user_events:
             try:
                 from backend.intelligence.long_horizon_rl import compute_preference_stability, estimate_churn_risk
+
                 churn_risk = estimate_churn_risk(user_events, lookback_days=30)
                 preference_stability = compute_preference_stability(user_events, window_days=90)
             except Exception as lh_exc:
@@ -274,6 +276,7 @@ def apply_learned_ranker(
             if user_events:
                 try:
                     from backend.intelligence.long_horizon_rl import long_horizon_score_adjustment
+
                     lh_adjustment = long_horizon_score_adjustment(
                         candidate=candidate,
                         user_events=user_events,
@@ -282,21 +285,20 @@ def apply_learned_ranker(
                     )
                     final_score += lh_adjustment
                 except Exception as lh_exc:
-                    logger.debug("Long-horizon score adjustment failed for item %s: %s",
-                                 candidate.get("id"), lh_exc)
+                    logger.debug("Long-horizon score adjustment failed for item %s: %s", candidate.get("id"), lh_exc)
 
             # Apply cold-start boost: boost content signals for users with < 5 interactions
             if is_cold_start:
                 try:
                     from backend.intelligence.uncertainty_estimator import cold_start_boost
+
                     boost_multiplier = cold_start_boost(
                         movie=candidate,
                         user_interaction_count=user_interaction_count,
                     )
                     final_score *= boost_multiplier
                 except Exception as cs_exc:
-                    logger.debug("Cold-start boost failed for item %s: %s",
-                                 candidate.get("id"), cs_exc)
+                    logger.debug("Cold-start boost failed for item %s: %s", candidate.get("id"), cs_exc)
 
             candidate["similarity_score"] = final_score
             candidate["metrics"] = {
@@ -670,11 +672,7 @@ def legacy_ai_search(rec, query: str, n: int = 10, fetch_k: int = 80) -> list:
         behavior_boost, behavior_reasons = rec._behavior_boost(movie.get("id"))
         intent_boost, intent_reasons = intent_score(movie, query_intent)
         hybrid_score = (
-            alpha * dense_score
-            + (1 - alpha) * sparse_score
-            + 0.10 * metadata_score
-            + behavior_boost
-            + intent_boost
+            alpha * dense_score + (1 - alpha) * sparse_score + 0.10 * metadata_score + behavior_boost + intent_boost
         )
         explanation = []
         if dense_score > 0:
@@ -708,7 +706,9 @@ def legacy_ai_search(rec, query: str, n: int = 10, fetch_k: int = 80) -> list:
     if rec._cross_encoder_enabled() and len(ranked_candidates) > 1:
         try:
             reranker = rec._get_cross_encoder()
-            rerank_window = ranked_candidates[: min(len(ranked_candidates), int(_os.getenv("NOVA_RERANK_WINDOW", "30")))]
+            rerank_window = ranked_candidates[
+                : min(len(ranked_candidates), int(_os.getenv("NOVA_RERANK_WINDOW", "30")))
+            ]
             pairs = [
                 [query, f"{item.get('title', '')}. {item.get('genres', '')}. {item.get('overview', '')}"]
                 for item in rerank_window
@@ -720,7 +720,7 @@ def legacy_ai_search(rec, query: str, n: int = 10, fetch_k: int = 80) -> list:
                 item["retrieval_stage"] = f"{item['retrieval_stage']}_cross_encoder"
                 item["explanation"] = ["neural reranker selected this match"] + item["explanation"][:3]
                 item["explanation_text"] = " | ".join(item["explanation"])
-            ranked_candidates = rerank_window + ranked_candidates[len(rerank_window):]
+            ranked_candidates = rerank_window + ranked_candidates[len(rerank_window) :]
             ranked_candidates.sort(key=lambda item: item["similarity_score"], reverse=True)
         except Exception as exc:
             logger.warning("Cross-encoder reranking skipped: %s", exc)
@@ -808,9 +808,7 @@ def get_all_titles(rec, limit: int = 100000) -> list:
     if "release_date" in titles_df.columns:
         years = _pd.to_datetime(titles_df["release_date"], errors="coerce").dt.year
         mask = years.notna() & (years > 0)
-        titles_df.loc[mask, "title"] = (
-            titles_df.loc[mask, "title"] + " (" + years[mask].astype(int).astype(str) + ")"
-        )
+        titles_df.loc[mask, "title"] = titles_df.loc[mask, "title"] + " (" + years[mask].astype(int).astype(str) + ")"
 
     if "genres" in titles_df.columns:
         mask = titles_df["genres"].notna() & (titles_df["genres"] != "")
@@ -840,8 +838,7 @@ def user_profile_fallback(rec, profile: dict, result_limit: int) -> list:
     """Metadata-only fallback for recommend_for_user_profile (no pipeline available)."""
     negative_ids = {int(mid) for mid in profile.get("negative_movie_ids") or []}
     seed_events = [
-        ev for ev in (profile.get("recent_events") or [])
-        if ev.get("movie_id") is not None and not ev.get("negative")
+        ev for ev in (profile.get("recent_events") or []) if ev.get("movie_id") is not None and not ev.get("negative")
     ]
     genre_affinity = rec._genre_affinity_from_profile(profile)
     scored: dict = {}
@@ -929,17 +926,20 @@ def user_profile_fallback(rec, profile: dict, result_limit: int) -> list:
 # Second-pass extractions: load sub-loaders, behavior, index builders, etc.
 # ---------------------------------------------------------------------------
 
+
 def load_vector_artifacts(rec) -> None:
     """Load FAISS index, SBERT embeddings, movie ID map, and pipeline manifest."""
     import json as _json
+    import pathlib as _pathlib
+    import sys as _sys
+
     import numpy as _np
-    from backend.models.model_loader import ensure_model_files
-    from backend.serving.feature_store import feature_store
-    from backend.models.diffusion_recommender import LatentDiffusionRecommender
     import torch as _torch
 
-    import sys as _sys
-    import pathlib as _pathlib
+    from backend.models.diffusion_recommender import LatentDiffusionRecommender
+    from backend.models.model_loader import ensure_model_files
+    from backend.serving.feature_store import feature_store
+
     recommender_module = _sys.modules.get(rec.__class__.__module__)
     MODELS_DIR = (
         (recommender_module and getattr(recommender_module, "MODELS_DIR", None))
@@ -965,10 +965,14 @@ def load_vector_artifacts(rec) -> None:
         logger.warning("Could not load Diffusion Recommender: %s", e)
 
     import os as _os
+
     selected_artifacts = {
-        "movies_transformed.parquet", "semantic_twins.parquet",
-        "semantic_twin_summary.json", "pipeline_manifest.json",
-        "nova_ranker.joblib", "nova_ranker.joblib.metadata.json",
+        "movies_transformed.parquet",
+        "semantic_twins.parquet",
+        "semantic_twin_summary.json",
+        "pipeline_manifest.json",
+        "nova_ranker.joblib",
+        "nova_ranker.joblib.metadata.json",
     }
     if not rec._low_memory or _os.getenv("NOVA_FORCE_VECTOR_ARTIFACTS", "").lower() in {"1", "true", "yes", "on"}:
         selected_artifacts.update({"sbert_embeddings.npy", "turbovec.tq", "movie_ids.npy"})
@@ -984,6 +988,7 @@ def load_vector_artifacts(rec) -> None:
         logger.info("Skipping TurboVec index load in low-memory serving profile.")
     elif turbovec_path.exists():
         from turbovec import TurboQuantIndex
+
         rec._index = TurboQuantIndex.load(str(turbovec_path))
         logger.info("Loaded TurboVec index with %s vectors", f"{len(rec._index):,}")
     elif faiss_path.exists():
@@ -995,9 +1000,7 @@ def load_vector_artifacts(rec) -> None:
         )
         rec._artifact_status["vector_artifacts_ready"] = False
     else:
-        raise FileNotFoundError(
-            f"turbovec.tq not found at {turbovec_path}. Run the ETL pipeline first."
-        )
+        raise FileNotFoundError(f"turbovec.tq not found at {turbovec_path}. Run the ETL pipeline first.")
 
     vectors_path = MODELS_DIR / "sbert_embeddings.npy"
     if rec._low_memory and not _env_truthy("NOVA_FORCE_VECTOR_ARTIFACTS"):
@@ -1022,19 +1025,23 @@ def load_vector_artifacts(rec) -> None:
     if manifest_path.exists():
         try:
             rec._artifact_manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
-            rec._artifact_status.update({
-                "manifest_run_id": rec._artifact_manifest.get("run_id"),
-                "manifest_run_date": rec._artifact_manifest.get("run_date"),
-            })
+            rec._artifact_status.update(
+                {
+                    "manifest_run_id": rec._artifact_manifest.get("run_id"),
+                    "manifest_run_date": rec._artifact_manifest.get("run_date"),
+                }
+            )
         except Exception as exc:
             logger.warning("Could not read pipeline manifest %s: %s", manifest_path, exc)
 
 
 def load_movie_catalog(rec) -> None:
     """Load movie metadata parquet and build lookup maps."""
-    import pandas as _pd
-    import sys as _sys
     import pathlib as _pathlib
+    import sys as _sys
+
+    import pandas as _pd
+
     recommender_module = _sys.modules.get(rec.__class__.__module__)
     DATA_DIR = (
         (recommender_module and getattr(recommender_module, "DATA_DIR", None))
@@ -1049,11 +1056,25 @@ def load_movie_catalog(rec) -> None:
         raise FileNotFoundError("Movie data not found. Run the ETL pipeline first.")
 
     essential_cols = [
-        "id", "title", "overview", "genres", "vote_average", "vote_count",
-        "popularity", "release_date", "poster_path", "director",
-        "original_language", "tagline", "runtime", "metadata_completeness",
-        "content_quality_score", "quality_bucket", "searchable",
-        "recommendable", "public_demo_eligible",
+        "id",
+        "title",
+        "overview",
+        "genres",
+        "vote_average",
+        "vote_count",
+        "popularity",
+        "release_date",
+        "poster_path",
+        "director",
+        "original_language",
+        "tagline",
+        "runtime",
+        "metadata_completeness",
+        "content_quality_score",
+        "quality_bucket",
+        "searchable",
+        "recommendable",
+        "public_demo_eligible",
     ]
     if not rec._low_memory:
         essential_cols.append("cast")
@@ -1070,9 +1091,11 @@ def load_movie_catalog(rec) -> None:
 def load_ranker_and_behavior(rec) -> None:
     """Load learned ranker, build sparse index, and warm behavior features."""
     import os as _os
-    import sys as _sys
     import pathlib as _pathlib
+    import sys as _sys
+
     from backend.pipeline.ranker import load_ranker
+
     recommender_module = _sys.modules.get(rec.__class__.__module__)
     MODELS_DIR = (
         (recommender_module and getattr(recommender_module, "MODELS_DIR", None))
@@ -1091,6 +1114,7 @@ def load_ranker_and_behavior(rec) -> None:
     rec.refresh_behavior_features(force=True)
     try:
         from backend.intelligence.contextual_bandit import get_bandit_engine
+
         get_bandit_engine().inject_priors(rec._movies)
     except Exception as e:
         logger.warning("Failed to initialize bandit engine: %s", e)
@@ -1098,10 +1122,13 @@ def load_ranker_and_behavior(rec) -> None:
 
 def load_optional_models(rec) -> None:
     """Load multi-modal index, KG, Two-Tower fine-tune, and RL policy."""
-    import sys as _sys
     import pathlib as _pathlib
+    import sys as _sys
+
     import torch as _torch
+
     from backend.intelligence.multimodal_fusion import MultiModalFusionIndex
+
     recommender_module = _sys.modules.get(rec.__class__.__module__)
     MODELS_DIR = (
         (recommender_module and getattr(recommender_module, "MODELS_DIR", None))
@@ -1120,6 +1147,7 @@ def load_optional_models(rec) -> None:
         rec.kg_engine.load()
         try:
             from backend.intelligence.cross_domain_kg import enrich_knowledge_graph_with_cross_domain
+
             enrich_knowledge_graph_with_cross_domain(rec.kg_engine)
         except Exception as exc:
             logger.warning("Cross-domain KG enrichment skipped: %s", exc)
@@ -1128,6 +1156,7 @@ def load_optional_models(rec) -> None:
 
     try:
         from backend.models.two_tower import TwoTowerModel
+
         two_tower_finetuned_path = MODELS_DIR / "two_tower_finetuned.pth"
         if two_tower_finetuned_path.exists():
             if not hasattr(rec, "_two_tower_model") or rec._two_tower_model is None:
@@ -1142,6 +1171,7 @@ def load_optional_models(rec) -> None:
 
     try:
         from backend.learning.rl_policy import ActorCriticPolicy
+
         rl_policy_path = MODELS_DIR / "rl_policy.pth"
         if not rl_policy_path.exists():
             logger.debug("rl_policy.pth not found; RL score adjustment disabled.")
@@ -1164,6 +1194,7 @@ def load_optional_models(rec) -> None:
 def wire_pipelines(rec, is_tier3: bool) -> None:
     """Wire RetrievalPipeline, RankingPipeline, and RerankingPipeline."""
     import os as _os
+
     try:
         from backend.pipeline.ranking_pipeline import RankingConfig, RankingPipeline
         from backend.pipeline.reranking_pipeline import RerankingConfig, RerankingPipeline
@@ -1176,19 +1207,24 @@ def wire_pipelines(rec, is_tier3: bool) -> None:
         tfidf_idx = (rec._vectorizer, rec._tfidf_matrix) if rec._vectorizer is not None else None
         kg = rec.kg_engine if hasattr(rec, "kg_engine") and rec.kg_engine is not None else None
         rec._retrieval_pipeline = RetrievalPipeline(
-            faiss_index=rec._index, tfidf_index=tfidf_idx, kg_engine=kg,
+            faiss_index=rec._index,
+            tfidf_index=tfidf_idx,
+            kg_engine=kg,
             movie_df=rec._movies,
             config=RetrievalConfig(low_memory=rec._low_memory, enable_kg=not is_tier3),
         )
         rec._ranking_pipeline = RankingPipeline(
-            ensemble_engine=None, learned_ranker=rec._learned_ranker,
+            ensemble_engine=None,
+            learned_ranker=rec._learned_ranker,
             config=RankingConfig(
                 use_neural_ensemble=(not is_tier3 or _serving_profile() == "full"),
                 use_learned_ranker=not is_tier3,
             ),
         )
         rec._reranking_pipeline = RerankingPipeline(
-            rl_policy=rec._rl_policy, llm_client=None, config=RerankingConfig(),
+            rl_policy=rec._rl_policy,
+            llm_client=None,
+            config=RerankingConfig(),
         )
         logger.info("Pipeline modules wired: RetrievalPipeline, RankingPipeline, RerankingPipeline")
     except Exception as exc:
@@ -1200,8 +1236,10 @@ def wire_pipelines(rec, is_tier3: bool) -> None:
 
 def refresh_behavior_features(rec, force: bool = False) -> dict:
     """Refresh aggregated behavior features (thread-safe, TTL-cached)."""
+    from datetime import UTC
+    from datetime import datetime as _datetime
     import os as _os
-    from datetime import UTC, datetime as _datetime
+
     ttl_seconds = int(_os.getenv("BEHAVIOR_FEATURE_TTL_SECONDS", "60"))
     now = _datetime.now(UTC)
     if (
@@ -1220,6 +1258,7 @@ def refresh_behavior_features(rec, force: bool = False) -> dict:
             return rec._behavior_features
         try:
             from backend.events import aggregate_behavior_features
+
             rec._behavior_features = aggregate_behavior_features(limit=100)
             rec._behavior_features_refreshed_at = now
         except Exception as exc:
@@ -1232,6 +1271,7 @@ def refresh_behavior_features(rec, force: bool = False) -> dict:
 def optimize_movie_frame(rec) -> None:
     """Reduce the in-memory footprint of the serving catalog."""
     import pandas as _pd
+
     if rec._movies is None:
         return
     for column in ("id", "vote_count"):
@@ -1251,6 +1291,7 @@ def optimize_movie_frame(rec) -> None:
 def build_sparse_retrieval_index(rec) -> None:
     """Build a TF-IDF recall index for hybrid search and cold-start resilience."""
     import os as _os
+
     import numpy as _np
     import pandas as _pd
     from sklearn.feature_extraction.text import TfidfVectorizer
@@ -1270,8 +1311,11 @@ def build_sparse_retrieval_index(rec) -> None:
     max_features = int(_os.getenv("NOVA_TFIDF_MAX_FEATURES", default_features))
     ngram_range = (1, 1) if rec._low_memory else (1, 2)
     rec._vectorizer = TfidfVectorizer(
-        max_features=max_features, ngram_range=ngram_range,
-        stop_words="english", min_df=1, dtype=_np.float32,
+        max_features=max_features,
+        ngram_range=ngram_range,
+        stop_words="english",
+        min_df=1,
+        dtype=_np.float32,
     )
     rec._tfidf_matrix = rec._vectorizer.fit_transform(rec._content_text)
     logger.info("Built sparse TF-IDF retrieval index with %s features", len(rec._vectorizer.vocabulary_))
@@ -1281,6 +1325,7 @@ def build_sparse_retrieval_index(rec) -> None:
 def build_item_retrieval_index(rec) -> None:
     """Build a plot/genre-focused sparse index for item-to-item recommendations."""
     import os as _os
+
     import numpy as _np
     from sklearn.feature_extraction.text import TfidfVectorizer
 
@@ -1290,19 +1335,27 @@ def build_item_retrieval_index(rec) -> None:
     def text_column(column):
         if column not in rec._movies.columns:
             import pandas as _pd
+
             return _pd.Series([""] * len(rec._movies), index=rec._movies.index)
         return rec._movies[column].fillna("").astype(str)
 
     item_text = (
-        text_column("overview") + ". " + text_column("tagline")
-        + ". Genres " + text_column("genres").str.replace(",", " ", regex=False)
-        + ". Language " + text_column("original_language")
+        text_column("overview")
+        + ". "
+        + text_column("tagline")
+        + ". Genres "
+        + text_column("genres").str.replace(",", " ", regex=False)
+        + ". Language "
+        + text_column("original_language")
     )
     default_features = "18000" if rec._low_memory else "40000"
     max_features = int(_os.getenv("NOVA_ITEM_TFIDF_MAX_FEATURES", default_features))
     rec._item_vectorizer = TfidfVectorizer(
-        max_features=max_features, ngram_range=(1, 2),
-        stop_words="english", min_df=1, dtype=_np.float32,
+        max_features=max_features,
+        ngram_range=(1, 2),
+        stop_words="english",
+        min_df=1,
+        dtype=_np.float32,
     )
     rec._item_tfidf_matrix = rec._item_vectorizer.fit_transform(item_text)
     logger.info("Built item-to-item sparse retrieval index with %s features", len(rec._item_vectorizer.vocabulary_))
@@ -1383,9 +1436,11 @@ def genre_affinity_from_profile(rec, profile: dict) -> dict:
 
 def visual_search(rec, movie_id: int, n: int = 10) -> list:
     """Multi-Modal similarity search using Text + Visual (Poster) embeddings."""
-    import sys as _sys
-    import numpy as _np
     import pathlib as _pathlib
+    import sys as _sys
+
+    import numpy as _np
+
     recommender_module = _sys.modules.get(rec.__class__.__module__)
     MODELS_DIR = (
         (recommender_module and getattr(recommender_module, "MODELS_DIR", None))
@@ -1453,7 +1508,9 @@ def candidate_to_dict(rec, item) -> dict:
 def popularity_quality_score(movie: dict) -> float:
     """Small bounded business score from popularity and quality."""
     import math as _math
+
     import numpy as _np
+
     if movie.get("content_quality_score") is not None:
         try:
             score = float(movie.get("content_quality_score"))
@@ -1474,7 +1531,9 @@ def popularity_quality_score(movie: dict) -> float:
 def semantic_affinity_for_indices(rec, query_idx: int, candidate_idx: int) -> dict:
     """Compare query/candidate semantic twins and return serializable signals."""
     import contextlib as _contextlib
+
     from backend.intelligence.semantic_twin import compare_semantic_twins
+
     if not hasattr(rec, "_affinity_cache"):
         rec._affinity_cache = {}
     pair_key = (query_idx, candidate_idx)
@@ -1497,19 +1556,27 @@ def semantic_affinity_for_indices(rec, query_idx: int, candidate_idx: int) -> di
 # Module-level helpers extracted from recommender.py
 # ---------------------------------------------------------------------------
 
+
 def render_like_environment() -> bool:
     """Detect constrained PaaS runtimes where the full vector stack can exceed memory."""
     import os as _os
+
     return any(
         _os.getenv(name)
-        for name in ("RENDER", "RENDER_SERVICE_ID", "RENDER_SERVICE_NAME",
-                     "RENDER_EXTERNAL_URL", "RENDER_EXTERNAL_HOSTNAME")
+        for name in (
+            "RENDER",
+            "RENDER_SERVICE_ID",
+            "RENDER_SERVICE_NAME",
+            "RENDER_EXTERNAL_URL",
+            "RENDER_EXTERNAL_HOSTNAME",
+        )
     )
 
 
 def serving_profile() -> str:
     """Resolve the serving profile for this process."""
     import os as _os
+
     profile = _os.getenv("NOVA_SERVING_PROFILE", "auto").strip().lower()
     return profile if profile in {"full", "lite", "light", "low-memory", "metadata"} else "auto"
 
@@ -1517,6 +1584,7 @@ def serving_profile() -> str:
 def low_memory_serving_enabled() -> bool:
     """Return true when serving should avoid loading heavyweight vector artifacts."""
     import os as _os
+
     if _os.getenv("NOVA_LOW_MEMORY", "").strip().lower() in {"1", "true", "yes", "on"}:
         return True
     if _os.getenv("NOVA_LOW_MEMORY", "").strip().lower() in {"0", "false", "no", "off"}:
@@ -1532,6 +1600,7 @@ def low_memory_serving_enabled() -> bool:
 def safe_float(val, default: float = 0.0) -> float:
     """Convert val to float safely, returning default on error or non-finite."""
     import math as _math
+
     try:
         v = float(val)
         return v if _math.isfinite(v) else default
@@ -1542,6 +1611,7 @@ def safe_float(val, default: float = 0.0) -> float:
 def build_rl_state(behavior_profile: dict, als_user_embedding, state_dim: int = 20):
     """Build a fixed-length RL state vector from user behavior profile."""
     import math as _math
+
     import numpy as _np
     import torch as _torch
 
@@ -1576,6 +1646,7 @@ def build_rl_state(behavior_profile: dict, als_user_embedding, state_dim: int = 
 def learned_ranker_enabled(rec) -> bool:
     """Return whether the learned ranker has enough signal to influence serving."""
     import os as _os
+
     value = _os.getenv("NOVA_ENABLE_LEARNED_RANKER", "auto").strip().lower()
     if value in {"1", "true", "yes", "on"}:
         return True

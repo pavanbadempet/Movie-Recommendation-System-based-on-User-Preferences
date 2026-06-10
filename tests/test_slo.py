@@ -44,9 +44,9 @@ def test_internal_quality_routes_are_excluded_from_serving_slo(monkeypatch):
 
 
 def test_platform_slo_endpoint_is_lightweight(monkeypatch):
+    import backend.data.remote_recommender as remote_rec_mod
     import backend.main as main
     import backend.serving.artifact_health as artifact_health_mod
-    import backend.data.remote_recommender as remote_rec_mod
 
     main._slo_tracker.clear()
     main._slo_tracker.record(

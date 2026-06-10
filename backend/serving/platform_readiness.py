@@ -364,16 +364,16 @@ def _platform_readiness_report(
     k: int,
 ) -> dict:
     """Private alias for the inline readiness report builder — moved from backend/main.py."""
-    from backend.serving.app_info import app_metadata
+    import os
+
+    from backend.events.recommendation_events import _serving_lineage
     from backend.metrics.benchmark_cache import (
         get_cached_recommendation_benchmark,
         get_cached_semantic_benchmark,
         start_background_recommendation_benchmark,
         start_background_semantic_benchmark,
     )
-    from backend.events.recommendation_events import _serving_lineage
-
-    import os
+    from backend.serving.app_info import app_metadata
 
     def _env_truthy(name: str) -> bool:
         return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
@@ -472,15 +472,16 @@ def _platform_readiness_report(
     recommendation_benchmark_report = get_cached_recommendation_benchmark(k)
     if _env_truthy("NOVA_ASYNC_EVALUATION_CACHE"):
         import sys
+
         _start_background_semantic_benchmark = start_background_semantic_benchmark
         _start_background_recommendation_benchmark = start_background_recommendation_benchmark
 
         if "backend.main" in sys.modules:
             main_mod = sys.modules["backend.main"]
             if hasattr(main_mod, "_start_background_semantic_benchmark"):
-                _start_background_semantic_benchmark = getattr(main_mod, "_start_background_semantic_benchmark")
+                _start_background_semantic_benchmark = main_mod._start_background_semantic_benchmark
             if hasattr(main_mod, "_start_background_recommendation_benchmark"):
-                _start_background_recommendation_benchmark = getattr(main_mod, "_start_background_recommendation_benchmark")
+                _start_background_recommendation_benchmark = main_mod._start_background_recommendation_benchmark
 
         if semantic_benchmark_report is None:
             _start_background_semantic_benchmark(k)

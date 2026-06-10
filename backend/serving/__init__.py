@@ -35,15 +35,15 @@ Override via environment:
 """
 
 from backend.intelligence.active_inference_engine import get_active_inference_engine
-from backend.serving.artifact_health import evaluate_artifact_health
-from backend.serving.artifact_validator import ArtifactValidator
 from backend.learning.kan_online_learner import KANOnlineLearner
-from backend.models.model_loader import ensure_model_files
 from backend.learning.online_learner import OnlineLearner
 from backend.learning.online_learning_coordinator import OnlineLearningCoordinator
+from backend.learning.sasrec_online_learner import SASRecOnlineLearner
+from backend.models.model_loader import ensure_model_files
+from backend.serving.artifact_health import evaluate_artifact_health
+from backend.serving.artifact_validator import ArtifactValidator
 from backend.serving.onnx_engine import get_onnx_engine
 from backend.serving.realtime_feature_updater import get_user_session_sequence, update_user_index
-from backend.learning.sasrec_online_learner import SASRecOnlineLearner
 from backend.serving.serving_tier import HardwareProfile, TierDetector, resolve_serving_tier
 from backend.serving.slo import RequestSloTracker, build_slo_report
 

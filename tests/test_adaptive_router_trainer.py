@@ -8,17 +8,17 @@ Covers:
 - Checkpoint save/load round-trip
 - Stats reporting
 """
-import os
-import tempfile
+
 from pathlib import Path
+import tempfile
 from unittest.mock import patch
 
+import numpy as np
 import pytest
 import torch
-import numpy as np
 
-from backend.models.contextual_router import ContextualRouter
 from backend.learning.adaptive_router_trainer import AdaptiveRouterTrainer
+from backend.models.contextual_router import ContextualRouter
 
 
 @pytest.fixture
@@ -60,7 +60,7 @@ class TestReplayBuffer:
         """Buffer should evict oldest when capacity is reached."""
         for i in range(150):
             trainer.record(_make_user_state(), _make_model_scores())
-        
+
         assert trainer.buffer_size == 100  # Capacity is 100
         assert trainer._total_samples_recorded == 150
 
@@ -79,7 +79,7 @@ class TestIPSDebiasing:
         """IPS weights should be uniform when no selection data exists."""
         for i in range(20):
             trainer.record(_make_user_state(), _make_model_scores(), selected_models=None)
-        
+
         ips = trainer._compute_ips_weights(
             [None] * 20,
             device=torch.device("cpu"),
@@ -90,19 +90,16 @@ class TestIPSDebiasing:
         """Models selected more frequently should have lower IPS weights (closer to 1/freq)."""
         # Record 50 samples where lightgcn is always selected
         for i in range(50):
-            trainer.record(
-                _make_user_state(), _make_model_scores(),
-                selected_models=["lightgcn", "quantum"]
-            )
-        
+            trainer.record(_make_user_state(), _make_model_scores(), selected_models=["lightgcn", "quantum"])
+
         # Now create batch where some have lightgcn vs rare models
         selected_list = [
-            ["lightgcn", "quantum"],   # frequent
-            ["kan", "diffusion"],       # rare (never selected before)
+            ["lightgcn", "quantum"],  # frequent
+            ["kan", "diffusion"],  # rare (never selected before)
         ]
-        
+
         ips = trainer._compute_ips_weights(selected_list, device=torch.device("cpu"))
-        
+
         # IPS weights should differ (rare selection = higher weight)
         # The frequent models get lower IPS; rare get higher
         assert ips.shape == (2,)
@@ -118,7 +115,7 @@ class TestTraining:
     def test_train_step_returns_loss_when_ready(self, trainer):
         for i in range(20):
             trainer.record(_make_user_state(), _make_model_scores())
-        
+
         loss = trainer.train_step()
         assert loss is not None
         assert isinstance(loss, float)
@@ -145,7 +142,7 @@ class TestTraining:
 
         # Routing should have changed
         final_models, final_weights = router.route(test_state, k=2)
-        
+
         # After training on data where lightgcn/quantum are best,
         # router should prefer them
         top_2 = set(final_models)
@@ -154,7 +151,7 @@ class TestTraining:
     def test_train_step_increments_counter(self, trainer):
         for i in range(20):
             trainer.record(_make_user_state(), _make_model_scores())
-        
+
         trainer.train_step()
         assert trainer._train_steps == 1
         trainer.train_step()
@@ -166,18 +163,16 @@ class TestCheckpointing:
         """force_checkpoint should save router weights to disk."""
         with tempfile.TemporaryDirectory() as tmpdir:
             save_path = Path(tmpdir) / "contextual_router.pth"
-            with patch.object(
-                trainer, '_save_checkpoint',
-                wraps=trainer._save_checkpoint
-            ):
+            with patch.object(trainer, "_save_checkpoint", wraps=trainer._save_checkpoint):
                 # Patch MODELS_DIR to temp directory
                 import backend.learning.adaptive_router_trainer as art
+
                 original = art.MODELS_DIR
                 art.MODELS_DIR = Path(tmpdir)
                 try:
                     trainer.force_checkpoint()
                     assert save_path.exists()
-                    
+
                     # Verify the saved state_dict can be loaded
                     loaded = torch.load(save_path, map_location="cpu", weights_only=True)
                     assert isinstance(loaded, dict)
@@ -200,7 +195,7 @@ class TestStats:
     def test_stats_update_after_operations(self, trainer):
         for i in range(20):
             trainer.record(_make_user_state(), _make_model_scores())
-        
+
         stats_pre = trainer.get_stats()
         assert stats_pre["buffer_size"] == 20
         assert stats_pre["total_samples_recorded"] == 20

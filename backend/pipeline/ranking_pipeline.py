@@ -79,7 +79,7 @@ class RankingConfig:
     use_neural_ensemble: bool = True
     use_learned_ranker: bool = True
     apply_ips_reranking: bool = True
-    item_popularity: "dict[int, float] | None" = None
+    item_popularity: dict[int, float] | None = None
     ips_clip_val: float = 5.0
 
 
@@ -126,7 +126,7 @@ class RankingPipeline:
         self.learned_ranker = learned_ranker
         self.config = config
         # Lazy popularity cache — loaded once from event store on first IPS call
-        self._popularity_cache: "dict[int, float] | None" = None
+        self._popularity_cache: dict[int, float] | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -333,7 +333,7 @@ class RankingPipeline:
             )
             return scores
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning(
                 "Ensemble engine predict_ensemble() failed with %s: %s — "
                 "falling back to retrieval_score for all candidates.",
@@ -342,7 +342,7 @@ class RankingPipeline:
             )
             return fallback
 
-    def _get_popularity(self) -> "dict[int, float]":
+    def _get_popularity(self) -> dict[int, float]:
         """Return item popularity map, using config value or lazy-loading from events.
 
         Returns an empty dict on any failure so callers degrade gracefully.
@@ -357,8 +357,8 @@ class RankingPipeline:
 
         # 3. Lazy-load from event store (runs once, then cached)
         try:
-            from backend.metrics.debiased_metrics import compute_item_popularity
             from backend.events import iter_events
+            from backend.metrics.debiased_metrics import compute_item_popularity
 
             events = list(iter_events())
             if events:
@@ -432,7 +432,7 @@ class RankingPipeline:
             )
             return scores, self.config.ranker_weight
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning(
                 "Learned ranker predict() failed with %s: %s — "
                 "using ensemble_score as ranker_score with ranker_weight=0.",

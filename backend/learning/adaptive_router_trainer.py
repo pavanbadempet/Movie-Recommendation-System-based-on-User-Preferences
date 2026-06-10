@@ -15,11 +15,10 @@ with every prediction served, adapting to user distribution shifts in real time.
 
 from __future__ import annotations
 
-import logging
-import threading
-import time
 from collections import deque
+import logging
 from pathlib import Path
+import threading
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -48,7 +47,7 @@ class AdaptiveRouterTrainer:
 
     def __init__(
         self,
-        router: "ContextualRouter",
+        router: ContextualRouter,
         buffer_capacity: int = 10_000,
         min_train_size: int = 256,
         batch_size: int = 64,
@@ -74,9 +73,7 @@ class AdaptiveRouterTrainer:
         self.checkpoint_interval = checkpoint_interval
 
         # Circular replay buffer: deque with maxlen handles eviction automatically
-        self._buffer: deque[tuple[torch.Tensor, torch.Tensor, list[str] | None]] = deque(
-            maxlen=buffer_capacity
-        )
+        self._buffer: deque[tuple[torch.Tensor, torch.Tensor, list[str] | None]] = deque(maxlen=buffer_capacity)
         self._lock = threading.Lock()
 
         # Optimizer (lazy-initialized to avoid issues if router moves device)
@@ -178,7 +175,7 @@ class AdaptiveRouterTrainer:
 
         # KL divergence with IPS weighting per sample
         # kl_div expects log(q) and p, computes sum(p * (log(p) - log(q)))
-        per_sample_kl = F.kl_div(router_log_probs, targets, reduction='none').sum(dim=-1)
+        per_sample_kl = F.kl_div(router_log_probs, targets, reduction="none").sum(dim=-1)
         weighted_loss = (per_sample_kl * ips_weights).mean()
 
         weighted_loss.backward()
@@ -215,7 +212,7 @@ class AdaptiveRouterTrainer:
 
         # Count global selection frequencies across the buffer
         with self._lock:
-            selection_counts = {name: 0 for name in model_names}
+            selection_counts = dict.fromkeys(model_names, 0)
             total_selections = 0
             for _, _, selected in self._buffer:
                 if selected is not None:
@@ -270,9 +267,7 @@ class AdaptiveRouterTrainer:
             "total_samples_recorded": self._total_samples_recorded,
             "train_steps": self._train_steps,
             "last_train_loss": round(self._last_train_loss, 6),
-            "avg_train_loss": round(
-                self._cumulative_loss / max(self._train_steps, 1), 6
-            ),
+            "avg_train_loss": round(self._cumulative_loss / max(self._train_steps, 1), 6),
             "is_ready": self.is_ready,
             "checkpoint_interval": self.checkpoint_interval,
             "last_checkpoint_step": self._last_checkpoint_step,

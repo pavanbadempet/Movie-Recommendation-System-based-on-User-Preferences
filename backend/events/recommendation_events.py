@@ -125,7 +125,7 @@ def recommendation_diagnostic_report(
     }
 
 
-def record_recommendation_events(
+def record_recommendation_events_generic(
     *,
     endpoint: str,
     context,
@@ -218,9 +218,9 @@ def _candidate_event_summary(candidate: dict, rank: int) -> dict:
 # Private-named wrappers moved from backend/main.py (task 2.2)
 # These preserve the exact call signatures that main.py and routers expect.
 # ---------------------------------------------------------------------------
+from collections import Counter as _Counter
 import os
 import uuid as _uuid
-from collections import Counter as _Counter
 
 from backend.events import append_event as _append_event
 from backend.pipeline.recommender_helpers import event_logging_enabled as _event_logging_enabled
@@ -301,8 +301,9 @@ async def remote_payload_or_raise(
     context=None,
 ) -> object | None:
     """Return remote recommender payload when configured, otherwise None."""
-    from fastapi import HTTPException
     import sys
+
+    from fastapi import HTTPException
 
     from backend.data.remote_recommender import remote_get_json, remote_recommender_url
 
@@ -312,9 +313,9 @@ async def remote_payload_or_raise(
     if "backend.main" in sys.modules:
         main_mod = sys.modules["backend.main"]
         if hasattr(main_mod, "remote_get_json"):
-            _remote_get_json = getattr(main_mod, "remote_get_json")
+            _remote_get_json = main_mod.remote_get_json
         if hasattr(main_mod, "remote_recommender_url"):
-            _remote_recommender_url = getattr(main_mod, "remote_recommender_url")
+            _remote_recommender_url = main_mod.remote_recommender_url
 
     def _env_truthy(name: str) -> bool:
         return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}

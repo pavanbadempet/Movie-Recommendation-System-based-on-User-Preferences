@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # These must be at module level (not inside factory functions) so that
 # FastAPI's TypeAdapter can resolve them for OpenAPI schema generation.
 # ---------------------------------------------------------------------------
-from pydantic import BaseModel as _BaseModel  # noqa: E402
+from pydantic import BaseModel as _BaseModel
 
 
 class ChatMessage(_BaseModel):
@@ -254,7 +254,7 @@ def _inject_pydantic_models_into_globals() -> None:
     try:
         # Import from backend.main — safe because main.py is already loaded
         # by the time any factory function is called.
-        import backend.main as _main  # noqa: PLC0415
+        import backend.main as _main
 
         for _name in [
             "Movie",
@@ -331,10 +331,7 @@ def create_recommendation_router(
                 key=lambda m: m.get("release_date", ""),
                 reverse=True,
             )
-            return [
-                {k: _sanitize_float(v) for k, v in m.items()}
-                for m in sorted_movies[:limit]
-            ]
+            return [{k: _sanitize_float(v) for k, v in m.items()} for m in sorted_movies[:limit]]
 
         seen_ids: set[int] = set()
         catalog_matches: list[dict] = []
@@ -443,9 +440,9 @@ def create_recommendation_router(
         include_remote_frontends: bool = Query(default=False),
         preferred_frontend: str | None = Query(default=None),
     ):
+        from backend.data.remote_recommender import remote_recommender_status as _remote_rec_status
         from backend.pipeline import recommender as recommender_module
         from backend.serving.artifact_health import evaluate_artifact_health as _eval_artifact_health
-        from backend.data.remote_recommender import remote_recommender_status as _remote_rec_status
 
         artifact_report = await run_in_threadpool(
             lambda: _eval_artifact_health(
@@ -610,13 +607,15 @@ def create_core_router(
     # ── /v1/platform/status ──────────────────────────────────────────────────
     @router.get("/v1/platform/status")
     async def platform_status(context=Depends(resolve_tenant_context)):
-        from backend.data.remote_recommender import remote_recommender_status as _default_remote_rec_status
         import sys
+
+        from backend.data.remote_recommender import remote_recommender_status as _default_remote_rec_status
+
         _remote_recommender_status = _default_remote_rec_status
         if "backend.main" in sys.modules:
             main_mod = sys.modules["backend.main"]
             if hasattr(main_mod, "remote_recommender_status"):
-                _remote_recommender_status = getattr(main_mod, "remote_recommender_status")
+                _remote_recommender_status = main_mod.remote_recommender_status
 
         remote_payload = await remote_payload_or_raise("/v1/platform/status", context=context)
         if remote_payload is not None:
@@ -664,12 +663,7 @@ def create_core_router(
             "tenant_id": context.tenant_id,
             "catalog_id": context.catalog_id,
             "movie_count": len(rec.movies),
-            "capabilities": [
-                "personalization_v2",
-                "recommendation_benchmark",
-                "semantic_benchmark",
-                "hybrid_search"
-            ],
+            "capabilities": ["personalization_v2", "recommendation_benchmark", "semantic_benchmark", "hybrid_search"],
             "event_store": {
                 "mode": behavior.get("event_store"),
                 "durable": behavior.get("durable"),
@@ -1099,7 +1093,9 @@ def create_rec_engine_router(
             raise HTTPException(status_code=404, detail=f"Movie with ID {movie_id} not found")
         if getattr(rec, "multimodal_index", None) is None:
             # Fall back to content-based similarity when CLIP index is unavailable
-            logger.info("Multimodal index unavailable — falling back to content-based similarity for movie %s", movie_id)
+            logger.info(
+                "Multimodal index unavailable — falling back to content-based similarity for movie %s", movie_id
+            )
             recommendations = await run_in_threadpool(lambda: rec.recommend_by_id(movie_id, n=n))
         else:
             recommendations = await run_in_threadpool(lambda: rec.visual_search(movie_id, n=n))
@@ -1448,16 +1444,16 @@ def create_rec_engine_router(
 # ---------------------------------------------------------------------------
 # Diagnostic helpers — moved from backend/main.py (task 6.3)
 # ---------------------------------------------------------------------------
-from backend.serving.app_info import app_metadata
-from backend.data.auth import TenantContext, get_current_user, get_optional_user
+from backend.data.auth import TenantContext, get_optional_user
+from backend.events.recommendation_events import _serving_lineage
 from backend.metrics.recommendation_benchmark import (
     evaluate_recommendation_case,
     find_recommendation_benchmark_case,
     load_recommendation_benchmark,
 )
-from backend.events.recommendation_events import _serving_lineage
 from backend.pipeline.recommender import Recommender
 from backend.pipeline.recommender_helpers import safe_float as _safe_float
+from backend.serving.app_info import app_metadata
 
 
 def _candidate_diagnostic_summary(candidate: dict, rank: int) -> dict:
@@ -1492,11 +1488,12 @@ def _recommendation_diagnostic_report(
     scores = [item["score"] for item in diagnostic_items if item.get("score") is not None]
 
     import sys
+
     _load_recommendation_benchmark = load_recommendation_benchmark
     if "backend.main" in sys.modules:
         main_mod = sys.modules["backend.main"]
         if hasattr(main_mod, "load_recommendation_benchmark"):
-            _load_recommendation_benchmark = getattr(main_mod, "load_recommendation_benchmark")
+            _load_recommendation_benchmark = main_mod.load_recommendation_benchmark
 
     benchmark_case = find_recommendation_benchmark_case(
         query_movie,

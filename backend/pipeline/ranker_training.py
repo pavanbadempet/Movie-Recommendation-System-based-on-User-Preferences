@@ -119,8 +119,8 @@ def build_training_frame(
 
     metadata = {
         "training_mode": "implicit_feedback" if has_behavior else "catalog_bootstrap",
-        "movie_count": int(len(movies)),
-        "feedback_item_count": int(len(feedback)),
+        "movie_count": len(movies),
+        "feedback_item_count": len(feedback),
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
     }
     return pd.DataFrame(features, columns=FEATURE_COLUMNS), pd.Series(labels), metadata

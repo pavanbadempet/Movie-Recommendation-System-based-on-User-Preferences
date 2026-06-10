@@ -100,8 +100,7 @@ class KANOnlineLearner:
             try:
                 dropped = self._queue.get_nowait()
                 logger.warning(
-                    "KANOnlineLearner queue full — dropped event "
-                    "(event_type=%s, user_id=%s, movie_id=%s).",
+                    "KANOnlineLearner queue full — dropped event (event_type=%s, user_id=%s, movie_id=%s).",
                     dropped.get("event_type"),
                     dropped.get("user_id"),
                     dropped.get("movie_id"),
@@ -210,13 +209,13 @@ class KANOnlineLearner:
 
         # Embeddings from LightGCN — detached so no gradient flows back into LightGCN
         with torch.no_grad():
-            u_emb = self.lightgcn.user_embedding(u_tensor).detach()   # [B, emb_dim]
-            p_emb = self.lightgcn.item_embedding(p_tensor).detach()   # [B, emb_dim]
-            n_emb = self.lightgcn.item_embedding(n_tensor).detach()   # [B, emb_dim]
+            u_emb = self.lightgcn.user_embedding(u_tensor).detach()  # [B, emb_dim]
+            p_emb = self.lightgcn.item_embedding(p_tensor).detach()  # [B, emb_dim]
+            n_emb = self.lightgcn.item_embedding(n_tensor).detach()  # [B, emb_dim]
 
         # KAN forward passes
-        pos_scores = self.kan(u_emb, p_emb)   # [B]
-        neg_scores = self.kan(u_emb, n_emb)   # [B]
+        pos_scores = self.kan(u_emb, p_emb)  # [B]
+        neg_scores = self.kan(u_emb, n_emb)  # [B]
 
         loss = (F.softplus(neg_scores - pos_scores) * w_tensor).mean()
 

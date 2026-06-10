@@ -24,8 +24,8 @@ from __future__ import annotations
 import json
 import logging
 import os
-import sys
 from pathlib import Path
+import sys
 
 # ---------------------------------------------------------------------------
 # Ensure repo root is on sys.path
@@ -55,7 +55,7 @@ def _rebuild_forward_refs(app) -> None:
     Pydantic models as local variables, which Pydantic sees as ForwardRefs
     when generating the OpenAPI schema.
     """
-    from backend.main import (  # noqa: PLC0415
+    from backend.main import (
         EnrichedMovie,
         EnrichedRecommendationResponse,
         EventRequest,
@@ -114,7 +114,7 @@ def main() -> None:
     print("Exporting APEX OpenAPI specification...")
 
     # Import the app — triggers FastAPI route registration but NOT model loading
-    from backend.main import app  # noqa: PLC0415
+    from backend.main import app
 
     # Resolve all Pydantic ForwardRefs before schema generation
     _rebuild_forward_refs(app)

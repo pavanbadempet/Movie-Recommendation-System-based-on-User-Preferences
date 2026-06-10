@@ -139,20 +139,22 @@ def validate(
     )
     expected_movie_rows = contract_value(manifest, "movie_rows") or contract_value(manifest, "serving_rows")
     expected_embedding_rows = contract_value(manifest, "embedding_rows")
-    expected_index_size = contract_value(manifest, "turbovec_index_size") or contract_value(manifest, "faiss_index_size")
+    expected_index_size = contract_value(manifest, "turbovec_index_size") or contract_value(
+        manifest, "faiss_index_size"
+    )
     expected_id_rows = contract_value(manifest, "movie_id_map_rows")
     expected_id_hash = contract_value(manifest, "movie_id_sha256")
 
     checks = {
-        "movie_rows": int(len(movies)),
-        "movie_id_map_rows": int(len(movie_ids)),
+        "movie_rows": len(movies),
+        "movie_id_map_rows": len(movie_ids),
         "manifest_movie_rows": int(expected_movie_rows) if expected_movie_rows is not None else None,
         "manifest_embedding_rows": int(expected_embedding_rows) if expected_embedding_rows is not None else None,
         "manifest_turbovec_index_size": int(expected_index_size) if expected_index_size is not None else None,
         "manifest_movie_id_map_rows": int(expected_id_rows) if expected_id_rows is not None else None,
         "movie_id_sha256": movie_id_sha256(movie_ids),
         "manifest_movie_id_sha256": expected_id_hash,
-        "semantic_twin_rows": int(len(semantic_twins)),
+        "semantic_twin_rows": len(semantic_twins),
         "heavy_artifacts": heavy_artifact_checks,
         "run_id": manifest.get("run_id"),
         "run_date": manifest.get("run_date"),

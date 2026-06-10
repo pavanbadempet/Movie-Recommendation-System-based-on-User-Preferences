@@ -345,8 +345,30 @@ class PrivacyBudgetAccountant:
 
         # Dense set of Renyi orders alpha for finding the tightest (epsilon, delta) bounds
         self.orders = [
-            1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 7.0, 8.0, 9.0, 10.0,
-            12.0, 14.0, 16.0, 18.0, 20.0, 24.0, 28.0, 32.0, 48.0, 64.0
+            1.5,
+            2.0,
+            2.5,
+            3.0,
+            3.5,
+            4.0,
+            4.5,
+            5.0,
+            5.5,
+            6.0,
+            7.0,
+            8.0,
+            9.0,
+            10.0,
+            12.0,
+            14.0,
+            16.0,
+            18.0,
+            20.0,
+            24.0,
+            28.0,
+            32.0,
+            48.0,
+            64.0,
         ]
 
     def _load_budgets(self) -> dict[str, Any]:
@@ -356,7 +378,7 @@ class PrivacyBudgetAccountant:
         if not os.path.exists(self.storage_path):
             return {}
         try:
-            with open(self.storage_path, "r", encoding="utf-8") as f:
+            with open(self.storage_path, encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
             logger.warning("Failed to load privacy budgets from %s: %s", self.storage_path, e)
@@ -390,10 +412,7 @@ class PrivacyBudgetAccountant:
             if not user_data or user_data.get("last_update") != today_str:
                 # Reset/Initialize budget
                 rdp_spent = {str(alpha): 0.0 for alpha in self.orders}
-                user_data = {
-                    "last_update": today_str,
-                    "rdp_spent": rdp_spent
-                }
+                user_data = {"last_update": today_str, "rdp_spent": rdp_spent}
                 budgets[uid_str] = user_data
                 self._save_budgets(budgets)
 
@@ -413,7 +432,7 @@ class PrivacyBudgetAccountant:
                 "rdp_spent": rdp_dict,
                 "current_epsilon": current_eps,
                 "remaining_epsilon": max(0.0, self.epsilon_max - current_eps),
-                "is_exhausted": is_exhausted
+                "is_exhausted": is_exhausted,
             }
 
     def compute_cumulative_epsilon(self, rdp_spent: dict[float, float]) -> float:
@@ -436,12 +455,8 @@ class PrivacyBudgetAccountant:
                 best_eps = eps
         return best_eps
 
-
     def compute_query_rdp(
-        self,
-        request_epsilon: float,
-        request_delta: float = 1e-5,
-        mechanism: str = "gaussian"
+        self, request_epsilon: float, request_delta: float = 1e-5, mechanism: str = "gaussian"
     ) -> dict[float, float]:
         """
         Computes RDP increments for all orders for a single query.
@@ -450,13 +465,13 @@ class PrivacyBudgetAccountant:
 
         increments = {}
         if request_epsilon <= 0.0:
-            return {alpha: 0.0 for alpha in self.orders}
+            return dict.fromkeys(self.orders, 0.0)
 
         if mechanism.lower() == "gaussian":
             # σ = sqrt(2 * ln(1.25/delta)) / ε
             sigma = math.sqrt(2.0 * math.log(1.25 / request_delta)) / request_epsilon
             for alpha in self.orders:
-                increments[alpha] = alpha / (2.0 * (sigma ** 2))
+                increments[alpha] = alpha / (2.0 * (sigma**2))
         elif mechanism.lower() == "laplace":
             for alpha in self.orders:
                 if alpha <= 1.0:
@@ -478,11 +493,7 @@ class PrivacyBudgetAccountant:
         return increments
 
     def check_and_deduct_budget(
-        self,
-        user_id: int,
-        request_epsilon: float,
-        request_delta: float = 1e-5,
-        mechanism: str = "gaussian"
+        self, user_id: int, request_epsilon: float, request_delta: float = 1e-5, mechanism: str = "gaussian"
     ) -> tuple[bool, float]:
         """
         Check if adding the request's privacy cost would exceed user's budget.
@@ -504,10 +515,7 @@ class PrivacyBudgetAccountant:
             if not user_data or user_data.get("last_update") != today_str:
                 # Reset/Initialize budget
                 rdp_spent = {str(alpha): 0.0 for alpha in self.orders}
-                user_data = {
-                    "last_update": today_str,
-                    "rdp_spent": rdp_spent
-                }
+                user_data = {"last_update": today_str, "rdp_spent": rdp_spent}
                 budgets[uid_str] = user_data
 
             # Simulate composition
@@ -563,9 +571,5 @@ class PrivacyBudgetAccountant:
         with self.lock:
             budgets = self._load_budgets()
             rdp_spent = {str(alpha): 0.0 for alpha in self.orders}
-            budgets[uid_str] = {
-                "last_update": today_str,
-                "rdp_spent": rdp_spent
-            }
+            budgets[uid_str] = {"last_update": today_str, "rdp_spent": rdp_spent}
             self._save_budgets(budgets)
-

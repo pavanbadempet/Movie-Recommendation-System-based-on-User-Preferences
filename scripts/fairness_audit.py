@@ -47,7 +47,7 @@ class FairnessAuditor:
         Target: < 0.7
         """
         # Count frequency of each item being recommended
-        item_counts = {}
+        item_counts: dict[int, int] = {}
         total_recs = 0
         for rec_list in recommended_items:
             for item in rec_list:

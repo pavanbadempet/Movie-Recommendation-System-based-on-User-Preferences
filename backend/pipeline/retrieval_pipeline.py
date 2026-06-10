@@ -275,7 +275,7 @@ class RetrievalPipeline:
             logger.debug("FAISS retrieval returned %d candidates.", len(candidates))
             return candidates
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning(
                 "FAISS retrieval failed with %s: %s — skipping FAISS source.",
                 type(exc).__name__,
@@ -331,7 +331,7 @@ class RetrievalPipeline:
             logger.debug("TF-IDF retrieval returned %d candidates.", len(candidates))
             return candidates
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning(
                 "TF-IDF retrieval failed with %s: %s — skipping TF-IDF source.",
                 type(exc).__name__,
@@ -390,7 +390,7 @@ class RetrievalPipeline:
             )
             return candidates
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning(
                 "KG retrieval failed with %s: %s — skipping KG source.",
                 type(exc).__name__,
@@ -426,7 +426,7 @@ class RetrievalPipeline:
                 if 0 <= idx < len(self.movie_df):
                     row = self.movie_df.iloc[idx]
                     return int(row.get("id", idx))
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.debug(
                     "FAISS seed lookup failed (%s: %s); falling back to movie_df[0].",
                     type(exc).__name__,

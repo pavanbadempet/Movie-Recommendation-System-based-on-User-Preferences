@@ -159,8 +159,7 @@ class TierDetector:
                 )
             else:
                 logger.warning(
-                    "GPU detected but VRAM (%.1f GB) < required %.1f GB for tier1; "
-                    "defaulting to tier2.",
+                    "GPU detected but VRAM (%.1f GB) < required %.1f GB for tier1; defaulting to tier2.",
                     profile.gpu_vram_gb,
                     self._TIER1_MIN_VRAM_GB,
                 )

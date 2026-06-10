@@ -13,8 +13,8 @@ from hypothesis import strategies as st
 import pytest
 import torch
 
-from backend.models.lightgcn import LightGCN
 from backend.learning.online_learner import OnlineLearner
+from backend.models.lightgcn import LightGCN
 
 # ---------------------------------------------------------------------------
 # Helpers

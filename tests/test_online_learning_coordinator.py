@@ -14,22 +14,20 @@ These tests are property-based where possible and cover:
 
 from __future__ import annotations
 
-import threading
 import time
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-import torch
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
+import pytest
+import torch
 
 from backend.learning.kan_online_learner import KANOnlineLearner
+from backend.learning.online_learning_coordinator import OnlineLearningCoordinator
+from backend.learning.sasrec_online_learner import SASRecOnlineLearner
 from backend.models.kan_ranker import KANRanker
 from backend.models.lightgcn import LightGCN
-from backend.learning.online_learning_coordinator import OnlineLearningCoordinator
 from backend.models.sasrec import SASRec
-from backend.learning.sasrec_online_learner import SASRecOnlineLearner
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -130,8 +128,7 @@ class TestSASRecOnlineLearner:
         learner = self._make_learner(sasrec)
         before = sasrec.item_emb.weight.data.clone()
         batch = [
-            {"event_type": "click", "user_id": i, "movie_id": (i * 3) % NUM_ITEMS,
-             "interaction_weight": 0.3}
+            {"event_type": "click", "user_id": i, "movie_id": (i * 3) % NUM_ITEMS, "interaction_weight": 0.3}
             for i in range(1, 6)
         ]
         learner._apply_gradient_step(batch)
@@ -156,8 +153,7 @@ class TestSASRecOnlineLearner:
         # Manually fill the queue
         learner._queue.maxsize = 3
         for i in range(3):
-            learner._queue.put_nowait({"event_type": "click", "user_id": i, "movie_id": i,
-                                       "interaction_weight": 0.3})
+            learner._queue.put_nowait({"event_type": "click", "user_id": i, "movie_id": i, "interaction_weight": 0.3})
         assert learner._queue.full()
         # This enqueue should drop oldest and add new one — no exception
         learner.enqueue(_make_click_event(user_id=99, movie_id=99))
@@ -235,22 +231,24 @@ class TestKANOnlineLearner:
         lgcn_before = lightgcn.user_embedding.weight.data.clone()
 
         batch = [
-            {"event_type": "click", "user_id": i % NUM_USERS,
-             "movie_id": (i * 7) % NUM_ITEMS, "interaction_weight": 0.3}
+            {
+                "event_type": "click",
+                "user_id": i % NUM_USERS,
+                "movie_id": (i * 7) % NUM_ITEMS,
+                "interaction_weight": 0.3,
+            }
             for i in range(1, 6)
         ]
         learner._apply_gradient_step(batch)
 
         # KAN params must have changed
-        any_changed = any(
-            not torch.allclose(before, after)
-            for before, after in zip(kan_before, kan.parameters())
-        )
+        any_changed = any(not torch.allclose(before, after) for before, after in zip(kan_before, kan.parameters()))
         assert any_changed, "At least one KAN parameter should have changed"
 
         # LightGCN embeddings must NOT change (only KAN is updated)
-        assert torch.allclose(lgcn_before, lightgcn.user_embedding.weight.data), \
+        assert torch.allclose(lgcn_before, lightgcn.user_embedding.weight.data), (
             "LightGCN user embeddings must not be modified by KANOnlineLearner"
+        )
 
     def test_gradient_step_empty_batch_is_noop(self, kan, lightgcn):
         learner = self._make_learner(kan, lightgcn)
@@ -300,8 +298,10 @@ class TestOnlineLearningCoordinator:
     @pytest.fixture
     def coord(self, lightgcn, sasrec, kan):
         engine = _make_mock_engine(lightgcn, sasrec, kan)
-        with patch("backend.learning.online_learning_coordinator.OnlineLearningCoordinator._get_session_sequence",
-                   return_value=[1, 2, 3]):
+        with patch(
+            "backend.learning.online_learning_coordinator.OnlineLearningCoordinator._get_session_sequence",
+            return_value=[1, 2, 3],
+        ):
             coordinator = OnlineLearningCoordinator(engine=engine)
         return coordinator
 
@@ -370,13 +370,13 @@ class TestOnlineLearningCoordinator:
         movie_id=st.integers(min_value=0, max_value=NUM_ITEMS - 1),
     )
     @settings(max_examples=25, deadline=3000, suppress_health_check=[HealthCheck.function_scoped_fixture])
-    def test_property_click_event_always_fans_out(
-        self, lightgcn, sasrec, kan, num_events, user_id, movie_id
-    ):
+    def test_property_click_event_always_fans_out(self, lightgcn, sasrec, kan, num_events, user_id, movie_id):
         """Property: for any valid click event count, all queues have the same depth."""
         engine = _make_mock_engine(lightgcn, sasrec, kan)
-        with patch("backend.learning.online_learning_coordinator.OnlineLearningCoordinator._get_session_sequence",
-                   return_value=[]):
+        with patch(
+            "backend.learning.online_learning_coordinator.OnlineLearningCoordinator._get_session_sequence",
+            return_value=[],
+        ):
             coord = OnlineLearningCoordinator(engine=engine)
 
         for _ in range(num_events):
@@ -387,8 +387,7 @@ class TestOnlineLearningCoordinator:
         kan_depth = coord.kan_learner._queue.qsize()
 
         assert lgcn_depth == sar_depth == kan_depth == num_events, (
-            f"All queues should have depth {num_events}, got "
-            f"lgcn={lgcn_depth}, sar={sar_depth}, kan={kan_depth}"
+            f"All queues should have depth {num_events}, got lgcn={lgcn_depth}, sar={sar_depth}, kan={kan_depth}"
         )
 
 
@@ -410,8 +409,10 @@ class TestOnlineLearningIntegration:
         sar_before = sasrec.item_emb.weight.data.clone()
         kan_params_before = [p.data.clone() for p in kan.parameters()]
 
-        with patch("backend.learning.online_learning_coordinator.OnlineLearningCoordinator._get_session_sequence",
-                   return_value=[1, 2, 3]):
+        with patch(
+            "backend.learning.online_learning_coordinator.OnlineLearningCoordinator._get_session_sequence",
+            return_value=[1, 2, 3],
+        ):
             coord = OnlineLearningCoordinator(engine=engine)
             # Force small batch sizes so events flush quickly
             coord.lightgcn_learner.batch_size = 4
@@ -421,9 +422,7 @@ class TestOnlineLearningIntegration:
 
         # Send enough events to fill a batch for each learner
         for i in range(6):
-            coord.enqueue(_make_rating_event(user_id=i % NUM_USERS,
-                                             movie_id=(i * 7) % NUM_ITEMS,
-                                             rating=5.0))
+            coord.enqueue(_make_rating_event(user_id=i % NUM_USERS, movie_id=(i * 7) % NUM_ITEMS, rating=5.0))
 
         time.sleep(0.5)  # allow background threads to process
         coord.stop()
@@ -431,8 +430,7 @@ class TestOnlineLearningIntegration:
         lgcn_changed = not torch.allclose(lgcn_before, lightgcn.user_embedding.weight.data)
         sar_changed = not torch.allclose(sar_before, sasrec.item_emb.weight.data)
         kan_changed = any(
-            not torch.allclose(before, after)
-            for before, after in zip(kan_params_before, kan.parameters())
+            not torch.allclose(before, after) for before, after in zip(kan_params_before, kan.parameters())
         )
 
         assert lgcn_changed, "LightGCN embeddings should have changed after online learning"
