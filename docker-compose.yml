@@ -1,12 +1,12 @@
 services:
   # ---------------------------------------------------------------------------
-  # 1. CORE API BACKEND (FastAPI + PyTorch + FAISS + Apex Ensemble)
+  # 1. CORE API BACKEND (FastAPI + PyTorch + FAISS + APEX Ensemble)
   # ---------------------------------------------------------------------------
   nova-backend:
     build: 
       context: .
       dockerfile: backend/Dockerfile
-    container_name: nova-backend
+    container_name: apex-backend
     restart: unless-stopped
     ports:
       - "8000:8000"

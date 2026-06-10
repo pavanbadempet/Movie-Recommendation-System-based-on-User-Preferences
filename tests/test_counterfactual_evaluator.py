@@ -8,8 +8,9 @@ Covers:
 - Policy comparison (recommendation generation)
 - Router-k configuration evaluation
 """
-import pytest
+
 import numpy as np
+import pytest
 
 from backend.metrics.counterfactual_evaluator import (
     CounterfactualEvaluator,
@@ -29,13 +30,15 @@ def _make_logged_data(n: int = 100, click_rate: float = 0.3, seed: int = 42) -> 
     for i in range(n):
         reward = 1.0 if rng.random() < click_rate else 0.0
         propensity = rng.uniform(0.1, 0.9)
-        data.append(LoggedInteraction(
-            user_id=i % 50,
-            item_id=rng.randint(0, 1000),
-            reward=reward,
-            propensity=propensity,
-            selected_models=["lightgcn", "quantum"],
-        ))
+        data.append(
+            LoggedInteraction(
+                user_id=i % 50,
+                item_id=rng.randint(0, 1000),
+                reward=reward,
+                propensity=propensity,
+                selected_models=["lightgcn", "quantum"],
+            )
+        )
     return data
 
 
@@ -43,7 +46,7 @@ class TestIPSEstimator:
     def test_ips_returns_valid_estimate(self, evaluator):
         data = _make_logged_data(100)
         target_props = [0.5] * len(data)
-        
+
         result = evaluator.ips_estimate(data, target_props)
         assert "estimate" in result
         assert "variance" in result
@@ -55,10 +58,10 @@ class TestIPSEstimator:
         data = _make_logged_data(500, click_rate=0.5, seed=123)
         # Target propensity = behavior propensity → importance weight = 1.0
         target_props = [d.propensity for d in data]
-        
+
         result = evaluator.ips_estimate(data, target_props)
         mean_reward = np.mean([d.reward for d in data])
-        
+
         # Should be close to mean reward when policies match
         assert abs(result["estimate"] - mean_reward) < 0.05
 
@@ -66,7 +69,7 @@ class TestIPSEstimator:
         """IPS weights should be clipped to prevent variance explosion."""
         data = [LoggedInteraction(user_id=0, item_id=0, reward=1.0, propensity=0.001)]
         target_props = [0.999]
-        
+
         result = evaluator.ips_estimate(data, target_props)
         # With clip=10.0, max weighted reward = 10.0 * 1.0 = 10.0
         assert result["estimate"] <= 10.0
@@ -80,7 +83,7 @@ class TestIPSEstimator:
         """ESS should be less than or equal to actual sample size."""
         data = _make_logged_data(100)
         target_props = [0.3] * len(data)
-        
+
         result = evaluator.ips_estimate(data, target_props)
         assert result["effective_sample_size"] <= 100
 
@@ -89,7 +92,7 @@ class TestSNIPSEstimator:
     def test_snips_returns_valid_estimate(self, evaluator):
         data = _make_logged_data(100)
         target_props = [0.5] * len(data)
-        
+
         result = evaluator.snips_estimate(data, target_props)
         assert "estimate" in result
         assert "weight_sum" in result
@@ -99,28 +102,28 @@ class TestSNIPSEstimator:
         """SNIPS estimate should be bounded in [0, 1] for binary rewards."""
         data = _make_logged_data(200)
         target_props = [0.5] * len(data)
-        
+
         result = evaluator.snips_estimate(data, target_props)
         assert 0.0 <= result["estimate"] <= 1.0
 
     def test_snips_lower_variance_than_ips(self, evaluator):
         """SNIPS should generally have lower variance than IPS."""
         data = _make_logged_data(500, seed=99)
-        
+
         # Run multiple evaluations with different target propensities
         ips_vars = []
         snips_estimates = []
-        
+
         for seed in range(10):
             rng = np.random.RandomState(seed + 1000)
             target_props = [rng.uniform(0.1, 0.9) for _ in data]
-            
+
             ips_result = evaluator.ips_estimate(data, target_props)
             snips_result = evaluator.snips_estimate(data, target_props)
-            
+
             ips_vars.append(ips_result["variance"])
             snips_estimates.append(snips_result["estimate"])
-        
+
         # SNIPS estimates should be more stable (in [0,1] range)
         for est in snips_estimates:
             assert 0.0 <= est <= 1.5  # SNIPS should stay reasonable
@@ -131,7 +134,7 @@ class TestDoublyRobustEstimator:
         data = _make_logged_data(100)
         target_props = [0.5] * len(data)
         reward_preds = [0.3] * len(data)  # Reward model always predicts 0.3
-        
+
         result = evaluator.doubly_robust_estimate(data, target_props, reward_preds)
         assert "estimate" in result
         assert "reward_model_component" in result
@@ -144,10 +147,10 @@ class TestDoublyRobustEstimator:
         target_props = [d.propensity for d in data]
         # Perfect reward model: predicts exact reward
         reward_preds = [d.reward for d in data]
-        
+
         result = evaluator.doubly_robust_estimate(data, target_props, reward_preds)
         mean_reward = np.mean([d.reward for d in data])
-        
+
         # With perfect model, IPS correction should be near zero
         assert abs(result["ips_correction_component"]) < 0.1
 
@@ -162,7 +165,7 @@ class TestPolicyComparison:
         data = _make_logged_data(200)
         policy_a = [0.5] * len(data)
         policy_b = [0.3] * len(data)
-        
+
         result = evaluator.compare_policies(data, policy_a, policy_b)
         assert "policy_a" in result
         assert "policy_b" in result
@@ -175,9 +178,11 @@ class TestPolicyComparison:
         policy_b = [0.3] * len(data)
         reward_a = [0.4] * len(data)
         reward_b = [0.3] * len(data)
-        
+
         result = evaluator.compare_policies(
-            data, policy_a, policy_b,
+            data,
+            policy_a,
+            policy_b,
             reward_model_predictions_a=reward_a,
             reward_model_predictions_b=reward_b,
         )
@@ -189,7 +194,7 @@ class TestPolicyComparison:
         # Policy A with higher propensity should get different estimate
         policy_a = [0.7] * len(data)
         policy_b = [0.2] * len(data)
-        
+
         result = evaluator.compare_policies(data, policy_a, policy_b)
         assert result["recommendation"] in ("policy_a", "policy_b", "no_difference", "insufficient_data")
 
@@ -225,26 +230,20 @@ class TestEdgeCases:
             LoggedInteraction(user_id=1, item_id=1, reward=1.0, propensity=0.5),
         ]
         target_props = [0.5, 0.5]
-        
+
         result = evaluator.ips_estimate(data, target_props)
         assert result["num_samples"] == 2
 
     def test_all_rewards_zero(self, evaluator):
-        data = [
-            LoggedInteraction(user_id=i, item_id=i, reward=0.0, propensity=0.5)
-            for i in range(50)
-        ]
+        data = [LoggedInteraction(user_id=i, item_id=i, reward=0.0, propensity=0.5) for i in range(50)]
         target_props = [0.5] * 50
-        
+
         result = evaluator.ips_estimate(data, target_props)
         assert result["estimate"] == 0.0
 
     def test_all_rewards_one(self, evaluator):
-        data = [
-            LoggedInteraction(user_id=i, item_id=i, reward=1.0, propensity=0.5)
-            for i in range(50)
-        ]
+        data = [LoggedInteraction(user_id=i, item_id=i, reward=1.0, propensity=0.5) for i in range(50)]
         target_props = [0.5] * 50
-        
+
         result = evaluator.ips_estimate(data, target_props)
         assert result["estimate"] > 0.0

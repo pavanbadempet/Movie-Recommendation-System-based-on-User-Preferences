@@ -68,7 +68,7 @@ def configure_local_spark():
 
         # Inject into OS Environment
         os.environ["HADOOP_HOME"] = str(hadoop_home)
-        os.environ["PATH"] = f"{str(bin_dir)};{os.environ.get('PATH', '')}"
+        os.environ["PATH"] = f"{bin_dir!s};{os.environ.get('PATH', '')}"
         logger.info(f"HADOOP_HOME dynamically set to {hadoop_home}")
         logger.info(f"JAVA_HOME dynamically set to {os.environ['JAVA_HOME']}")
 

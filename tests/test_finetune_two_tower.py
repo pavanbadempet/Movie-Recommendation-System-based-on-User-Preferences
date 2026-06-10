@@ -76,7 +76,7 @@ def test_positive_pair_filter_property(events: list[dict]):
         uid = e.get("user_id")
         if mid is None or uid is None:
             continue
-        if et == "click" or et == "rating" and r is not None and float(r) >= 3.5:
+        if et == "click" or (et == "rating" and r is not None and float(r) >= 3.5):
             qualifying_movie_ids.add(mid)
 
     for _, mid in pairs:

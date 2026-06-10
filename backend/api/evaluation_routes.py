@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from starlette.concurrency import run_in_threadpool
 
 from backend.data.auth import TenantContext

@@ -2,10 +2,11 @@
 Property-based test for ablation report serialization round-trip.
 # Feature: architecture-design-perfection, Property 11: Ablation Report Serialization Round-Trip
 """
+
 import json
+from pathlib import Path
 import sys
 import tempfile
-from pathlib import Path
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -42,9 +43,7 @@ def _ablation_report_strategy():
     return st.builds(
         AblationReport,
         run_timestamp=st.just("2024-01-01T00:00:00Z"),
-        full_ensemble_ndcg=st.floats(
-            min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False
-        ),
+        full_ensemble_ndcg=st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False),
         models=st.lists(_model_result_strategy(), min_size=0, max_size=6),
     )
 
@@ -87,15 +86,12 @@ def test_ablation_report_serialization_roundtrip(report):
     )
 
     for orig, loaded_m in zip(report.models, loaded["models"]):
-        assert orig.model == loaded_m["model"], (
-            f"model name mismatch: {orig.model!r} != {loaded_m['model']!r}"
-        )
+        assert orig.model == loaded_m["model"], f"model name mismatch: {orig.model!r} != {loaded_m['model']!r}"
 
         if orig.ndcg_without is not None:
             assert loaded_m["ndcg_without"] is not None
             assert abs(loaded_m["ndcg_without"] - orig.ndcg_without) < 1e-9, (
-                f"ndcg_without mismatch for {orig.model}: "
-                f"{loaded_m['ndcg_without']} != {orig.ndcg_without}"
+                f"ndcg_without mismatch for {orig.model}: {loaded_m['ndcg_without']} != {orig.ndcg_without}"
             )
         else:
             assert loaded_m["ndcg_without"] is None, (
@@ -108,9 +104,7 @@ def test_ablation_report_serialization_roundtrip(report):
                 f"delta mismatch for {orig.model}: {loaded_m['delta']} != {orig.delta}"
             )
         else:
-            assert loaded_m["delta"] is None, (
-                f"Expected delta=None for {orig.model}, got {loaded_m['delta']}"
-            )
+            assert loaded_m["delta"] is None, f"Expected delta=None for {orig.model}, got {loaded_m['delta']}"
 
         if orig.marginal_contribution_pct is not None:
             assert loaded_m["marginal_contribution_pct"] is not None
@@ -120,6 +114,5 @@ def test_ablation_report_serialization_roundtrip(report):
             )
         else:
             assert loaded_m["marginal_contribution_pct"] is None, (
-                f"Expected marginal_contribution_pct=None for {orig.model}, "
-                f"got {loaded_m['marginal_contribution_pct']}"
+                f"Expected marginal_contribution_pct=None for {orig.model}, got {loaded_m['marginal_contribution_pct']}"
             )

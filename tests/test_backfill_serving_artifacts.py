@@ -66,6 +66,7 @@ def test_build_backfill_artifacts_can_include_heavy_artifact_contract(tmp_path):
     np.save(embeddings_path, embeddings)
 
     from turbovec import TurboQuantIndex
+
     index = TurboQuantIndex(embeddings.shape[1], bit_width=4)
     index.add(embeddings)
     turbovec_path = tmp_path / "turbovec.tq"

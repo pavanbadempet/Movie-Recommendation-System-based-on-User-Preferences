@@ -16,20 +16,28 @@ import re
 import time
 import uuid
 
-from turbovec import TurboQuantIndex
 import numpy as np
 import pandas as pd
 import pandera.pandas as pa
 from pandera.pandas import Check, Column, DataFrameSchema
 from sentence_transformers import SentenceTransformer
+from turbovec import TurboQuantIndex
 
 from etl.config import data_config, paths
+from etl.data_contracts import validate_dataframe_contract
 from etl.semantic_artifacts import write_semantic_artifacts
 
 logger = logging.getLogger(__name__)
 PIPELINE_NAME = "nova-pandas-etl"
 PIPELINE_VERSION = "1.0"
 SERVING_CONTRACT_VERSION = 1
+STAGE_CONTRACTS = {
+    "bronze": "bronze_movies",
+    "silver": "silver_movies",
+    "gold": "gold_training_set",
+    "serving": "gold_training_set",
+    "serving_contract": "gold_training_set",
+}
 
 # ==========================================
 # 1. INGESTION LOGIC
@@ -414,9 +422,7 @@ def build_turbovec_index(vectors: np.ndarray) -> TurboQuantIndex:
     if n_samples > 0:
         index.add(vectors)
         if len(index) != n_samples:
-            raise ValueError(
-                f"TurboVec len ({len(index)}) != vectors added ({n_samples})"
-            )
+            raise ValueError(f"TurboVec len ({len(index)}) != vectors added ({n_samples})")
     return index
 
 
@@ -568,11 +574,11 @@ def build_serving_contract(
     return {
         "version": SERVING_CONTRACT_VERSION,
         "model_name": model_name,
-        "movie_rows": int(len(df)),
+        "movie_rows": len(df),
         "embedding_rows": int(vectors.shape[0]),
         "embedding_dimensions": int(vectors.shape[1]) if len(vectors.shape) > 1 else 0,
         "turbovec_index_size": len(index) if index is not None else None,
-        "movie_id_map_rows": int(len(movie_ids)),
+        "movie_id_map_rows": len(movie_ids),
         "movie_id_sha256": movie_id_sha256(movie_ids),
         "quality_gate": gate,
     }
@@ -655,12 +661,12 @@ def assert_batch_invariants(
     if df["title"].isna().any() or (df["title"].astype(str).str.strip() == "").any():
         raise ValueError(f"{stage} contains empty titles")
 
-    result = {"stage": stage, "rows": int(len(df))}
+    result = {"stage": stage, "rows": len(df)}
 
     if vectors is not None:
         if len(vectors) != len(df):
             raise ValueError(f"{stage} vector count does not match row count")
-        result["vector_rows"] = int(len(vectors))
+        result["vector_rows"] = len(vectors)
         result["vector_dimensions"] = int(vectors.shape[1]) if len(vectors.shape) > 1 else 0
 
     if index is not None:
@@ -675,8 +681,14 @@ def assert_batch_invariants(
         expected_ids = df["id"].astype("int64").to_numpy()
         if not np.array_equal(expected_ids, movie_ids):
             raise ValueError(f"{stage} movie id map order does not match serving catalog order")
-        result["movie_id_map_rows"] = int(len(movie_ids))
+        result["movie_id_map_rows"] = len(movie_ids)
         result["movie_id_sha256"] = movie_id_sha256(movie_ids)
+
+    contract_name = STAGE_CONTRACTS.get(stage)
+    if contract_name is not None:
+        contract_result = validate_dataframe_contract(df, contract_name, stage=stage)
+        result["contract_name"] = contract_result["contract_name"]
+        result["contract_version"] = contract_result["contract_version"]
 
     return result
 
@@ -876,7 +888,7 @@ def run_pipeline(
                 metrics["time_travel_artifacts"]["dim_movie_scd"] = scd_snapshot["manifest"]
                 metrics["quality_gates"]["dim_movie_scd"] = {
                     "stage": "dim_movie_scd",
-                    "source_rows": int(len(scd_input_df)),
+                    "source_rows": len(scd_input_df),
                     "current_rows": scd_snapshot["current_rows"],
                     "total_versions": scd_snapshot["total_versions"],
                     "effective_ts": scd_snapshot["effective_ts"],
@@ -912,6 +924,7 @@ def run_pipeline(
         # 4. MLOps Validation & Run Registration
         try:
             from backend.serving.mlops_engine import MLOpsEngine
+
             mlops = MLOpsEngine(paths.models / "run_lineage_registry.json")
             mlops_report = mlops.validate_and_register_run(
                 run_id=run_id,

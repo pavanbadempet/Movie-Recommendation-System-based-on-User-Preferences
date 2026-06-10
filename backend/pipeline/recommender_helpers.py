@@ -105,8 +105,8 @@ def reload_local_recommender(force_download: bool):
 
 def refresh_artifact_files(force_download: bool) -> dict[str, bool]:
     """Refresh serving artifact files without rebuilding the in-memory recommender."""
-    from backend.pipeline import recommender as recommender_module
     from backend.models.model_loader import default_artifacts_for_serving_profile, ensure_model_files
+    from backend.pipeline import recommender as recommender_module
 
     with temporary_env(artifact_refresh_env(force_download)):
         return ensure_model_files(

@@ -32,7 +32,9 @@ logger = logging.getLogger(__name__)
 # Security Settings
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "").strip()
 if not SECRET_KEY:
-    logger.warning("WARNING: JWT_SECRET_KEY env var is not set. Falling back to a default key for preview mode. Please configure JWT_SECRET_KEY in production settings!")
+    logger.warning(
+        "WARNING: JWT_SECRET_KEY env var is not set. Falling back to a default key for preview mode. Please configure JWT_SECRET_KEY in production settings!"
+    )
     SECRET_KEY = "demo-fallback-secret-key-do-not-use-in-production-12345678"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30

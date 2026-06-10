@@ -15,10 +15,10 @@ for circuit-breaking unreliable microservices.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 import logging
 import threading
 import time
-from dataclasses import dataclass, field
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -84,8 +84,7 @@ class ModelHealthMonitor:
         self.error_threshold_multiplier = error_threshold_multiplier
 
         self._states: dict[str, ModelState] = {
-            name: ModelState(name=name, ewma_alpha=ewma_alpha)
-            for name in model_names
+            name: ModelState(name=name, ewma_alpha=ewma_alpha) for name in model_names
         }
 
         self._global_prediction_count = 0
@@ -124,14 +123,8 @@ class ModelHealthMonitor:
             else:
                 state.consecutive_failures = 0
                 # Update EWMA
-                state.ewma_error = (
-                    state.ewma_alpha * error
-                    + (1 - state.ewma_alpha) * state.ewma_error
-                )
-                state.ewma_latency_ms = (
-                    state.ewma_alpha * latency_ms
-                    + (1 - state.ewma_alpha) * state.ewma_latency_ms
-                )
+                state.ewma_error = state.ewma_alpha * error + (1 - state.ewma_alpha) * state.ewma_error
+                state.ewma_latency_ms = state.ewma_alpha * latency_ms + (1 - state.ewma_alpha) * state.ewma_latency_ms
 
             self._global_prediction_count += 1
 
@@ -147,11 +140,7 @@ class ModelHealthMonitor:
     def _check_degradation(self, state: ModelState) -> None:
         """Check if a model should be auto-disabled (called under lock)."""
         # Compute ensemble mean error (excluding disabled models)
-        active_errors = [
-            s.ewma_error
-            for s in self._states.values()
-            if not s.is_disabled and s.total_predictions > 10
-        ]
+        active_errors = [s.ewma_error for s in self._states.values() if not s.is_disabled and s.total_predictions > 10]
 
         if not active_errors:
             return
@@ -188,11 +177,7 @@ class ModelHealthMonitor:
     def _check_recovery(self, state: ModelState, probe_error: float) -> None:
         """Check if a disabled model should be re-enabled (called under lock)."""
         # Compute current ensemble mean error
-        active_errors = [
-            s.ewma_error
-            for s in self._states.values()
-            if not s.is_disabled and s.total_predictions > 10
-        ]
+        active_errors = [s.ewma_error for s in self._states.values() if not s.is_disabled and s.total_predictions > 10]
 
         if not active_errors:
             # All models disabled — force re-enable
@@ -225,10 +210,7 @@ class ModelHealthMonitor:
     def get_active_models(self) -> list[str]:
         """Return list of model names that are currently healthy and active."""
         with self._lock:
-            active = [
-                name for name, state in self._states.items()
-                if not state.is_disabled
-            ]
+            active = [name for name, state in self._states.items() if not state.is_disabled]
             # Safety: never return empty — re-enable all if all disabled
             if not active:
                 logger.warning("All models disabled! Re-enabling all models.")
@@ -278,9 +260,7 @@ class ModelHealthMonitor:
             total_disabled = 0
 
             for name, state in self._states.items():
-                failure_rate = (
-                    state.total_failures / max(state.total_predictions, 1)
-                )
+                failure_rate = state.total_failures / max(state.total_predictions, 1)
                 models[name] = {
                     "status": "disabled" if state.is_disabled else "active",
                     "ewma_error": round(state.ewma_error, 6),
@@ -294,9 +274,7 @@ class ModelHealthMonitor:
                 }
                 if state.is_disabled:
                     models[name]["disabled_at"] = state.disabled_at
-                    models[name]["disabled_duration_s"] = round(
-                        time.time() - state.disabled_at, 1
-                    )
+                    models[name]["disabled_duration_s"] = round(time.time() - state.disabled_at, 1)
                     models[name]["probe_success_count"] = state.probe_success_count
                     total_disabled += 1
                 else:

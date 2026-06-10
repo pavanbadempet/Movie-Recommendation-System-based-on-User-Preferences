@@ -18,8 +18,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from backend.pipeline.recommender import Recommender
 from backend.metrics.semantic_benchmark import DEFAULT_BENCHMARK_PATH, evaluate_semantic_benchmark
+from backend.pipeline.recommender import Recommender
 
 
 def _download_movies_from_hf(repo_id: str, repo_type: str, token: str | None, cache_dir: Path) -> Path:

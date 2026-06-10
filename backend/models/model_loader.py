@@ -184,7 +184,14 @@ def _load_manifest_contract(models_dir: Path) -> dict[str, object]:
 
     contract = dict(manifest.get("serving_contract") or {})
     quality = manifest.get("quality") or {}
-    for key in ("movie_rows", "embedding_rows", "faiss_index_size", "turbovec_index_size", "movie_id_map_rows", "movie_id_sha256"):
+    for key in (
+        "movie_rows",
+        "embedding_rows",
+        "faiss_index_size",
+        "turbovec_index_size",
+        "movie_id_map_rows",
+        "movie_id_sha256",
+    ):
         if contract.get(key) is None and quality.get(key) is not None:
             contract[key] = quality.get(key)
     return contract
@@ -212,7 +219,7 @@ def _manifest_contract_matches(
         if filename == "movie_ids.npy":
             expected_rows = manifest_contract.get("movie_id_map_rows") or manifest_contract.get("movie_rows")
             movie_ids = np.load(file_path, mmap_mode="r")
-            actual_rows = int(len(movie_ids))
+            actual_rows = len(movie_ids)
             if expected_rows is not None and actual_rows != int(expected_rows):
                 return False, f"pipeline manifest movie_id_map_rows ({expected_rows}) != local rows ({actual_rows})"
             expected_hash = manifest_contract.get("movie_id_sha256")

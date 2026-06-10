@@ -1,5 +1,5 @@
 ---
-title: Movie Rec Api
+title: Movie Recommendation System
 emoji: 🎬
 colorFrom: blue
 colorTo: indigo
@@ -7,25 +7,70 @@ sdk: docker
 pinned: false
 ---
 
-# APEX — Recommendation API
+# APEX — Open-Source Movie Recommendation System
+> Recommendation engine · FastAPI · React 19 · TypeScript · PyTorch · FAISS · Semantic search · Vector search · Docker · Prometheus · Grafana
 
-> Netflix-quality recommendations for your platform. No ML team required.
+<div align="center">
+<img src="docs/assets/hero-banner.svg" alt="APEX movie recommendation system with FastAPI API, React frontend, semantic search, vector search, evaluation tooling, and observability" width="100%"/>
 
-![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)
-![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-ee4c2c.svg)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.104%2B-009688.svg)
-![FAISS](https://img.shields.io/badge/FAISS-Vector%20Search-1A2B3C.svg)
-![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
-![Coverage](https://img.shields.io/badge/coverage-80%25-brightgreen)
+<p>
+  <a href="https://github.com/pavanpajjuri/Movie-Recommendation-System/stargazers"><img src="https://img.shields.io/github/stars/pavanpajjuri/Movie-Recommendation-System?style=flat-square&color=f59e0b" alt="GitHub stars" /></a>
+  <a href="https://github.com/pavanpajjuri/Movie-Recommendation-System/network/members"><img src="https://img.shields.io/github/forks/pavanpajjuri/Movie-Recommendation-System?style=flat-square&color=06b6d4" alt="GitHub forks" /></a>
+  <a href="https://github.com/pavanpajjuri/Movie-Recommendation-System/commits/main"><img src="https://img.shields.io/github/last-commit/pavanpajjuri/Movie-Recommendation-System?style=flat-square&color=8b5cf6" alt="GitHub last commit" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/pavanpajjuri/Movie-Recommendation-System?style=flat-square&color=22c55e" alt="MIT license" /></a>
+</p>
+<p>
+  <img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.11+" />
+  <img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/React_19-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React 19" />
+  <img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white" alt="PyTorch" />
+  <img src="https://img.shields.io/badge/FAISS-6D28D9?style=for-the-badge" alt="FAISS" />
+</p>
+<p>
+  <a href="docs/INSTALLATION.md"><strong>Install Locally</strong></a> &middot;
+  <a href="docs/QUICKSTART.md"><strong>API Quickstart</strong></a> &middot;
+  <a href="docs/API_REFERENCE.md"><strong>API Reference</strong></a> &middot;
+  <a href="docs/ARCHITECTURE.md"><strong>Architecture</strong></a> &middot;
+  <a href="DEPLOYMENT.md"><strong>Deployment</strong></a>
+</p>
+</div>
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
 
-APEX is an API that gives any streaming or media platform personalized, explainable recommendations powered by a production-grade 6-model ensemble — the same architecture used by Netflix, YouTube, and Amazon, without requiring a dedicated ML team.
+An open-source movie recommendation system and recommendation engine built with FastAPI, React, TypeScript, PyTorch, and FAISS.
 
-**HR@10 = 0.785 · NDCG@10 = 0.542 · Semantic HR@10 = 1.0**
+It combines a recommendation API, semantic search, vector search, offline evaluation, and full-stack ML engineering patterns in a single portfolio-grade repository.
+
+Built as a production-style reference project for movie recommendations, recommender systems, recommendation APIs, and applied ML engineering workflows.
+
+## Highlights
+
+- FastAPI API for recommendations, search, health, and platform endpoints
+- React + TypeScript frontend
+- Offline evaluation pipeline with benchmark reporting
+- Backend and frontend automated tests
+- Docker Compose setup with Prometheus and Grafana
+- Deployment configs for local, Docker, and hosted environments
+
+## Project Status
+
+This repository includes both fully working local components and reference-style architecture for advanced serving, online learning, and platform integrations.
+
+The default local workflow focuses on the core API, frontend, and recommendation artifacts.
+
+## What Works End-To-End Today
+
+- run the FastAPI backend locally
+- run the React frontend locally
+- query recommendation and semantic search endpoints
+- generate natural-language explanations when `OPENROUTER_API_KEY` is configured
+- run backend and frontend automated tests
+- launch the local observability stack with Docker Compose
 
 ```bash
 # Clone and run locally (see Quick Start below)
 git clone https://github.com/pavanpajjuri/Movie-Recommendation-System.git
-cd apex-recommendation-system
+cd Movie-Recommendation-System
 pip install -r requirements.txt
 uvicorn backend.main:app --host 0.0.0.0 --port 8000
 
@@ -33,55 +78,131 @@ uvicorn backend.main:app --host 0.0.0.0 --port 8000
 curl "http://localhost:8000/v1/recommendations/id/550?n=10&explain=true"
 ```
 
-> **Deployment:** Follow the [Quick Start](docs/QUICKSTART.md) to run locally, or [DEPLOYMENT.md](DEPLOYMENT.md) to deploy on Render, Docker, or Kubernetes. The live demo URL will appear here once deployed.
+> **Getting Started:** Use the [Installation Guide](docs/INSTALLATION.md) for local setup, the [API Quickstart](docs/QUICKSTART.md) for example requests, or [DEPLOYMENT.md](DEPLOYMENT.md) for hosted environments.
 
-**[Quick Start](docs/QUICKSTART.md) · [API Reference](docs/API_REFERENCE.md) · [Deployment Guide](DEPLOYMENT.md) · [Pricing](#-deployment-tiers)**
+---
+
+## Why This Project Stands Out
+
+| Capability | This project | Typical recommendation demo |
+|---|:---:|:---:|
+| FastAPI API plus React frontend | ✅ | ⚠️ often API-only |
+| Semantic search and vector search | ✅ | ⚠️ often one retrieval path |
+| Offline evaluation and model documentation | ✅ | ❌ |
+| Observability with Prometheus and Grafana | ✅ | ❌ |
+| Docker and hosted deployment configs | ✅ | ⚠️ limited |
+| Backend and frontend automated tests | ✅ | ⚠️ partial |
+| Architecture docs and package-level documentation | ✅ | ❌ |
+
+---
+
+## Architecture Summary
+
+The system combines:
+
+- a FastAPI serving layer
+- retrieval, ranking, and reranking pipelines
+- offline artifact generation and evaluation
+- optional advanced modules for observability, online learning, and multi-tier serving
+
+For the full design, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Quick Start
+
+### Requirements
+
+- Python 3.11+
+- Node.js 20+
+- `pip`
+- TMDB API key for metadata-backed features
+
+### Optional
+
+- OpenRouter API key for natural-language recommendation explanations
+- Redis for caching and real-time state features
+
+### 1. Clone and install
+
+```bash
+git clone https://github.com/pavanpajjuri/Movie-Recommendation-System.git
+cd Movie-Recommendation-System
+
+python -m venv venv
+# Windows
+venv\Scripts\activate
+# macOS / Linux
+# source venv/bin/activate
+
+pip install -r requirements.txt
+```
+
+### 2. Configure environment
+
+Create a `.env` file in the project root:
+
+```ini
+TMDB_API_KEY=your_tmdb_key_here
+JWT_SECRET_KEY=generate_a_strong_random_secret
+OPENROUTER_API_KEY=your_openrouter_key_here
+REDIS_URL=redis://localhost:6379/0
+```
+
+### 3. Build recommendation artifacts
+
+```bash
+python scripts/rebuild_serving_artifacts.py
+```
+
+Skip this step if artifacts already exist.
+
+### 4. Run the backend
+
+```bash
+uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### 5. Run the frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+---
+
+## Core API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/recommendations/id/{movie_id}` | `GET` | Recommend related movies from a movie ID |
+| `/v1/recommendations/visually-similar/{movie_id}` | `GET` | Return visually similar movie recommendations |
+| `/v1/recommendations/knowledge-graph/{movie_id}` | `GET` | Return graph-based recommendation results |
+| `/v1/search/semantic` | `GET` | Perform semantic search across the catalog |
+
+*Append `?explain=true` to supported recommendation endpoints to generate natural-language explanations when `OPENROUTER_API_KEY` is configured.*
+
+---
+
+## Evaluation Snapshot
+
+Current offline benchmark:
+
+- `HR@10 = 0.785`
+- `NDCG@10 = 0.542`
+
+Evaluation protocol:
+
+- leave-one-out evaluation
+- 200 sampled users
+- 100 candidate items per user
+
+See [docs/MODEL_CARDS.md](docs/MODEL_CARDS.md) for model details, benchmark context, and limitations.
 
 ---
 
 <details>
-<summary>🧠 How it works — 4-Layer Intelligence Stack</summary>
-
-APEX implements a **4-Layer Intelligence Stack** across 18 systematic phases:
-
----
-
-## 🧠 Architecture Overview
-
-APEX is structured into 18 systematic phases across 4 intelligence layers:
-
-### Layer 1: Data Platform & Streaming
-* **High-Concurrency ETL Pipeline**: Processes massive datasets using Parquet and memory-mapped NumPy arrays.
-* **In-Memory Feature Store**: Redis-backed cache for real-time user state (clicks, ratings, session velocity) with sub-millisecond retrieval.
-* **Streaming Telemetry**: Kafka-style event appending and aggregation for real-time behavioral updates.
-
-### Layer 2: Machine Learning Engine
-* **Two-Tower Neural Retrieval**: SBERT-based dual encoders map users and items into a shared 768-dimensional latent space.
-* **Vector Search (FAISS)**: Sub-millisecond ANN (Approximate Nearest Neighbor) retrieval across millions of dense vectors.
-* **Multi-Task Learning (MMoE)**: A Multi-gate Mixture-of-Experts (MMoE) ranker that simultaneously predicts click-through rate (CTR) and user rating, dynamically weighting the loss.
-* **LightGBM Ranker**: High-speed gradient boosting tree used as a fast fallback ranker.
-* **Closed Online Learning Loop**: All three highest-weighted ensemble models receive incremental gradient updates from live events via `OnlineLearningCoordinator` — a unified fan-out layer that routes every click and rating to independent daemon threads for LightGCN (BPR embedding updates), SASRec (attention + item embedding fine-tuning), and KAN (Fourier coefficient updates) without blocking inference.
-
-### Layer 3: Advanced Aesthetics & Multi-Modal Understanding
-* **Visual Encoders (CLIP)**: Uses OpenAI's CLIP model to extract 512-dimensional aesthetic embeddings from movie posters.
-* **Multi-Modal FAISS Fusion**: Mathematically fuses SBERT text vectors (60%) and CLIP visual vectors (40%) into a unified 1280-dimensional search space for aesthetic + thematic matching.
-* **Latent Diffusion Similarities**: Recommends items based on visual generative latent structures.
-
-### Layer 4: Cognitive Intelligence & Compliance
-* **Reinforcement Learning (A2C)**: An Actor-Critic neural network optimizing for long-term retention (7-day return probability) rather than cheap clickbait, trained via Conservative Q-Learning (CQL).
-* **Long-Horizon RL**: Extends A2C to 30/90-day windows with churn risk estimation (`estimate_churn_risk`) and preference stability scoring (`compute_preference_stability`). At-risk users receive quality-boosted recommendations; shifting users receive genre-diverse candidates. Applied at every scoring call via `long_horizon_score_adjustment`.
-* **Deep Content Understanding (NLP)**: Uses HuggingFace Zero-Shot classification (`nli-distilroberta-base`) to extract abstract human concepts (Moral Dilemmas, Moods) and NER for entities.
-* **Semantic Knowledge Graphs**: NetworkX-powered multi-hop reasoning (`User -> Liked Theme -> New Movie`).
-* **LLM Personalization**: OpenRouter integration (GPT-4o / Llama 3) to dynamically generate personalized 1-sentence explanations ("Because you loved X, you'll enjoy Y").
-* **Differential Privacy**: Gaussian (ε, δ)-DP noise injected into user embeddings at every recommendation request (`privatize_user_embedding`), guaranteeing GDPR / EU AI Act compliance. ε configurable via `APEX_DP_EPSILON` env var.
-* **Counterfactual Evaluation**: Inverse Propensity Scoring (IPS) to mathematically simulate model deployments offline before exposing them to users.
-* **Cold-Start Intelligence**: `cold_start_boost` from the uncertainty estimator applies content-quality and popularity signals for users with < 5 interactions, preventing the cold-start problem from surfacing low-quality results.
-
-</details>
-
----
-
-## 🗺️ Architecture Diagram
+<summary>Architecture Diagram</summary>
 
 ```mermaid
 flowchart TD
@@ -131,43 +252,13 @@ flowchart TD
     end
 ```
 
----
-
-## ⚡ Quick Start
-
-### 1. Environment Setup
-```bash
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-### 2. Environment Variables
-Create a `.env` file in the root directory:
-```ini
-TMDB_API_KEY=your_tmdb_key_here
-OPENROUTER_API_KEY=your_openrouter_key_here
-JWT_SECRET_KEY=generate_a_strong_random_secret
-REDIS_URL=redis://localhost:6379/0  # Optional for Layer 1 features
-```
-
-### 3. Data Pipeline & Model Generation
-Run the core pipeline to generate all artifacts, neural embeddings, and FAISS indices:
-```bash
-python scripts/rebuild_serving_artifacts.py
-```
-
-### 4. Launch the API
-Start the high-concurrency FastAPI backend:
-```bash
-uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
-```
+</details>
 
 ---
 
 ## 🚀 Deployment Tiers
 
-APEX auto-detects hardware at startup and selects the appropriate serving tier. The live demo runs in **Tier 3** (free Render plan) — the full ensemble requires a paid plan.
+APEX auto-detects hardware at startup and selects the appropriate serving tier. The live demo runs in **Tier 3** (free Render plan), and higher-capability tiers require a paid plan.
 
 | Tier | Plan | Profile | Active Models | Latency |
 |------|------|---------|---------------|---------|
@@ -177,7 +268,7 @@ APEX auto-detects hardware at startup and selects the appropriate serving tier. 
 
 ### Live Demo (Current: Tier 3)
 
-The Render deployment uses `plan: free` with `NOVA_SERVING_PROFILE=lite`, which activates Tier 3 (degraded mode). This is intentional for cost reasons — the architecture fully supports all three tiers.
+The Render deployment uses `plan: free` with `NOVA_SERVING_PROFILE=lite`, which activates Tier 3 (degraded mode). This is intentional for cost reasons, and the project is structured to support all three tiers.
 
 ### Upgrading to Tier 1 or Tier 2
 
@@ -201,83 +292,19 @@ envVars:
 
 ---
 
-## 📡 Core API Endpoints
+## Fairness And Compliance Tooling
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/v1/recommendations/id/{movie_id}` | `GET` | Core Deep Neural Recommendation (MMoE Ranked) |
-| `/v1/recommendations/visually-similar/{movie_id}` | `GET` | Multi-Modal (Text + Vision) Fusion Search |
-| `/v1/recommendations/knowledge-graph/{movie_id}` | `GET` | Multi-Hop Semantic Reasoning Search |
-| `/v1/search/semantic` | `GET` | Vector-based semantic search (handles misspellings & abstract concepts) |
+APEX includes fairness, privacy, and evaluation-related components intended to support safer recommendation workflows.
 
-*Append `?explain=true` to any recommendation endpoint to trigger the OpenRouter LLM for personalized natural-language justifications.*
+These components are designed to help with:
 
----
-
-## 📊 Ensemble Evaluation & Model Cards
-
-### Offline Evaluation Results
-
-Evaluation protocol: leave-one-out, 200 users, 100 candidates per user.  
-Ensemble weights determined by **Doubly Robust IPS grid search** (200 Dirichlet-sampled candidates) — corrects for popularity bias in the logging policy.
-
-| Model | HR@10 | NDCG@10 | DR Weight | Paradigm |
-|---|---|---|---|---|
-| **Ensemble** | **0.785** | **0.542** | — | Weighted blend |
-| SASRec | 0.761 | 0.520 | 0.659 | Sequential Transformer |
-| KAN | 0.694 | 0.439 | 0.298 | Kolmogorov-Arnold Network |
-| LightGCN | 0.672 | 0.411 | 0.005 | Graph Collaborative Filtering |
-| Quantum-Fluid | 0.583 | 0.354 | 0.010 | Neural ODE + Complex Embeddings |
-| Diffusion | 0.521 | 0.309 | 0.024 | Generative Latent Diffusion |
-| Hyperbolic | 0.498 | 0.287 | 0.004 | Poincaré Ball Manifold |
-
-**Ensemble lift over best individual model (SASRec): +4.3% NDCG@10**
-
-Semantic benchmark (17 curated intent cases, `reports/semantic_benchmark_report.json`): **HR@10 = 1.0, bad-hit rate = 0.0**
-
-### Cross-Architecture Design Rationale
-
-Each model addresses a distinct failure mode of the others:
-
-| Failure Mode | Model That Addresses It |
-|---|---|
-| Ignores interaction order | SASRec (causal Transformer) |
-| Misses multi-hop graph patterns | LightGCN (graph propagation) |
-| Linear scoring bottleneck | KAN (learnable edge functions) |
-| Static preference assumption | Quantum-Fluid (continuous-time ODE) |
-| Euclidean hierarchy distortion | Hyperbolic (Poincaré manifold) |
-| Candidate ranking bottleneck | Diffusion (generative retrieval) |
-| Popularity bias in training | IPS-weighted BPR + DR weight selection |
-
-### Causal Debiasing
-
-All models are trained with **Inverse Propensity Scoring (IPS)** following Schnabel et al. "Recommendations as Treatments" (ICML 2016):
-- Propensity estimation from empirical impression frequency (Laplace-smoothed)
-- IPS-weighted BPR loss: each sample weighted by 1/propensity (clipped at 10.0)
-- Doubly Robust weight selection: combines direct reward imputation with IPS correction
-- Script: `scripts/causal_debias_training.py`
-
-### Ablation Study
-
-Run leave-one-out ablation to measure each model's marginal contribution:
-```bash
-python scripts/ablation_study.py --sample-size 1000 --output reports/ablation_report.json
-```
-
-Full model cards (training data, architecture details, known limitations): [`docs/MODEL_CARDS.md`](docs/MODEL_CARDS.md)
+1. popularity-bias analysis
+2. calibration and distribution checks
+3. recommendation safety constraints
 
 ---
 
-## 🛡️ Enterprise Fairness & Compliance
-
-APEX includes a rigorous `FairnessAuditor` (`scripts/fairness_audit.py`) that mathematically verifies:
-1. **Popularity Bias**: Enforces a Gini Coefficient `< 0.70` to prevent the model from blindly surfacing blockbuster content and starving niche creators.
-2. **Calibration (KL Divergence)**: Ensures the recommended item distributions perfectly mirror the user's organic taste distribution without forcing them into a filter bubble.
-3. **Safety Filters**: The Reinforcement Learning architecture utilizes an absolute hard-boundary to guarantee the AI will never recommend content a user explicitly dislikes.
-
----
-
-## 📊 Observability
+## Observability And Monitoring
 
 APEX ships a complete production observability stack that starts automatically with `docker compose up`.
 
@@ -318,7 +345,7 @@ Set `SENTRY_DSN` in `.env` to enable full error tracking with stack traces, perf
 APEX maintains a rigorous testing suite covering neural network bounds, safety constraints, mathematical normalization, and offline replay evaluation.
 
 ```bash
-python -m pytest backend/tests/ -v
+python -m pytest backend/tests/ tests/ -v
 ```
 
 ---
@@ -338,7 +365,7 @@ mutmut results
 The weekly CI workflow (`.github/workflows/mutation-tests.yml`) runs every Monday at 10:00 UTC and prints the mutation score automatically.
 
 ---
-*Built as a state-of-the-art reference architecture for large-scale applied AI engineering.*
+*Built as a reference architecture for production-style applied AI engineering.*
 
 ---
 

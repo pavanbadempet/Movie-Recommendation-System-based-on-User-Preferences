@@ -17,6 +17,12 @@ Note: Source modules remain in backend/ for backward compatibility.
 This sub-package provides logical namespacing and a documentation anchor.
 """
 
+from backend.intelligence.uncertainty_estimator import (
+    cold_start_boost,
+    compute_confidence_score,
+    coverage_uncertainty,
+    ensemble_uncertainty,
+)
 from backend.metrics.benchmark_cache import (
     compute_recommendation_benchmark_cached,
     compute_semantic_benchmark_cached,
@@ -33,12 +39,6 @@ from backend.metrics.evaluation import evaluate_recommendation_quality
 from backend.metrics.recommendation_benchmark import evaluate_recommendation_benchmark
 from backend.metrics.search_benchmark import evaluate_search_benchmark
 from backend.metrics.semantic_benchmark import evaluate_semantic_benchmark
-from backend.intelligence.uncertainty_estimator import (
-    cold_start_boost,
-    compute_confidence_score,
-    coverage_uncertainty,
-    ensemble_uncertainty,
-)
 
 __all__ = [
     # IPS-debiased metrics

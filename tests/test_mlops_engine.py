@@ -7,7 +7,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from backend.serving.mlops_engine import MLOpsEngine
 
@@ -69,11 +68,13 @@ def test_validate_and_register_run(tmp_path):
 
     # Base dataframes
     np.random.seed(42)
-    baseline_df = pd.DataFrame({
-        "popularity": np.random.normal(10.0, 1.0, 50),
-        "vote_count": np.random.normal(100.0, 10.0, 50),
-        "content_quality_score": np.random.normal(0.8, 0.05, 50)
-    })
+    baseline_df = pd.DataFrame(
+        {
+            "popularity": np.random.normal(10.0, 1.0, 50),
+            "vote_count": np.random.normal(100.0, 10.0, 50),
+            "content_quality_score": np.random.normal(0.8, 0.05, 50),
+        }
+    )
     baseline_embeds = np.random.normal(0.0, 1.0, (50, 8)).astype(np.float32)
 
     # New matching data (promoted run) - close deterministic offset to prevent false alarms
@@ -101,11 +102,13 @@ def test_validate_and_register_run(tmp_path):
     assert report_healthy["hashes"]["turbovec_index"] != "none"
 
     # Case 2: Drifted Run
-    drift_df = pd.DataFrame({
-        "popularity": np.random.normal(25.0, 1.0, 50),
-        "vote_count": np.random.normal(1000.0, 10.0, 50),
-        "content_quality_score": np.random.normal(0.1, 0.05, 50)
-    })
+    drift_df = pd.DataFrame(
+        {
+            "popularity": np.random.normal(25.0, 1.0, 50),
+            "vote_count": np.random.normal(1000.0, 10.0, 50),
+            "content_quality_score": np.random.normal(0.1, 0.05, 50),
+        }
+    )
     report_drifted = engine.validate_and_register_run(
         run_id="run-002",
         new_df=drift_df,

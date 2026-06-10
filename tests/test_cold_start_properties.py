@@ -16,7 +16,6 @@ Covers:
 
 from __future__ import annotations
 
-import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -27,14 +26,12 @@ from backend.intelligence.uncertainty_estimator import (
     ensemble_uncertainty,
 )
 
-
 # ---------------------------------------------------------------------------
 # cold_start_boost invariants
 # ---------------------------------------------------------------------------
 
 
 class TestColdStartBoost:
-
     def test_warm_user_returns_no_boost(self):
         """Users with >= 10 interactions receive exactly 1.0 (no boost applied)."""
         movie = {"vote_average": 8.5, "vote_count": 5000, "popularity": 200.0}
@@ -84,9 +81,7 @@ class TestColdStartBoost:
         count=st.integers(min_value=0, max_value=9),
     )
     @settings(max_examples=100)
-    def test_property_cold_start_boost_always_in_range(
-        self, vote_avg, vote_count, popularity, count
-    ):
+    def test_property_cold_start_boost_always_in_range(self, vote_avg, vote_count, popularity, count):
         """Property: for any cold-start user, boost is always in [1.0, 1.2]."""
         movie = {
             "vote_average": vote_avg,
@@ -115,7 +110,6 @@ class TestColdStartBoost:
 
 
 class TestEnsembleUncertainty:
-
     def test_all_models_agree_produces_low_uncertainty(self):
         """When all models give identical scores, uncertainty should be near 0."""
         scores = {"lightgcn": 0.8, "quantum": 0.8, "sasrec": 0.8, "kan": 0.8}
@@ -160,7 +154,6 @@ class TestEnsembleUncertainty:
 
 
 class TestCoverageUncertainty:
-
     def test_zero_interactions_maximum_uncertainty(self):
         """Both user and item with 0 interactions = maximum uncertainty (1.0)."""
         unc = coverage_uncertainty(user_interaction_count=0, item_interaction_count=0)
@@ -198,37 +191,36 @@ class TestCoverageUncertainty:
 
 
 class TestComputeConfidenceScore:
-
     def test_returns_all_required_keys(self):
         scores = {"m1": 0.8, "m2": 0.6}
         weights = {"m1": 0.5, "m2": 0.5}
         result = compute_confidence_score(scores, weights, user_interaction_count=3, item_interaction_count=3)
-        required_keys = {"confidence", "uncertainty_ensemble", "uncertainty_coverage",
-                         "is_cold_start", "confidence_label"}
-        assert required_keys <= set(result.keys()), (
-            f"Missing keys: {required_keys - set(result.keys())}"
-        )
+        required_keys = {
+            "confidence",
+            "uncertainty_ensemble",
+            "uncertainty_coverage",
+            "is_cold_start",
+            "confidence_label",
+        }
+        assert required_keys <= set(result.keys()), f"Missing keys: {required_keys - set(result.keys())}"
 
     def test_cold_start_flag_for_few_interactions(self):
         """is_cold_start is True when user or item has < 5 interactions."""
         scores = {"m": 0.5}
         weights = {"m": 1.0}
-        result = compute_confidence_score(scores, weights, user_interaction_count=4,
-                                          item_interaction_count=100)
+        result = compute_confidence_score(scores, weights, user_interaction_count=4, item_interaction_count=100)
         assert result["is_cold_start"] is True
 
     def test_not_cold_start_with_sufficient_interactions(self):
         scores = {"m": 0.5}
         weights = {"m": 1.0}
-        result = compute_confidence_score(scores, weights, user_interaction_count=10,
-                                          item_interaction_count=10)
+        result = compute_confidence_score(scores, weights, user_interaction_count=10, item_interaction_count=10)
         assert result["is_cold_start"] is False
 
     def test_confidence_in_unit_interval(self):
         scores = {"m1": 0.9, "m2": 0.1}
         weights = {"m1": 0.6, "m2": 0.4}
-        result = compute_confidence_score(scores, weights, user_interaction_count=50,
-                                          item_interaction_count=50)
+        result = compute_confidence_score(scores, weights, user_interaction_count=50, item_interaction_count=50)
         assert 0.0 <= result["confidence"] <= 1.0
 
     def test_confidence_label_valid_values(self):
@@ -248,10 +240,9 @@ class TestComputeConfidenceScore:
         scores = {"m": score}
         weights = {"m": 1.0}
         result = compute_confidence_score(
-            scores, weights,
+            scores,
+            weights,
             user_interaction_count=user_count,
             item_interaction_count=item_count,
         )
-        assert 0.0 <= result["confidence"] <= 1.0, (
-            f"Confidence {result['confidence']} out of [0, 1]"
-        )
+        assert 0.0 <= result["confidence"] <= 1.0, f"Confidence {result['confidence']} out of [0, 1]"

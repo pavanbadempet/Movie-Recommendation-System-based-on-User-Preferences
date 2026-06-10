@@ -111,7 +111,7 @@ def build_backfill_artifacts(
     semantic_twins_path = Path(semantic["semantic_twins_path"])
     semantic_summary_path = Path(semantic["semantic_twin_summary_path"])
 
-    row_count = int(len(movie_ids))
+    row_count = len(movie_ids)
     id_hash = movie_id_sha256(movie_ids)
     quality_report = {
         "run_id": run_id,

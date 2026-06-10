@@ -12,7 +12,7 @@ import json
 import logging
 from pathlib import Path
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -28,7 +28,7 @@ class MLOpsEngine:
         self.registry_path = Path(registry_path)
         self.registry_path.parent.mkdir(parents=True, exist_ok=True)
 
-    def load_registry(self) -> List[Dict[str, Any]]:
+    def load_registry(self) -> list[dict[str, Any]]:
         """Load history logs from the registry JSON file."""
         if not self.registry_path.exists():
             return []
@@ -41,7 +41,7 @@ class MLOpsEngine:
             logger.warning("Failed to read MLOps lineage registry: %s — resetting.", exc)
         return []
 
-    def save_registry(self, history: List[Dict[str, Any]]) -> None:
+    def save_registry(self, history: list[dict[str, Any]]) -> None:
         """Write history logs to the registry JSON file."""
         try:
             self.registry_path.write_text(json.dumps(history, indent=2), encoding="utf-8")
@@ -49,8 +49,8 @@ class MLOpsEngine:
             logger.error("Failed to save MLOps registry: %s", exc)
 
     def compute_ks_drift(
-        self, baseline_df: pd.DataFrame, new_df: pd.DataFrame, columns: List[str]
-    ) -> Dict[str, Dict[str, float]]:
+        self, baseline_df: pd.DataFrame, new_df: pd.DataFrame, columns: list[str]
+    ) -> dict[str, dict[str, float]]:
         """Run Kolmogorov-Smirnov test on numerical features to detect distribution shifts."""
         results = {}
         for col in columns:
@@ -71,9 +71,7 @@ class MLOpsEngine:
 
         return results
 
-    def compute_embedding_drift(
-        self, baseline_embeds: np.ndarray, new_embeds: np.ndarray
-    ) -> Dict[str, float]:
+    def compute_embedding_drift(self, baseline_embeds: np.ndarray, new_embeds: np.ndarray) -> dict[str, float]:
         """Compute cosine similarity alignment shift between baseline and new embedding matrices."""
         if baseline_embeds.shape[1] != new_embeds.shape[1]:
             logger.warning(
@@ -117,14 +115,14 @@ class MLOpsEngine:
         self,
         run_id: str,
         new_df: pd.DataFrame,
-        new_embeds: Optional[np.ndarray] = None,
-        turbovec_path: Optional[Path] = None,
-        baseline_df: Optional[pd.DataFrame] = None,
-        baseline_embeds: Optional[np.ndarray] = None,
-        numerical_columns: Optional[List[str]] = None,
+        new_embeds: np.ndarray | None = None,
+        turbovec_path: Path | None = None,
+        baseline_df: pd.DataFrame | None = None,
+        baseline_embeds: np.ndarray | None = None,
+        numerical_columns: list[str] | None = None,
         ks_p_value_threshold: float = 0.05,
         max_embedding_shift: float = 0.15,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Validate current run against a baseline, assess data drift, log metrics, and record run lineage."""
         if numerical_columns is None:
             numerical_columns = ["popularity", "vote_count", "content_quality_score"]

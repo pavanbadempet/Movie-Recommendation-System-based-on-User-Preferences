@@ -25,8 +25,8 @@ from __future__ import annotations
 
 import argparse
 import logging
-import sys
 from pathlib import Path
+import sys
 
 import numpy as np
 
@@ -83,7 +83,7 @@ def evaluate_recall(
     ValueError
         If ``n_queries`` exceeds the number of available corpus vectors.
     """
-    from turbovec import TurboQuantIndex  # noqa: PLC0415
+    from turbovec import TurboQuantIndex
 
     turbovec_path = Path(turbovec_path)
     embeddings_path = Path(embeddings_path)
@@ -132,10 +132,7 @@ def evaluate_recall(
 
         # Recall = fraction of BF top-K results that appear in TurboVec top-K,
         # averaged across all queries.
-        hits: float = sum(
-            len(set(tq_indices[i].tolist()) & set(bf_indices[i].tolist())) / k
-            for i in range(n_queries)
-        )
+        hits: float = sum(len(set(tq_indices[i].tolist()) & set(bf_indices[i].tolist())) / k for i in range(n_queries))
         recall[k] = hits / n_queries
         logger.info("Recall@%d = %.4f", k, recall[k])
 
@@ -201,7 +198,7 @@ def main() -> None:
     except (FileNotFoundError, ValueError) as exc:
         logger.error("%s", exc)
         sys.exit(1)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error("Recall evaluation failed: %s", exc)
         sys.exit(1)
 
@@ -210,13 +207,10 @@ def main() -> None:
     # --- Quality gate: exit 1 if Recall@10 < 0.90 ---
     recall_at_10 = recall.get(10)
     if recall_at_10 is None:
-        logger.warning(
-            "K=10 was not included in k_values; skipping Recall@10 quality gate."
-        )
+        logger.warning("K=10 was not included in k_values; skipping Recall@10 quality gate.")
     elif recall_at_10 < RECALL_AT_10_THRESHOLD:
         logger.error(
-            "Quality gate FAILED: Recall@10 = %.4f < %.2f threshold. "
-            "The TurboVec index may need to be rebuilt.",
+            "Quality gate FAILED: Recall@10 = %.4f < %.2f threshold. The TurboVec index may need to be rebuilt.",
             recall_at_10,
             RECALL_AT_10_THRESHOLD,
         )

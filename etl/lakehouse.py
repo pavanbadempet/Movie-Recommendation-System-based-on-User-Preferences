@@ -280,7 +280,7 @@ def validate_table_contract(
 
     return {
         "table": model.name,
-        "rows": int(len(df)),
+        "rows": len(df),
         "columns": list(df.columns),
         "required_columns": list(model.required_columns),
         "duplicate_keys": duplicate_keys,
@@ -311,7 +311,7 @@ def write_versioned_snapshot(
     if validate_contract:
         contract = validate_table_contract(df, model)
     else:
-        contract = {"table": model.name, "rows": int(len(df)), "columns": list(df.columns)}
+        contract = {"table": model.name, "rows": len(df), "columns": list(df.columns)}
 
     run_date = _normalize_run_date(run_date)
     table_root = Path(base_path) / table_name
@@ -325,7 +325,7 @@ def write_versioned_snapshot(
         "run_id": run_id,
         "run_date": run_date,
         "created_at": utc_now(),
-        "row_count": int(len(df)),
+        "row_count": len(df),
         "data_path": str(data_path),
         "data_sha256": _file_sha256(data_path),
         "data_size_bytes": int(data_path.stat().st_size),
@@ -509,7 +509,7 @@ def write_movie_scd_snapshot(
         "table": MOVIE_SCD_MODEL.name,
         "effective_ts": str(effective_ts),
         "current_rows": current_rows,
-        "total_versions": int(len(history)),
+        "total_versions": len(history),
         "manifest": manifest,
     }
 

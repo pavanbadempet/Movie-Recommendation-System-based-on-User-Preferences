@@ -19,7 +19,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from backend.metrics.search_benchmark import DEFAULT_SEARCH_BENCHMARK_PATH, evaluate_search_benchmark  # noqa: E402
+from backend.metrics.search_benchmark import DEFAULT_SEARCH_BENCHMARK_PATH, evaluate_search_benchmark
 
 
 def _parse_title_csv(value: str) -> list[str]:

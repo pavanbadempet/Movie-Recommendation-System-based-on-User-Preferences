@@ -11,8 +11,10 @@ import pandas as pd
 import torch
 import torch.nn as nn
 
-from backend.models.diffusion_recommender import LatentDiffusionRecommender
 from backend.events import iter_events
+from backend.learning.adaptive_router_trainer import AdaptiveRouterTrainer
+from backend.models.contextual_router import ContextualRouter
+from backend.models.diffusion_recommender import LatentDiffusionRecommender
 from backend.models.hyperbolic_recommender import HyperbolicRecommender
 from backend.models.kan_ranker import KANRanker
 from backend.models.lightgcn import LightGCN
@@ -20,8 +22,6 @@ from backend.models.lightgcn import LightGCN
 # Import all 4 Advanced Research Models
 from backend.models.neural_ode_recommender import QuantumFluidRecommender
 from backend.models.sasrec import SASRec
-from backend.models.contextual_router import ContextualRouter
-from backend.learning.adaptive_router_trainer import AdaptiveRouterTrainer
 from backend.serving.model_health_monitor import ModelHealthMonitor
 
 logger = logging.getLogger(__name__)
@@ -159,6 +159,7 @@ class ApexEnsembleEngine(nn.Module):
         # Initialize Rényi Differential Privacy (RDP) Privacy Budget Accountant
         try:
             from backend.privacy.privacy_preserving_ml import PrivacyBudgetAccountant
+
             self.privacy_accountant = PrivacyBudgetAccountant()
         except Exception as exc:
             logger.warning("Failed to initialize PrivacyBudgetAccountant: %s", exc)
@@ -179,7 +180,6 @@ class ApexEnsembleEngine(nn.Module):
         except Exception as exc:
             logger.warning("Failed to initialize ModelHealthMonitor: %s", exc)
             self.health_monitor = None
-
 
     # ------------------------------------------------------------------ #
     # Ensemble weight loading                                              #
@@ -225,7 +225,7 @@ class ApexEnsembleEngine(nn.Module):
                 exc,
             )
             return dict(self._DEFAULT_WEIGHTS)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning(
                 "Could not read ensemble_weights.json (%s); using hard-coded defaults.",
                 exc,
@@ -242,6 +242,17 @@ class ApexEnsembleEngine(nn.Module):
             return dict(self._DEFAULT_WEIGHTS)
 
         weights: dict[str, float] = {k: float(raw[k]) for k in self._REQUIRED_WEIGHT_KEYS}
+
+        # --- log experimental-model warnings ---
+        _EXPERIMENTAL_THRESHOLD = 0.01
+        for model_name, w in weights.items():
+            if 0 < w < _EXPERIMENTAL_THRESHOLD:
+                logger.info(
+                    "Ensemble model '%s' has weight %.4f (< %.2f) — classified as experimental contribution.",
+                    model_name,
+                    w,
+                    _EXPERIMENTAL_THRESHOLD,
+                )
 
         # --- normalise if sum != 1.0 ---
         total = sum(weights.values())
@@ -268,6 +279,27 @@ class ApexEnsembleEngine(nn.Module):
         with self._weights_lock:
             self._weights = new_weights
         return dict(self._weights)
+
+    def model_classifications(self) -> dict[str, dict[str, object]]:
+        """Return a transparency report for each ensemble model.
+
+        Models with weight >= 0.01 are classified as ``core``; those below
+        are ``experimental`` — they contribute to the ensemble but their
+        marginal impact is minimal.  This classification is informational
+        only and does not affect scoring.
+        """
+        _EXPERIMENTAL_THRESHOLD = 0.01
+        with self._weights_lock:
+            weights = dict(self._weights)
+        classifications: dict[str, dict[str, object]] = {}
+        for name, weight in weights.items():
+            tier = "core" if weight >= _EXPERIMENTAL_THRESHOLD else "experimental"
+            classifications[name] = {
+                "weight": weight,
+                "tier": tier,
+                "weight_pct": round(weight * 100, 2),
+            }
+        return classifications
 
     def _move_to_device(self) -> None:
         """Move all sub-models to self._device."""
@@ -484,7 +516,7 @@ class ApexEnsembleEngine(nn.Module):
             padded = [0] * (SEQ_LEN - len(safe_ids)) + safe_ids
             return torch.tensor([padded], dtype=torch.long)
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning(
                 "Event Store query failed for user %s; falling back to zero sequence: %s",
                 user_id,
@@ -493,7 +525,10 @@ class ApexEnsembleEngine(nn.Module):
             return torch.zeros((1, SEQ_LEN), dtype=torch.long)
 
     def predict_ensemble(
-        self, user_id: int, candidate_item_ids: list[int], session_sequence: list[int] | None = None,
+        self,
+        user_id: int,
+        candidate_item_ids: list[int],
+        session_sequence: list[int] | None = None,
         user_emb_override: "torch.Tensor | None" = None,
         use_router: bool = True,
         router_k: int = 2,
@@ -650,7 +685,10 @@ class ApexEnsembleEngine(nn.Module):
         return {orig_id: float(final[idx]) for idx, orig_id in enumerate(candidate_item_ids)}
 
     def _predict_ensemble_pytorch(
-        self, user_id: int, candidate_item_ids: list[int], session_sequence: list[int] | None = None,
+        self,
+        user_id: int,
+        candidate_item_ids: list[int],
+        session_sequence: list[int] | None = None,
         user_emb_override: "torch.Tensor | None" = None,
         use_router: bool = True,
         router_k: int = 2,
@@ -662,20 +700,18 @@ class ApexEnsembleEngine(nn.Module):
         budget_allowed = True
         if self.privacy_accountant is not None:
             import os
+
             # If user_emb_override is provided, we deduct the budget.
             if user_emb_override is not None:
                 dp_epsilon = float(os.getenv("APEX_DP_EPSILON", "1.0"))
                 budget_allowed, remaining = self.privacy_accountant.check_and_deduct_budget(
-                    user_id=user_id,
-                    request_epsilon=dp_epsilon,
-                    request_delta=1e-5,
-                    mechanism="gaussian"
+                    user_id=user_id, request_epsilon=dp_epsilon, request_delta=1e-5, mechanism="gaussian"
                 )
                 if not budget_allowed:
                     logger.warning(
                         "Privacy budget exhausted for user %d (remaining budget: %.4f). Falling back to safe zero/dummy representations.",
                         user_id,
-                        remaining
+                        remaining,
                     )
 
         if not budget_allowed:
@@ -689,7 +725,6 @@ class ApexEnsembleEngine(nn.Module):
 
         # Ensure ID bounds are respected (hash to max size if unknown)
         safe_item_ids = [item_id % self.num_items for item_id in candidate_item_ids]
-
 
         u_tensor = torch.tensor([safe_user_id], dtype=torch.long)
         i_tensor = torch.tensor(safe_item_ids, dtype=torch.long)
@@ -712,7 +747,10 @@ class ApexEnsembleEngine(nn.Module):
         # Enrich user embedding with attention over session history
         if budget_allowed:
             try:
-                from backend.models.attention_user_model import build_attended_user_embedding, get_user_attention_encoder
+                from backend.models.attention_user_model import (
+                    build_attended_user_embedding,
+                    get_user_attention_encoder,
+                )
 
                 seq_list = simulated_seq.squeeze().tolist()
                 if isinstance(seq_list, int):
@@ -727,7 +765,6 @@ class ApexEnsembleEngine(nn.Module):
                         lgcn_u_emb = 0.7 * lgcn_u_emb + 0.3 * attended_expanded
             except Exception as exc:
                 logger.debug("Attention user embedding unavailable; using base embedding: %s", exc)
-
 
         def _norm(t):
             t_min, t_max = t.min(), t.max()
@@ -786,17 +823,18 @@ class ApexEnsembleEngine(nn.Module):
             if use_router:
                 try:
                     import os
+
                     from backend.models.contextual_router import build_user_state
-                    
+
                     # 1. Get interaction count for user
                     try:
                         interaction_count = len(_get_user_event_index().get(str(safe_user_id), []))
                     except Exception:
                         interaction_count = 0
-                        
+
                     # 2. Get base user embedding
                     base_u_emb = lgcn_u_emb[0].detach()
-                    
+
                     # 3. Build user state vector [emb_dim + 4]
                     user_state = build_user_state(
                         user_id=safe_user_id,
@@ -804,14 +842,16 @@ class ApexEnsembleEngine(nn.Module):
                         session_seq=simulated_seq,
                         item_embeddings=lgcn_all_items,
                         interaction_count=interaction_count,
-                        inference_energy=float(os.getenv("APEX_INFERENCE_ENERGY", "0.5"))
+                        inference_energy=float(os.getenv("APEX_INFERENCE_ENERGY", "0.5")),
                     )
-                    
+
                     # 4. Query router
                     selected_models, routing_weights = self.router.route(user_state.to(self._device), k=router_k)
                     _router_user_state = user_state  # Save for router trainer feedback
                 except Exception as router_exc:
-                    logger.warning("Dynamic router execution failed; falling back to full ensemble. Error: %s", router_exc)
+                    logger.warning(
+                        "Dynamic router execution failed; falling back to full ensemble. Error: %s", router_exc
+                    )
                     selected_models = None
                     routing_weights = None
 
@@ -871,29 +911,21 @@ class ApexEnsembleEngine(nn.Module):
             # score proportionally — high disagreement signals low confidence.
             # -----------------------------------------------------------------
             try:
-                from backend.intelligence.uncertainty_estimator import ensemble_uncertainty
-
                 active_names = list(results.keys())
-                stacked = torch.stack([
-                    results[m] * w.get(m, 0.0)
-                    for m in active_names
-                ], dim=0)  # [num_active, num_items]
-                
+                stacked = torch.stack(
+                    [results[m] * w.get(m, 0.0) for m in active_names], dim=0
+                )  # [num_active, num_items]
+
                 # Weighted mean and variance across active models
-                w_tensor = torch.tensor(
-                    [w.get(m, 0.0) for m in active_names],
-                    dtype=torch.float32,
-                    device=self._device
-                )
+                w_tensor = torch.tensor([w.get(m, 0.0) for m in active_names], dtype=torch.float32, device=self._device)
                 w_tensor = w_tensor / (w_tensor.sum() + 1e-8)
                 w_expanded = w_tensor.unsqueeze(1)
                 weighted_mean = (stacked * w_expanded).sum(dim=0, keepdim=True)
-                
-                per_item_uncertainty = (
-                    (stacked - weighted_mean) ** 2
-                    * w_expanded
-                ).sum(dim=0)  # [num_items] — weighted variance per item
-                
+
+                per_item_uncertainty = ((stacked - weighted_mean) ** 2 * w_expanded).sum(
+                    dim=0
+                )  # [num_items] — weighted variance per item
+
                 # Confidence gate: items with high model disagreement get penalised
                 max_var = per_item_uncertainty.max()
                 if max_var > 1e-6:
@@ -933,9 +965,7 @@ class ApexEnsembleEngine(nn.Module):
             try:
                 if self.router_trainer is not None and use_router and _router_user_state is not None:
                     # Record model scores for online router training
-                    per_model_scores = {
-                        m: results[m].mean().item() for m in active_names
-                    }
+                    per_model_scores = {m: results[m].mean().item() for m in active_names}
                     self.router_trainer.record(
                         user_state=_router_user_state,
                         model_scores=per_model_scores,

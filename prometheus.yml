@@ -10,9 +10,9 @@ rule_files:
   - "prometheus.rules.yml"
 
 scrape_configs:
-  - job_name: 'nova-backend'
+  - job_name: 'apex-backend'
     static_configs:
-      - targets: ['nova-backend:8000']
+      - targets: ['apex-backend:8000']
     metrics_path: '/metrics'
 
   - job_name: 'redis'

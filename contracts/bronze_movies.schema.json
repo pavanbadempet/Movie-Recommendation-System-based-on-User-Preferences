@@ -1,0 +1,50 @@
+{
+  "name": "bronze_movies",
+  "version": 1,
+  "description": "Machine-readable contract for raw movie batch rows entering the bronze layer.",
+  "primary_key": ["id"],
+  "partition_keys": [],
+  "required_columns": ["id", "title"],
+  "columns": {
+    "id": {
+      "type": "integer",
+      "nullable": false
+    },
+    "title": {
+      "type": "string",
+      "nullable": false
+    },
+    "overview": {
+      "type": "string",
+      "nullable": true
+    },
+    "genres": {
+      "type": "string",
+      "nullable": true
+    },
+    "vote_average": {
+      "type": "number",
+      "nullable": true,
+      "min": 0.0,
+      "max": 10.0
+    },
+    "vote_count": {
+      "type": "number",
+      "nullable": true,
+      "min": 0.0
+    },
+    "popularity": {
+      "type": "number",
+      "nullable": true,
+      "min": 0.0
+    },
+    "release_date": {
+      "type": "string",
+      "nullable": true
+    },
+    "poster_path": {
+      "type": "string",
+      "nullable": true
+    }
+  }
+}

@@ -78,9 +78,7 @@ class OnlineLearningCoordinator:
             lightgcn=engine.lightgcn,
         )
 
-        logger.info(
-            "OnlineLearningCoordinator initialised: LightGCN + SASRec + KAN online learners ready."
-        )
+        logger.info("OnlineLearningCoordinator initialised: LightGCN + SASRec + KAN online learners ready.")
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -138,6 +136,7 @@ class OnlineLearningCoordinator:
 
     def status(self) -> dict[str, object]:
         """Return a compact health snapshot for the /v1/platform/slo endpoint."""
+
         def _thread_alive(learner) -> bool:
             t = getattr(learner, "_thread", None)
             return t is not None and t.is_alive()
@@ -180,6 +179,7 @@ class OnlineLearningCoordinator:
         """
         try:
             from backend.serving.realtime_feature_updater import get_user_session_sequence
+
             seq = get_user_session_sequence(user_id, max_len=self._engine.sasrec.max_seq_len)
             if seq:
                 return seq
@@ -189,6 +189,7 @@ class OnlineLearningCoordinator:
         # Fall back to the engine's background event index
         try:
             from backend.models.ensemble_engine import _get_user_event_index
+
             index = _get_user_event_index()
             interactions = index.get(str(user_id), [])
             seq_len = self._engine.sasrec.max_seq_len

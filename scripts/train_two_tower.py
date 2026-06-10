@@ -24,11 +24,11 @@ import logging
 from pathlib import Path
 import time
 
-from turbovec import TurboQuantIndex
 import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader, Dataset
+from turbovec import TurboQuantIndex
 
 from backend.models.two_tower import TwoTowerModel
 

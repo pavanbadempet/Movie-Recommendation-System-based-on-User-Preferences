@@ -1,8 +1,8 @@
 import logging
 from pathlib import Path
 
-from turbovec import TurboQuantIndex
 import numpy as np
+from turbovec import TurboQuantIndex
 
 logger = logging.getLogger(__name__)
 

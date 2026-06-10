@@ -73,8 +73,7 @@ def _start_tier1_engine(tier_detector) -> tuple:
             coord_status = coordinator.status()
             if not all(v["thread_alive"] for v in coord_status["learners"].values()):
                 logger.critical(
-                    "OnlineLearningCoordinator threads could not be started after retry. "
-                    "Online learning disabled."
+                    "OnlineLearningCoordinator threads could not be started after retry. Online learning disabled."
                 )
                 return None, None
 
