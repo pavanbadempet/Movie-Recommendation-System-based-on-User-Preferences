@@ -9,10 +9,12 @@ the reranking step does not drop valid items.
 
 import json
 import sys
+
 import numpy as np
 import pandas as pd
 import pytest
 from turbovec import TurboQuantIndex
+
 
 # We use fixture scope=module so we only load the mock/real index once per test session
 @pytest.fixture(scope="module")
@@ -52,7 +54,7 @@ def recommender(tmp_path_factory):
             "semantic_twin_json": ["{}"] * len(movies),
         }
     ).to_parquet(tmp_path / "semantic_twins.parquet", index=False)
-    
+
     (tmp_path / "semantic_twin_summary.json").write_text(
         json.dumps({"row_count": len(movies), "avg_confidence": 0.8}),
         encoding="utf-8",
@@ -103,6 +105,7 @@ def recommender(tmp_path_factory):
         sys.modules["backend.main"]._recommender = None
 
     from backend.main import get_rec as _get_rec
+
     recommender_instance = _get_rec()
     recommender_instance.load()
 
