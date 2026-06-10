@@ -41,6 +41,7 @@ psycopg[binary]==3.3.4                 # Durable Postgres driver
 sqlalchemy==2.0.49                     # ORM and Connection Pooling
 python-jose[cryptography]==3.5.0       # JWT auth
 passlib[bcrypt]==1.7.4                 # Password hashing
+bcrypt==4.0.1                          # Pin to avoid passlib compatibility issue
 prometheus-client==0.25.0             # Observability metrics
 psutil==7.2.2                          # Hardware detection (RAM, CPU cores)
 
