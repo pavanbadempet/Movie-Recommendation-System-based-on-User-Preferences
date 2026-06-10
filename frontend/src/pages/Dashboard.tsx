@@ -172,7 +172,7 @@ function SloMetrics({
         <Gauge size={16} aria-hidden="true" />
         SLO Metrics
       </h3>
-      
+
       <div style={{ display: "flex", justifyContent: "space-around", flexWrap: "wrap", gap: "10px", margin: "8px 0" }}>
         <LatencyGauge value={p95} label="P95 Latency" maxVal={200} />
         <LatencyGauge value={p99} label="P99 Latency" maxVal={300} />
@@ -301,7 +301,7 @@ function LiveTerminalLogs() {
           LIVE
         </span>
       </h3>
-      <div 
+      <div
         ref={logContainerRef}
         style={{
           fontFamily: "'Courier New', Courier, monospace",

@@ -22,7 +22,7 @@ The APEX ensemble combines 6 complementary architectures. Weights are determined
 
 > **Note on weights:** The DR optimization runs against real interaction data, so weights evolve as the event store grows. The current run reflects relatively sparse event data — LightGCN's near-zero weight is expected to increase as the online learner accumulates interactions. Hot-reload via `ApexEnsembleEngine.reload_weights()` (no restart required).
 
-Evaluation protocol: leave-one-out, 200 users, 100 candidates per user.  
+Evaluation protocol: leave-one-out, 200 users, 100 candidates per user.
 Semantic benchmark (17 curated intent cases): HR@10 = 1.0, bad-hit rate = 0.0.
 
 ### Online Learning Status

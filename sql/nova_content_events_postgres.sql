@@ -30,4 +30,3 @@ CREATE INDEX IF NOT EXISTS nova_content_events_type_ts_idx
 
 CREATE INDEX IF NOT EXISTS nova_content_events_user_ts_idx
     ON nova_content_events (user_id, event_ts DESC);
-

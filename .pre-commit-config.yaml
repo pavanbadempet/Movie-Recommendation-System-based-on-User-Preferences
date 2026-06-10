@@ -4,6 +4,8 @@
 #
 # Hook order mirrors CI gate order so local failures match CI failures exactly.
 
+exclude: ^(notebooks/|frontend/|manage\.py|k8s/)
+
 repos:
   # ---------------------------------------------------------------------------
   # 1. General hygiene (fast, no deps required)

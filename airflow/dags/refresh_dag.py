@@ -1,17 +1,14 @@
 from datetime import datetime, timedelta
-from airflow import DAG
-from airflow.operators.bash import BashOperator
-from airflow.operators.python import PythonOperator
-import sys
 import os
 
+from airflow.operators.bash import BashOperator
+from airflow.operators.python import PythonOperator
+
+from airflow import DAG
+
 # Import Kafka and Spark related operators if needed
-try:
-    from airflow.providers.apache.kafka.operators.produce import ProduceToTopicOperator
-    from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
-except ImportError:
-    # These will be available after the providers are installed
-    pass
+# (imported on-demand or in respective sub-modules if utilized)
+
 
 # Function to check for Kaggle credentials
 def check_kaggle_creds():
@@ -20,29 +17,29 @@ def check_kaggle_creds():
     if not kaggle_key and not os.path.exists(home_kaggle):
         raise ValueError("Kaggle credentials not found in env or ~/.kaggle")
 
+
 # Default args
 default_args = {
-    'owner': 'airflow',
-    'depends_on_past': False,
-    'start_date': datetime(2024, 1, 1),
-    'email_on_failure': False,
-    'email_on_retry': False,
-    'retries': 3,  # ROBUSTNESS: Increased retries
-    'retry_delay': timedelta(minutes=5),
-    'retry_exponential_backoff': True, # EXPONENTIAL BACKOFF
+    "owner": "airflow",
+    "depends_on_past": False,
+    "start_date": datetime(2024, 1, 1),
+    "email_on_failure": False,
+    "email_on_retry": False,
+    "retries": 3,  # ROBUSTNESS: Increased retries
+    "retry_delay": timedelta(minutes=5),
+    "retry_exponential_backoff": True,  # EXPONENTIAL BACKOFF
 }
 
 with DAG(
-    'movie_data_refresh',
+    "movie_data_refresh",
     default_args=default_args,
-    description='Daily refresh of movie recommendation data',
-    schedule='0 3 * * *',  # 3 AM daily
+    description="Daily refresh of movie recommendation data",
+    schedule="0 3 * * *",  # 3 AM daily
     catchup=False,
 ) as dag:
-
     # Task 1: Check Credentials
     t0_check_creds = PythonOperator(
-        task_id='check_creds',
+        task_id="check_creds",
         python_callable=check_kaggle_creds,
     )
 
@@ -57,28 +54,28 @@ with DAG(
     """
 
     t1_download = BashOperator(
-        task_id='download_from_kaggle',
+        task_id="download_from_kaggle",
         bash_command=download_cmd,
     )
 
     # Task 3: Run Spark ETL with Delta Lake format (Medallion Architecture)
     # IDEMPOTENCY: Pass logical date {{ ds }} for partitioning
     t2_spark_etl = BashOperator(
-        task_id='run_spark_etl',
+        task_id="run_spark_etl",
         bash_command=(
-            'cd movie-rec && python etl/pyspark_etl.py '
+            "cd movie-rec && python etl/pyspark_etl.py "
             '--date {{ ds }} --run-id "{{ run_id }}" --sink delta '
             '--tenant-id "${NOVA_TENANT_ID:-demo-media-co}" '
             '--catalog-id "${NOVA_CATALOG_ID:-tmdb-movies}" '
-            '--source-system tmdb_kaggle'
+            "--source-system tmdb_kaggle"
         ),
     )
 
     # Task 4: Rebuild Index
     # Uses our consolidated pandas_etl.py just for indexing
     t3_index = BashOperator(
-        task_id='rebuild_index',
-        bash_command='cd movie-rec && python -m etl.pandas_etl --index-only',
+        task_id="rebuild_index",
+        bash_command="cd movie-rec && python -m etl.pandas_etl --index-only",
     )
 
     # DAG Flow

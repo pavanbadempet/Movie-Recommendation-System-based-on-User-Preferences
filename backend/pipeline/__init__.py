@@ -36,33 +36,45 @@ Import graph (strictly acyclic):
     pipeline_types ← retrieval_pipeline, ranking_pipeline, reranking_pipeline ← recommender ← main
 """
 
-from backend.pipeline.diversity_reranker import submodular_rerank
-from backend.pipeline.multi_objective_ranker import pareto_rank
-from backend.pipeline.pipeline_types import CandidateItem, FinalItem, RankedItem
-from backend.pipeline.ranker import load_ranker
-from backend.pipeline.ranker_training import build_training_frame, train_nova_ranker
-from backend.pipeline.ranking_pipeline import RankingConfig, RankingPipeline
-from backend.pipeline.reranking_pipeline import RerankingConfig, RerankingPipeline
-from backend.pipeline.retrieval_pipeline import RetrievalConfig, RetrievalPipeline
+# ---------------------------------------------------------------------------
+# Lazy Imports — Avoid importing heavy ML dependencies (e.g. torch, faiss,
+# numpy, sklearn) at package initialization time.
+# ---------------------------------------------------------------------------
+import importlib
 
-__all__ = [
+_LAZY_MAPPING = {
     # Shared types
-    "CandidateItem",
-    "RankedItem",
-    "FinalItem",
+    "CandidateItem": "backend.pipeline.pipeline_types",
+    "RankedItem": "backend.pipeline.pipeline_types",
+    "FinalItem": "backend.pipeline.pipeline_types",
     # Stage 1: Retrieval
-    "RetrievalPipeline",
-    "RetrievalConfig",
+    "RetrievalPipeline": "backend.pipeline.retrieval_pipeline",
+    "RetrievalConfig": "backend.pipeline.retrieval_pipeline",
     # Stage 2: Ranking
-    "RankingPipeline",
-    "RankingConfig",
+    "RankingPipeline": "backend.pipeline.ranking_pipeline",
+    "RankingConfig": "backend.pipeline.ranking_pipeline",
     # Stage 3: Reranking
-    "RerankingPipeline",
-    "RerankingConfig",
+    "RerankingPipeline": "backend.pipeline.reranking_pipeline",
+    "RerankingConfig": "backend.pipeline.reranking_pipeline",
     # Support
-    "submodular_rerank",
-    "pareto_rank",
-    "load_ranker",
-    "build_training_frame",
-    "train_nova_ranker",
-]
+    "submodular_rerank": "backend.pipeline.diversity_reranker",
+    "pareto_rank": "backend.pipeline.multi_objective_ranker",
+    "load_ranker": "backend.pipeline.ranker",
+    "build_training_frame": "backend.pipeline.ranker_training",
+    "train_nova_ranker": "backend.pipeline.ranker_training",
+}
+
+
+def __getattr__(name: str):
+    if name in _LAZY_MAPPING:
+        module_path = _LAZY_MAPPING[name]
+        module = importlib.import_module(module_path)
+        return getattr(module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    return sorted(_LAZY_MAPPING.keys())
+
+
+__all__ = list(_LAZY_MAPPING.keys())

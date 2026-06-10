@@ -16,12 +16,12 @@
   --panel-active: rgba(255, 255, 255, 0.08);
   --line: rgba(255, 255, 255, 0.06);
   --line-strong: rgba(255, 255, 255, 0.12);
-  
+
   /* Text values */
   --text: #f8fafc;
   --muted: #94a3b8;
   --quiet: #64748b;
-  
+
   /* Modern Accents */
   --accent: #6366f1; /* Premium Violet Indigo */
   --accent-rgb: 99, 102, 241;
@@ -29,7 +29,7 @@
   --secondary: #ec4899; /* Electric Rose */
   --secondary-glow: rgba(236, 72, 153, 0.2);
   --cyan: #06b6d4; /* Tech Cyan */
-  
+
   /* Alert/Status states */
   --success: #10b981;
   --warn: #f59e0b;
@@ -1758,4 +1758,3 @@ input:focus-visible {
     display: none; /* Hide header search on mobile to save space */
   }
 }
-

@@ -22,4 +22,3 @@ sort -t"	" -k 1,1n -k 2,2n ub.base > tmp.$$
 mv tmp.$$ ub.base
 sort -t"	" -k 1,1n -k 2,2n ub.test > tmp.$$
 mv tmp.$$ ub.test
-

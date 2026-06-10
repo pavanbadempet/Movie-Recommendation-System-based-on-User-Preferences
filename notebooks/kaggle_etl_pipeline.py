@@ -25,7 +25,7 @@ import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # Config
-# Placeholder for CI injection. 
+# Placeholder for CI injection.
 # If running on Kaggle without injection, this remains as the placeholder string.
 HF_TOKEN = "HF_TOKEN_PLACEHOLDER"
 

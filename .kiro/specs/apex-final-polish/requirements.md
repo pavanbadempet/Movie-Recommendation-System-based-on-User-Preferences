@@ -221,4 +221,3 @@ The APEX Final Polish spec closes the four remaining gaps that prevent the APEX 
 2. WHEN axe-core runs against each new page component with `runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] }`, THE System SHALL report zero critical or serious violations. Any violations discovered during development MUST be fixed before the tests are committed — zero tolerance is enforced at the CI gate.
 3. THE KnowledgeGraph D3 SVG graph SHALL have all interactive node elements keyboard-accessible via `tabIndex` and `onKeyDown` handlers.
 4. THE `RecommendationCard` retrieval signals `<dl>` element SHALL include an `aria-label` attribute with the value `"Retrieval signals"`.
-

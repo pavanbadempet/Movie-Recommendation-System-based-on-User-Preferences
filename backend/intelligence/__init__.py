@@ -33,53 +33,53 @@ Compliance:
                                 (lives in backend.metrics but logically part of Layer 4)
 """
 
-from backend.intelligence.content_understanding import ContentUnderstandingEngine
-from backend.intelligence.contextual_bandit import get_bandit_engine
-from backend.intelligence.cross_domain_kg import enrich_knowledge_graph_with_cross_domain
-from backend.intelligence.exploration_engine import ThompsonSamplingBandit, get_thompson_bandit
-from backend.intelligence.knowledge_graph import KnowledgeGraphEngine
-from backend.intelligence.llm_explanations import generate_explanation
-from backend.intelligence.long_horizon_rl import (
-    compute_preference_stability,
-    estimate_churn_risk,
-    long_horizon_score_adjustment,
-)
-from backend.intelligence.multimodal_fusion import MultiModalFusionIndex
-from backend.intelligence.openrouter_client import chat_completion
-from backend.intelligence.query_understanding import intent_score, parse_query_intent
-from backend.intelligence.semantic_twin import build_semantic_twin, compare_semantic_twins
-from backend.intelligence.temporal_preference import build_temporal_user_profile, temporal_score_boost
-from backend.intelligence.vision_encoder import VisionEncoder
-from backend.learning.rl_reward import RLRewardEngine
-from backend.models.attention_user_model import build_attended_user_embedding, get_user_attention_encoder
+# ---------------------------------------------------------------------------
+# Lazy Imports — Avoid importing heavy sub-modules at package initialization.
+# ---------------------------------------------------------------------------
+import importlib
 
-__all__ = [
+_LAZY_MAPPING = {
     # Knowledge & Reasoning
-    "KnowledgeGraphEngine",
-    "enrich_knowledge_graph_with_cross_domain",
-    "build_semantic_twin",
-    "compare_semantic_twins",
-    "ContentUnderstandingEngine",
+    "KnowledgeGraphEngine": "backend.intelligence.knowledge_graph",
+    "enrich_knowledge_graph_with_cross_domain": "backend.intelligence.cross_domain_kg",
+    "build_semantic_twin": "backend.intelligence.semantic_twin",
+    "compare_semantic_twins": "backend.intelligence.semantic_twin",
+    "ContentUnderstandingEngine": "backend.intelligence.content_understanding",
     # Personalization
-    "parse_query_intent",
-    "intent_score",
-    "generate_explanation",
-    "chat_completion",
-    "MultiModalFusionIndex",
-    "VisionEncoder",
+    "parse_query_intent": "backend.intelligence.query_understanding",
+    "intent_score": "backend.intelligence.query_understanding",
+    "generate_explanation": "backend.intelligence.llm_explanations",
+    "chat_completion": "backend.intelligence.openrouter_client",
+    "MultiModalFusionIndex": "backend.intelligence.multimodal_fusion",
+    "VisionEncoder": "backend.intelligence.vision_encoder",
     # Session modeling
-    "get_user_attention_encoder",
-    "build_attended_user_embedding",
+    "get_user_attention_encoder": "backend.models.attention_user_model",
+    "build_attended_user_embedding": "backend.models.attention_user_model",
     # Long-horizon RL
-    "estimate_churn_risk",
-    "compute_preference_stability",
-    "long_horizon_score_adjustment",
-    "build_temporal_user_profile",
-    "temporal_score_boost",
+    "estimate_churn_risk": "backend.intelligence.long_horizon_rl",
+    "compute_preference_stability": "backend.intelligence.long_horizon_rl",
+    "long_horizon_score_adjustment": "backend.intelligence.long_horizon_rl",
+    "build_temporal_user_profile": "backend.intelligence.temporal_preference",
+    "temporal_score_boost": "backend.intelligence.temporal_preference",
     # RL reward
-    "RLRewardEngine",
+    "RLRewardEngine": "backend.learning.rl_reward",
     # Exploration
-    "get_bandit_engine",
-    "ThompsonSamplingBandit",
-    "get_thompson_bandit",
-]
+    "get_bandit_engine": "backend.intelligence.contextual_bandit",
+    "ThompsonSamplingBandit": "backend.intelligence.exploration_engine",
+    "get_thompson_bandit": "backend.intelligence.exploration_engine",
+}
+
+
+def __getattr__(name: str):
+    if name in _LAZY_MAPPING:
+        module_path = _LAZY_MAPPING[name]
+        module = importlib.import_module(module_path)
+        return getattr(module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    return sorted(_LAZY_MAPPING.keys())
+
+
+__all__ = list(_LAZY_MAPPING.keys())
