@@ -126,6 +126,8 @@ from backend.events.recommendation_events import (
 from backend.intelligence.active_inference_engine import get_active_inference_engine
 from backend.learning.online_learner import OnlineLearner
 from backend.metrics.benchmark_cache import (
+    _recommendation_benchmark_cache,
+    _semantic_benchmark_cache,
     compute_recommendation_benchmark_cached,
     compute_semantic_benchmark_cached,
     get_cached_recommendation_benchmark,
