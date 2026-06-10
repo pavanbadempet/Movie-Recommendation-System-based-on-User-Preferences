@@ -49,18 +49,21 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           REPORT=$(cat reports/synthetic_monitor.json || echo '{"error": "Failed to read report"}')
-          ISSUE_BODY="## Synthetic Monitor Failed
+          ISSUE_BODY=$(cat <<EOF_BODY
+## Synthetic Monitor Failed
 
 The synthetic monitor detected a failure in the live application.
 
 **Workflow Run**: [View Logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
 
 **Details**:
-\`\`\`json
+```json
 $REPORT
-\`\`\`
+```
 
-*This issue was created automatically by the synthetic monitoring action to trigger the autonomous bug fixing agent.*"
+*This issue was created automatically by the synthetic monitoring action to trigger the autonomous bug fixing agent.*
+EOF_BODY
+)
 
           # Check if an issue for this already exists to avoid spam
           EXISTING_ISSUE=$(gh issue list --state open --search "Synthetic Monitor Failed in:title" --json number --jq '.[0].number')

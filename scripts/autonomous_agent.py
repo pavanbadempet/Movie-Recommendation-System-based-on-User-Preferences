@@ -1,12 +1,15 @@
-import os
-import sys
 import json
+import os
 import subprocess
+import sys
+
 import requests
 
+
 def run_cmd(cmd):
-    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)  # noqa: S602
     return result.stdout, result.stderr, result.returncode
+
 
 def ask_llm(prompt, hf_token):
     url = "https://api-inference.huggingface.co/models/Qwen/Qwen2.5-Coder-32B-Instruct"
@@ -17,14 +20,10 @@ def ask_llm(prompt, hf_token):
 
     data = {
         "inputs": formatted_prompt,
-        "parameters": {
-            "max_new_tokens": 1500,
-            "return_full_text": False,
-            "temperature": 0.1
-        }
+        "parameters": {"max_new_tokens": 1500, "return_full_text": False, "temperature": 0.1},
     }
 
-    response = requests.post(url, headers=headers, json=data)
+    response = requests.post(url, headers=headers, json=data, timeout=30)
     if response.status_code != 200:
         print(f"Error from HF API: {response.text}")
         return ""
@@ -33,6 +32,7 @@ def ask_llm(prompt, hf_token):
     if isinstance(result, list) and len(result) > 0:
         return result[0].get("generated_text", "")
     return ""
+
 
 def main():
     issue_number = os.environ.get("ISSUE_NUMBER")
@@ -72,7 +72,9 @@ def main():
     """
 
     search_cmds_text = ask_llm(search_prompt, hf_token)
-    search_cmds = [cmd.strip() for cmd in search_cmds_text.strip().split('\n') if cmd.strip() and not cmd.startswith('```')]
+    search_cmds = [
+        cmd.strip() for cmd in search_cmds_text.strip().split("\n") if cmd.strip() and not cmd.startswith("```")
+    ]
 
     log_content += "### Step 1: Investigation\n"
     log_content += "The agent executed the following commands to investigate:\n"
@@ -82,7 +84,7 @@ def main():
         log_content += f"- `{cmd}`\n"
         print(f"Running: {cmd}")
         stdout, stderr, _ = run_cmd(cmd)
-        out = stdout[:1000] # truncate output
+        out = stdout[:1000]  # truncate output
         investigation_results += f"Command: {cmd}\nOutput:\n{out}\n\n"
 
     # Step 2: Proposing a Fix
@@ -135,6 +137,7 @@ def main():
         f.write(log_content)
 
     print("Agent process complete.")
+
 
 if __name__ == "__main__":
     main()
