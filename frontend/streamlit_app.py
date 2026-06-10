@@ -1,27 +1,25 @@
 # Movie Recommendation System - Premium UI
 # Run: streamlit run app.py
 
-import streamlit as st
-import streamlit.components.v1 as components
-import requests
-import time
-import os
 from datetime import datetime, timedelta
+import os
+import time
+
 import pandas as pd
 import plotly.express as px
+import requests
 from st_clickable_images import clickable_images
+import streamlit as st
+import streamlit.components.v1 as components
 
-st.set_page_config(
-    page_title="Nova Recommendation Console",
-    page_icon="N",
-    layout="wide"
-)
+st.set_page_config(page_title="Nova Recommendation Console", page_icon="N", layout="wide")
 
 # New Streamlit 1.54.0 Feature: Native Logo Support
 st.logo("https://upload.wikimedia.org/wikipedia/commons/e/e4/Movie-icon.svg", icon_image=":material/movie:")
 
 # Premium CSS - Hide branding + full-screen dark theme + WHITE TEXT
-st.markdown("""
+st.markdown(
+    """
 <style>
 /* Hide Streamlit branding */
 #MainMenu, footer, header {visibility: hidden;}
@@ -92,14 +90,21 @@ st.markdown("""
     background: linear-gradient(135deg, #ff1a1a 0%, #d32f2f 100%);
 }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # Config
 # Try both free hosts. Either one can sleep or time out, so product API calls
 # use request-level failover instead of trusting a single active backend.
 RENDER_GATEWAY_URL = "https://movie-recs-api-5qvy.onrender.com"
 HF_SPACE_URL = "https://pavanbadempet-movie-rec-api.hf.space"
-ENABLE_DIRECT_HF_FALLBACK = os.getenv("NOVA_ENABLE_DIRECT_HF_FALLBACK", "true").strip().lower() in {"1", "true", "yes", "on"}
+ENABLE_DIRECT_HF_FALLBACK = os.getenv("NOVA_ENABLE_DIRECT_HF_FALLBACK", "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 BACKEND_URLS = [
     os.getenv("API_URL", ""),  # Local/dev override or Streamlit secret
@@ -118,7 +123,9 @@ NOVA_CATALOG_ID = os.getenv("NOVA_CATALOG_ID", "tmdb-movies")
 
 # Validate TMDB Key
 if not TMDB_KEY:
-    st.warning("⚠️ TMDB_API_KEY not set. Posters and trailers will not load. Set it in your environment or Streamlit secrets.")
+    st.warning(
+        "⚠️ TMDB_API_KEY not set. Posters and trailers will not load. Set it in your environment or Streamlit secrets."
+    )
 
 
 def api_headers(extra_headers=None):
@@ -212,7 +219,7 @@ def fetch_trailer(movie_id):
         r = requests.get(
             f"https://api.themoviedb.org/3/movie/{movie_id}/videos",
             params={"api_key": TMDB_KEY, "language": "en-US"},
-            timeout=3
+            timeout=3,
         )
         data = r.json()
         for v in data.get("results", []):
@@ -237,11 +244,7 @@ def fetch_poster(poster_path):
 def fetch_tmdb_details(movie_id):
     """Fetch movie details from TMDB - cached."""
     try:
-        r = requests.get(
-            f"https://api.themoviedb.org/3/movie/{movie_id}",
-            params={"api_key": TMDB_KEY},
-            timeout=3
-        )
+        r = requests.get(f"https://api.themoviedb.org/3/movie/{movie_id}", params={"api_key": TMDB_KEY}, timeout=3)
         return r.json()
     except (requests.RequestException, ValueError):
         return {}
@@ -252,9 +255,7 @@ def fetch_credits(movie_id):
     """Fetch cast and crew from TMDB - cached."""
     try:
         r = requests.get(
-            f"https://api.themoviedb.org/3/movie/{movie_id}/credits",
-            params={"api_key": TMDB_KEY},
-            timeout=3
+            f"https://api.themoviedb.org/3/movie/{movie_id}/credits", params={"api_key": TMDB_KEY}, timeout=3
         )
         data = r.json()
         cast = [c["name"] for c in data.get("cast", [])[:3]]
@@ -269,16 +270,14 @@ def fetch_watch_providers(movie_id):
     """Fetch watch providers (streaming) from TMDB - cached."""
     try:
         r = requests.get(
-            f"https://api.themoviedb.org/3/movie/{movie_id}/watch/providers",
-            params={"api_key": TMDB_KEY},
-            timeout=3
+            f"https://api.themoviedb.org/3/movie/{movie_id}/watch/providers", params={"api_key": TMDB_KEY}, timeout=3
         )
         data = r.json()
         results = data.get("results", {})
-        
+
         # Priority: IN (India) -> US -> First available
-        providers = results.get("IN",results.get("US", {}))
-        
+        providers = results.get("IN", results.get("US", {}))
+
         # We only care about "flatrate" (subscription) for now
         flatrate = providers.get("flatrate", [])
         return flatrate
@@ -286,11 +285,11 @@ def fetch_watch_providers(movie_id):
         return []
 
 
-
 def wake_up_backend():
     """
     Wake up backend and find an active server from the failover list.
     """
+
     def catalog_ready(url, timeout=8):
         try:
             health = requests.get(f"{url}/health", timeout=3)
@@ -340,12 +339,13 @@ def wake_up_backend():
 if "backend_ready" not in st.session_state or "API_URL" not in st.session_state:
     st.session_state.backend_ready = wake_up_backend()
 
+
 def legacy_search_movies(query):
     """Search movies via API."""
     if not st.session_state.backend_ready:
         st.error("⚠️ The engine is still waking up. Give it a moment to stretch its legs.")
         return []
-        
+
     try:
         api_url = st.session_state.get("API_URL", BACKEND_URLS[0])
         r = requests.get(
@@ -399,7 +399,7 @@ def fetch_all_movie_titles(backend_urls, version=4):
                     return {"api_url": api_url, "titles": data}
         except Exception:
             continue
-        
+
     # Do not cache a failed catalog fetch; free-tier backends may still be warming.
     fetch_all_movie_titles.clear()
     return {"api_url": None, "titles": []}
@@ -418,7 +418,7 @@ def legacy_get_recommendations(movie_id, n=10):
         if r.ok:
             return r.json()
     except Exception as e:
-            st.error(f"Error: {e}")
+        st.error(f"Error: {e}")
     return {}
 
 
@@ -466,19 +466,20 @@ def display_fullscreen_video(youtube_key):
     """Display YouTube video as dimmed background."""
     if not youtube_key:
         return
-    
+
     # Simple dimmed video background - NO overlay affecting top UI
-    video_html = """
+    video_html = (
+        """
     <style>
     .video-container {
         width: 60vw;
         height: 100vh;
         position: absolute;
-        min-width: 80%; 
+        min-width: 80%;
         filter: brightness(35%);
         pointer-events: none;
     }
-    
+
     .video-container iframe {
         position: absolute;
         top: 52.5%;
@@ -489,11 +490,13 @@ def display_fullscreen_video(youtube_key):
         pointer-events: none;
     }
     </style>
-""" + f"""
+"""
+        + f"""
     <div class="video-container">
         <iframe src="https://www.youtube.com/embed/{youtube_key}?controls=0&autoplay=1&mute=1&loop=1&playlist={youtube_key}&modestbranding=1&showinfo=0&rel=0&iv_load_policy=3&disablekb=1" frameborder="0" allow="autoplay"></iframe>
     </div>
     """
+    )
     st.markdown(video_html, unsafe_allow_html=True)
 
 
@@ -511,13 +514,14 @@ def display_movie_card(rec, tmdb, credits, similarity):
     popularity = rec.get("popularity", 0)
     cast = credits.get("cast", "N/A")
     director = credits.get("director", "N/A")
-    
+
     # Format budget/revenue in millions
     budget_m = f"${budget // 1000000}M" if budget else "N/A"
     revenue_m = f"${revenue // 1000000}M" if revenue else "N/A"
-    
+
     # Card container styling - pure white text for maximum visibility
-    st.markdown("""
+    st.markdown(
+        """
     <style>
     .card-container {
         background: rgba(0,0,0,0.95);
@@ -578,62 +582,77 @@ def display_movie_card(rec, tmdb, credits, similarity):
         text-shadow: 1px 1px 3px rgba(0,0,0,1);
     }
     </style>
-    """, unsafe_allow_html=True)
-    
-    st.markdown(f"""
+    """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        f"""
     <div class="card-container">
         <div class="movie-title-main">{title}</div>
-        <div class="movie-subtitle">{year} {'• ' + str(runtime) + ' min' if runtime else ''} {'• ⭐ ' + str(round(rating, 1)) + '/10' if rating else ''}</div>
+        <div class="movie-subtitle">{year} {"• " + str(runtime) + " min" if runtime else ""} {"• ⭐ " + str(round(rating, 1)) + "/10" if rating else ""}</div>
     </div>
-    """, unsafe_allow_html=True)
-    
+    """,
+        unsafe_allow_html=True,
+    )
+
     # Genre tags
-    genre_html = "".join([f'<span class="genre-pill">{g.strip()}</span>' for g in str(genres).split(',')[:4]])
+    genre_html = "".join([f'<span class="genre-pill">{g.strip()}</span>' for g in str(genres).split(",")[:4]])
     st.markdown(f'<div style="margin: 8px 0;">{genre_html}</div>', unsafe_allow_html=True)
-    
+
     # Match badge
     match_pct = int(similarity * 100)
     st.markdown(f'<div class="match-badge">🎯 {match_pct}% Match</div>', unsafe_allow_html=True)
-    
+
     # Details grid - Cast, Director, Popularity
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown(f"""
+    st.markdown(
+        f"""
     <div style="background: rgba(0,0,0,0.8); padding: 12px; border-radius: 10px; margin-bottom: 10px;">
         <div class="detail-label">🎬 Director</div>
         <div class="detail-value">{director}</div>
     </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown(f"""
+    """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        f"""
     <div style="background: rgba(0,0,0,0.8); padding: 12px; border-radius: 10px; margin-bottom: 10px;">
         <div class="detail-label">🎭 Cast</div>
         <div class="detail-value">{cast}</div>
     </div>
-    """, unsafe_allow_html=True)
-    
+    """,
+        unsafe_allow_html=True,
+    )
+
     # Stats row
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Votes", f"{votes:,}")
     c2.metric("Budget", budget_m)
     c3.metric("Revenue", revenue_m)
     c4.metric("Popularity", f"{popularity:.0f}")
-    
+
     # Overview
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown(f"""
+    st.markdown(
+        f"""
     <div style="background: rgba(0,0,0,0.8); padding: 12px; border-radius: 10px;">
         <div class="detail-label">📝 Overview</div>
         <div style="color: #ffffff !important; line-height: 1.6; font-size: 0.9rem; margin-top: 5px; text-shadow: 1px 1px 2px rgba(0,0,0,1);">{overview}</div>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
 
 @st.dialog(" ", width="large")
 def show_movie_dialog(rec):
     """Show modal dialog with full movie details."""
-    
+
     # --- CSS: Style Dialog (No Scrollbar, Full Height) ---
-    st.markdown("""
+    st.markdown(
+        """
         <style>
             /* TARGET: The main dialog container */
             div[data-testid="stDialog"], div[role="dialog"] {
@@ -687,7 +706,9 @@ def show_movie_dialog(rec):
                  background-color: #000 !important;
             }
         </style>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     with st.spinner("Fetching details..."):
         movie_id = rec.get("id")
@@ -695,72 +716,76 @@ def show_movie_dialog(rec):
         credits = fetch_credits(movie_id)
         trailer_key = fetch_trailer(movie_id)
         providers = fetch_watch_providers(movie_id)
-        
+
     # === CINEMATIC BILLBOARD HEADER ===
     # Use the same style as the home page hero
     # Logic moved to components.html section below
 
     # Extract Metadata
     genres = ", ".join([g["name"] for g in tmdb.get("genres", [])[:3]]) if tmdb.get("genres") else rec.get("genres", "")
-    runtime = f"{tmdb.get('runtime', 0)} min" if tmdb.get('runtime') else ""
+    runtime = f"{tmdb.get('runtime', 0)} min" if tmdb.get("runtime") else ""
     rating = tmdb.get("vote_average", rec.get("vote_average", 0))
     year = tmdb.get("release_date", "")[:4] or "N/A"
-    
+
     # Prepare Provider HTML (Pre-computation for embedding)
     provider_html = ""
     if providers:
         cards = ""
-        for p in providers[:4]: # Limit to 4 to save space
+        for p in providers[:4]:  # Limit to 4 to save space
             logo = f"https://image.tmdb.org/t/p/original{p.get('logo_path')}"
-            name = p.get('provider_name')
+            name = p.get("provider_name")
             # Create a Google Search link for the movie on this provider
             query = f"watch {rec.get('title')} on {name}"
             url = f"https://www.google.com/search?q={query}"
-            
+
             cards += f'<a href="{url}" target="_blank" style="text-decoration:none; cursor:pointer;"><div style="display:inline-block; margin-right:10px; text-align:center; transition: transform 0.2s;"><img src="{logo}" style="width:40px; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.5);" title="Watch on {name}"></div></a>'
-        
+
         provider_html = f'<div class="db-providers"><div style="font-size:0.7rem; color:#aaa; margin-bottom:5px; text-transform:uppercase; letter-spacing:1px; font-weight:bold;">Watch Now</div>{cards}</div>'
 
     # Truncate overview for compact display
-    overview_text = rec.get('overview', '')
+    overview_text = rec.get("overview", "")
     if len(overview_text) > 200:
-        overview_text = overview_text[:200].rsplit(' ', 1)[0] + '...'
+        overview_text = overview_text[:200].rsplit(" ", 1)[0] + "..."
 
     # Build clickable Google search links for director and cast
     import urllib.parse
-    director_name = credits.get('director', 'Unknown')
+
+    director_name = credits.get("director", "Unknown")
     director_link = f'<a href="https://www.google.com/search?q={urllib.parse.quote(director_name)}" target="_blank" class="credit-link">{director_name}</a>'
-    
-    cast_names = credits.get('cast', '').split(', ')
-    cast_links = ', '.join([
-        f'<a href="https://www.google.com/search?q={urllib.parse.quote(name.strip())}" target="_blank" class="credit-link">{name.strip()}</a>'
-        for name in cast_names if name.strip()
-    ])
+
+    cast_names = credits.get("cast", "").split(", ")
+    cast_links = ", ".join(
+        [
+            f'<a href="https://www.google.com/search?q={urllib.parse.quote(name.strip())}" target="_blank" class="credit-link">{name.strip()}</a>'
+            for name in cast_names
+            if name.strip()
+        ]
+    )
 
     # Calculate rating percentage for radial progress bar
     rating_pct = (rating / 10) * 100
     rating_color = "#21d07a" if rating >= 7 else "#d2d531" if rating >= 5 else "#db2360"
-    
+
     # === RENDER BILLBOARD WITH COMPONENTS.HTML FOR JS SUPPORT ===
     # Using components.html allows JavaScript execution for click-to-mute
-    
+
     player_id = f"player_{movie_id}"
-    
+
     # YouTube Player API for reliable mute control
     if trailer_key:
         player_id = f"ytplayer_{movie_id}"
         video_html = f'<div id="{player_id}" class="db-video-layer"></div>'
-        youtube_js = f'''
+        youtube_js = f"""
         <script>
             var tag = document.createElement('script');
             tag.src = "https://www.youtube.com/iframe_api";
             var firstScriptTag = document.getElementsByTagName('script')[0];
             firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-            
+
             var player;
             var isMuted = true;
             var muteBtn = document.getElementById('muteBtn');
-            
+
             function onYouTubeIframeAPIReady() {{
                 player = new YT.Player('{player_id}', {{
                     videoId: '{trailer_key}',
@@ -783,7 +808,7 @@ def show_movie_dialog(rec):
                     }}
                 }});
             }}
-            
+
             function onPlayerReady(event) {{
                 event.target.playVideo();
                 // Apply pointer-events:none to the generated iframe
@@ -795,7 +820,7 @@ def show_movie_dialog(rec):
                     }}
                 }}
             }}
-            
+
             function toggleMute() {{
                 if (player && typeof player.isMuted === 'function') {{
                     if (player.isMuted()) {{
@@ -809,20 +834,20 @@ def show_movie_dialog(rec):
                     }}
                 }}
             }}
-            
+
             muteBtn.addEventListener('click', toggleMute);
         </script>
-        '''
+        """
     else:
         poster_url = fetch_poster(tmdb.get("backdrop_path") or rec.get("poster_path"))
         video_html = f'<div class="db-video-layer"><img src="{poster_url}" alt="backdrop"></div>'
         youtube_js = ""
-    
+
     explanation_html = ""
     if rec.get("explanation_text"):
         explanation_html = f'<div style="font-size: 0.85rem; color: #fff; background: rgba(229,9,20,0.2); border-left: 3px solid #e50914; padding: 8px 12px; margin: 10px 0; border-radius: 4px; animation: fadeInUp 0.6s ease-out 0.45s both;"><strong>🤖 CineBot Vibe Check:</strong> {rec.get("explanation_text")}</div>'
 
-    billboard_html = f'''
+    billboard_html = f"""
     <!DOCTYPE html>
     <html>
     <head>
@@ -830,7 +855,7 @@ def show_movie_dialog(rec):
         <style>
             * {{ margin: 0; padding: 0; box-sizing: border-box; }}
             body {{ background: #000; font-family: 'Montserrat', sans-serif; overflow: hidden; }}
-            
+
             @keyframes fadeInUp {{
                 from {{ opacity: 0; transform: translateY(20px); }}
                 to {{ opacity: 1; transform: translateY(0); }}
@@ -839,7 +864,7 @@ def show_movie_dialog(rec):
                 from {{ opacity: 0; }}
                 to {{ opacity: 1; }}
             }}
-            
+
             .dialog-billboard {{
                 background: #000;
                 position: relative;
@@ -941,7 +966,7 @@ def show_movie_dialog(rec):
                 margin-bottom: 10px;
                 animation: fadeInUp 0.6s ease-out 0.5s both;
             }}
-            .db-credits strong {{ 
+            .db-credits strong {{
                 color: #fff;
                 transition: color 0.2s;
             }}
@@ -1015,7 +1040,7 @@ def show_movie_dialog(rec):
             {video_html}
             <div class="db-content-layer">
                 <div class="db-title-row">
-                    <div class="db-title">{rec.get('title')}</div>
+                    <div class="db-title">{rec.get("title")}</div>
                     <div class="rating-circle">
                         <svg width="48" height="48">
                             <circle class="bg" cx="24" cy="24" r="20"></circle>
@@ -1024,7 +1049,7 @@ def show_movie_dialog(rec):
                         <div class="value">{rating:.1f}</div>
                     </div>
                 </div>
-                <div class="db-meta">{year} • {runtime} • {str(genres).split(',')[0]}</div>
+                <div class="db-meta">{year} • {runtime} • {str(genres).split(",")[0]}</div>
                 <div class="db-overview">{overview_text}</div>
                 {explanation_html}
                 <div class="db-credits">Directed by {director_link} • Cast: {cast_links}</div>
@@ -1034,8 +1059,8 @@ def show_movie_dialog(rec):
         {youtube_js}
     </body>
     </html>
-    '''
-    
+    """
+
     # Render using components.html for JS execution
     components.html(billboard_html, height=600, scrolling=False)
 
@@ -1050,7 +1075,8 @@ def format_option(m):
 # ===== APP MODES =====
 
 # ===== CUSTOM CSS FOR LANDING PAGE =====
-st.markdown("""
+st.markdown(
+    """
 <style>
 /* Glass Card for Landing Page */
 .glass-card {
@@ -1105,7 +1131,9 @@ st.markdown("""
     z-index: 10;
 }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 
 # ===== NAVIGATION STATE =====
@@ -1114,11 +1142,7 @@ if "page" not in st.session_state:
 
 # Initialize monitoring state
 if "monitoring_data" not in st.session_state:
-    st.session_state.monitoring_data = {
-        "kafka_events": [],
-        "delta_state": {},
-        "system_metrics": {}
-    }
+    st.session_state.monitoring_data = {"kafka_events": [], "delta_state": {}, "system_metrics": {}}
 
 
 def go_home():
@@ -1131,14 +1155,18 @@ def go_home():
     if "selected_rec" in st.session_state:
         del st.session_state.selected_rec
 
+
 def go_search():
     st.session_state.page = "search"
+
 
 def go_chat():
     st.session_state.page = "chat"
 
+
 def go_monitoring():
     st.session_state.page = "monitoring"
+
 
 def go_console():
     st.session_state.page = "console"
@@ -1148,28 +1176,26 @@ def go_console():
 def fetch_trending_movies():
     """Fetch trending movies from TMDB for the welcome page."""
     try:
-        r = requests.get(
-            "https://api.themoviedb.org/3/trending/movie/week",
-            params={"api_key": TMDB_KEY},
-            timeout=3
-        )
+        r = requests.get("https://api.themoviedb.org/3/trending/movie/week", params={"api_key": TMDB_KEY}, timeout=3)
         return r.json().get("results", [])
     except Exception:
         return []
 
+
 # ===== PAGE 1: LANDING SCREEN (MAIN SCENE) =====
 if st.session_state.page == "home":
     # 1. Google Fonts Import & Cinematic CSS
-    st.markdown("""
+    st.markdown(
+        """
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@300;400;600&display=swap');
-    
+
     /* Animated Background Layer */
     .stApp {
         background: radial-gradient(circle at 60% 50%, #1a1a2e 0%, #000000 100%);
         background-attachment: fixed;
     }
-    
+
     h1 {
         font-family: 'Bebas Neue', sans-serif !important;
         font-size: 3.5rem !important;
@@ -1179,9 +1205,9 @@ if st.session_state.page == "home":
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
     }
-    
+
     p, button, div { font-family: 'Montserrat', sans-serif !important; }
-    
+
     /* Compact Holographic Row Card */
     .holo-card-row {
         background: rgba(255, 255, 255, 0.03);
@@ -1196,31 +1222,37 @@ if st.session_state.page == "home":
         cursor: pointer;
         backdrop-filter: blur(10px);
     }
-    
+
     .holo-card-row:hover {
         background: rgba(255, 255, 255, 0.08);
         border-color: rgba(229, 9, 20, 0.5);
         transform: translateX(5px);
     }
-    
+
     .holo-icon { font-size: 2rem; }
     .holo-text h3 { margin: 0; color: #fff; font-size: 1.1rem; text-transform: uppercase; letter-spacing: 1px; }
     .holo-text p { margin: 0; color: #888; font-size: 0.8rem; }
-    
+
     </style>
-    """, unsafe_allow_html=True)
-    
+    """,
+        unsafe_allow_html=True,
+    )
+
     # Split Layout: Left (Controls) | Right (Visuals)
     st.markdown("<div style='margin-top: 2vh;'></div>", unsafe_allow_html=True)
     c1, c2 = st.columns([5, 7], gap="large")
-    
+
     # LEFT COLUMN: Title & Tools
     with c1:
         st.markdown("<h1>MOVIE RECOMMENDATION<br>SYSTEM</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='color: #888; font-size: 1rem; margin-bottom: 30px;'>AI-Powered Curator • Deep Search • Semantic Analysis</p>", unsafe_allow_html=True)
-        
+        st.markdown(
+            "<p style='color: #888; font-size: 1rem; margin-bottom: 30px;'>AI-Powered Curator • Deep Search • Semantic Analysis</p>",
+            unsafe_allow_html=True,
+        )
+
         # === NAVIGATION CARDS ===
-        st.markdown("""
+        st.markdown(
+            """
         <style>
         /* Style buttons to look like cards */
         div[data-testid="stButton"] button[kind="secondary"] {
@@ -1238,14 +1270,14 @@ if st.session_state.page == "home":
             cursor: pointer !important;
             margin-bottom: 12px !important;
         }
-        
+
         div[data-testid="stButton"] button[kind="secondary"]:hover {
             border-color: #e50914 !important;
             background: rgba(229, 9, 20, 0.1) !important;
             transform: translateY(-4px) !important;
             box-shadow: 0 15px 40px rgba(229, 9, 20, 0.25), 0 0 20px rgba(229, 9, 20, 0.15) !important;
         }
-        
+
         div[data-testid="stButton"] button[kind="secondary"] p {
             color: white !important;
             font-size: 1rem !important;
@@ -1255,8 +1287,10 @@ if st.session_state.page == "home":
             margin: 0 !important;
         }
         </style>
-        """, unsafe_allow_html=True)
-        
+        """,
+            unsafe_allow_html=True,
+        )
+
         # Product Console Card
         if st.button("NOVA CONSOLE", key="nav_console", use_container_width=True):
             go_console()
@@ -1266,7 +1300,7 @@ if st.session_state.page == "home":
         if st.button("🔍  DEEP SEARCH", key="nav_search", use_container_width=True):
             go_search()
             st.rerun()
-        
+
         # Chat Card
         if st.button("🧬  CINEBOT AI", key="nav_chat", use_container_width=True):
             go_chat()
@@ -1280,35 +1314,36 @@ if st.session_state.page == "home":
     # RIGHT COLUMN: Visual Showcase (Trending)
     with c2:
         trending = fetch_trending_movies()
-        
+
         if trending:
             # Initialize Slideshow State
             if "hero_index" not in st.session_state:
                 st.session_state.hero_index = 0
-                
+
             # Circular Buffer Logic
             # CLICKABLE IMAGE LOGIC (Invisible Overlay Button Hack)
             # We use st.button(type="primary") as a dedicated "Invisible Click Layer"
-            
+
             # Current Hero Movie
             if "hero_index" not in st.session_state:
-                 st.session_state.hero_index = 0
-            
+                st.session_state.hero_index = 0
+
             hero = trending[st.session_state.hero_index]
-            
+
             # FETCH FULL DETAILS
             trailer_key = fetch_trailer(hero["id"])
             credits = fetch_credits(hero["id"])
             details = fetch_tmdb_details(hero["id"])
-            
+
             # Extract Metadata
             genres = ", ".join([g["name"] for g in details.get("genres", [])[:2]])
-            runtime = f"{details.get('runtime', 0)} min" if details.get('runtime') else ""
-            
+            runtime = f"{details.get('runtime', 0)} min" if details.get("runtime") else ""
+
             # HERO BILLBOARD LAYOUT
-            st.markdown(f"""
+            st.markdown(
+                """
             <style>
-            .billboard-container {{
+            .billboard-container {
                 background: linear-gradient(135deg, rgba(26, 26, 46, 0.9), rgba(0, 0, 0, 0.95));
                 border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: 20px;
@@ -1318,37 +1353,37 @@ if st.session_state.page == "home":
                 height: 40vh;
                 box-shadow: 0 10px 40px rgba(0,0,0,0.5);
                 backdrop-filter: blur(10px);
-            }}
-            .billboard-video {{
-                flex: 1.4; 
+            }
+            .billboard-video {
+                flex: 1.4;
                 border-radius: 12px;
                 overflow: hidden;
                 box-shadow: 0 5px 15px rgba(0,0,0,0.5);
                 background: #000;
-            }}
-            .billboard-info {{
-                flex: 1; 
+            }
+            .billboard-info {
+                flex: 1;
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
                 overflow-y: hidden;
-            }}
-            .bb-title {{
+            }
+            .bb-title {
                 font-family: 'Bebas Neue', sans-serif;
                 font-size: 2.2rem;
                 line-height: 1;
                 margin-bottom: 8px;
                 color: #fff;
                 text-transform: uppercase;
-            }}
-            .bb-meta {{
+            }
+            .bb-meta {
                 font-family: 'Montserrat', sans-serif;
                 font-size: 0.75rem;
-                color: #ea696f; 
+                color: #ea696f;
                 font-weight: 700;
                 margin-bottom: 10px;
-            }}
-            .bb-desc {{
+            }
+            .bb-desc {
                 font-family: 'Montserrat', sans-serif;
                 font-size: 0.8rem;
                 color: #ccc;
@@ -1358,42 +1393,44 @@ if st.session_state.page == "home":
                 -webkit-line-clamp: 4;
                 -webkit-box-orient: vertical;
                 overflow: hidden;
-            }}
-            .bb-credits {{
+            }
+            .bb-credits {
                 font-family: 'Montserrat', sans-serif;
                 font-size: 0.7rem;
                 color: #888;
                 border-top: 1px solid rgba(255,255,255,0.1);
                 padding-top: 8px;
-            }}
+            }
             /* MOVIE CARD BUTTONS - Styled as labels */
-            .movie-card-btn {{
+            .movie-card-btn {
                 background: transparent !important;
                 border: none !important;
                 padding: 0 !important;
                 margin: 0 !important;
                 width: 100% !important;
-            }}
-            .movie-card-btn > button {{
+            }
+            .movie-card-btn > button {
                 background: transparent !important;
                 border: 2px solid transparent !important;
                 border-radius: 12px !important;
                 padding: 8px !important;
                 width: 100% !important;
                 transition: all 0.3s ease !important;
-            }}
-            .movie-card-btn > button:hover {{
+            }
+            .movie-card-btn > button:hover {
                 border-color: #e50914 !important;
                 background: rgba(229, 9, 20, 0.1) !important;
                 transform: scale(1.02);
-            }}
-            .movie-card-btn > button:focus {{
+            }
+            .movie-card-btn > button:focus {
                 border-color: #e50914 !important;
                 box-shadow: 0 0 15px rgba(229, 9, 20, 0.4) !important;
-            }}
+            }
             </style>
-            """, unsafe_allow_html=True)
-            
+            """,
+                unsafe_allow_html=True,
+            )
+
             # Render Billboard
             video_embed = ""
             if trailer_key:
@@ -1402,50 +1439,51 @@ if st.session_state.page == "home":
                 poster_url = fetch_poster(hero.get("backdrop_path"))
                 video_embed = f'<img src="{poster_url}" style="width:100%; height:100%; object-fit:cover;">'
 
-            st.markdown(f"""
+            st.markdown(
+                f"""
             <div class="billboard-container">
                 <div class="billboard-video">
                     {video_embed}
                 </div>
                 <div class="billboard-info">
-                    <div class="bb-title">{hero.get('title')}</div>
-                    <div class="bb-meta">⭐ {hero.get('vote_average', 0):.1f} | {genres} | {runtime}</div>
-                    <div class="bb-desc">{hero.get('overview')}</div>
+                    <div class="bb-title">{hero.get("title")}</div>
+                    <div class="bb-meta">⭐ {hero.get("vote_average", 0):.1f} | {genres} | {runtime}</div>
+                    <div class="bb-desc">{hero.get("overview")}</div>
                     <div class="bb-credits">
-                        Directed by <strong>{credits.get('director')}</strong><br>
-                        Starring: {credits.get('cast')}
+                        Directed by <strong>{credits.get("director")}</strong><br>
+                        Starring: {credits.get("cast")}
                     </div>
                 </div>
             </div>
-            """, unsafe_allow_html=True)
-            
+            """,
+                unsafe_allow_html=True,
+            )
+
             # SUB-GRID - TRUE CLICKABLE IMAGES (No Buttons!)
-            st.markdown("<div style='margin-bottom: 8px; color: #666; font-size: 0.75rem; letter-spacing: 2px; text-transform: uppercase; margin-top: 15px;'>More Trending</div>", unsafe_allow_html=True)
-            
+            st.markdown(
+                "<div style='margin-bottom: 8px; color: #666; font-size: 0.75rem; letter-spacing: 2px; text-transform: uppercase; margin-top: 15px;'>More Trending</div>",
+                unsafe_allow_html=True,
+            )
+
             # Prepare image URLs for clickable_images
             poster_urls = [fetch_poster(m.get("poster_path")) for m in trending[:5]]
-            
+
             # Clickable Images Component - returns index of clicked image
             clicked = clickable_images(
                 paths=poster_urls,
-                titles=[m.get('title', '') for m in trending[:5]],
-                div_style={
-                    "display": "flex", 
-                    "justify-content": "center", 
-                    "flex-wrap": "wrap",
-                    "gap": "10px"
-                },
+                titles=[m.get("title", "") for m in trending[:5]],
+                div_style={"display": "flex", "justify-content": "center", "flex-wrap": "wrap", "gap": "10px"},
                 img_style={
                     "width": "18%",
                     "border-radius": "10px",
                     "cursor": "pointer",
                     "border": "2px solid transparent",
                     "transition": "all 0.3s ease",
-                    "box-shadow": "0 4px 10px rgba(0,0,0,0.3)"
+                    "box-shadow": "0 4px 10px rgba(0,0,0,0.3)",
                 },
-                key="trending_selector"
+                key="trending_selector",
             )
-            
+
             # Handle click - update hero when image is clicked
             if clicked > -1 and clicked != st.session_state.hero_index:
                 st.session_state.hero_index = clicked
@@ -1497,11 +1535,14 @@ elif st.session_state.page == "console":
             )
 
         if refresh_readiness or "platform_readiness" not in st.session_state:
-            st.session_state.platform_readiness = api_get(
-                "/v1/platform/readiness",
-                params={"strict": True, "k": 10},
-                timeout=90,
-            ) or {}
+            st.session_state.platform_readiness = (
+                api_get(
+                    "/v1/platform/readiness",
+                    params={"strict": True, "k": 10},
+                    timeout=90,
+                )
+                or {}
+            )
 
         readiness = st.session_state.get("platform_readiness") or {}
         components = readiness.get("components") or []
@@ -1568,8 +1609,7 @@ elif st.session_state.page == "console":
         with left:
             st.subheader("API Usage")
             usage_rows = [
-                {"operation": key, "requests": value}
-                for key, value in (usage.get("operation_counts") or {}).items()
+                {"operation": key, "requests": value} for key, value in (usage.get("operation_counts") or {}).items()
             ]
             if usage_rows:
                 usage_df = pd.DataFrame(usage_rows)
@@ -1595,9 +1635,7 @@ elif st.session_state.page == "console":
             st.subheader("Behavior Signals")
             event_counts = behavior.get("event_type_counts") or {}
             if event_counts:
-                event_df = pd.DataFrame(
-                    [{"event_type": key, "count": value} for key, value in event_counts.items()]
-                )
+                event_df = pd.DataFrame([{"event_type": key, "count": value} for key, value in event_counts.items()])
                 fig = px.pie(
                     event_df,
                     values="count",
@@ -1619,7 +1657,11 @@ elif st.session_state.page == "console":
         trending = behavior.get("trending_movies") or {}
         if trending:
             trend_df = pd.DataFrame(list(trending.values()))
-            shown_cols = [col for col in ["movie_id", "content_id", "event_count", "views", "clicks", "ratings", "avg_rating"] if col in trend_df.columns]
+            shown_cols = [
+                col
+                for col in ["movie_id", "content_id", "event_count", "views", "clicks", "ratings", "avg_rating"]
+                if col in trend_df.columns
+            ]
             st.dataframe(trend_df[shown_cols], use_container_width=True, hide_index=True)
         else:
             st.caption("No event-backed ranking signals yet.")
@@ -1885,7 +1927,11 @@ elif st.session_state.page == "console":
         if personalized:
             st.dataframe(
                 pd.DataFrame(personalized)[
-                    [col for col in ["id", "title", "similarity_score", "retrieval_stage", "explanation_text"] if col in pd.DataFrame(personalized).columns]
+                    [
+                        col
+                        for col in ["id", "title", "similarity_score", "retrieval_stage", "explanation_text"]
+                        if col in pd.DataFrame(personalized).columns
+                    ]
                 ],
                 use_container_width=True,
                 hide_index=True,
@@ -1928,33 +1974,33 @@ elif st.session_state.page == "search":
         if st.button("🏠 Home", key="back_search"):
             go_home()
             st.rerun()
-            
+
     st.title("🔍 Search & Discover")
-    
+
     # Pre-fetch all titles for instant autocomplete
     with st.spinner("Loading movie catalog..."):
         title_payload = fetch_all_movie_titles(tuple(candidate_backend_urls()))
         all_titles = title_payload.get("titles", []) if title_payload else []
         if title_payload and title_payload.get("api_url"):
             set_active_backend(title_payload["api_url"])
-    
+
     movie_to_fetch = None
-    
+
     if all_titles:
         # 1. Instant Dropdown Search (The primary UX)
         title_options = {t["title"]: t for t in all_titles}
-        
+
         selected_title = st.selectbox(
-            "Search by title", 
+            "Search by title",
             options=list(title_options.keys()),
             index=None,
             placeholder="e.g. Inception, Avatar, The Dark Knight...",
         )
-        
+
         if selected_title:
             # We instantly have the exact ID here
             selected_id = title_options[selected_title]["id"]
-            
+
             # Fetch the full movie object using the ID endpoint
             movie_to_fetch = api_get(f"/movie/{selected_id}", timeout=15)
             if not movie_to_fetch:
@@ -1966,48 +2012,54 @@ elif st.session_state.page == "search":
             st.session_state.pop("API_URL", None)
             st.session_state.backend_ready = wake_up_backend()
             st.rerun()
-    
+
     # 2. Semantic Search (The fallback/advanced UX)
     with st.expander("🔎 Search by plot, genre, or description"):
-        st.caption("Can't find the title? Describe the movie — e.g. *'time travel heist'* or *'romantic comedy set in Paris'*")
+        st.caption(
+            "Can't find the title? Describe the movie — e.g. *'time travel heist'* or *'romantic comedy set in Paris'*"
+        )
         search_query = st.text_input("Describe a movie...")
-        
+
         if search_query and len(search_query) >= 2:
             with st.spinner("Analyzing semantic meaning..."):
                 movies = ai_search_movies(search_query)
-            
+
             if movies:
                 options = {format_option(m): m for m in movies}
-                selected_option = st.selectbox(f"Found {len(movies)} matches:", list(options.keys()), key="deep_search_select")
+                selected_option = st.selectbox(
+                    f"Found {len(movies)} matches:", list(options.keys()), key="deep_search_select"
+                )
                 if options.get(selected_option):
                     movie_to_fetch = options.get(selected_option)
             else:
                 st.info("No text matches found. Try describing the plot differently!")
-    
-    
+
     # 3. Universal Display Logic (Triggered by either search method)
     if movie_to_fetch:
         movie = movie_to_fetch
-        
+
         # Preview
         poster_url = fetch_poster(movie.get("poster_path"))
         credits = fetch_credits(movie.get("id"))
-        
+
         # Highlight Card
-        st.markdown(f"""
+        st.markdown(
+            f"""
         <div style="display: flex; gap: 20px; background: rgba(255,255,255,0.05); padding: 20px; border-radius: 15px; margin-top: 20px;">
             <img src="{poster_url}" width="120" style="border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
             <div>
-                <div style="font-size: 1.5rem; font-weight: 700; margin-bottom: 5px;">{movie.get('title')}</div>
-                <div style="color: #bbb; margin-bottom: 10px;">{movie.get('release_date', '')[:4]} • ⭐ {movie.get('vote_average', 0):.1f}/10</div>
-                <div style="font-size: 0.9rem; line-height: 1.5; color: #ddd;">{movie.get('overview', '')}</div>
-                <div style="margin-top: 10px; font-size: 0.8rem; color: #888;">🎭 {credits.get('cast', 'N/A')}</div>
+                <div style="font-size: 1.5rem; font-weight: 700; margin-bottom: 5px;">{movie.get("title")}</div>
+                <div style="color: #bbb; margin-bottom: 10px;">{movie.get("release_date", "")[:4]} • ⭐ {movie.get("vote_average", 0):.1f}/10</div>
+                <div style="font-size: 0.9rem; line-height: 1.5; color: #ddd;">{movie.get("overview", "")}</div>
+                <div style="margin-top: 10px; font-size: 0.8rem; color: #888;">🎭 {credits.get("cast", "N/A")}</div>
             </div>
         </div>
-        """, unsafe_allow_html=True)
-        
+        """,
+            unsafe_allow_html=True,
+        )
+
         st.markdown("<br>", unsafe_allow_html=True)
-        
+
         # Action Button
         if st.button("✨ Get Similar Recommendations", type="primary", use_container_width=True):
             st.session_state.selected_rec = None
@@ -2024,37 +2076,37 @@ elif st.session_state.page == "search":
         # Check if recs match current search context (optional, but keep it simple)
         recs = st.session_state.recs
         source = st.session_state.get("source_movie", {})
-        
+
         st.markdown("---")
         st.subheader(f"Because you liked '{source.get('title', '...')}'")
-        
+
         # Prepare data for clickable grid
         rec_posters = [fetch_poster(r.get("poster_path")) for r in recs]
-        rec_titles = [f"{r.get('title')} ({int(r.get('similarity_score', 0)*100)}% Match)" for r in recs]
-        
+        rec_titles = [f"{r.get('title')} ({int(r.get('similarity_score', 0) * 100)}% Match)" for r in recs]
+
         # Clickable Images Grid (Matches Homepage Style)
         clicked_rec = clickable_images(
             paths=rec_posters,
             titles=rec_titles,
             div_style={
-                "display": "flex", 
-                "justify-content": "center", 
+                "display": "flex",
+                "justify-content": "center",
                 "flex-wrap": "wrap",
                 "gap": "15px",
-                "margin-top": "20px"
+                "margin-top": "20px",
             },
             img_style={
-                "width": "18%", # roughly 5 per row
+                "width": "18%",  # roughly 5 per row
                 "border-radius": "12px",
                 "cursor": "pointer",
                 "aspect-ratio": "2/3",
                 "object-fit": "cover",
                 "box-shadow": "0 4px 10px rgba(0,0,0,0.5)",
-                "transition": "transform 0.3s ease"
+                "transition": "transform 0.3s ease",
             },
-            key="rec_grid"
+            key="rec_grid",
         )
-        
+
         # Handle selection
         if clicked_rec > -1:
             show_movie_dialog(recs[clicked_rec])
@@ -2071,37 +2123,40 @@ elif st.session_state.page == "chat":
 
     st.title("🤖 CineBot Assistant")
     st.caption("Ask complex questions like: *'I want a thriller with a plot twist like Shutter Island'*")
-    
+
     # Initialize Chat
     if "chat_history" not in st.session_state:
-        st.session_state.chat_history = [{"role": "assistant", "content": "Hello! I'm your AI movie expert. Ask me anything!"}]
-    
+        st.session_state.chat_history = [
+            {"role": "assistant", "content": "Hello! I'm your AI movie expert. Ask me anything!"}
+        ]
+
     # Display History
     for msg in st.session_state.chat_history:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
-            
+
     # Input
     if prompt := st.chat_input("Ask CineBot..."):
         st.session_state.chat_history.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                try:
-                    recent_msgs = st.session_state.chat_history[-6:]
-                    clean_msgs = [{"role": m["role"], "content": m["content"]} for m in recent_msgs if m["role"] != "system"]
+        with st.chat_message("assistant"), st.spinner("Thinking..."):
+            try:
+                recent_msgs = st.session_state.chat_history[-6:]
+                clean_msgs = [
+                    {"role": m["role"], "content": m["content"]} for m in recent_msgs if m["role"] != "system"
+                ]
 
-                    result = api_post("/chat", {"messages": clean_msgs}, timeout=60)
-                    if result and not result.get("error"):
-                        response_text = result["content"]
-                        st.markdown(response_text)
-                        st.session_state.chat_history.append({"role": "assistant", "content": response_text})
-                    else:
-                         st.error("AI Brain Offline.")
-                except Exception as e:
-                    st.error(f"Error: {e}")
+                result = api_post("/chat", {"messages": clean_msgs}, timeout=60)
+                if result and not result.get("error"):
+                    response_text = result["content"]
+                    st.markdown(response_text)
+                    st.session_state.chat_history.append({"role": "assistant", "content": response_text})
+                else:
+                    st.error("AI Brain Offline.")
+            except Exception as e:
+                st.error(f"Error: {e}")
 
 # ===== PAGE 4: REAL-TIME MONITORING =====
 elif st.session_state.page == "monitoring":
@@ -2116,7 +2171,8 @@ elif st.session_state.page == "monitoring":
     st.caption("Kafka event stream and Delta table state visualization")
 
     # Custom CSS for monitoring page
-    st.markdown("""
+    st.markdown(
+        """
     <style>
     /* Monitoring page specific styles */
     .monitoring-card {
@@ -2196,7 +2252,9 @@ elif st.session_state.page == "monitoring":
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
     }
     </style>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     # Initialize monitoring data if not exists
     if "monitoring_data" not in st.session_state:
@@ -2208,15 +2266,15 @@ elif st.session_state.page == "monitoring":
                 "view_events": 0,
                 "rating_events": 0,
                 "last_event_time": None,
-                "events_per_minute": 0
-            }
+                "events_per_minute": 0,
+            },
         }
 
     # Function to simulate Kafka consumer (will be replaced with real implementation)
     def consume_kafka_events():
         """Simulate consuming Kafka events for demo purposes"""
-        import random
         from datetime import datetime
+        import random
 
         # Sample movie data for simulation
         sample_movies = [
@@ -2229,7 +2287,7 @@ elif st.session_state.page == "monitoring":
             {"id": 7, "title": "Forrest Gump"},
             {"id": 8, "title": "The Matrix"},
             {"id": 9, "title": "Goodfellas"},
-            {"id": 10, "title": "The Silence of the Lambs"}
+            {"id": 10, "title": "The Silence of the Lambs"},
         ]
 
         # Generate random event
@@ -2242,7 +2300,7 @@ elif st.session_state.page == "monitoring":
             "title": movie["title"],
             "event_type": event_type,
             "user_id": random.randint(100, 999),
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
 
         if event_type == "rating":
@@ -2253,8 +2311,8 @@ elif st.session_state.page == "monitoring":
     # Function to simulate Delta table state
     def get_delta_table_state():
         """Simulate getting Delta table state for demo purposes"""
-        import random
         from datetime import datetime, timedelta
+        import random
 
         # Simulate some processing state
         states = ["idle", "processing", "updating", "optimizing"]
@@ -2274,7 +2332,7 @@ elif st.session_state.page == "monitoring":
             "record_count": record_count,
             "new_records": new_records,
             "processing_time": f"{random.randint(1, 10)}.{random.randint(0, 99)}s",
-            "table_size": f"{random.randint(100, 999)}.{random.randint(0, 99)} MB"
+            "table_size": f"{random.randint(100, 999)}.{random.randint(0, 99)} MB",
         }
 
     # Function to update monitoring data
@@ -2326,36 +2384,48 @@ elif st.session_state.page == "monitoring":
         metrics = st.session_state.monitoring_data["system_metrics"]
 
         with m1:
-            st.markdown(f"""
+            st.markdown(
+                f"""
             <div class="metric-card">
                 <div class="metric-value">{metrics["total_events"]}</div>
                 <div class="metric-label">Total Events</div>
             </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
 
         with m2:
-            st.markdown(f"""
+            st.markdown(
+                f"""
             <div class="metric-card">
                 <div class="metric-value">{metrics["view_events"]}</div>
                 <div class="metric-label">Views</div>
             </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
 
         with m3:
-            st.markdown(f"""
+            st.markdown(
+                f"""
             <div class="metric-card">
                 <div class="metric-value">{metrics["rating_events"]}</div>
                 <div class="metric-label">Ratings</div>
             </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
 
         with m4:
-            st.markdown(f"""
+            st.markdown(
+                f"""
             <div class="metric-card">
                 <div class="metric-value">{metrics["events_per_minute"]}</div>
                 <div class="metric-label">Events/Min</div>
             </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
 
         # Delta Table State
         st.markdown('<div class="monitoring-title">🔄 Delta Table State</div>', unsafe_allow_html=True)
@@ -2399,7 +2469,7 @@ elif st.session_state.page == "monitoring":
             event_details += "</div>"
 
             event_stream_html += f'<div class="{event_class}">{event_details}</div>'
-        event_stream_html += '</div>'
+        event_stream_html += "</div>"
 
         st.markdown(event_stream_html, unsafe_allow_html=True)
 
@@ -2420,31 +2490,29 @@ elif st.session_state.page == "monitoring":
         st.subheader("Event Type Distribution")
 
         # Prepare data for pie chart
-        event_counts = {
-            "Views": metrics["view_events"],
-            "Ratings": metrics["rating_events"]
-        }
+        event_counts = {"Views": metrics["view_events"], "Ratings": metrics["rating_events"]}
 
         # Create pie chart
         import plotly.express as px
+
         fig = px.pie(
             values=list(event_counts.values()),
             names=list(event_counts.keys()),
             color=list(event_counts.keys()),
             color_discrete_map={"Views": "#4CAF50", "Ratings": "#FFC107"},
-            hole=0.4
+            hole=0.4,
         )
         fig.update_layout(
             margin=dict(t=0, b=0, l=0, r=0),
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
             font=dict(color="#ffffff"),
-            showlegend=True
+            showlegend=True,
         )
         fig.update_traces(textposition="inside", textinfo="percent+label")
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
     with chart_col2:
         # Event timeline chart
@@ -2452,8 +2520,8 @@ elif st.session_state.page == "monitoring":
         st.subheader("Event Timeline")
 
         # Prepare data for line chart (simulated)
-        import pandas as pd
         import numpy as np
+        import pandas as pd
 
         # Create simulated timeline data
         now = datetime.now()
@@ -2461,19 +2529,10 @@ elif st.session_state.page == "monitoring":
         event_counts = [metrics["events_per_minute"] * (1 + 0.2 * np.random.randn()) for _ in range(10)]
         event_counts = [max(0, int(count)) for count in event_counts]
 
-        df = pd.DataFrame({
-            "Time": time_points,
-            "Events": event_counts
-        })
+        df = pd.DataFrame({"Time": time_points, "Events": event_counts})
 
         # Create line chart
-        fig = px.line(
-            df,
-            x="Time",
-            y="Events",
-            line_shape="spline",
-            color_discrete_sequence=["#e50914"]
-        )
+        fig = px.line(df, x="Time", y="Events", line_shape="spline", color_discrete_sequence=["#e50914"])
         fig.update_layout(
             margin=dict(t=0, b=0, l=0, r=0),
             paper_bgcolor="rgba(0,0,0,0)",
@@ -2481,17 +2540,18 @@ elif st.session_state.page == "monitoring":
             font=dict(color="#ffffff"),
             xaxis=dict(showgrid=False, title=None),
             yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.1)", title=None),
-            showlegend=False
+            showlegend=False,
         )
         fig.update_traces(line=dict(width=3))
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
     # System Architecture Diagram
     st.markdown('<div class="monitoring-title">🏗️ Data Pipeline Architecture</div>', unsafe_allow_html=True)
 
-    st.markdown("""
+    st.markdown(
+        """
     <div class="monitoring-card">
         <div style="text-align: center; padding: 20px;">
             <svg width="100%" height="200" viewBox="0 0 800 200" style="background: rgba(0,0,0,0.3); border-radius: 10px; padding: 20px;">
@@ -2542,13 +2602,17 @@ elif st.session_state.page == "monitoring":
             Real-time data flow: Kafka → Spark Streaming → Delta Lake → Streamlit Dashboard
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     # Footer
-    st.markdown("""
+    st.markdown(
+        """
     <div style="text-align: center; margin-top: 30px; color: #666; font-size: 0.8rem;">
         <p>Real-time monitoring dashboard for Movie Recommendation System data pipeline</p>
         <p>Showing simulated data - connect to actual Kafka and Delta Lake for production use</p>
     </div>
-    """, unsafe_allow_html=True)
-
+    """,
+        unsafe_allow_html=True,
+    )

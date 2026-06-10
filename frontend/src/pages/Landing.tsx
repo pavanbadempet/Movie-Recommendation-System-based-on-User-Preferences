@@ -215,7 +215,7 @@ console.log(\`Top recommendation: \${recommendations[0].title}\`);`
               <span className="dot green" />
             </div>
             <div className="code-tabs" style={{ display: "flex", gap: "2px", marginLeft: "16px" }}>
-              <button 
+              <button
                 type="button"
                 className={`code-tab-btn ${activeLang === "curl" ? "active" : ""}`}
                 style={{
@@ -232,7 +232,7 @@ console.log(\`Top recommendation: \${recommendations[0].title}\`);`
               >
                 cURL
               </button>
-              <button 
+              <button
                 type="button"
                 className={`code-tab-btn ${activeLang === "python" ? "active" : ""}`}
                 style={{
@@ -249,7 +249,7 @@ console.log(\`Top recommendation: \${recommendations[0].title}\`);`
               >
                 Python
               </button>
-              <button 
+              <button
                 type="button"
                 className={`code-tab-btn ${activeLang === "js" ? "active" : ""}`}
                 style={{

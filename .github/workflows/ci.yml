@@ -31,6 +31,8 @@ jobs:
 
     - name: Run pre-commit
       uses: pre-commit/action@v3.0.1
+      env:
+        SKIP: no-commit-to-branch
 
   # ---------------------------------------------------------------------------
   # 0.1 Lint & format gate (fast — runs before any tests)

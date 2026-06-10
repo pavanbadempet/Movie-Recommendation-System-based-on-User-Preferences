@@ -30,7 +30,7 @@
             justify-content: center;
             align-items: center;
             overflow: hidden;
-            background-image: 
+            background-image:
                 radial-gradient(circle at 15% 50%, rgba(124, 58, 237, 0.15) 0%, transparent 50%),
                 radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.15) 0%, transparent 50%);
             animation: bgShift 20s ease-in-out infinite alternate;
@@ -281,7 +281,7 @@
         function appendLog(text, type="info") {
             const terminal = document.getElementById('terminal');
             const lines = text.split('\n');
-            
+
             lines.forEach(line => {
                 if (!line.trim()) return;
                 const span = document.createElement('span');
@@ -289,14 +289,14 @@
                 span.textContent = line;
                 terminal.appendChild(span);
             });
-            
+
             terminal.scrollTop = terminal.scrollHeight;
         }
 
         async function triggerTest(suite, btnId) {
             const btn = document.getElementById(btnId);
             const originalHTML = btn.innerHTML;
-            
+
             // Prevent multiple clicks
             if(btn.classList.contains('running')) return;
 
@@ -305,7 +305,7 @@
                 b.style.opacity = '0.5';
                 b.style.pointerEvents = 'none';
             });
-            
+
             btn.style.opacity = '1';
             btn.classList.add('running');
             btn.innerHTML = btn.innerHTML.replace('➜', '⟳').replace('⚡', '⟳');

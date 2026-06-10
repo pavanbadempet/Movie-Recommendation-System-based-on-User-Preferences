@@ -34,41 +34,48 @@ Override via environment:
     NOVA_SERVING_PROFILE=full|lite       (legacy mapping)
 """
 
-from backend.intelligence.active_inference_engine import get_active_inference_engine
-from backend.learning.kan_online_learner import KANOnlineLearner
-from backend.learning.online_learner import OnlineLearner
-from backend.learning.online_learning_coordinator import OnlineLearningCoordinator
-from backend.learning.sasrec_online_learner import SASRecOnlineLearner
-from backend.models.model_loader import ensure_model_files
-from backend.serving.artifact_health import evaluate_artifact_health
-from backend.serving.artifact_validator import ArtifactValidator
-from backend.serving.onnx_engine import get_onnx_engine
-from backend.serving.realtime_feature_updater import get_user_session_sequence, update_user_index
-from backend.serving.serving_tier import HardwareProfile, TierDetector, resolve_serving_tier
-from backend.serving.slo import RequestSloTracker, build_slo_report
+# ---------------------------------------------------------------------------
+# Lazy Imports — Avoid importing heavy sub-modules at package initialization.
+# ---------------------------------------------------------------------------
+import importlib
 
-__all__ = [
+_LAZY_MAPPING = {
     # Tier detection
-    "TierDetector",
-    "HardwareProfile",
-    "resolve_serving_tier",
+    "TierDetector": "backend.serving.serving_tier",
+    "HardwareProfile": "backend.serving.serving_tier",
+    "resolve_serving_tier": "backend.serving.serving_tier",
     # ONNX inference
-    "get_onnx_engine",
+    "get_onnx_engine": "backend.serving.onnx_engine",
     # Online learning
-    "OnlineLearner",
-    "SASRecOnlineLearner",
-    "KANOnlineLearner",
-    "OnlineLearningCoordinator",
+    "OnlineLearner": "backend.learning.online_learner",
+    "SASRecOnlineLearner": "backend.learning.sasrec_online_learner",
+    "KANOnlineLearner": "backend.learning.kan_online_learner",
+    "OnlineLearningCoordinator": "backend.learning.online_learning_coordinator",
     # Active inference
-    "get_active_inference_engine",
+    "get_active_inference_engine": "backend.intelligence.active_inference_engine",
     # Real-time features
-    "get_user_session_sequence",
-    "update_user_index",
+    "get_user_session_sequence": "backend.serving.realtime_feature_updater",
+    "update_user_index": "backend.serving.realtime_feature_updater",
     # Artifact management
-    "evaluate_artifact_health",
-    "ArtifactValidator",
-    "ensure_model_files",
+    "evaluate_artifact_health": "backend.serving.artifact_health",
+    "ArtifactValidator": "backend.serving.artifact_validator",
+    "ensure_model_files": "backend.models.model_loader",
     # SLO
-    "RequestSloTracker",
-    "build_slo_report",
-]
+    "RequestSloTracker": "backend.serving.slo",
+    "build_slo_report": "backend.serving.slo",
+}
+
+
+def __getattr__(name: str):
+    if name in _LAZY_MAPPING:
+        module_path = _LAZY_MAPPING[name]
+        module = importlib.import_module(module_path)
+        return getattr(module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    return sorted(_LAZY_MAPPING.keys())
+
+
+__all__ = list(_LAZY_MAPPING.keys())

@@ -6,7 +6,7 @@
 
 ## 1. Get your API key
 
-Sign up at `https://your-apex-domain.com/signup`.  
+Sign up at `https://your-apex-domain.com/signup`.
 Your API key is shown **once** at registration. Store it in a password manager or your
 secrets vault — it cannot be recovered, only rotated.
 

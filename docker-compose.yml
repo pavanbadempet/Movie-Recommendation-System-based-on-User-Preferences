@@ -3,7 +3,7 @@ services:
   # 1. CORE API BACKEND (FastAPI + PyTorch + FAISS + APEX Ensemble)
   # ---------------------------------------------------------------------------
   nova-backend:
-    build: 
+    build:
       context: .
       dockerfile: backend/Dockerfile
     container_name: apex-backend

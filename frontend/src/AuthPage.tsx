@@ -15,10 +15,10 @@ export function AuthPage({ onLogin }: { onLogin: (token: string, username: strin
       setError("Username and password are required");
       return;
     }
-    
+
     setLoading(true);
     setError("");
-    
+
     try {
       if (!isLogin) {
         await registerUser(username, password);
@@ -28,7 +28,7 @@ export function AuthPage({ onLogin }: { onLogin: (token: string, username: strin
         setLoading(false);
         return;
       }
-      
+
       const res = await loginUser(username, password);
       if (res.data.access_token) {
         window.localStorage.setItem("nova_jwt_token", res.data.access_token);
@@ -50,15 +50,15 @@ export function AuthPage({ onLogin }: { onLogin: (token: string, username: strin
           <h1>{isLogin ? "Welcome Back" : "Join Nova"}</h1>
           <p>{isLogin ? "Sign in to continue your personalized session" : "Create an account for this browser session"}</p>
         </div>
-        
+
         {error && <div className={`auth-error ${error.includes('successful') ? 'success' : ''}`}>{error}</div>}
-        
+
         <form onSubmit={handleSubmit} className="auth-form">
           <div className="input-group">
             <User size={18} />
-            <input 
-              type="text" 
-              placeholder="Username" 
+            <input
+              type="text"
+              placeholder="Username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               disabled={loading}
@@ -66,20 +66,20 @@ export function AuthPage({ onLogin }: { onLogin: (token: string, username: strin
           </div>
           <div className="input-group">
             <Lock size={18} />
-            <input 
-              type="password" 
+            <input
+              type="password"
               placeholder={isLogin ? "Password" : "Create password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={loading}
             />
           </div>
-          
+
           <button type="submit" className="auth-submit" disabled={loading}>
             {loading ? <Loader2 size={18} className="spin" /> : <>{isLogin ? "Sign In" : "Create Account"} <ArrowRight size={18}/></>}
           </button>
         </form>
-        
+
         <div className="auth-footer">
           <button type="button" onClick={() => { setIsLogin(!isLogin); setError(""); }}>
             {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}

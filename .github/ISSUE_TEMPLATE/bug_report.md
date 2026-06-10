@@ -10,9 +10,9 @@ assignees: pavanpajjuri
 <!-- A clear, concise description of what is broken. -->
 
 ## Steps to reproduce
-1. 
-2. 
-3. 
+1.
+2.
+3.
 
 ## Expected behaviour
 <!-- What should happen. -->

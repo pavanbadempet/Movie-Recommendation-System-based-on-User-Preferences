@@ -681,9 +681,9 @@ function MovieSpotlight({
           )}
         </div>
         <p>{movie.overview || "No overview is available for this title."}</p>
-        
+
         <div className="interaction-panel">
-          <button 
+          <button
             className={`interaction-btn ${likedStatus === "liked" ? "active-like" : ""}`}
             title="Like this movie"
             onClick={async () => {
@@ -703,9 +703,9 @@ function MovieSpotlight({
           >
             <ThumbsUp size={16} fill={likedStatus === "liked" ? "currentColor" : "none"} /> Like
           </button>
-          <button 
+          <button
             className={`interaction-btn ${likedStatus === "disliked" ? "active-dislike" : ""}`}
-            title="Dislike this movie" 
+            title="Dislike this movie"
             onClick={async () => {
               try {
                 await recordEvent({
@@ -1678,7 +1678,7 @@ function App() {
     return (
       <div className="app-container" id="main-content">
         <a href="#main-content" className="skip-link">Skip to main content</a>
-        
+
         {/* Unified Sticky top navigation header */}
         <header className="topbar">
           <div className="topbar-left">

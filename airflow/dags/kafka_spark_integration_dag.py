@@ -6,23 +6,24 @@ in the movie recommendation pipeline using the new Kafka cluster for Bronze laye
 """
 
 from datetime import datetime, timedelta
-from airflow import DAG
+
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
-import sys
-import os
+
+from airflow import DAG
 
 # Default args
 default_args = {
-    'owner': 'airflow',
-    'depends_on_past': False,
-    'start_date': datetime(2024, 1, 1),
-    'email_on_failure': False,
-    'email_on_retry': False,
-    'retries': 3,
-    'retry_delay': timedelta(minutes=5),
-    'retry_exponential_backoff': True,
+    "owner": "airflow",
+    "depends_on_past": False,
+    "start_date": datetime(2024, 1, 1),
+    "email_on_failure": False,
+    "email_on_retry": False,
+    "retries": 3,
+    "retry_delay": timedelta(minutes=5),
+    "retry_exponential_backoff": True,
 }
+
 
 def check_kafka_connection():
     """Check if Kafka cluster is available and accessible"""
@@ -31,8 +32,7 @@ def check_kafka_connection():
 
     try:
         admin_client = KafkaAdminClient(
-            bootstrap_servers="kafka-1:9092,kafka-2:9092,kafka-3:9092",
-            client_id='airflow-connection-test'
+            bootstrap_servers="kafka-1:9092,kafka-2:9092,kafka-3:9092", client_id="airflow-connection-test"
         )
         topics = admin_client.list_topics()
         admin_client.close()
@@ -40,18 +40,19 @@ def check_kafka_connection():
     except KafkaError as e:
         raise ValueError(f"Kafka cluster connection failed: {e}")
 
+
 def check_spark_connection():
     """Check if Spark is available and accessible"""
-    import pyspark
     from pyspark.sql import SparkSession
 
     try:
-        spark = SparkSession.builder \
-            .appName("AirflowConnectionTest") \
-            .master("spark://spark:7077") \
-            .config("spark.executor.memory", "2g") \
-            .config("spark.driver.memory", "1g") \
+        spark = (
+            SparkSession.builder.appName("AirflowConnectionTest")
+            .master("spark://spark:7077")
+            .config("spark.executor.memory", "2g")
+            .config("spark.driver.memory", "1g")
             .getOrCreate()
+        )
 
         spark_version = spark.version
         spark.stop()
@@ -59,30 +60,30 @@ def check_spark_connection():
     except Exception as e:
         raise ValueError(f"Spark connection failed: {e}")
 
-with DAG(
-    'kafka_spark_integration',
-    default_args=default_args,
-    description='Kafka and Spark integration for movie recommendation pipeline (Bronze layer)',
-    schedule='@daily',
-    catchup=False,
-    tags=['integration', 'kafka', 'spark', 'data-pipeline', 'bronze-layer'],
-) as dag:
 
+with DAG(
+    "kafka_spark_integration",
+    default_args=default_args,
+    description="Kafka and Spark integration for movie recommendation pipeline (Bronze layer)",
+    schedule="@daily",
+    catchup=False,
+    tags=["integration", "kafka", "spark", "data-pipeline", "bronze-layer"],
+) as dag:
     # Task 1: Check Kafka connection
     t0_check_kafka = PythonOperator(
-        task_id='check_kafka_connection',
+        task_id="check_kafka_connection",
         python_callable=check_kafka_connection,
     )
 
     # Task 2: Check Spark connection
     t1_check_spark = PythonOperator(
-        task_id='check_spark_connection',
+        task_id="check_spark_connection",
         python_callable=check_spark_connection,
     )
 
     # Task 3: Create Kafka topic for movie events (Bronze layer)
     t2_create_topic = BashOperator(
-        task_id='create_movie_events_topic',
+        task_id="create_movie_events_topic",
         bash_command="""
         kafka-topics.sh --bootstrap-server kafka-1:9092 \
           --create --if-not-exists \
@@ -94,7 +95,7 @@ with DAG(
 
     # Task 4: Simulate producing movie events to Kafka (Bronze layer)
     t3_produce_events = BashOperator(
-        task_id='produce_movie_events',
+        task_id="produce_movie_events",
         bash_command="""
         cd /opt/airflow/movie-rec
         python -c "
@@ -131,7 +132,7 @@ with DAG(
 
     # Task 5: Process events with Spark (Bronze layer)
     t4_process_events = BashOperator(
-        task_id='process_events_with_spark',
+        task_id="process_events_with_spark",
         bash_command="""
         cd /opt/airflow/movie-rec
         python -c "
@@ -187,13 +188,13 @@ with DAG(
 
     # Task 6: Run Spark ETL with Delta Lake support
     t5_spark_etl = BashOperator(
-        task_id='run_spark_etl_with_delta',
+        task_id="run_spark_etl_with_delta",
         bash_command=(
-            'cd /opt/airflow/movie-rec && python etl/pyspark_etl.py '
+            "cd /opt/airflow/movie-rec && python etl/pyspark_etl.py "
             '--date {{ ds }} --run-id "{{ run_id }}" --sink delta '
             '--tenant-id "${NOVA_TENANT_ID:-demo-media-co}" '
             '--catalog-id "${NOVA_CATALOG_ID:-tmdb-movies}" '
-            '--source-system tmdb_kaggle'
+            "--source-system tmdb_kaggle"
         ),
     )
 
