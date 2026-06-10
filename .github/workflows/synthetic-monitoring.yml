@@ -31,6 +31,8 @@ jobs:
           python-version: "3.11"
 
       - name: Probe live product paths
+        id: probe
+        continue-on-error: true
         run: >-
           python scripts/synthetic_monitor.py
           --base-url "$NOVA_SERVING_URL"
@@ -40,6 +42,40 @@ jobs:
           --retry-delay-seconds 30
           --output reports/synthetic_monitor.json
           --fail-on-error
+
+      - name: Create Issue on Failure
+        if: steps.probe.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPORT=$(cat reports/synthetic_monitor.json || echo '{"error": "Failed to read report"}')
+          ISSUE_BODY="## Synthetic Monitor Failed
+
+The synthetic monitor detected a failure in the live application.
+
+**Workflow Run**: [View Logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+**Details**:
+\`\`\`json
+$REPORT
+\`\`\`
+
+*This issue was created automatically by the synthetic monitoring action to trigger the autonomous bug fixing agent.*"
+
+          # Check if an issue for this already exists to avoid spam
+          EXISTING_ISSUE=$(gh issue list --state open --search "Synthetic Monitor Failed in:title" --json number --jq '.[0].number')
+
+          if [ -z "$EXISTING_ISSUE" ]; then
+            echo -e "$ISSUE_BODY" > issue_body.md
+            gh issue create \
+              --title "Bug: Synthetic Monitor Failed" \
+              --body-file issue_body.md \
+              --label "bug,automated"
+          else
+            echo "Issue already exists: #$EXISTING_ISSUE. Adding a comment."
+            gh issue comment "$EXISTING_ISSUE" --body "Monitor failed again. See run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          fi
+          /bin/false
 
       - name: Upload monitor report
         if: always()

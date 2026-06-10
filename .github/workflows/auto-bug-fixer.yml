@@ -1,0 +1,72 @@
+name: Auto Bug Fixer
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  auto-fix:
+    runs-on: ubuntu-latest
+    if: contains(github.event.issue.labels.*.name, 'automated') || contains(github.event.issue.labels.*.name, 'bug')
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create Fix Branch
+        id: branch
+        run: |
+          BRANCH_NAME="auto-fix-issue-${{ github.event.issue.number }}"
+          git checkout -b "$BRANCH_NAME"
+          echo "branch_name=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Run Autonomous Agent
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          python scripts/autonomous_agent.py
+
+      - name: Commit and Push Fix
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "Auto-fix for Issue #${{ github.event.issue.number }}"
+
+            git push origin "${{ steps.branch.outputs.branch_name }}"
+            # Create Pull Request
+            PR_URL=$(gh pr create \
+              --title "Auto-fix: ${{ github.event.issue.title }}" \
+              --body-file agent_log.md \
+              --head "${{ steps.branch.outputs.branch_name }}" \
+              --base main)
+
+            # Comment on the issue that a PR was created
+            gh issue comment "${{ github.event.issue.number }}" --body "An autonomous agent has attempted to fix this issue. Review the PR here: $PR_URL"
+          else
+            echo "No changes made by the agent."
+            # Comment on the issue that the agent failed to find a fix
+            if [ -f agent_log.md ]; then
+              gh issue comment "${{ github.event.issue.number }}" --body-file agent_log.md
+              gh issue comment "${{ github.event.issue.number }}" --body "The autonomous agent ran but could not generate a valid code change to fix this issue."
+            fi
+          fi
