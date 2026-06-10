@@ -141,6 +141,9 @@ from backend.metrics.evaluation import evaluate_recommendation_quality
 from backend.metrics.recommendation_benchmark import load_recommendation_benchmark
 from backend.metrics.search_benchmark import evaluate_search_benchmark
 
+_start_background_semantic_benchmark = start_background_semantic_benchmark
+_start_background_recommendation_benchmark = start_background_recommendation_benchmark
+
 # Optional middleware — imported conditionally in the middleware section below
 from backend.models.ensemble_engine import get_apex_engine
 from backend.pipeline import recommender_helpers
