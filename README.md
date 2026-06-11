@@ -96,6 +96,26 @@ Clickstream rating feeds are ingested asynchronously. Sequential candidate vecto
 * **Event Coordinated Updates**: Rating and click actions are written to a message store, where the `OnlineLearningCoordinator` pushes updates to models asynchronously, updating sequence history vectors and KAN weights instantly without full batch model rebuilds.
 * **State Sync**: Clickstream features are immediately compiled into the user behavior profile cache, keeping recommendations contextually relevant to the active browsing session.
 
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as User Client
+    participant API as FastAPI Gateway
+    participant Redis as Redis Cache
+    participant Coordinator as Online Learning Coordinator
+    participant Models as Ensemble Models (KAN/SASRec)
+
+    User->>API: POST /v1/events (Rating/Click)
+    API->>Redis: Ingest Clickstream Log (Append to Sequence)
+    API->>Coordinator: Trigger Event Signal (Async)
+    Note over API,Coordinator: Response 202 Accepted immediately returned to User
+    Coordinator->>Redis: Fetch User History Session Queue
+    Redis-->>Coordinator: User Session History Vector
+    Coordinator->>Models: Push online training inputs (mini-batch SGD)
+    Models-->>Models: Update KAN Spline weights & SASRec sequence state
+    Note over Coordinator,Models: Model weights hot-swapped in memory
+```
+
 ### 4. Differential Privacy & Auditing
 * **$\epsilon$-Differential Privacy ($\epsilon$-DP)**: Implements calibrated Laplace noise injection during aggregation to protect sensitive user watch profiles and clickstreams from membership inference or database reconstruction attacks.
 * **Fairness & Gini Metrics**: Periodic evaluation computes Gini coefficients and KL-divergence over demographic recommendations to audit and prevent systemic catalog coverage bias.
@@ -314,6 +334,44 @@ npm run dev
 | `POST`| `/v1/events` | Ingests clickstream actions (clicks/ratings) for online learner. | `{"user_id": 1, "movie_id": 550, "event_type": "rating", "rating": 5.0}` |
 
 *Append `?explain=true` to recommendation endpoints to generate natural-language explanations powered by LLMs.*
+
+## 🗃 Delta Lake Medallion Data Architecture
+
+APEX implements a structured **Delta Lake Medallion Architecture** using PySpark for scaling to 10M+ records. Clickstream raw logs are systematically cleaned, contextualized, and aggregated down to high-performance Gold serving layers:
+
+```mermaid
+erDiagram
+    BronzeRawRatings {
+        string userId
+        string movieId
+        string rating
+        string timestamp
+        string ingestionTime
+    }
+    SilverCleanedRatings {
+        int user_id PK
+        int movie_id PK
+        float rating
+        timestamp interaction_time
+        boolean is_processed
+    }
+    GoldUserFeatures {
+        int user_id PK
+        array sequence_history
+        vector user_embedding_768d
+        timestamp last_updated
+    }
+    GoldMovieFeatures {
+        int movie_id PK
+        vector movie_embedding_768d
+        string genres
+        float popularity_score
+    }
+
+    BronzeRawRatings ||--o{ SilverCleanedRatings : transforms
+    SilverCleanedRatings ||--|| GoldUserFeatures : updates
+    SilverCleanedRatings ||--|| GoldMovieFeatures : references
+```
 
 <img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
 
