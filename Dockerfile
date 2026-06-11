@@ -32,6 +32,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY etl/ ./etl/
 COPY backend/ ./backend/
 COPY frontend/streamlit_app.py ./frontend/streamlit_app.py
+COPY REVISION* ./
 
 # Fail image builds early if synced Python source has a syntax error.
 RUN python -m compileall backend etl frontend/streamlit_app.py

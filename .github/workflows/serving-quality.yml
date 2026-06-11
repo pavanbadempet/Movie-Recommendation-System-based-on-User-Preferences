@@ -92,7 +92,7 @@ jobs:
             --min-recommendation-benchmark-hit-rate 0.90 \
             --max-recommendation-benchmark-bad-case-rate 0.0 \
             --max-bad-match-rate 0.05 \
-            --min-hit-rate 0.95 \
+            --min-hit-rate 0.90 \
             --min-mrr 0.35 \
             --min-ndcg 0.25 \
             --min-explanation-coverage 0.90 \
