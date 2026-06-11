@@ -234,14 +234,20 @@ class OnlineLearner:
             safe_item = int(movie_id) % num_items
 
             if interaction_weight > 0:
-                # Positive interaction: user liked safe_item
+                # Positive interaction: user liked safe_item.
+                # Ensure neg_item != safe_item so BPR loss is non-zero.
                 neg_item = random.randrange(num_items)
+                while neg_item == safe_item:
+                    neg_item = random.randrange(num_items)
                 users.append(safe_user)
                 pos_items.append(safe_item)
                 neg_items.append(neg_item)
             else:
-                # Negative interaction: user disliked safe_item — swap roles
+                # Negative interaction: user disliked safe_item — swap roles.
+                # Ensure random_item != safe_item so BPR loss is non-zero.
                 random_item = random.randrange(num_items)
+                while random_item == safe_item:
+                    random_item = random.randrange(num_items)
                 users.append(safe_user)
                 pos_items.append(random_item)
                 neg_items.append(safe_item)
