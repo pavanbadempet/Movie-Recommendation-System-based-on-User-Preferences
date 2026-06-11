@@ -307,4 +307,3 @@ curl http://127.0.0.1:8000/api/v2/recommend/ensemble/classifications
 
 > [!NOTE]
 > Offline evaluation metrics (HR@10 and NDCG@10) may vary by up to ±2% due to random candidate sampling of negative items.
-

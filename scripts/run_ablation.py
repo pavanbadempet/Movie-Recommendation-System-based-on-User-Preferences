@@ -65,11 +65,7 @@ def _ndcg_at_k(ranked_items: list[int], ground_truth: set[int], k: int = 10) -> 
     if not ground_truth:
         return 0.0
     top_k = ranked_items[:k]
-    dcg = sum(
-        1.0 / math.log2(rank + 2)
-        for rank, item in enumerate(top_k)
-        if item in ground_truth
-    )
+    dcg = sum(1.0 / math.log2(rank + 2) for rank, item in enumerate(top_k) if item in ground_truth)
     idcg = _ideal_dcg(len(ground_truth), k)
     return dcg / idcg if idcg > 0 else 0.0
 
@@ -103,11 +99,7 @@ def _ips_ndcg_at_k(
         return min(1.0 / max(p, 1e-6), clip_val)
 
     top_k = ranked_items[:k]
-    dcg = sum(
-        ips_weight(item) / math.log2(rank + 2)
-        for rank, item in enumerate(top_k)
-        if item in ground_truth
-    )
+    dcg = sum(ips_weight(item) / math.log2(rank + 2) for rank, item in enumerate(top_k) if item in ground_truth)
     gt_weights = sorted([ips_weight(item) for item in ground_truth], reverse=True)
     idcg = sum(w / math.log2(rank + 2) for rank, w in enumerate(gt_weights[:k]))
     return dcg / idcg if idcg > 0 else 0.0
@@ -205,11 +197,7 @@ def _precompute_per_model_scores(
                 seen.add(item)
                 all_item_ids.append(item)
 
-    valid_users = [
-        uid
-        for uid, gt in val_ground_truth.items()
-        if gt and train_history.get(uid)
-    ]
+    valid_users = [uid for uid, gt in val_ground_truth.items() if gt and train_history.get(uid)]
     if len(valid_users) > max_users:
         valid_users = rng.sample(valid_users, max_users)
 
@@ -299,8 +287,7 @@ def _precompute_per_model_scores(
             )
 
             per_model_scores[user_id] = {
-                orig_id: scores_matrix[idx].tolist()
-                for idx, orig_id in enumerate(candidate_ids)
+                orig_id: scores_matrix[idx].tolist() for idx, orig_id in enumerate(candidate_ids)
             }
             evaluated += 1
 
@@ -372,10 +359,7 @@ def _evaluate_ensemble(
         gt = val_ground_truth.get(user_id, set())
         if not gt or not item_scores:
             continue
-        blended = {
-            item_id: float(np.dot(weight_vector, np.array(ms)))
-            for item_id, ms in item_scores.items()
-        }
+        blended = {item_id: float(np.dot(weight_vector, np.array(ms))) for item_id, ms in item_scores.items()}
         ranked = sorted(item_scores.keys(), key=lambda x: blended.get(x, 0.0), reverse=True)
         ndcg_scores.append(_ndcg_at_k(ranked, gt, k))
         hit_scores.append(_hit_rate_at_k(ranked, gt, k))
@@ -527,8 +511,7 @@ def run_ablation(num_users: int = 200, num_candidates: int = 100) -> None:
 
     if not user_events:
         logger.warning(
-            "No interaction data found in Event Store. "
-            "Generating synthetic evaluation data (users=%d) …",
+            "No interaction data found in Event Store. Generating synthetic evaluation data (users=%d) …",
             num_users,
         )
         # Generate synthetic leave-one-out data
@@ -539,10 +522,12 @@ def run_ablation(num_users: int = 200, num_candidates: int = 100) -> None:
             n_events = rng_syn.randint(5, 30)
             events = []
             for j in range(n_events):
-                events.append({
-                    "event_ts": f"2024-01-{j + 1:02d}T00:00:00Z",
-                    "movie_id": rng_syn.randint(1, 10000),
-                })
+                events.append(
+                    {
+                        "event_ts": f"2024-01-{j + 1:02d}T00:00:00Z",
+                        "movie_id": rng_syn.randint(1, 10000),
+                    }
+                )
             user_events[uid] = events
 
     train_history, val_ground_truth = _build_leave_one_out_split(user_events)
@@ -648,7 +633,11 @@ def run_ablation(num_users: int = 200, num_candidates: int = 100) -> None:
     actual_users = len(per_model_scores)
     _print_results_table(model_results, ensemble_results, weights, actual_users, num_candidates)
     output_path = _write_ablation_results_md(
-        model_results, ensemble_results, weights, actual_users, num_candidates,
+        model_results,
+        ensemble_results,
+        weights,
+        actual_users,
+        num_candidates,
     )
     logger.info("Ablation evaluation complete. Results at %s", output_path)
 
@@ -663,8 +652,12 @@ def _run_fallback_ablation(num_users: int, num_candidates: int) -> None:
 
     rng = np.random.default_rng(42)
     default_weights = {
-        "lightgcn": 0.65, "quantum": 0.25, "sasrec": 0.10,
-        "kan": 0.00, "hyperbolic": 0.00, "diffusion": 0.00,
+        "lightgcn": 0.65,
+        "quantum": 0.25,
+        "sasrec": 0.10,
+        "kan": 0.00,
+        "hyperbolic": 0.00,
+        "diffusion": 0.00,
     }
 
     # Simulate per-model scores
@@ -676,26 +669,33 @@ def _run_fallback_ablation(num_users: int, num_candidates: int) -> None:
         neg_items = rng.integers(1, 10001, size=num_candidates).tolist()
         candidate_ids = [int(gt_item)] + neg_items
         val_ground_truth[str(uid)] = {int(gt_item)}
-        per_model_scores[str(uid)] = {
-            item_id: rng.random(6).tolist()
-            for item_id in candidate_ids
-        }
+        per_model_scores[str(uid)] = {item_id: rng.random(6).tolist() for item_id in candidate_ids}
 
     popularity: dict[int, float] = {}
 
     model_results: dict[str, dict[str, float]] = {}
     for idx, model_name in enumerate(MODEL_NAMES):
         model_results[model_name] = _evaluate_single_model(
-            idx, per_model_scores, val_ground_truth, popularity,
+            idx,
+            per_model_scores,
+            val_ground_truth,
+            popularity,
         )
 
     ensemble_results = _evaluate_ensemble(
-        default_weights, per_model_scores, val_ground_truth, popularity,
+        default_weights,
+        per_model_scores,
+        val_ground_truth,
+        popularity,
     )
 
     _print_results_table(model_results, ensemble_results, default_weights, num_users, num_candidates)
     _write_ablation_results_md(
-        model_results, ensemble_results, default_weights, num_users, num_candidates,
+        model_results,
+        ensemble_results,
+        default_weights,
+        num_users,
+        num_candidates,
     )
     logger.warning(
         "FALLBACK MODE: These results use random scores because the ensemble "
