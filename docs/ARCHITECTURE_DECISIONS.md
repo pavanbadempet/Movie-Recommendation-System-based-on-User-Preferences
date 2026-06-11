@@ -254,6 +254,50 @@ LightGCN's near-zero weight (0.005) in this run reflects sparse live event data 
 
 **Alternatives Rejected:** Standard NDCG@10 grid search was rejected because it is biased toward popular items. Bayesian optimization over the weight simplex was considered but rejected as over-engineering for a 6-dimensional search space — random Dirichlet sampling with 200 candidates is sufficient to find a good solution. Online bandit-based weight adaptation was considered but rejected because it requires a production traffic stream to generate feedback, which is not available in the current deployment.
 
+### Mathematical Formulation
+
+The Doubly Robust (DR) estimator combines a direct reward model r̂ with Inverse Propensity Scoring (IPS) to produce an unbiased estimate of a target policy's value:
+
+```
+            1   n
+V_DR(π) =  — · Σ  [ r̂(xᵢ, aᵢ)  +  (rᵢ − r̂(xᵢ, aᵢ)) · π(aᵢ|xᵢ) / p(aᵢ|xᵢ) ]
+            n  i=1
+```
+
+where:
+- `rᵢ` is the observed reward (1 if user interacted, 0 otherwise)
+- `r̂(xᵢ, aᵢ)` is the direct reward model's predicted click probability for user `xᵢ` and item `aᵢ`
+- `p(aᵢ|xᵢ)` is the logging policy's propensity — estimated from the empirical impression frequency in the event store
+- `π(aᵢ|xᵢ)` is the target policy's probability of recommending item `aᵢ` to user `xᵢ`
+
+The DR estimator is **doubly robust** because it is unbiased if *either* the reward model r̂ is correct *or* the propensity model p is correct. This is strictly better than pure IPS (unbiased only if p is correct) or pure direct method (unbiased only if r̂ is correct).
+
+#### Worked Example: 3-Item Popularity Correction
+
+Consider a user who has interacted with three items: a blockbuster, a mid-tier film, and a niche indie.
+
+| Item | Observed Reward rᵢ | Propensity p(aᵢ) | IPS Weight 1/p | Direct Model r̂ |
+|---|---|---|---|---|
+| Blockbuster (id=1) | 1 (clicked) | 0.40 (shown to 40% of users) | 2.5 | 0.85 |
+| Mid-tier (id=2) | 1 (clicked) | 0.10 (shown to 10% of users) | 10.0 | 0.60 |
+| Niche Indie (id=3) | 0 (not clicked) | 0.02 (shown to 2% of users) | 50.0 (clipped to 10) | 0.30 |
+
+**Without IPS correction (standard NDCG):** The blockbuster and mid-tier film contribute equally (both clicked), so a model that ranks the blockbuster higher scores the same as one that ranks the mid-tier higher. This rewards popularity matching.
+
+**With IPS correction:** The mid-tier click is reweighted by 10.0× (inverse of its low propensity), while the blockbuster click is only reweighted by 2.5×. The DR estimator gives ~4× more credit for correctly predicting the mid-tier interaction, because discovering that preference is more informative than confirming a popular item's popularity.
+
+The IPS weight for the niche indie (50.0) is **clipped** to `clip_val=10.0` to prevent variance explosion from extremely rare items.
+
+#### Dirichlet Sampling on the 6-Simplex
+
+To search over the weight space, 200 candidate weight vectors are sampled from a symmetric Dirichlet distribution:
+
+```
+w₁, w₂, ..., w₂₀₀  ~  Dirichlet(α = [1, 1, 1, 1, 1, 1])
+```
+
+Each wᵢ is a 6-dimensional vector that sums to 1 (one weight per ensemble component: LightGCN, Quantum, SASRec, KAN, Hyperbolic, Diffusion). The symmetric Dirichlet with α=1 produces a uniform distribution over the 6-simplex, ensuring that all weight combinations are explored without bias toward any particular model. Each candidate is scored by V_DR, and the weight vector with the highest DR score is selected and written to `models/ensemble_weights.json`.
+
 ---
 
 ## ADR-008: Unified Online Learning Coordinator — Closing the Feedback Loop

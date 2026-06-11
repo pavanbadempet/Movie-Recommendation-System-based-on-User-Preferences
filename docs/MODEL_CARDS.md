@@ -287,3 +287,24 @@ Each model addresses a distinct failure mode of the others:
 | Popularity bias in training | IPS-weighted BPR + DR weight selection |
 
 No single model addresses all failure modes. The ensemble, with DR-optimized weights, achieves +4.3% NDCG@10 lift over the best individual model.
+
+---
+
+## Reproducing These Results
+
+You can reproduce the offline evaluation metrics and study the ablation results for the ensemble using the following steps:
+
+```bash
+# Reproduce all metrics in this document and generate docs/ABLATION_RESULTS.md
+python scripts/run_ablation.py --users 200 --candidates 100
+
+# Re-optimize ensemble weights (requires event store data)
+python scripts/causal_debias_training.py
+
+# View per-model classifications
+curl http://127.0.0.1:8000/api/v2/recommend/ensemble/classifications
+```
+
+> [!NOTE]
+> Offline evaluation metrics (HR@10 and NDCG@10) may vary by up to ±2% due to random candidate sampling of negative items.
+
