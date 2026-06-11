@@ -3,7 +3,7 @@ name: Feature request
 about: Suggest a new capability or improvement
 title: "[FEAT] "
 labels: enhancement
-assignees: pavanpajjuri
+assignees: pavanbadempet
 ---
 
 ## Problem / motivation

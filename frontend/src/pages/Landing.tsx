@@ -487,7 +487,7 @@ console.log(\`Top recommendation: \${recommendations[0].title}\`);`
             Status
           </button>
           <a
-            href="https://github.com/pavanpajjuri/Movie-Recommendation-System"
+            href="https://github.com/pavanbadempet/Movie-Recommendation-System"
             target="_blank"
             rel="noreferrer"
             aria-label="APEX source code on GitHub (opens in new tab)"

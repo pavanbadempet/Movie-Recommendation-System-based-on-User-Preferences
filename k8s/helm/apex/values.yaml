@@ -11,7 +11,7 @@ replicaCount: 2
 # Container image
 # ---------------------------------------------------------------------------
 image:
-  repository: ghcr.io/pavanpajjuri/apex-backend
+  repository: ghcr.io/pavanbadempet/apex-backend
   pullPolicy: IfNotPresent
   # Pin to a specific tag in production — never use "latest" in prod
   tag: "2.1.0"

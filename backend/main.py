@@ -309,7 +309,7 @@ app = FastAPI(
         "and adaptive 3-tier serving (GPU / ONNX CPU / FAISS lite).\n\n"
         "**Interactive docs:** `/docs` (Swagger UI) · `/redoc` (ReDoc)\n\n"
         "**Full API reference:** [docs/API_REFERENCE.md]"
-        "(https://github.com/pavanpajjuri/Movie-Recommendation-System/blob/main/docs/API_REFERENCE.md)"
+        "(https://github.com/pavanbadempet/Movie-Recommendation-System/blob/main/docs/API_REFERENCE.md)"
     ),
     version=APP_VERSION,
     lifespan=lifespan,
@@ -335,7 +335,7 @@ app = FastAPI(
     ],
     contact={
         "name": "APEX Project",
-        "url": "https://github.com/pavanpajjuri/Movie-Recommendation-System",
+        "url": "https://github.com/pavanbadempet/Movie-Recommendation-System",
     },
     license_info={
         "name": "MIT",
