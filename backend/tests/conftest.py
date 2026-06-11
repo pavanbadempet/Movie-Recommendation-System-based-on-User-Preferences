@@ -2,10 +2,12 @@
 
 import json
 import sys
-import pytest
+
 import numpy as np
 import pandas as pd
+import pytest
 from turbovec import TurboQuantIndex
+
 
 @pytest.fixture(autouse=True)
 def _backend_test_env(tmp_path, monkeypatch):
@@ -81,4 +83,3 @@ def _backend_test_env(tmp_path, monkeypatch):
     rec._recommender = None
     if "backend.main" in sys.modules:
         sys.modules["backend.main"]._recommender = None
-
