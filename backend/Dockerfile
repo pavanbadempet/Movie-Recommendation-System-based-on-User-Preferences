@@ -3,6 +3,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Install system dependencies — no-install-recommends keeps the layer lean
+# hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
@@ -11,7 +12,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install Python dependencies
 COPY requirements.txt .
 # Adding torch explicitly for the Quantum ML algorithms
+# hadolint ignore=DL3013
 RUN pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+# hadolint ignore=DL3059
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend source and the serving artifacts used by local compose builds.
