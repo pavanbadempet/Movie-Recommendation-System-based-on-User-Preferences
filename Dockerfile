@@ -19,6 +19,7 @@ FROM python:3.11-slim AS builder
 WORKDIR /app
 
 # Install build dependencies
+# hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
@@ -38,12 +39,14 @@ RUN python -m compileall backend etl frontend/streamlit_app.py
 # Copy Pre-computed Models and Data (present in production builds; skipped in CI)
 # Use COPY with a wildcard so the layer is a no-op when the directories are absent
 # rather than failing with "no source files were specified".
+# hadolint ignore=DL3059
 RUN mkdir -p models data/processed data/evaluation
 COPY models/ ./models/
 COPY data/processed/ ./data/processed/
 COPY data/evaluation/ ./data/evaluation/
 
 # Create other directories
+# hadolint ignore=DL3059
 RUN mkdir -p data/raw logs
 
 # -------------------------------------------
@@ -53,6 +56,7 @@ FROM python:3.11-slim AS runtime
 WORKDIR /app
 
 # Install runtime dependencies only
+# hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
