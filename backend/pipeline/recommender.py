@@ -510,7 +510,7 @@ class Recommender:
         """Search movies by title, overview, and genres. Delegates to pipeline or sparse fallback."""
         if not query or self._movies is None:
             return []
-        if self._retrieval_pipeline is not None:
+        if self._retrieval_pipeline is not None and self._dense_query_enabled():
             try:
                 encoder = self._get_query_encoder()
                 query_embedding = encoder.encode([query], convert_to_numpy=True)
@@ -630,7 +630,7 @@ class Recommender:
         """Multi-stage AI search. Delegates to pipeline or legacy SBERT+FAISS+MMR fallback."""
         if not query or self._movies is None:
             return []
-        if self._retrieval_pipeline is not None:
+        if self._retrieval_pipeline is not None and self._dense_query_enabled():
             try:
                 encoder = self._get_query_encoder()
                 query_embedding = encoder.encode([query], convert_to_numpy=True)
