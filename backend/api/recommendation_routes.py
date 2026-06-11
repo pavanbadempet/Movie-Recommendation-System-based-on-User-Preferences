@@ -557,12 +557,15 @@ def create_core_router(
         load_rec_env = os.getenv("NOVA_HEALTH_LOAD_RECOMMENDER", "true").strip().lower()
         if load_rec_env in {"0", "false", "no", "off"}:
             from backend.pipeline import recommender as recommender_module
+            from backend.data.remote_recommender import remote_recommender_url
 
             report = evaluate_artifact_health(
                 models_dir=recommender_module.MODELS_DIR, data_dir=recommender_module.DATA_DIR
             )
+            is_remote = bool(remote_recommender_url())
+            has_movies = bool(report.get("files", {}).get("movies", {}).get("exists"))
             return HealthResponse(
-                status="healthy" if report.get("files", {}).get("movies", {}).get("exists") else "degraded",
+                status="healthy" if (has_movies or is_remote) else "degraded",
                 movie_count=int((report.get("row_counts") or {}).get("movies") or 0),
                 app_version=metadata["version"],
                 app_commit=metadata["commit"],

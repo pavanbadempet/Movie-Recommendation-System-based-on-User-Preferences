@@ -75,5 +75,12 @@ jobs:
                   '*.err',
               ]
           )
+          print('Uploading REVISION file explicitly...')
+          api.upload_file(
+              path_or_fileobj='REVISION',
+              path_in_repo='REVISION',
+              repo_id='pavanbadempet/movie-rec-api',
+              repo_type='space'
+          )
           print('Upload complete!')
           "
