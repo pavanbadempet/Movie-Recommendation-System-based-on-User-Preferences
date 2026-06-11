@@ -130,9 +130,9 @@ Before launching the APEX recommendation server, ensure your target hardware mee
 
 ### 2. Causal Debiasing & Unbiased Evaluation
 * **Doubly Robust (DR) Estimator**: Counters natural selection and popularity bias (inflated blockbuster discovery) using Inverse Propensity Score (IPS) weighting and a direct reward predictor:
-  
+
   $$V_{DR}(\pi) = \frac{1}{n} \sum_{i=1}^n \left[ \hat{r}(x_i, a_i) + \frac{(r_i - \hat{r}(x_i, a_i)) \cdot \pi(a_i|x_i)}{p(a_i|x_i)} \right]$$
-  
+
   where $\hat{r}$ is the direct reward prediction model, $r_i$ is observed feedback, $p(a_i|x_i)$ is logging policy propensity, and $\pi(a_i|x_i)$ is the target recommendation policy.
 * **Simplex Weight Selection**: Simulates 200 random ensemble weight candidates on the Dirichlet 6-simplex to pick the combination optimizing the debiased DR metric.
 
@@ -251,7 +251,7 @@ graph TD
     Gateway -->|Enqueue Event| Queue[(Redis Event Queue)]
     Queue --> Learner[Online Learning Coordinator]
     Learner --> DB
-    
+
     subgraph Analytics ["Spark Lakehouse Compaction Layer"]
         DB --> Spark[PySpark Medallion ETL]
         Spark --> Delta[(Delta Lakehouse Storage)]
@@ -309,7 +309,7 @@ $$V_{DR}(\pi) = \frac{1}{n} \sum_{i=1}^n \left[ \hat{r}(x_i, a_i) + \frac{(r_i -
 ### Worked Propensity Correction Example
 Suppose we want to evaluate a target recommendation policy $\pi$ on three items with different popularity characteristics:
 
-1. **Popular Blockbuster**: High logged propensity ($p(a_1|x) = 0.8$). It receives a click ($r_1 = 1$), and the reward model predicts high relevance ($\hat{r}(x, a_1) = 0.9$). 
+1. **Popular Blockbuster**: High logged propensity ($p(a_1|x) = 0.8$). It receives a click ($r_1 = 1$), and the reward model predicts high relevance ($\hat{r}(x, a_1) = 0.9$).
    $$\text{DR Score}(a_1) = 0.9 + \frac{(1 - 0.9) \cdot 1.0}{0.8} = 0.9 + 0.125 = 1.025$$
 2. **Niche Indie**: Low logged propensity ($p(a_2|x) = 0.05$). It receives a click ($r_2 = 1$) because a user actively sought it out. The reward model predicted moderate relevance ($\hat{r}(x, a_2) = 0.5$).
    $$\text{DR Score}(a_2) = 0.5 + \frac{(1 - 0.5) \cdot 1.0}{0.05} = 0.5 + 10.0 = 10.500$$
@@ -586,34 +586,34 @@ The model designs, estimators, and algorithms in this repository leverage resear
 <details>
 <summary><strong>Click to expand Frequently Asked Questions</strong></summary>
 
-**Q1: How does the 6-model ensemble combine predictions?**  
+**Q1: How does the 6-model ensemble combine predictions?**
 The ensemble applies a weighted average to the predicted probabilities of each model (SASRec, KAN, LightGCN, Quantum, Hyperbolic, Diffusion). The weights are derived dynamically using the Doubly Robust estimator.
 
-**Q2: What happens if a machine doesn't have a GPU?**  
+**Q2: What happens if a machine doesn't have a GPU?**
 APEX profiles the hardware at startup. If no CUDA device is present or RAM is under 8GB, it falls back to Tier 2 (quantized ONNX CPU models) or Tier 3 (FAISS index + sparse TF-IDF) to protect memory from overflow.
 
-**Q3: How does the real-time feedback loop update model weights?**  
+**Q3: How does the real-time feedback loop update model weights?**
 Rating events are consumed asynchronously by the `OnlineLearningCoordinator` to update user session history vectors instantly. The KAN ranker weights are updated incrementally via mini-batch SGD.
 
-**Q4: How does Differential Privacy protect user watch history?**  
+**Q4: How does Differential Privacy protect user watch history?**
 We apply calibrated Laplace noise to model gradient calculations and aggregate interaction vectors. This provides a mathematical guarantee ($\epsilon$-DP) that individual watch events cannot be inferred by comparing database states.
 
-**Q5: What datasets are used for model training?**  
+**Q5: What datasets are used for model training?**
 APEX uses the TMDB Movie Dataset (v11) combined with public MovieLens ratings (over 1M+ user interactions).
 
-**Q6: What is a Kolmogorov-Arnold Network (KAN) model doing here?**  
+**Q6: What is a Kolmogorov-Arnold Network (KAN) model doing here?**
 We use KAN for tabular feature ranking, replacing traditional MLPs. KAN uses learnable 1D B-spline activation functions on edges, achieving superior convergence rates and interpretability for collaborative signals.
 
-**Q7: Can I run this offline?**  
+**Q7: Can I run this offline?**
 Yes. Option B local development mode runs fully offline. The only cloud dependencies are TMDB metadata (for poster fetching) and OpenRouter (for recommendation explanations), both of which have local mock fallbacks.
 
-**Q8: How does the Quantum-Fluid Neural ODE model work?**  
+**Q8: How does the Quantum-Fluid Neural ODE model work?**
 It models continuous-time collaborative filtering. It treats user interest evolution as a continuous neural ODE trajectory moving through a complex Hilbert space manifold.
 
-**Q9: How do I run a new ablation study?**  
+**Q9: How do I run a new ablation study?**
 Run `python scripts/run_ablation.py --users 200 --candidates 100`. The script will output per-model metrics and compile them to `docs/ABLATION_RESULTS.md`.
 
-**Q10: Why Poincaré ball manifolds (Hyperbolic Embeddings)?**  
+**Q10: Why Poincaré ball manifolds (Hyperbolic Embeddings)?**
 Hyperbolic spaces have exponential volume growth, making them mathematically optimal for embedding hierarchical structures like movie genre graphs without spatial distortion.
 </details>
 
