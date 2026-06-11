@@ -7,9 +7,9 @@ sdk: docker
 pinned: false
 ---
 
-# APEX — Enterprise-Grade Causal Recommendation Engine & Streaming Serving Platform
+# 🎬 APEX — Enterprise-Grade Causal Recommendation Engine & Streaming Serving Platform
 
-> Reference implementation of a secure, high-throughput recommendation platform. Demonstrates hybrid ensembled models, real-time streaming feedback updates, hardware-aware execution tiering, and causal doubly robust debiasing.
+> A high-performance, real-time recommendation engine combining sequential Transformers (SASRec), learnable edge networks (KAN), and graph collaboration (LightGCN) with causal popularity debiasing.
 
 <div align="center">
 
@@ -28,22 +28,51 @@ pinned: false
 
 <h3>
   <a href="#-quick-start"><strong>Quick Start</strong></a> &middot;
-  <a href="#-core-engineering-guarantees"><strong>System Guarantees</strong></a> &middot;
+  <a href="#-core-features"><strong>Features</strong></a> &middot;
+  <a href="#-core-engineering-guarantees"><strong>Guarantees</strong></a> &middot;
   <a href="#-core-technical-architecture"><strong>Architecture</strong></a> &middot;
   <a href="#-model-evaluation-registry"><strong>Model Evaluation</strong></a> &middot;
-  <a href="#-api-contract-reference"><strong>API Contract</strong></a> &middot;
-  <a href="#-verification--coverage-suite"><strong>Testing</strong></a>
+  <a href="#-api-contract-reference"><strong>API Contract</strong></a>
 </h3>
 
 </div>
 
 ---
 
-## 💡 System Overview
+## 🚀 Why APEX?
 
-**APEX** is an open-source reference implementation of a high-performance movie recommendation platform. It combines six complementary machine learning architectures (Transformer, KAN, GCN, Diffusion, Neural ODE, Poincaré ball manifolds) with an asynchronous streaming feedback loop and offline causal debiasing.
+Most recommendation system tutorials teach you how to train a model in a Jupyter notebook, but leave out the hard part: **how to serve it in production**.
 
-The platform is engineered to demonstrate **production-grade ensembling and serving patterns**: hardware-aware model tiering at startup, low-latency SIMD vector indexes, differential privacy guarantees, PySpark Delta Lake Medallion ETL, and counterfactual policy evaluation.
+**APEX** is a complete, production-ready recommender engine. It combines **6 complementary ML architectures** into an ensemble that dynamically scales from free CPU servers to high-performance GPU instances. It integrates a **real-time streaming feedback loop** that updates candidate features instantly, and uses **causal debiasing** to ensure users discover new long-tail content, not just blockbusters.
+
+The codebase is engineered to demonstrate **production-grade ensembling and serving patterns**: hardware-aware model tiering at startup, low-latency SIMD vector indexes, differential privacy guarantees, PySpark Delta Lake Medallion ETL, and counterfactual policy evaluation.
+
+---
+
+## ⚡ Core Features
+
+<table>
+<tr>
+<td width="33%" valign="top">
+
+### 🤖 6-Model Ensemble
+LightGCN (Graph), SASRec (Transformer), KAN (Kolmogorov-Arnold), Quantum-Fluid (Neural ODE), Hyperbolic, and Generative Latent Diffusion models.
+
+</td>
+<td width="33%" valign="top">
+
+### ⚡ Dynamic Hardware Tiers
+Auto-detects memory and hardware capabilities at startup: Tier 1 (Full GPU Ensemble) vs. Tier 2 (ONNX CPU) vs. Tier 3 (FAISS/TF-IDF lite).
+
+</td>
+<td width="33%" valign="top">
+
+### 🔄 Streaming Feedback Loop
+Clickstream rating feeds are ingested asynchronously. Sequential candidate vectors are updated in real-time without batch DB rebuilds.
+
+</td>
+</tr>
+</table>
 
 ---
 
@@ -157,6 +186,12 @@ npm install
 npm run dev
 ```
 
+| Service | Access URL |
+| :--- | :--- |
+| **Cinema Portal** | [http://127.0.0.1:3000](http://127.0.0.1:3000) |
+| **REST API Server** | [http://127.0.0.1:8000](http://127.0.0.1:8000) |
+| **Interactive API Documentation** | [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) |
+
 ---
 
 ## 📡 API Contract Reference
@@ -205,3 +240,11 @@ npm --prefix frontend run test
 ## 📄 License
 
 MIT License — Copyright © 2026 **Pavan Badempet**. See [LICENSE](LICENSE) for details.
+
+---
+
+<div align="center">
+
+### **If you find this project useful, give it a ⭐ star!**
+
+</div>
