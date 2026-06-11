@@ -7,7 +7,7 @@ sdk: docker
 pinned: false
 ---
 
-# 🎬 APEX — Enterprise-Grade Causal Recommendation Engine & Streaming Serving Platform
+# 🎬 APEX — Enterprise-Grade Causal Recommendation Engine & Serving Platform
 
 > A high-performance, real-time recommendation engine combining sequential Transformers (SASRec), learnable edge networks (KAN), and graph collaboration (LightGCN) with causal popularity debiasing.
 
@@ -177,6 +177,90 @@ For comprehensive training hyperparameters and offline benchmarks, see [`docs/MO
 
 <img src="docs/assets/divider.svg" alt="" width="100%"/>
 
+## ⚖ Causal Debiasing & Unbiased Evaluation
+
+Standard recommendations suffer from **popularity bias**—inflating scores for blockbusters at the expense of niche content. APEX integrates an **Inverse Propensity Score (IPS)** and a **Doubly Robust (DR) Estimator** to optimize ensemble weights.
+
+### Propensity Corrections
+A blockbuster movie $a$ might receive high click volume simply because it is featured on the home page. The logging policy propensity $p(a|x)$ measures the probability of displaying item $a$ to user $x$. To counter this, the Doubly Robust estimator adjusts predictions using the propensity:
+
+$$V_{DR}(\pi) = \frac{1}{n} \sum_{i=1}^n \left[ \hat{r}(x_i, a_i) + \frac{(r_i - \hat{r}(x_i, a_i)) \cdot \pi(a_i|x_i)}{p(a_i|x_i)} \right]$$
+
+### Worked Propensity Correction Example
+Suppose we want to evaluate a target recommendation policy $\pi$ on three items with different popularity characteristics:
+
+1. **Popular Blockbuster**: High logged propensity ($p(a_1|x) = 0.8$). It receives a click ($r_1 = 1$), and the reward model predicts high relevance ($\hat{r}(x, a_1) = 0.9$). 
+   $$\text{DR Score}(a_1) = 0.9 + \frac{(1 - 0.9) \cdot 1.0}{0.8} = 0.9 + 0.125 = 1.025$$
+2. **Niche Indie**: Low logged propensity ($p(a_2|x) = 0.05$). It receives a click ($r_2 = 1$) because a user actively sought it out. The reward model predicted moderate relevance ($\hat{r}(x, a_2) = 0.5$).
+   $$\text{DR Score}(a_2) = 0.5 + \frac{(1 - 0.5) \cdot 1.0}{0.05} = 0.5 + 10.0 = 10.500$$
+
+Without propensity corrections, the blockbuster dominates. With DR-IPS, the Niche Indie receives a massive correction boost, reflecting its high true utility relative to its poor exposure in the training logs.
+
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
+
+## 📈 Multi-Factor Re-ranking & MMR Diversity
+
+### Re-ranking Boost Factors
+APEX applies heuristic boosts to candidate items to maintain topical diversity and user engagement:
+
+| Factor | Boost Weight | Description |
+| :--- | :---: | :--- |
+| **Franchise Match** | `+0.25` | Boosts sequels or franchises (e.g. Avatar -> Avatar 2). |
+| **Director Match** | `+0.10` | Stylistic consistency boost. |
+| **Same Era** | `+0.03` | Boosts films released within 5 years of target. |
+| **Quality** | `+0.02` | Vote rating confidence factor. |
+| **Genre Mismatch** | `-0.15` | Penalizes candidates sharing zero genres with history. |
+
+### MMR Diversity Logic
+The Maximal Marginal Relevance (MMR) stage balances relevance (similarity to search query/user profile) against diversity (redundancy compared to items already recommended):
+
+$$\text{MMR} = \arg\max_{D_i \in R \setminus S} \left[ \lambda \cdot \text{Sim}_1(D_i, Q) - (1 - \lambda) \max_{D_j \in S} \text{Sim}_2(D_i, D_j) \right]$$
+
+where:
+* $R$ is the set of initial recommendations.
+* $S$ is the set of selected items in the output basket.
+* $\text{Sim}_1$ is the query similarity score.
+* $\text{Sim}_2$ is the pairwise cross-item similarity score.
+* $\lambda = 0.7$ controls the balance (70% relevance vs. 30% diversity).
+
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
+
+## 📁 Project Structure Tree
+
+```
+Movie-Recommendation-System/
+├── .github/workflows/       # 4 CI/CD pipelines (Backend, Secrets, linting)
+├── backend/                 # FastAPI REST Backend
+│   ├── main.py              # Application entry, Middleware & Route registration
+│   ├── recommender.py       # Core retrieval & ensembling pipeline
+│   ├── schemas.py           # Pydantic Request/Response models
+│   ├── models/              # Ensemble ML models (SASRec, KAN, LightGCN, ODE)
+│   ├── learning/            # Online learning coordinator & learner instances
+│   ├── metrics/             # HR@10, NDCG@10 & Causal DR-IPS implementations
+│   ├── serving/             # Hardware profiling & tiering selector
+│   ├── privacy/             # Laplace & Gaussian Differential Privacy (ε-DP)
+│   └── database/            # SQLAlchemy database configurations
+├── docs/                    # Architecture whitepapers, ADRs, compliance runbooks
+├── etl/                     # Delta Lake Medallion Pipelines (Bronze/Silver/Gold)
+├── frontend/                # Vite React SPA cinema portal
+├── scripts/                 # Ingestion & training scripts
+└── tests/                   # Pytest suite (~59 unit/integration files)
+```
+
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
+
+## ⚙ Environment Configuration Reference
+
+| Variable | Type | Default | Purpose |
+| :--- | :---: | :---: | :--- |
+| `TMDB_API_KEY` | string | — | TMDB API Key for metadata fetching (trailers, posters). |
+| `JWT_SECRET_KEY` | string | — | JWT token verification key. |
+| `OPENROUTER_API_KEY` | string | — | API key for LLM explanations (OpenRouter). |
+| `REDIS_URL` | string | `redis://localhost:6379/0` | Cache connection string for session clickstreams. |
+| `DATABASE_URL` | string | `sqlite:///./nova_db.sqlite3` | SQLite/Postgres connection string. |
+
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
+
 ## ⚡ Quick Start
 
 ### Option A: Launch with Docker Compose
@@ -258,6 +342,40 @@ python -m pytest tests/ -v
 # Run the frontend unit tests
 npm --prefix frontend run test
 ```
+
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
+
+## ❓ FAQ
+
+**Q1: How does the 6-model ensemble combine predictions?**  
+The ensemble applies a weighted average to the predicted probabilities of each model (SASRec, KAN, LightGCN, Quantum, Hyperbolic, Diffusion). The weights are derived dynamically using the Doubly Robust estimator.
+
+**Q2: What happens if a machine doesn't have a GPU?**  
+APEX profiles the hardware at startup. If no CUDA device is present or RAM is under 8GB, it falls back to Tier 2 (quantized ONNX CPU models) or Tier 3 (FAISS index + sparse TF-IDF) to protect memory from overflow.
+
+**Q3: How does the real-time feedback loop update model weights?**  
+Rating events are consumed asynchronously by the `OnlineLearningCoordinator` to update user session history vectors instantly. The KAN ranker weights are updated incrementally via mini-batch SGD.
+
+**Q4: How does Differential Privacy protect user watch history?**  
+We apply calibrated Laplace noise to model gradient calculations and aggregate interaction vectors. This provides a mathematical guarantee ($\epsilon$-DP) that individual watch events cannot be inferred by comparing database states.
+
+**Q5: What datasets are used for model training?**  
+APEX uses the TMDB Movie Dataset (v11) combined with public MovieLens ratings (over 1M+ user interactions).
+
+**Q6: What is a Kolmogorov-Arnold Network (KAN) model doing here?**  
+We use KAN for tabular feature ranking, replacing traditional MLPs. KAN uses learnable 1D B-spline activation functions on edges, achieving superior convergence rates and interpretability for collaborative signals.
+
+**Q7: Can I run this offline?**  
+Yes. Option B local development mode runs fully offline. The only cloud dependencies are TMDB metadata (for poster fetching) and OpenRouter (for recommendation explanations), both of which have local mock fallbacks.
+
+**Q8: How does the Quantum-Fluid Neural ODE model work?**  
+It models continuous-time collaborative filtering. It treats user interest evolution as a continuous neural ODE trajectory moving through a complex Hilbert space manifold.
+
+**Q9: How do I run a new ablation study?**  
+Run `python scripts/run_ablation.py --users 200 --candidates 100`. The script will output per-model metrics and compile them to `docs/ABLATION_RESULTS.md`.
+
+**Q10: Why Poincaré ball manifolds (Hyperbolic Embeddings)?**  
+Hyperbolic spaces have exponential volume growth, making them mathematically optimal for embedding hierarchical structures like movie genre graphs without spatial distortion.
 
 <img src="docs/assets/divider.svg" alt="" width="100%"/>
 
