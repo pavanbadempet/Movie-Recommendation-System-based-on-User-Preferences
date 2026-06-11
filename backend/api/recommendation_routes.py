@@ -556,8 +556,8 @@ def create_core_router(
 
         load_rec_env = os.getenv("NOVA_HEALTH_LOAD_RECOMMENDER", "true").strip().lower()
         if load_rec_env in {"0", "false", "no", "off"}:
-            from backend.pipeline import recommender as recommender_module
             from backend.data.remote_recommender import remote_recommender_url
+            from backend.pipeline import recommender as recommender_module
 
             report = evaluate_artifact_health(
                 models_dir=recommender_module.MODELS_DIR, data_dir=recommender_module.DATA_DIR
