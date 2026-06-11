@@ -28,7 +28,9 @@ jobs:
         run: python -m compileall backend etl airflow scripts frontend/streamlit_app.py manage.py tests
 
       - name: Stamp app revision
-        run: echo "${GITHUB_SHA}" > REVISION
+        run: |
+          echo "${GITHUB_SHA}" > REVISION
+          git add -f REVISION
 
       - name: Deploy to Hugging Face Space
         env:
