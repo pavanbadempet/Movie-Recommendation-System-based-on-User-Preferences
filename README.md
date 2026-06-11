@@ -37,7 +37,7 @@ pinned: false
 
 </div>
 
----
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
 
 ## 🚀 Why APEX?
 
@@ -47,7 +47,7 @@ Most recommendation system tutorials teach you how to train a model in a Jupyter
 
 The codebase is engineered to demonstrate **production-grade ensembling and serving patterns**: hardware-aware model tiering at startup, low-latency SIMD vector indexes, differential privacy guarantees, PySpark Delta Lake Medallion ETL, and counterfactual policy evaluation.
 
----
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
 
 ## ⚡ Core Features
 
@@ -74,7 +74,7 @@ Clickstream rating feeds are ingested asynchronously. Sequential candidate vecto
 </tr>
 </table>
 
----
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
 
 ## ⚡ Core Engineering Guarantees
 
@@ -100,40 +100,64 @@ Clickstream rating feeds are ingested asynchronously. Sequential candidate vecto
 * **$\epsilon$-Differential Privacy ($\epsilon$-DP)**: Implements calibrated Laplace noise injection during aggregation to protect sensitive user watch profiles and clickstreams from membership inference or database reconstruction attacks.
 * **Fairness & Gini Metrics**: Periodic evaluation computes Gini coefficients and KL-divergence over demographic recommendations to audit and prevent systemic catalog coverage bias.
 
----
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
 
 ## 🏗 Core Technical Architecture
 
 ```mermaid
 graph TB
-    subgraph Client["CLIENT SURFACE"]
-        FE["Vite React SPA · Cinema Portal & Streaming UI"]
+    subgraph Serving["Serving Path"]
+        U[UserRequest] --> API[FastAPI]
+        API --> TD[TierDetector\nbackend.serving]
+        TD -->|GPU + ≥16GB RAM| T1["Tier1: GPU / Full Ensemble\nLightGCN · Quantum · SASRec\nKAN · Hyperbolic · Diffusion"]
+        TD -->|No GPU + ≥8GB RAM| T2["Tier2: ONNX CPU\nQuantized Inference"]
+        TD -->|< 8GB RAM| T3["Tier3: FAISS + TF-IDF Only\nLow-Memory Mode"]
+        T1 --> RP[RetrievalPipeline\nbackend.pipeline]
+        T2 --> RP
+        T3 --> RP
+        RP --> RK[RankingPipeline\nbackend.pipeline]
+        RK --> RR[RerankingPipeline\nbackend.pipeline]
+        RR --> Resp[Response]
     end
 
-    subgraph Gateway["API GATEWAY & SECURITY"]
-        MW["Enterprise Middleware Stack (Plan Enforcer · Rate Limiter · SLO Tracker)"]
-        ROUTERS["REST API Routers (Auth · Recommendations · Events · Experiments · Billing)"]
+    subgraph Retrieval["Retrieval Sources"]
+        FAISS[FAISS ANN Index] --> RP
+        TFIDF[TF-IDF Sparse Index] --> RP
+        KG[Knowledge Graph] --> RP
     end
 
-    subgraph Engine["INTELLIGENCE & ENSEMBLING"]
-        EE["Ensemble Engine (6-Model Blend: SASRec · KAN · LightGCN · Diffusion · ODE · Hyperbolic)"]
-        TIER["Serving Tier Detector (Hardware-Aware Compute Fallback: GPU → CPU ONNX → Lite FAISS)"]
-        DBI["Causal Debiasing Layer (Inverse Propensity Score & Doubly Robust Estimation)"]
+    subgraph Ranking["Ranking Components — 6 Ensemble Models (DR-Optimized Weights)\nbackend.models"]
+        RK --> LGC[LightGCN\nweight 0.005]
+        RK --> QNN[Quantum-Fluid NeuralODE\nweight 0.010]
+        RK --> SAS[SASRec\nweight 0.659]
+        RK --> KAN2[KAN\nweight 0.298]
+        RK --> HYP[Hyperbolic\nweight 0.004]
+        RK --> DIF[Diffusion\nweight 0.024]
     end
 
-    subgraph Data["DATA & PERSISTENCE LAYER"]
-        LAKE["PySpark Lakehouse (Delta Lake Medallion Architecture · SCD Type 2)"]
-        VS[(Vector Store — turbovec SIMD Index / FAISS Index)]
-        SQL[(Durable Relational Database — PostgreSQL / SQLite WAL)]
-        STREAM["Online Learning Coordinator (Real-time Session Feedbacks)"]
+    subgraph DataPipeline["Data Pipeline"]
+        TMDB[TMDB API] --> ETL[ETL Jobs]
+        Kaggle[Kaggle Dataset] --> ETL
+        ETL --> Bronze[Delta Lake Bronze\nRaw Ingestion]
+        Bronze --> Silver[Delta Lake Silver\nCleaned + Joined]
+        Silver --> Gold[Delta Lake Gold\nFeature Vectors]
+        Gold --> MT[Model Training\nPySpark + PyTorch]
+        MT --> Artifacts[Serving Artifacts\nFAISS + ONNX + Weights]
     end
 
-    Client --> Gateway
-    Gateway --> Engine
-    Engine --> Data
+    subgraph Compliance["Compliance & Fairness\nbackend.privacy · backend.metrics"]
+        DP[Differential Privacy\nLaplace/Gaussian ε-DP]
+        IPS[IPS Debiasing\nDoubly Robust weights]
+        FA[Fairness Auditor\nGini + KL divergence]
+    end
+
+    Serving -.-> Compliance
+    DataPipeline --> Artifacts
+    Artifacts --> Retrieval
+    Retrieval --> Serving
 ```
 
----
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
 
 ## 🔬 Model Evaluation Registry
 
@@ -151,7 +175,7 @@ For comprehensive training hyperparameters and offline benchmarks, see [`docs/MO
 
 *Note: Evaluation metrics are updated dynamically. Run the ablation evaluation script `python scripts/run_ablation.py` to regenerate results with fresh datasets.*
 
----
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
 
 ## ⚡ Quick Start
 
@@ -192,7 +216,7 @@ npm run dev
 | **REST API Server** | [http://127.0.0.1:8000](http://127.0.0.1:8000) |
 | **Interactive API Documentation** | [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) |
 
----
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
 
 ## 📡 API Contract Reference
 
@@ -207,7 +231,7 @@ npm run dev
 
 *Append `?explain=true` to recommendation endpoints to generate natural-language explanations powered by LLMs.*
 
----
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
 
 ## 📂 Key Modules Directory
 
@@ -221,7 +245,7 @@ npm run dev
 | **Ablation Evaluation** | Runs reproducible leave-one-out benchmarks across all models. | [scripts/run_ablation.py](scripts/run_ablation.py) · [backend/metrics/evaluation.py](backend/metrics/evaluation.py) |
 | **ETL Data Pipeline** | Delta Lake Medallion Architecture (Bronze/Silver/Gold). | [scripts/pyspark_medallion_pipeline.py](scripts/pyspark_medallion_pipeline.py) |
 
----
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
 
 ## 🧪 Verification & Coverage Suite
 
@@ -235,7 +259,42 @@ python -m pytest tests/ -v
 npm --prefix frontend run test
 ```
 
----
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
+
+## 📚 Related Resources
+
+- [FastAPI Documentation](https://fastapi.tiangolo.com/) — Web framework powering APEX's REST endpoints
+- [Sentence Transformers](https://www.sbert.net/) — Semantic representations for recommendations and search
+- [FAISS GitHub Repository](https://github.com/facebookresearch/faiss) — Library for efficient similarity search of dense vectors
+- [Delta Lake Documentation](https://delta.io/) — Lakehouse storage layer for data pipelines
+
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
+
+## 🤝 Contributing
+
+Contributions are welcome — bug fixes, model enhancements, pipelines, or test improvements.
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Follow [`AGENTS.md`](AGENTS.md) — the canonical instruction file for all code changes.
+
+```bash
+python -m pytest tests/ -v
+npm --prefix frontend run test
+```
+
+<a href="https://github.com/pavanbadempet/Movie-Recommendation-System/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=pavanbadempet/Movie-Recommendation-System&max=20" alt="Contributors" />
+</a>
+
+<details>
+<summary><strong>Star History</strong></summary>
+<p align="center">
+  <a href="https://star-history.com/#pavanbadempet/Movie-Recommendation-System&Date">
+    <img src="https://api.star-history.com/svg?repos=pavanbadempet/Movie-Recommendation-System&type=Date" alt="Star History" width="600"/>
+  </a>
+</p>
+</details>
+
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
 
 ## 📄 License
 
