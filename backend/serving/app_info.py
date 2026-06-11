@@ -12,7 +12,7 @@ from pathlib import Path
 from fastapi import Request
 
 APP_VERSION = "2.0.0"
-REVISION_FILE = Path(__file__).resolve().parent.parent / "REVISION"
+REVISION_FILE = Path(__file__).resolve().parent.parent.parent / "REVISION"
 
 
 def app_metadata() -> dict[str, str | None]:
