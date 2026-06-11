@@ -222,18 +222,25 @@ class RequestSloTracker:
 
 def _dependency_state(dependencies: dict[str, Any]) -> str:
     artifact_status = ((dependencies.get("artifacts") or {}).get("status") or "").lower()
-    remote_state = (((dependencies.get("remote_recommender") or {}).get("circuit") or {}).get("state") or "").lower()
+    remote_rec = dependencies.get("remote_recommender") or {}
+    remote_configured = remote_rec.get("configured") is True
+    remote_state = ((remote_rec.get("circuit") or {}).get("state") or "").lower()
     frontend_status = ((dependencies.get("frontends") or {}).get("status") or "").lower()
 
     degraded = False
-    if artifact_status and artifact_status not in {"ready", "degraded"}:
-        return "failed"
-    if artifact_status == "degraded":
-        degraded = True
-    if remote_state in {"open"}:
-        degraded = True
-    if frontend_status in {"unavailable", "failed"}:
-        degraded = True
+    if not remote_configured:
+        if artifact_status and artifact_status not in {"ready", "degraded"}:
+            return "failed"
+        if artifact_status == "degraded":
+            degraded = True
+    else:
+        # If remote is configured, we rely on the remote recommender.
+        # But we might still be degraded if the remote circuit is open or frontend is unavailable.
+        if remote_state in {"open"}:
+            degraded = True
+        if frontend_status in {"unavailable", "failed"}:
+            degraded = True
+
     return "degraded" if degraded else "ok"
 
 

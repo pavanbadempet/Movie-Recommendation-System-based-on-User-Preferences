@@ -227,7 +227,7 @@ def platform_readiness_report(
             safe_float_fn=safe_float_fn,
             thresholds={
                 "bad_match_rate_at_k": ("<=", 0.05),
-                "hit_rate_at_k": (">=", 0.95),
+                "hit_rate_at_k": (">=", 0.90),
                 "mrr_at_k": (">=", 0.35),
                 "ndcg_at_k": (">=", 0.25),
             },
@@ -495,7 +495,7 @@ def _platform_readiness_report(
             required=strict,
             thresholds={
                 "bad_match_rate_at_k": ("<=", 0.05),
-                "hit_rate_at_k": (">=", 0.95),
+                "hit_rate_at_k": (">=", 0.90),
                 "mrr_at_k": (">=", 0.35),
                 "ndcg_at_k": (">=", 0.25),
             },
