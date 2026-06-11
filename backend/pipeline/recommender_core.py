@@ -1487,15 +1487,15 @@ def candidate_to_dict(rec, item) -> dict:
     if movie is None:
         movie = dict(item.metadata)
         movie.setdefault("id", item.movie_id)
-    
+
     retrieval_score = getattr(item, "retrieval_score", 0.0)
     ensemble_score = getattr(item, "ensemble_score", 0.0)
     ranker_score = getattr(item, "ranker_score", None)
     diversity_score = getattr(item, "diversity_score", 0.0)
-    
+
     movie["similarity_score"] = float(ranker_score if ranker_score is not None else retrieval_score)
     movie["retrieval_stage"] = getattr(item, "retrieval_source", "unknown")
-    
+
     retrieval_signals = getattr(item, "retrieval_signals", {}) or {}
     movie["retrieval_signals"] = {
         "dense": round(float(retrieval_score), 4),
@@ -1504,7 +1504,7 @@ def candidate_to_dict(rec, item) -> dict:
         "diversity": round(float(diversity_score), 4),
         **retrieval_signals,
     }
-    
+
     explanation = getattr(item, "explanation", None)
     if explanation:
         movie["explanation"] = [explanation]
