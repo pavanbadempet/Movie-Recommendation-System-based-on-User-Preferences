@@ -13,31 +13,31 @@ pinned: false
 
 <div align="center">
 
-<img src="docs/assets/hero-banner.svg" alt="APEX Banner" width="100%"/>
+<img src="docs/assets/hero-banner.svg" alt="APEX Movie Recommendation System - Open-Source Causal Recommendation Engine with SASRec, KAN, LightGCN, Delta Lake Medallion ETL, and DR-IPS debiasing" width="100%"/>
 
 <br/>
 
 <p align="center">
-  <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/ci.yml"><img src="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/ci.yml/badge.svg" alt="CI build status" /></a>
-  <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/secrets-scan.yml"><img src="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/secrets-scan.yml/badge.svg" alt="Secrets Scan status" /></a>
-  <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/serving-quality.yml"><img src="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/serving-quality.yml/badge.svg" alt="Serving Quality status" /></a>
+  <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/ci.yml"><img src="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/ci.yml/badge.svg" alt="CI build status badge" /></a>
+  <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/secrets-scan.yml"><img src="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/secrets-scan.yml/badge.svg" alt="Secrets Scan status badge" /></a>
+  <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/serving-quality.yml"><img src="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/serving-quality.yml/badge.svg" alt="Serving Quality status badge" /></a>
   <br/>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/pavanbadempet/Movie-Recommendation-System?color=22c55e&style=flat-square" alt="MIT license" /></a>
-  <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/stargazers"><img src="https://img.shields.io/github/stars/pavanbadempet/Movie-Recommendation-System?style=flat-square&color=f59e0b" alt="GitHub stars" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/pavanbadempet/Movie-Recommendation-System?color=22c55e&style=flat-square" alt="MIT license open-source badge" /></a>
+  <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/stargazers"><img src="https://img.shields.io/github/stars/pavanbadempet/Movie-Recommendation-System?style=flat-square&color=f59e0b" alt="GitHub stars popularity badge" /></a>
 </p>
 
 <h3>
-  <a href="#-quick-start"><strong>Quick Start</strong></a> &middot;
-  <a href="#-core-features"><strong>Features</strong></a> &middot;
-  <a href="#-core-engineering-guarantees"><strong>Guarantees</strong></a> &middot;
-  <a href="#-core-technical-architecture"><strong>Architecture</strong></a> &middot;
-  <a href="#-model-evaluation-registry"><strong>Model Evaluation</strong></a> &middot;
-  <a href="#-api-contract-reference"><strong>API Contract</strong></a>
+  <a href="#-quick-start"><strong>Quick Start Guide</strong></a> &middot;
+  <a href="#-core-features"><strong>Core Features</strong></a> &middot;
+  <a href="#-core-engineering-guarantees"><strong>System Guarantees</strong></a> &middot;
+  <a href="#-core-technical-architecture"><strong>Architecture Design</strong></a> &middot;
+  <a href="#-model-evaluation-registry"><strong>Model Evaluation Registry</strong></a> &middot;
+  <a href="#-api-contract-reference"><strong>REST API Contract</strong></a>
 </h3>
 
 </div>
 
-<img src="docs/assets/divider.svg" alt="" width="100%"/>
+<img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
 
 ## 🚀 Why APEX?
 
@@ -47,7 +47,7 @@ Most recommendation system tutorials teach you how to train a model in a Jupyter
 
 The codebase is engineered to demonstrate **production-grade ensembling and serving patterns**: hardware-aware model tiering at startup, low-latency SIMD vector indexes, differential privacy guarantees, PySpark Delta Lake Medallion ETL, and counterfactual policy evaluation.
 
-<img src="docs/assets/divider.svg" alt="" width="100%"/>
+<img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
 
 ## ⚡ Core Features
 
@@ -74,7 +74,7 @@ Clickstream rating feeds are ingested asynchronously. Sequential candidate vecto
 </tr>
 </table>
 
-<img src="docs/assets/divider.svg" alt="" width="100%"/>
+<img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
 
 ## ⚡ Core Engineering Guarantees
 
@@ -100,7 +100,7 @@ Clickstream rating feeds are ingested asynchronously. Sequential candidate vecto
 * **$\epsilon$-Differential Privacy ($\epsilon$-DP)**: Implements calibrated Laplace noise injection during aggregation to protect sensitive user watch profiles and clickstreams from membership inference or database reconstruction attacks.
 * **Fairness & Gini Metrics**: Periodic evaluation computes Gini coefficients and KL-divergence over demographic recommendations to audit and prevent systemic catalog coverage bias.
 
-<img src="docs/assets/divider.svg" alt="" width="100%"/>
+<img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
 
 ## 🏗 Core Technical Architecture
 
@@ -157,7 +157,7 @@ graph TB
     Retrieval --> Serving
 ```
 
-<img src="docs/assets/divider.svg" alt="" width="100%"/>
+<img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
 
 ## 🔬 Model Evaluation Registry
 
@@ -175,7 +175,7 @@ For comprehensive training hyperparameters and offline benchmarks, see [`docs/MO
 
 *Note: Evaluation metrics are updated dynamically. Run the ablation evaluation script `python scripts/run_ablation.py` to regenerate results with fresh datasets.*
 
-<img src="docs/assets/divider.svg" alt="" width="100%"/>
+<img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
 
 ## ⚖ Causal Debiasing & Unbiased Evaluation
 
@@ -196,7 +196,7 @@ Suppose we want to evaluate a target recommendation policy $\pi$ on three items 
 
 Without propensity corrections, the blockbuster dominates. With DR-IPS, the Niche Indie receives a massive correction boost, reflecting its high true utility relative to its poor exposure in the training logs.
 
-<img src="docs/assets/divider.svg" alt="" width="100%"/>
+<img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
 
 ## 📈 Multi-Factor Re-ranking & MMR Diversity
 
@@ -223,7 +223,7 @@ where:
 * $\text{Sim}_2$ is the pairwise cross-item similarity score.
 * $\lambda = 0.7$ controls the balance (70% relevance vs. 30% diversity).
 
-<img src="docs/assets/divider.svg" alt="" width="100%"/>
+<img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
 
 ## 📁 Project Structure Tree
 
@@ -247,7 +247,7 @@ Movie-Recommendation-System/
 └── tests/                   # Pytest suite (~59 unit/integration files)
 ```
 
-<img src="docs/assets/divider.svg" alt="" width="100%"/>
+<img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
 
 ## ⚙ Environment Configuration Reference
 
@@ -259,7 +259,7 @@ Movie-Recommendation-System/
 | `REDIS_URL` | string | `redis://localhost:6379/0` | Cache connection string for session clickstreams. |
 | `DATABASE_URL` | string | `sqlite:///./nova_db.sqlite3` | SQLite/Postgres connection string. |
 
-<img src="docs/assets/divider.svg" alt="" width="100%"/>
+<img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
 
 ## ⚡ Quick Start
 
@@ -300,7 +300,7 @@ npm run dev
 | **REST API Server** | [http://127.0.0.1:8000](http://127.0.0.1:8000) |
 | **Interactive API Documentation** | [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) |
 
-<img src="docs/assets/divider.svg" alt="" width="100%"/>
+<img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
 
 ## 📡 API Contract Reference
 
@@ -315,7 +315,7 @@ npm run dev
 
 *Append `?explain=true` to recommendation endpoints to generate natural-language explanations powered by LLMs.*
 
-<img src="docs/assets/divider.svg" alt="" width="100%"/>
+<img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
 
 ## 📂 Key Modules Directory
 
@@ -329,7 +329,7 @@ npm run dev
 | **Ablation Evaluation** | Runs reproducible leave-one-out benchmarks across all models. | [scripts/run_ablation.py](scripts/run_ablation.py) · [backend/metrics/evaluation.py](backend/metrics/evaluation.py) |
 | **ETL Data Pipeline** | Delta Lake Medallion Architecture (Bronze/Silver/Gold). | [scripts/pyspark_medallion_pipeline.py](scripts/pyspark_medallion_pipeline.py) |
 
-<img src="docs/assets/divider.svg" alt="" width="100%"/>
+<img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
 
 ## 🧪 Verification & Coverage Suite
 
@@ -343,7 +343,7 @@ python -m pytest tests/ -v
 npm --prefix frontend run test
 ```
 
-<img src="docs/assets/divider.svg" alt="" width="100%"/>
+<img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
 
 ## ❓ FAQ
 
@@ -377,16 +377,16 @@ Run `python scripts/run_ablation.py --users 200 --candidates 100`. The script wi
 **Q10: Why Poincaré ball manifolds (Hyperbolic Embeddings)?**  
 Hyperbolic spaces have exponential volume growth, making them mathematically optimal for embedding hierarchical structures like movie genre graphs without spatial distortion.
 
-<img src="docs/assets/divider.svg" alt="" width="100%"/>
+<img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
 
 ## 📚 Related Resources
 
-- [FastAPI Documentation](https://fastapi.tiangolo.com/) — Web framework powering APEX's REST endpoints
-- [Sentence Transformers](https://www.sbert.net/) — Semantic representations for recommendations and search
-- [FAISS GitHub Repository](https://github.com/facebookresearch/faiss) — Library for efficient similarity search of dense vectors
-- [Delta Lake Documentation](https://delta.io/) — Lakehouse storage layer for data pipelines
+- [FastAPI Framework Web Site](https://fastapi.tiangolo.com/) — Web framework powering APEX's REST endpoints
+- [Sentence Transformers Library](https://www.sbert.net/) — Semantic representations for recommendations and search
+- [FAISS Vector Index Repository](https://github.com/facebookresearch/faiss) — Library for efficient similarity search of dense vectors
+- [Delta Lake Engine Documentation](https://delta.io/) — Lakehouse storage layer for data pipelines
 
-<img src="docs/assets/divider.svg" alt="" width="100%"/>
+<img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
 
 ## 🤝 Contributing
 
@@ -400,25 +400,38 @@ npm --prefix frontend run test
 ```
 
 <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=pavanbadempet/Movie-Recommendation-System&max=20" alt="Contributors" />
+  <img src="https://contrib.rocks/image?repo=pavanbadempet/Movie-Recommendation-System&max=20" alt="Contributors - Open-Source Developers contributing to the APEX Movie Recommendation Engine codebase" />
 </a>
 
 <details>
 <summary><strong>Star History</strong></summary>
 <p align="center">
   <a href="https://star-history.com/#pavanbadempet/Movie-Recommendation-System&Date">
-    <img src="https://api.star-history.com/svg?repos=pavanbadempet/Movie-Recommendation-System&type=Date" alt="Star History" width="600"/>
+    <img src="https://api.star-history.com/svg?repos=pavanbadempet/Movie-Recommendation-System&type=Date" alt="APEX Movie Recommendation System GitHub Star History Chart showing repository popularity growth" width="600"/>
   </a>
 </p>
 </details>
 
-<img src="docs/assets/divider.svg" alt="" width="100%"/>
+<img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
 
 ## 📄 License
 
 MIT License — Copyright © 2026 **Pavan Badempet**. See [LICENSE](LICENSE) for details.
 
 ---
+
+<details>
+<summary><strong>🔍 SEO Metadata, Search Keywords & Indexing Terms</strong></summary>
+
+### Primary Keywords
+- **Causal Recommender Engine**: Popularity bias mitigation, Doubly Robust (DR) estimation, Inverse Propensity Score (IPS) counterfactual weight selection.
+- **Deep Learning Architectures**: Sequential Transformer (SASRec), Kolmogorov-Arnold Network (KAN) tabular ranking, Graph Collaborative Filtering (LightGCN), Poincaré ball manifolds (Hyperbolic Embeddings), Quantum-Fluid Neural ODEs, Generative Latent Diffusion models.
+- **Data Engineering & Lakehouse**: PySpark medallion architecture (Bronze/Silver/Gold Delta Lake layers), ETL pipelines, real-time streaming feedback loop, FAISS similarity index, vector search.
+- **Low-Latency Serving**: Hardware-aware compute fallbacks (GPU PyTorch, Quantized ONNX CPU, in-memory turbovec SIMD search).
+
+### Search Phrases
+`open source movie recommendation system`, `causal debiasing counterfactual policy evaluation`, `sasrec transformer recommendation engine python`, `kan kolmogorov-arnold network recommendation`, `hyperbolic embeddings poincare ball graph`, `pyspark medallion delta lake pipeline`, `onnx runtime low latency cpu serving`, `turbovec rust simd vector database search`, `fairness audits gini coefficient recommender`.
+</details>
 
 <div align="center">
 
