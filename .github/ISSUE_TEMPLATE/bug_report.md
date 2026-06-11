@@ -3,16 +3,16 @@ name: Bug report
 about: Something is broken or behaving incorrectly
 title: "[BUG] "
 labels: bug
-assignees: pavanpajjuri
+assignees: pavanbadempet
 ---
 
 ## Describe the bug
 <!-- A clear, concise description of what is broken. -->
 
 ## Steps to reproduce
-1. 
-2. 
-3. 
+1.
+2.
+3.
 
 ## Expected behaviour
 <!-- What should happen. -->

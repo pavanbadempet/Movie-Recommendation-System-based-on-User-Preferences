@@ -5,19 +5,19 @@
   --bg-primary: #050508;
   --bg-secondary: rgba(255, 255, 255, 0.02);
   --bg-tertiary: rgba(255, 255, 255, 0.06);
-  
+
   --accent-primary: #6366f1; /* Premium Violet Indigo */
   --accent-hover: #818cf8;
   --accent-glow: rgba(99, 102, 241, 0.25);
-  
+
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
   --text-tertiary: #64748b;
-  
+
   /* Semantic Colors */
   --success: #10b981;
   --warning: #f59e0b;
-  
+
   /* Utilities */
   --glass-bg: rgba(255, 255, 255, 0.02);
   --glass-border: rgba(255, 255, 255, 0.06);
@@ -25,7 +25,7 @@
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
-  
+
   --transition-fast: 0.15s cubic-bezier(0.16, 1, 0.3, 1);
   --transition-normal: 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }

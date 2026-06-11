@@ -143,7 +143,7 @@ Recommended for the primary frontend — global CDN, zero cost, automatic HTTPS.
    - **Root directory:** `frontend`
    - **Build command:** `npm ci && npm run build`
    - **Build output directory:** `dist`
-   - **Node version:** `24`
+   - **Node version:** `22` (Cloudflare Pages max supported version)
 4. Environment variables (optional):
    - `VITE_API_URL` — primary backend URL (e.g., `https://your-api.onrender.com`)
    - `VITE_BACKUP_API_URL` — backup backend URL

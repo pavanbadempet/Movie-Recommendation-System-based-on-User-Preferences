@@ -1,0 +1,43 @@
+{
+  "name": "gold_training_set",
+  "version": 1,
+  "description": "Gold feature and training contract for vector generation and serving alignment.",
+  "primary_key": ["id"],
+  "partition_keys": [],
+  "required_columns": ["id", "title", "overview", "tags"],
+  "columns": {
+    "id": {
+      "type": "integer",
+      "nullable": false
+    },
+    "title": {
+      "type": "string",
+      "nullable": false
+    },
+    "overview": {
+      "type": "string",
+      "nullable": false
+    },
+    "tags": {
+      "type": "string",
+      "nullable": false
+    },
+    "metadata_completeness": {
+      "type": "number",
+      "nullable": true,
+      "min": 0.0,
+      "max": 1.0
+    },
+    "content_quality_score": {
+      "type": "number",
+      "nullable": true,
+      "min": 0.0,
+      "max": 1.0
+    },
+    "quality_bucket": {
+      "type": "string",
+      "nullable": true,
+      "enum": ["premium", "standard", "long_tail", "thin_metadata"]
+    }
+  }
+}

@@ -12,7 +12,7 @@ from backend.data.auth import TenantContext
 
 
 class CatalogPreviewRequest(BaseModel):
-    """CSV catalog preview request from the Nova Console."""
+    """CSV catalog preview request from the APEX Console."""
 
     filename: str = "catalog.csv"
     csv_text: str

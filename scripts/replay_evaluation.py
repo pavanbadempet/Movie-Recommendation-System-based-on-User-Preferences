@@ -33,7 +33,7 @@ class CounterfactualReplayEngine:
         """
         if rank < 0 or rank >= max_rank:
             return 0.01  # Floor propensity
-        return 1.0 / np.log2(rank + 2)
+        return float(1.0 / np.log2(rank + 2))
 
     def evaluate_ips(self, historical_logs: list[dict[str, Any]], new_policy_func) -> float:
         """

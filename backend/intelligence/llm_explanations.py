@@ -3,8 +3,8 @@ import hashlib
 import logging
 from typing import Any
 
-from backend.serving.feature_store import feature_store
 from backend.intelligence.openrouter_client import chat_completion, configured_models, openrouter_api_key
+from backend.serving.feature_store import feature_store
 
 logger = logging.getLogger(__name__)
 

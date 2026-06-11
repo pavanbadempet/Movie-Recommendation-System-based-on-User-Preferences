@@ -35,7 +35,7 @@ def evaluate_recommendation_quality(recommender: Any, sample_size: int = 25, k: 
     metrics: dict[str, Any] = {
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
         "status": "ok",
-        "movie_count": int(len(movies)),
+        "movie_count": len(movies),
         "sample_size": int(min(max(sample_size, 1), len(movies))),
         "k": int(max(k, 1)),
         "catalog": {},

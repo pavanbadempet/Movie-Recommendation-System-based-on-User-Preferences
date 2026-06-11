@@ -28,7 +28,10 @@ jobs:
         run: python -m compileall backend etl airflow scripts frontend/streamlit_app.py manage.py tests
 
       - name: Stamp app revision
-        run: echo "${GITHUB_SHA}" > REVISION
+        run: |
+          echo "${GITHUB_SHA}" > REVISION
+          git add -f REVISION
+          echo "ENV NOVA_APP_COMMIT=${GITHUB_SHA}" >> Dockerfile
 
       - name: Deploy to Hugging Face Space
         env:
@@ -72,6 +75,13 @@ jobs:
                   '*.log',
                   '*.err',
               ]
+          )
+          print('Uploading REVISION file explicitly...')
+          api.upload_file(
+              path_or_fileobj='REVISION',
+              path_in_repo='REVISION',
+              repo_id='pavanbadempet/movie-rec-api',
+              repo_type='space'
           )
           print('Upload complete!')
           "

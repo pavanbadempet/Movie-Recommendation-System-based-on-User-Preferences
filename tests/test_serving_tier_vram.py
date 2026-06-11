@@ -17,12 +17,11 @@ Covers:
 
 from __future__ import annotations
 
-import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
+import pytest
 
 from backend.serving.serving_tier import HardwareProfile, TierDetector
-
 
 # ---------------------------------------------------------------------------
 # HardwareProfile backward compatibility
@@ -50,20 +49,17 @@ def test_hardware_profile_accepts_gpu_vram_gb():
     "ram_gb, gpu, vram_gb, expected_tier",
     [
         # No GPU path
-        (4.0, False, 0.0, "tier3"),   # < 8 GB RAM → tier3
-        (8.0, False, 0.0, "tier2"),   # no GPU, enough RAM → tier2
+        (4.0, False, 0.0, "tier3"),  # < 8 GB RAM → tier3
+        (8.0, False, 0.0, "tier2"),  # no GPU, enough RAM → tier2
         (32.0, False, 0.0, "tier2"),  # no GPU, lots of RAM → tier2
-
         # GPU present, insufficient RAM → tier2
         (12.0, True, 16.0, "tier2"),  # RAM < 16 GB threshold
-
         # GPU present, sufficient RAM, but insufficient VRAM
-        (16.0, True, 4.0, "tier2"),   # vram=4 < required 8
-        (16.0, True, 7.9, "tier2"),   # vram just below threshold
-        (16.0, True, 0.0, "tier2"),   # vram unknown (0.0) → safe fallback
-
+        (16.0, True, 4.0, "tier2"),  # vram=4 < required 8
+        (16.0, True, 7.9, "tier2"),  # vram just below threshold
+        (16.0, True, 0.0, "tier2"),  # vram unknown (0.0) → safe fallback
         # GPU present, sufficient RAM and VRAM → tier1
-        (16.0, True, 8.0, "tier1"),   # exact threshold
+        (16.0, True, 8.0, "tier1"),  # exact threshold
         (16.0, True, 24.0, "tier1"),  # typical high-end GPU
         (32.0, True, 80.0, "tier1"),  # A100-class
     ],
@@ -77,9 +73,7 @@ def test_vram_aware_auto_selection(ram_gb, gpu, vram_gb, expected_tier):
         gpu_vram_gb=vram_gb,
     )
     tier, reason = TierDetector()._auto_select(profile)
-    assert tier == expected_tier, (
-        f"Expected {expected_tier} for gpu={gpu}, ram={ram_gb}, vram={vram_gb}, got {tier}"
-    )
+    assert tier == expected_tier, f"Expected {expected_tier} for gpu={gpu}, ram={ram_gb}, vram={vram_gb}, got {tier}"
     assert reason == "hardware_auto_detection"
 
 
@@ -162,6 +156,4 @@ def test_property_low_ram_always_tier3(ram_gb, gpu, vram_gb):
         gpu_vram_gb=vram_gb,
     )
     tier, _ = TierDetector()._auto_select(profile)
-    assert tier == "tier3", (
-        f"Expected tier3 for ram_gb={ram_gb} < 8.0, got {tier}"
-    )
+    assert tier == "tier3", f"Expected tier3 for ram_gb={ram_gb} < 8.0, got {tier}"

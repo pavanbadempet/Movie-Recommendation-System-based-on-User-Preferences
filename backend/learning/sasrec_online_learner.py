@@ -51,9 +51,9 @@ class SASRecOnlineLearner:
     def __init__(
         self,
         sasrec: SASRec,
-        session_sequence_getter,          # callable(user_id: int) -> list[int]
+        session_sequence_getter,  # callable(user_id: int) -> list[int]
         batch_size: int = 16,
-        lr: float = 5e-5,                 # Smaller LR than LightGCN — Transformer is more sensitive
+        lr: float = 5e-5,  # Smaller LR than LightGCN — Transformer is more sensitive
         checkpoint_interval: int = 500,
         checkpoint_path: Path = MODELS_DIR / "sasrec_online.pth",
         num_items: int | None = None,
@@ -110,8 +110,7 @@ class SASRecOnlineLearner:
             try:
                 dropped = self._queue.get_nowait()
                 logger.warning(
-                    "SASRecOnlineLearner queue full — dropped event "
-                    "(event_type=%s, user_id=%s, movie_id=%s).",
+                    "SASRecOnlineLearner queue full — dropped event (event_type=%s, user_id=%s, movie_id=%s).",
                     dropped.get("event_type"),
                     dropped.get("user_id"),
                     dropped.get("movie_id"),
@@ -202,7 +201,7 @@ class SASRecOnlineLearner:
 
             # Pad / truncate to max_seq_len
             seq_len = self.sasrec.max_seq_len
-            padded = ([0] * max(seq_len - len(seq), 0) + [s % self.num_items for s in seq[-seq_len:]])
+            padded = [0] * max(seq_len - len(seq), 0) + [s % self.num_items for s in seq[-seq_len:]]
 
             neg_item = random.randrange(self.num_items)
 
@@ -221,21 +220,21 @@ class SASRecOnlineLearner:
         if not seqs:
             return
 
-        seq_tensor = torch.tensor(seqs, dtype=torch.long)          # [B, seq_len]
-        pos_tensor = torch.tensor(pos_items, dtype=torch.long)     # [B]
-        neg_tensor = torch.tensor(neg_items, dtype=torch.long)     # [B]
-        weight_tensor = torch.tensor(weights, dtype=torch.float32) # [B]
+        seq_tensor = torch.tensor(seqs, dtype=torch.long)  # [B, seq_len]
+        pos_tensor = torch.tensor(pos_items, dtype=torch.long)  # [B]
+        neg_tensor = torch.tensor(neg_items, dtype=torch.long)  # [B]
+        weight_tensor = torch.tensor(weights, dtype=torch.float32)  # [B]
 
         # Forward pass: use predict() for the final hidden state scores
         # We compute scores via the final hidden state against pos/neg items
-        seq_out = self.sasrec(seq_tensor)                          # [B, seq_len, hidden_dim]
-        final_state = seq_out[:, -1, :]                           # [B, hidden_dim]
+        seq_out = self.sasrec(seq_tensor)  # [B, seq_len, hidden_dim]
+        final_state = seq_out[:, -1, :]  # [B, hidden_dim]
 
-        pos_emb = self.sasrec.item_emb(pos_tensor)                # [B, hidden_dim]
-        neg_emb = self.sasrec.item_emb(neg_tensor)                # [B, hidden_dim]
+        pos_emb = self.sasrec.item_emb(pos_tensor)  # [B, hidden_dim]
+        neg_emb = self.sasrec.item_emb(neg_tensor)  # [B, hidden_dim]
 
-        pos_scores = (final_state * pos_emb).sum(dim=1)           # [B]
-        neg_scores = (final_state * neg_emb).sum(dim=1)           # [B]
+        pos_scores = (final_state * pos_emb).sum(dim=1)  # [B]
+        neg_scores = (final_state * neg_emb).sum(dim=1)  # [B]
 
         loss = (F.softplus(neg_scores - pos_scores) * weight_tensor).mean()
 

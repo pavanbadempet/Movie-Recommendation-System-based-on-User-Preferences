@@ -5,7 +5,12 @@ Tests for Nova's learned ranking layer.
 import pandas as pd
 
 from backend.pipeline.ranker import candidate_features, load_ranker
-from backend.pipeline.ranker_training import build_item_feedback, build_training_frame, promotion_decision, train_nova_ranker
+from backend.pipeline.ranker_training import (
+    build_item_feedback,
+    build_training_frame,
+    promotion_decision,
+    train_nova_ranker,
+)
 
 
 def sample_movies() -> pd.DataFrame:

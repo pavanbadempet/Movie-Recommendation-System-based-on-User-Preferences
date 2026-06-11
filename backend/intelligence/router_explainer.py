@@ -17,13 +17,12 @@ This is critical for:
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass, field
+import logging
 from typing import TYPE_CHECKING
 
 import torch
 import torch.nn.functional as F
-import numpy as np
 
 if TYPE_CHECKING:
     from backend.models.contextual_router import ContextualRouter
@@ -47,6 +46,7 @@ class RoutingExplanation:
     Contains per-model routing probabilities, selected models,
     and feature-level attribution for the routing decision.
     """
+
     selected_models: list[str]
     routing_weights: list[float]
     all_model_probabilities: dict[str, float]
@@ -71,7 +71,7 @@ class RouterExplainer:
 
     def __init__(
         self,
-        router: "ContextualRouter",
+        router: ContextualRouter,
         emb_dim: int = 16,
         num_permutations: int = 10,
     ):
@@ -111,10 +111,7 @@ class RouterExplainer:
             logits = self.router(user_state.unsqueeze(0) if user_state.dim() == 1 else user_state)
             probs = F.softmax(logits.squeeze(), dim=-1)
 
-        all_probs = {
-            name: round(probs[i].item(), 4)
-            for i, name in enumerate(self.router.model_names)
-        }
+        all_probs = {name: round(probs[i].item(), 4) for i, name in enumerate(self.router.model_names)}
 
         # 3. Compute feature attributions
         attributions = self._compute_attributions(user_state, selected_models)
@@ -164,11 +161,7 @@ class RouterExplainer:
             base_probs = F.softmax(base_logits, dim=-1)
 
         # Get indices of selected models
-        selected_indices = [
-            self.router.model_names.index(m)
-            for m in selected_models
-            if m in self.router.model_names
-        ]
+        selected_indices = [self.router.model_names.index(m) for m in selected_models if m in self.router.model_names]
 
         # Sum of probabilities for selected models (our "target score")
         base_score = sum(base_probs[idx].item() for idx in selected_indices)
@@ -210,7 +203,7 @@ class RouterExplainer:
         summary = {}
 
         # Embedding norm
-        emb = user_state[:self.emb_dim]
+        emb = user_state[: self.emb_dim]
         summary["embedding_norm"] = round(torch.norm(emb).item(), 4)
 
         # Individual metrics
@@ -233,9 +226,7 @@ class RouterExplainer:
         lines = []
 
         # Model selection
-        model_str = ", ".join(
-            f"{m} ({w.item():.0%})" for m, w in zip(selected_models, routing_weights)
-        )
+        model_str = ", ".join(f"{m} ({w.item():.0%})" for m, w in zip(selected_models, routing_weights))
         lines.append(f"Router selected: {model_str}")
 
         # User context

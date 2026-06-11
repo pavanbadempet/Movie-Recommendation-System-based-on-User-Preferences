@@ -4,12 +4,14 @@ from fastapi.testclient import TestClient
 
 
 def test_frontend_status_reports_streamlit_and_react_without_remote_probe(tmp_path, monkeypatch):
+    import backend.api.recommendation_routes as rec_routes
     import backend.data.frontend_failover as frontend_failover
     import backend.main as main
 
     frontend_failover._HEALTH_CACHE.clear()
     (tmp_path / "index.html").write_text("<html>ok</html>", encoding="utf-8")
     monkeypatch.setattr(main, "FRONTEND_DIST_DIR", tmp_path)
+    monkeypatch.setattr(rec_routes, "_FRONTEND_DIST_DIR", tmp_path)
     monkeypatch.setenv("NOVA_FRONTEND_STREAMLIT_URL", "https://streamlit.example")
     monkeypatch.setenv("NOVA_FRONTEND_PRIORITY", "streamlit,react")
 
@@ -27,12 +29,14 @@ def test_frontend_status_reports_streamlit_and_react_without_remote_probe(tmp_pa
 
 
 def test_frontend_launch_redirects_to_healthy_react_backup(tmp_path, monkeypatch):
+    import backend.api.recommendation_routes as rec_routes
     import backend.data.frontend_failover as frontend_failover
     import backend.main as main
 
     frontend_failover._HEALTH_CACHE.clear()
     (tmp_path / "index.html").write_text("<html>ok</html>", encoding="utf-8")
     monkeypatch.setattr(main, "FRONTEND_DIST_DIR", tmp_path)
+    monkeypatch.setattr(rec_routes, "_FRONTEND_DIST_DIR", tmp_path)
     monkeypatch.setenv("NOVA_FRONTEND_STREAMLIT_URL", "https://streamlit.example")
     monkeypatch.setenv("NOVA_FRONTEND_PRIORITY", "streamlit,react")
 
@@ -48,12 +52,14 @@ def test_frontend_launch_redirects_to_healthy_react_backup(tmp_path, monkeypatch
 
 
 def test_frontend_launch_uses_forwarded_https_for_same_origin_backup(tmp_path, monkeypatch):
+    import backend.api.recommendation_routes as rec_routes
     import backend.data.frontend_failover as frontend_failover
     import backend.main as main
 
     frontend_failover._HEALTH_CACHE.clear()
     (tmp_path / "index.html").write_text("<html>ok</html>", encoding="utf-8")
     monkeypatch.setattr(main, "FRONTEND_DIST_DIR", tmp_path)
+    monkeypatch.setattr(rec_routes, "_FRONTEND_DIST_DIR", tmp_path)
     monkeypatch.setenv("NOVA_FRONTEND_STREAMLIT_URL", "https://streamlit.example")
     monkeypatch.setenv("NOVA_FRONTEND_PRIORITY", "streamlit,react")
 

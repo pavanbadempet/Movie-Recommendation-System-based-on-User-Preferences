@@ -101,7 +101,7 @@ export async function apiGet<T>(
       const token = typeof window !== "undefined" ? window.localStorage.getItem("nova_jwt_token") : null;
       const headers: Record<string, string> = { Accept: "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      
+
       const response = await fetch(`${baseUrl}${suffix}`, {
         headers,
         signal: timeout.signal,
@@ -139,7 +139,7 @@ export async function apiGetFirstSuccess<T>(
       const token = typeof window !== "undefined" ? window.localStorage.getItem("nova_jwt_token") : null;
       const headers: Record<string, string> = { Accept: "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      
+
       const response = await fetch(`${baseUrl}${suffix}`, {
         headers,
         signal: controller.signal,
@@ -179,7 +179,7 @@ export async function apiPost<T>(path: string, body: unknown, timeoutMs = 15000)
           "Content-Type": "application/json",
       };
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      
+
       const response = await fetch(`${baseUrl}${path}`, {
         method: "POST",
         headers,

@@ -4,6 +4,8 @@
 #
 # Hook order mirrors CI gate order so local failures match CI failures exactly.
 
+exclude: ^(notebooks/|frontend/|manage\.py|k8s/)
+
 repos:
   # ---------------------------------------------------------------------------
   # 1. General hygiene (fast, no deps required)
@@ -64,4 +66,4 @@ repos:
       - id: yamllint
         args: [-d, relaxed]
         files: \.(yml|yaml)$
-        exclude: ^(frontend/|\.kiro/)
+        exclude: ^(frontend/|\.kiro/|k8s/)

@@ -12,8 +12,8 @@ Covers:
 
 from __future__ import annotations
 
-import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 import numpy as np
 import pytest
@@ -24,7 +24,6 @@ from backend.privacy.privacy_preserving_ml import (
     add_gaussian_noise,
     privatize_user_embedding,
 )
-
 
 # ---------------------------------------------------------------------------
 # privatize_user_embedding — unit tests
@@ -117,9 +116,7 @@ class TestUserEmbOverride:
         # Scores should differ (zero emb gives different dot products)
         raw_vals = [scores_raw[i] for i in items]
         ovr_vals = [scores_override[i] for i in items]
-        assert raw_vals != ovr_vals, (
-            "user_emb_override had no effect — wiring is broken"
-        )
+        assert raw_vals != ovr_vals, "user_emb_override had no effect — wiring is broken"
 
     def test_override_does_not_mutate_shared_table(self, engine):
         """The shared LightGCN embedding table must not change after override call."""
@@ -132,8 +129,7 @@ class TestUserEmbOverride:
         table_after = engine.lightgcn.user_embedding.weight.data
 
         assert torch.allclose(table_before, table_after), (
-            "predict_ensemble mutated the shared LightGCN embedding table — "
-            "thread-safety violation"
+            "predict_ensemble mutated the shared LightGCN embedding table — thread-safety violation"
         )
 
     def test_none_override_uses_table_embedding(self, engine):
@@ -153,6 +149,7 @@ class TestUserEmbOverride:
     def test_scores_are_finite_with_override(self, engine):
         """Scores must be finite floats regardless of the override embedding value."""
         import math
+
         user_id = 4
         items = [1, 5, 10, 20, 50]
 
@@ -160,9 +157,7 @@ class TestUserEmbOverride:
             emb = torch.full((engine.emb_dim,), override_val)
             scores = engine.predict_ensemble(user_id, items, user_emb_override=emb)
             for item, score in scores.items():
-                assert math.isfinite(score), (
-                    f"Non-finite score {score} for item {item} with override={override_val}"
-                )
+                assert math.isfinite(score), f"Non-finite score {score} for item {item} with override={override_val}"
 
 
 # ---------------------------------------------------------------------------
@@ -204,8 +199,7 @@ class TestDPConcurrencySafety:
 
         table_after = engine.lightgcn.user_embedding.weight.data
         assert torch.allclose(table_before, table_after), (
-            "Concurrent predict_ensemble calls mutated the shared embedding table — "
-            "thread-safety regression"
+            "Concurrent predict_ensemble calls mutated the shared embedding table — thread-safety regression"
         )
 
     def test_concurrent_same_user_different_dp_noise(self, engine):
@@ -226,9 +220,7 @@ class TestDPConcurrencySafety:
 
         def run(thread_idx: int) -> None:
             barrier.wait()  # start both threads simultaneously
-            results[thread_idx] = engine.predict_ensemble(
-                user_id, items, user_emb_override=embeddings[thread_idx]
-            )
+            results[thread_idx] = engine.predict_ensemble(user_id, items, user_emb_override=embeddings[thread_idx])
 
         threads = [threading.Thread(target=run, args=(i,)) for i in range(2)]
         for t in threads:
@@ -244,8 +236,7 @@ class TestDPConcurrencySafety:
 
         # More importantly: both results must be valid (finite, in range)
         import math
+
         for thread_idx, scores in enumerate(results):
             for item, score in scores.items():
-                assert math.isfinite(score), (
-                    f"Thread {thread_idx} produced non-finite score {score} for item {item}"
-                )
+                assert math.isfinite(score), f"Thread {thread_idx} produced non-finite score {score} for item {item}"

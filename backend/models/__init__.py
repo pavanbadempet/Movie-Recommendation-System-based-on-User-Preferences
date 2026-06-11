@@ -18,6 +18,10 @@ Training & optimization:
     OnlineLearner         — LightGCN online BPR updates (backend/learning/online_learner.py)
 """
 
+from backend.learning.online_learner import OnlineLearner
+from backend.learning.rl_policy import ActorCriticPolicy, RLSafetyFilter
+from backend.learning.rl_reward import RLRewardEngine
+from backend.models.contextual_router import ContextualRouter, build_user_state
 from backend.models.diffusion_recommender import LatentDiffusionRecommender
 from backend.models.ensemble_engine import ApexEnsembleEngine, get_apex_engine
 from backend.models.hyperbolic_recommender import HyperbolicRecommender
@@ -26,12 +30,8 @@ from backend.models.lightgcn import LightGCN
 from backend.models.mmoe_ranker import MMoERanker
 from backend.models.neural_ode_recommender import QuantumFluidRecommender
 from backend.models.neural_weight_optimizer import ContextualWeightNetwork, get_contextual_weights
-from backend.learning.online_learner import OnlineLearner
-from backend.learning.rl_policy import ActorCriticPolicy, RLSafetyFilter
-from backend.learning.rl_reward import RLRewardEngine
 from backend.models.sasrec import SASRec
 from backend.models.two_tower import TwoTowerModel
-from backend.models.contextual_router import ContextualRouter, build_user_state
 
 __all__ = [
     # 6-model ensemble

@@ -37,7 +37,7 @@ Thanks for your interest. This document covers everything you need to get from z
 
 ```bash
 # 1. Clone and create a virtual environment
-git clone https://github.com/pavanpajjuri/Movie-Recommendation-System.git
+git clone https://github.com/pavanbadempet/Movie-Recommendation-System.git
 cd Movie-Recommendation-System
 python -m venv venv
 venv\Scripts\activate      # Windows

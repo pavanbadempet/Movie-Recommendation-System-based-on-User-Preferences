@@ -33,7 +33,7 @@ jobs:
   trigger-kaggle-notebook:
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -73,16 +73,16 @@ jobs:
         run: |
           echo "Waiting for Kaggle notebook to complete..."
           KERNEL_ID="flameemperor/movie-recommendation-system-etl-pipeline"
-          
+
           # Wait 2 minutes before first check (notebook needs time to start)
           sleep 120
-          
+
           # Poll for completion (max 90 minutes, check every 30s).
           # Full catalog embedding rebuilds can outlive the old 30-minute window.
           for i in $(seq 1 180); do
             STATUS=$(kaggle kernels status "$KERNEL_ID" 2>&1 | tail -1)
             echo "[$i/180] Status: $STATUS"
-            
+
             if echo "$STATUS" | grep -qi "complete"; then
               echo "Kaggle notebook completed successfully!"
               kaggle kernels output "$KERNEL_ID" -p /tmp/kaggle_output || true
@@ -91,17 +91,17 @@ jobs:
               echo "--- End Output ---"
               exit 0
             fi
-            
+
             if echo "$STATUS" | grep -qi "error\|cancel"; then
               echo "Kaggle notebook failed!"
               kaggle kernels output "$KERNEL_ID" -p /tmp/kaggle_output || true
               cat /tmp/kaggle_output/*.log 2>/dev/null || echo "(no log file)"
               exit 1
             fi
-            
+
             sleep 30
           done
-          
+
           echo "Timeout after 90 minutes. Check Kaggle manually:"
           echo "https://www.kaggle.com/code/$KERNEL_ID"
           exit 1

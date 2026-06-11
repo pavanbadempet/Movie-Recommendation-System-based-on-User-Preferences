@@ -22,9 +22,8 @@ References:
 
 from __future__ import annotations
 
-import logging
-import math
 from dataclasses import dataclass, field
+import logging
 from typing import Any
 
 import numpy as np
@@ -43,6 +42,7 @@ class LoggedInteraction:
     - What reward was observed
     - What was the propensity (probability) of this action under the logging policy
     """
+
     user_id: int
     item_id: int
     reward: float  # 1.0 for click/engagement, 0.0 for no interaction
@@ -120,7 +120,7 @@ class CounterfactualEvaluator:
                 weights.append(min(target_p / interaction.propensity, self.ips_clip))
 
         w_arr = np.array(weights) if weights else np.array([1.0])
-        ess = float((w_arr.sum() ** 2) / (w_arr ** 2).sum()) if w_arr.sum() > 0 else 0.0
+        ess = float((w_arr.sum() ** 2) / (w_arr**2).sum()) if w_arr.sum() > 0 else 0.0
 
         return {
             "estimate": round(estimate, 6),
@@ -171,7 +171,7 @@ class CounterfactualEvaluator:
 
         # Kish's ESS
         w_arr = np.array(weights)
-        ess = float((w_arr.sum() ** 2) / (w_arr ** 2).sum()) if len(weights) > 0 else 0.0
+        ess = float((w_arr.sum() ** 2) / (w_arr**2).sum()) if len(weights) > 0 else 0.0
 
         return {
             "estimate": round(estimate, 6),
@@ -208,9 +208,12 @@ class CounterfactualEvaluator:
         n = len(logged_data)
         if not logged_data or len(target_propensities) != n or len(reward_model_predictions) != n:
             return {
-                "estimate": 0.0, "variance": 0.0,
-                "reward_model_component": 0.0, "ips_correction_component": 0.0,
-                "effective_sample_size": 0, "num_samples": 0,
+                "estimate": 0.0,
+                "variance": 0.0,
+                "reward_model_component": 0.0,
+                "ips_correction_component": 0.0,
+                "effective_sample_size": 0,
+                "num_samples": 0,
             }
 
         dr_terms = []
@@ -218,9 +221,7 @@ class CounterfactualEvaluator:
         ips_correction_sum = 0.0
         weights = []
 
-        for interaction, target_p, pred_reward in zip(
-            logged_data, target_propensities, reward_model_predictions
-        ):
+        for interaction, target_p, pred_reward in zip(logged_data, target_propensities, reward_model_predictions):
             # Reward model component
             reward_model_sum += pred_reward
 
@@ -242,7 +243,7 @@ class CounterfactualEvaluator:
 
         # Kish's ESS
         w_arr = np.array(weights) if weights else np.array([1.0])
-        ess = float((w_arr.sum() ** 2) / (w_arr ** 2).sum()) if w_arr.sum() > 0 else 0.0
+        ess = float((w_arr.sum() ** 2) / (w_arr**2).sum()) if w_arr.sum() > 0 else 0.0
 
         return {
             "estimate": round(estimate, 6),

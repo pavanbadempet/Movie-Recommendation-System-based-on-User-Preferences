@@ -7,8 +7,8 @@ groups:
       # -----------------------------------------------------------------------
       - alert: HighErrorRate
         expr: |
-          rate(nova_http_requests_total{http_status=~"5.."}[5m])
-          / rate(nova_http_requests_total[5m]) > 0.03
+          rate(apex_http_requests_total{http_status=~"5.."}[5m])
+          / rate(apex_http_requests_total[5m]) > 0.03
         for: 2m
         labels:
           severity: critical
@@ -25,7 +25,7 @@ groups:
       - alert: RecommendationLatencyHigh
         expr: |
           histogram_quantile(0.95,
-            rate(nova_http_request_duration_seconds_bucket{
+            rate(apex_http_request_duration_seconds_bucket{
               endpoint=~"/v1/recommendations.*"
             }[5m])
           ) > 25
@@ -45,7 +45,7 @@ groups:
       - alert: SearchLatencyHigh
         expr: |
           histogram_quantile(0.95,
-            rate(nova_http_request_duration_seconds_bucket{
+            rate(apex_http_request_duration_seconds_bucket{
               endpoint=~"/v1/search.*"
             }[5m])
           ) > 2.5
@@ -63,7 +63,7 @@ groups:
       # -----------------------------------------------------------------------
       - alert: NoTraffic
         expr: |
-          rate(nova_http_requests_total[10m]) == 0
+          rate(apex_http_requests_total[10m]) == 0
         for: 10m
         labels:
           severity: warning
@@ -82,7 +82,7 @@ groups:
       # -----------------------------------------------------------------------
       - alert: RecommendationEndpointErrors
         expr: |
-          rate(nova_http_requests_total{
+          rate(apex_http_requests_total{
             endpoint=~"/v1/recommendations.*",
             http_status=~"5.."
           }[5m]) > 0.01

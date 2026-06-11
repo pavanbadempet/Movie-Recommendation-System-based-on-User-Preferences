@@ -9,38 +9,43 @@ Usage:
     python manage.py clean      # Remove artifacts/cache
     python manage.py docker     # Run with Docker Compose
 """
+
 import argparse
+import os
+from pathlib import Path
+import platform
 import subprocess
 import sys
 import time
-import os
-import platform
-from pathlib import Path
+
 
 # Colors for terminal output
 class Colors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
+    HEADER = "\033[95m"
+    OKBLUE = "\033[94m"
+    OKGREEN = "\033[92m"
+    WARNING = "\033[93m"
+    FAIL = "\033[91m"
+    ENDC = "\033[0m"
+    BOLD = "\033[1m"
+
 
 def log(msg, color=Colors.OKBLUE):
     print(f"{color}{Colors.BOLD}[MANAGER] {msg}{Colors.ENDC}", flush=True)
+
 
 def run_cmd(cmd, cwd=None, background=False):
     """Run a shell command."""
     log(f"Running: {cmd}")
     if background:
         return subprocess.Popen(cmd, shell=True, cwd=cwd)
-    
+
     try:
         subprocess.check_call(cmd, shell=True, cwd=cwd)
     except subprocess.CalledProcessError:
         log("Command failed.", Colors.FAIL)
         sys.exit(1)
+
 
 def check_env():
     """Check for .env file."""
@@ -51,14 +56,16 @@ def check_env():
             f.write("API_URL=http://localhost:8000\n")
         log("Created .env. Please edit it with your API keys!", Colors.WARNING)
 
+
 def setup():
     """Install dependencies."""
     log("Installing dependencies...")
     run_cmd(f"{sys.executable} -m pip install --upgrade pip")
     run_cmd(f"{sys.executable} -m pip install -r requirements.txt")
-    
+
     check_env()
     log("Setup complete!", Colors.OKGREEN)
+
 
 def etl(spark=False):
     """Run ETL Pipeline."""
@@ -71,11 +78,13 @@ def etl(spark=False):
         run_cmd(f"{sys.executable} -m etl.pandas_etl")
     log("ETL Complete!", Colors.OKGREEN)
 
+
 def test():
     """Run Tests."""
     log("Running Tests...")
     run_cmd(f"{sys.executable} -m pytest tests/ -v")
     log("All tests passed!", Colors.OKGREEN)
+
 
 def lakehouse(format_type="text", as_of=None, compare_from=None, compare_to=None):
     """Inspect local medallion snapshots and SCD history."""
@@ -92,6 +101,7 @@ def lakehouse(format_type="text", as_of=None, compare_from=None, compare_to=None
 
     log("Inspecting lakehouse snapshots...")
     run_cmd(cmd)
+
 
 def rebuild_serving(
     movies_path="data/processed/movies_transformed.parquet",
@@ -116,6 +126,7 @@ def rebuild_serving(
     if upload_to_hf:
         cmd += " --upload-to-hf"
     run_cmd(cmd)
+
 
 def run_app():
     """Run Backend and Frontend concurrently."""
@@ -163,64 +174,64 @@ def run_app():
         backend.terminate()
         frontend.terminate()
 
+
 def docker_run():
     """Run with Docker Compose."""
     log("Starting Docker Containers...")
     run_cmd("docker-compose up --build -d")
     log("Services running at http://localhost:8501 (Frontend) and http://localhost:8080 (Airflow)", Colors.OKGREEN)
 
+
 def clean():
     """Clean artifacts."""
     log("Cleaning up...", Colors.WARNING)
-    
+
     if platform.system() == "Windows":
         run_cmd("del /s /q __pycache__")
     else:
         run_cmd("find . -name '__pycache__' -exec rm -rf {} +")
-        
+
     log("Clean complete.")
+
 
 def deploy():
     """Commit and push changes to trigger deployment."""
     log("Deploying updates to Git...", Colors.WARNING)
-    
+
     # 1. Add specific artifacts
     log("Adding artifacts...")
-    artifacts = [
-        "data/processed/movies_transformed.parquet", 
-        "models/sbert_embeddings.npy", 
-        "models/turbovec.tq"
-    ]
+    artifacts = ["data/processed/movies_transformed.parquet", "models/sbert_embeddings.npy", "models/turbovec.tq"]
     for art in artifacts:
         if os.path.exists(art):
             run_cmd(f"git add {art}")
-            
+
     # 2. Add docs/configs if changed
     run_cmd("git add README.md docs/ manage.py etl/")
-    
+
     # 3. Commit
     current_time = time.strftime("%Y-%m-%d %H:%M:%S")
     try:
         run_cmd(f'git commit -m "chore: update models and data ({current_time})"')
-        
+
         # 4. Push
         log("Pushing to remote to trigger Render/Streamlit...", Colors.OKBLUE)
         run_cmd("git push")
         log("Deployment triggered! Check Render dashboard.", Colors.OKGREEN)
-        
+
     except Exception:
         log("Nothing to commit or push failed.", Colors.WARNING)
+
 
 def main():
     parser = argparse.ArgumentParser(description="Project Manager")
     subparsers = parser.add_subparsers(dest="command", required=True)
-    
+
     subparsers.add_parser("setup", help="Install dependencies")
     subparsers.add_parser("frontend-install", help="Install React frontend dependencies")
 
     etl_parser = subparsers.add_parser("etl", help="Run ETL pipeline")
     etl_parser.add_argument("--spark", action="store_true", help="Use PySpark instead of Pandas")
-    
+
     subparsers.add_parser("run", help="Run App (Backend + Frontend)")
     subparsers.add_parser("test", help="Run Tests")
     subparsers.add_parser("clean", help="Clean artifacts")
@@ -234,7 +245,9 @@ def main():
     lakehouse_parser.add_argument("--compare-from")
     lakehouse_parser.add_argument("--compare-to")
 
-    rebuild_serving_parser = subparsers.add_parser("rebuild-serving", help="Rebuild aligned serving artifacts from movies_transformed.parquet")
+    rebuild_serving_parser = subparsers.add_parser(
+        "rebuild-serving", help="Rebuild aligned serving artifacts from movies_transformed.parquet"
+    )
     rebuild_serving_parser.add_argument("--movies-path", default="data/processed/movies_transformed.parquet")
     rebuild_serving_parser.add_argument("--models-dir", default="models")
     rebuild_serving_parser.add_argument("--processed-dir", default="data/processed")
@@ -242,9 +255,9 @@ def main():
     rebuild_serving_parser.add_argument("--upload-to-hf", action="store_true")
     rebuild_serving_parser.add_argument("--hf-repo", default="pavanbadempet/movie-recs-models")
     rebuild_serving_parser.add_argument("--hf-repo-type", default="model")
-    
+
     args = parser.parse_args()
-    
+
     if args.command == "setup":
         setup()
     elif args.command == "frontend-install":
@@ -280,6 +293,7 @@ def main():
             hf_repo=args.hf_repo,
             hf_repo_type=args.hf_repo_type,
         )
+
 
 if __name__ == "__main__":
     main()

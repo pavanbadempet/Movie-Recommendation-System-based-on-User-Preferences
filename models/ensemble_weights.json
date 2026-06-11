@@ -11,5 +11,13 @@
   "num_candidates_evaluated": 200,
   "method": "doubly_robust_ips",
   "dr_score": 3.917076,
-  "notes": "DR-optimized via 200 Dirichlet-sampled candidates. SASRec dominates (0.659) because real session sequences are wired in. KAN contributes meaningfully (0.298). LightGCN near-zero (0.005) reflects sparse live event data -- will increase as online learner accumulates interactions. Ensemble achieves +4.3% NDCG@10 lift over best individual model (SASRec)."
+  "model_classifications": {
+    "sasrec": "core",
+    "kan": "core",
+    "diffusion": "core",
+    "quantum": "core",
+    "lightgcn": "experimental",
+    "hyperbolic": "experimental"
+  },
+  "notes": "DR-optimized via 200 Dirichlet-sampled candidates. Core models (SASRec 65.9%, KAN 29.8%, Diffusion 2.4%, Quantum 1.0%) account for 99.1% of ensemble weight. Experimental models (LightGCN 0.5%, Hyperbolic 0.4%) are included for architectural diversity and will gain weight as online learning accumulates interaction data. Ensemble achieves +4.3% NDCG@10 lift over best individual model (SASRec)."
 }

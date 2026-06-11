@@ -1044,8 +1044,8 @@ def run_spark_etl(
 
         rows = serving_df.select("id", "vector").collect()
 
-        from turbovec import TurboQuantIndex
         import numpy as np
+        from turbovec import TurboQuantIndex
 
         # COMPRESSION (Precision Engineering):
         # Convert to float16 (Half Precision) to save 50% RAM/Disk/Network
@@ -1077,11 +1077,11 @@ def run_spark_etl(
             "model_name": EMBEDDING_MODEL_NAME,
             "serving_contract": {
                 "version": 1,
-                "movie_rows": int(len(movie_ids)),
+                "movie_rows": len(movie_ids),
                 "embedding_rows": int(vectors.shape[0]),
                 "embedding_dimensions": int(vectors.shape[1]) if len(vectors.shape) > 1 else 0,
                 "turbovec_index_size": len(index),
-                "movie_id_map_rows": int(len(movie_ids)),
+                "movie_id_map_rows": len(movie_ids),
                 "movie_id_sha256": movie_id_hash,
             },
             "artifacts": {

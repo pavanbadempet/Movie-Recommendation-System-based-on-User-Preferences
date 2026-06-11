@@ -9,12 +9,10 @@ Covers:
 - Manual enable/disable
 - Safety: all-models-disabled fallback
 """
-import time
-from unittest.mock import patch
 
 import pytest
 
-from backend.serving.model_health_monitor import ModelHealthMonitor, ModelState
+from backend.serving.model_health_monitor import ModelHealthMonitor
 
 
 @pytest.fixture
@@ -32,7 +30,7 @@ class TestEWMATracking:
         # Record several predictions with known error
         for _ in range(20):
             monitor.record_prediction("lightgcn", error=0.5, latency_ms=10.0)
-        
+
         state = monitor._states["lightgcn"]
         # After many observations, EWMA should converge toward 0.5
         assert 0.3 < state.ewma_error < 0.7
@@ -41,7 +39,7 @@ class TestEWMATracking:
         """EWMA latency should track recorded values."""
         for _ in range(20):
             monitor.record_prediction("quantum", error=0.1, latency_ms=50.0)
-        
+
         state = monitor._states["quantum"]
         assert 30.0 < state.ewma_latency_ms < 70.0
 
@@ -49,7 +47,7 @@ class TestEWMATracking:
         """Failures should increment counters."""
         monitor.record_prediction("kan", error=1.0, latency_ms=100.0, success=False)
         monitor.record_prediction("kan", error=1.0, latency_ms=100.0, success=False)
-        
+
         state = monitor._states["kan"]
         assert state.total_failures == 2
         assert state.consecutive_failures == 2
@@ -59,7 +57,7 @@ class TestEWMATracking:
         monitor.record_prediction("sasrec", error=1.0, latency_ms=50.0, success=False)
         monitor.record_prediction("sasrec", error=1.0, latency_ms=50.0, success=False)
         monitor.record_prediction("sasrec", error=0.1, latency_ms=10.0, success=True)
-        
+
         state = monitor._states["sasrec"]
         assert state.consecutive_failures == 0
         assert state.total_failures == 2
@@ -72,11 +70,11 @@ class TestAutoDisable:
         for _ in range(20):
             for m in ("lightgcn", "quantum", "sasrec", "kan", "hyperbolic"):
                 monitor.record_prediction(m, error=0.1, latency_ms=10.0)
-        
+
         # Now record sustained high error for diffusion
         for _ in range(150):
             monitor.record_prediction("diffusion", error=1.0, latency_ms=100.0)
-        
+
         state = monitor._states["diffusion"]
         assert state.is_disabled, "Diffusion model should be auto-disabled after sustained high error"
 
@@ -86,11 +84,11 @@ class TestAutoDisable:
         for _ in range(20):
             for m in ("lightgcn", "quantum", "sasrec", "kan", "hyperbolic"):
                 monitor.record_prediction(m, error=0.1, latency_ms=10.0)
-        
+
         # 10 consecutive failures for diffusion
         for _ in range(10):
             monitor.record_prediction("diffusion", error=0.0, latency_ms=0.0, success=False)
-        
+
         state = monitor._states["diffusion"]
         assert state.is_disabled
 
@@ -108,17 +106,17 @@ class TestAutoRecovery:
         # Disable the model
         monitor.force_disable("kan")
         state = monitor._states["kan"]
-        
+
         # Establish baselines for active models
         for _ in range(20):
             for m in ("lightgcn", "quantum", "sasrec", "hyperbolic", "diffusion"):
                 monitor.record_prediction(m, error=0.1, latency_ms=10.0)
-        
+
         # Shadow probe at intervals (probe_interval=50)
         # Simulate enough predictions to trigger probes
         for i in range(1, 300):
             monitor.record_prediction("kan", error=0.05, latency_ms=5.0, success=True)
-        
+
         # After enough successful probes, model should be re-enabled
         assert not state.is_disabled, "Model should auto-recover after successful shadow probes"
 
@@ -126,7 +124,7 @@ class TestAutoRecovery:
         """If all models are disabled, get_active_models should re-enable all."""
         for m in ("lightgcn", "quantum", "sasrec", "kan", "hyperbolic", "diffusion"):
             monitor.force_disable(m)
-        
+
         active = monitor.get_active_models()
         assert len(active) == 6  # All re-enabled as safety fallback
 
@@ -165,7 +163,7 @@ class TestHealthReport:
     def test_report_per_model_fields(self, monitor):
         monitor.record_prediction("lightgcn", error=0.1, latency_ms=10.0)
         report = monitor.get_health_report()
-        
+
         lgcn = report["models"]["lightgcn"]
         assert lgcn["status"] == "active"
         assert "ewma_error" in lgcn
@@ -177,7 +175,7 @@ class TestHealthReport:
     def test_report_disabled_model_details(self, monitor):
         monitor.force_disable("diffusion")
         report = monitor.get_health_report()
-        
+
         diff = report["models"]["diffusion"]
         assert diff["status"] == "disabled"
         assert "disabled_at" in diff
@@ -189,7 +187,7 @@ class TestHealthReport:
         for _ in range(5):
             monitor.record_prediction("lightgcn", error=0.1, latency_ms=10.0)
             monitor.record_prediction("quantum", error=0.2, latency_ms=20.0)
-        
+
         report = monitor.get_health_report()
         assert report["summary"]["global_prediction_count"] == 10
 
@@ -198,24 +196,28 @@ class TestEngineIntegration:
     def test_engine_has_health_monitor(self):
         """Verify that the engine singleton initializes the health monitor."""
         import os
+
         os.environ["NOVA_DISABLE_MODEL_DOWNLOADS"] = "1"
         os.environ["JWT_SECRET_KEY"] = "test-jwt-secret-key-for-ci-only"
-        
+
         from backend.models.ensemble_engine import get_apex_engine
+
         engine = get_apex_engine()
-        
+
         assert engine.health_monitor is not None
         assert engine.router_trainer is not None
 
     def test_engine_get_system_health(self):
         """Verify the get_system_health method returns structured data."""
         import os
+
         os.environ["NOVA_DISABLE_MODEL_DOWNLOADS"] = "1"
         os.environ["JWT_SECRET_KEY"] = "test-jwt-secret-key-for-ci-only"
-        
+
         from backend.models.ensemble_engine import get_apex_engine
+
         engine = get_apex_engine()
-        
+
         health = engine.get_system_health()
         assert health["engine"] == "ApexEnsembleEngine"
         assert "model_health" in health

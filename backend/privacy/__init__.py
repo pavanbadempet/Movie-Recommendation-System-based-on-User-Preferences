@@ -46,6 +46,7 @@ class DifferentialPrivacyEngine:
     def add_gaussian_noise(self, embedding: np.ndarray) -> np.ndarray:
         """Injects Gaussian noise for (epsilon, delta)-DP."""
         import math
+
         c = math.sqrt(2 * math.log(1.25 / self.delta))
         sigma = (c * self.sensitivity) / self.epsilon
         noise = np.random.normal(loc=0.0, scale=sigma, size=embedding.shape)
@@ -64,7 +65,7 @@ def anonymize_telemetry(event: dict[str, Any]) -> dict[str, Any]:
     return safe_event
 
 
-from backend.privacy.privacy_preserving_ml import (  # noqa: E402
+from backend.privacy.privacy_preserving_ml import (
     add_gaussian_noise,
     add_laplace_noise,
     federated_average_gradients,
@@ -74,10 +75,10 @@ from backend.privacy.privacy_preserving_ml import (  # noqa: E402
 
 __all__ = [
     "DifferentialPrivacyEngine",
-    "anonymize_telemetry",
-    "add_laplace_noise",
     "add_gaussian_noise",
-    "privatize_user_embedding",
-    "k_anonymize_profile",
+    "add_laplace_noise",
+    "anonymize_telemetry",
     "federated_average_gradients",
+    "k_anonymize_profile",
+    "privatize_user_embedding",
 ]

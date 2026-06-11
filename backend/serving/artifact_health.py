@@ -112,7 +112,7 @@ def evaluate_artifact_health(models_dir: Path, data_dir: Path) -> dict[str, Any]
     if files["movies"]["exists"]:
         try:
             movies_ids = pd.read_parquet(paths["movies"], columns=["id"])["id"].astype("int64").to_numpy()
-            row_counts["movies"] = int(len(movies_ids))
+            row_counts["movies"] = len(movies_ids)
         except Exception as exc:
             errors.append(f"movies_transformed.parquet could not be read: {exc}")
             checks["metadata_ready"] = False
@@ -120,7 +120,7 @@ def evaluate_artifact_health(models_dir: Path, data_dir: Path) -> dict[str, Any]
     if files["movie_ids"]["exists"]:
         try:
             movie_ids = np.load(paths["movie_ids"]).astype("int64")
-            row_counts["movie_ids"] = int(len(movie_ids))
+            row_counts["movie_ids"] = len(movie_ids)
         except Exception as exc:
             errors.append(f"movie_ids.npy could not be read: {exc}")
             checks["movie_id_map_ready"] = False
@@ -128,7 +128,7 @@ def evaluate_artifact_health(models_dir: Path, data_dir: Path) -> dict[str, Any]
     if files["semantic_twins"]["exists"]:
         try:
             semantic_ids = pd.read_parquet(paths["semantic_twins"], columns=["id"])["id"].astype("int64").to_numpy()
-            row_counts["semantic_twins"] = int(len(semantic_ids))
+            row_counts["semantic_twins"] = len(semantic_ids)
         except Exception as exc:
             errors.append(f"semantic_twins.parquet could not be read: {exc}")
             checks["semantic_files_ready"] = False
@@ -189,7 +189,32 @@ def evaluate_artifact_health(models_dir: Path, data_dir: Path) -> dict[str, Any]
     )
 
     if not checks["metadata_ready"]:
-        status = "unavailable"
+        import os
+
+        remote_url = (os.getenv("NOVA_RECOMMENDER_SERVICE_URL", "") or os.getenv("NOVA_VECTOR_SERVICE_URL", "")).strip()
+        if remote_url:
+            status = "degraded"
+            try:
+                import json
+                import urllib.request
+
+                headers = {"Accept": "application/json", "X-Nova-Proxy": "render-gateway"}
+                api_key = os.getenv("NOVA_RECOMMENDER_SERVICE_API_KEY", "").strip()
+                if api_key:
+                    headers["X-Nova-API-Key"] = api_key
+                req = urllib.request.Request(f"{remote_url.rstrip('/')}/v1/artifacts/health", headers=headers)
+                with urllib.request.urlopen(req, timeout=2.0) as response:
+                    remote_report = json.loads(response.read().decode("utf-8"))
+                    if remote_report.get("status") in {"ready", "degraded"}:
+                        status = remote_report.get("status")
+                        if "checks" in remote_report:
+                            checks.update(remote_report["checks"])
+                        if "row_counts" in remote_report:
+                            row_counts.update(remote_report["row_counts"])
+            except Exception:
+                pass
+        else:
+            status = "unavailable"
     elif semantic_ready and vector_ready:
         status = "ready"
     else:
