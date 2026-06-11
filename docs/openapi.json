@@ -2,10 +2,10 @@
   "openapi": "3.1.0",
   "info": {
     "title": "APEX Recommendation API",
-    "description": "Production-grade AI recommendation engine with a 6-model ensemble (SASRec, KAN, LightGCN, Diffusion, Quantum-Fluid, Hyperbolic). Implements Doubly Robust IPS weight optimization, differential privacy, and adaptive 3-tier serving (GPU / ONNX CPU / FAISS lite).\n\n**Interactive docs:** `/docs` (Swagger UI) · `/redoc` (ReDoc)\n\n**Full API reference:** [docs/API_REFERENCE.md](https://github.com/pavanpajjuri/Movie-Recommendation-System/blob/main/docs/API_REFERENCE.md)",
+    "description": "Production-grade AI recommendation engine with a 6-model ensemble (SASRec, KAN, LightGCN, Diffusion, Quantum-Fluid, Hyperbolic). Implements Doubly Robust IPS weight optimization, differential privacy, and adaptive 3-tier serving (GPU / ONNX CPU / FAISS lite).\n\n**Interactive docs:** `/docs` (Swagger UI) · `/redoc` (ReDoc)\n\n**Full API reference:** [docs/API_REFERENCE.md](https://github.com/pavanbadempet/Movie-Recommendation-System/blob/main/docs/API_REFERENCE.md)",
     "contact": {
       "name": "APEX Project",
-      "url": "https://github.com/pavanpajjuri/Movie-Recommendation-System"
+      "url": "https://github.com/pavanbadempet/Movie-Recommendation-System"
     },
     "license": {
       "name": "MIT",

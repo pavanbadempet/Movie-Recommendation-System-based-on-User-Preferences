@@ -23,7 +23,7 @@ k8s/helm/apex/
 
 - Kubernetes 1.25+
 - Helm 3.10+
-- Container registry access (default: `ghcr.io/pavanpajjuri/apex-backend`)
+- Container registry access (default: `ghcr.io/pavanbadempet/apex-backend`)
 - A Kubernetes Secret named `apex-secrets` with sensitive keys (see below)
 
 ## Quick Start

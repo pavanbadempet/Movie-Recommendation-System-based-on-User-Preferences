@@ -3,7 +3,7 @@ name: Bug report
 about: Something is broken or behaving incorrectly
 title: "[BUG] "
 labels: bug
-assignees: pavanpajjuri
+assignees: pavanbadempet
 ---
 
 ## Describe the bug

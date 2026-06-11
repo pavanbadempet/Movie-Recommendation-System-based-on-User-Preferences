@@ -14,10 +14,10 @@ pinned: false
 <img src="docs/assets/hero-banner.svg" alt="APEX movie recommendation system with FastAPI API, React frontend, semantic search, vector search, evaluation tooling, and observability" width="100%"/>
 
 <p>
-  <a href="https://github.com/pavanpajjuri/Movie-Recommendation-System/stargazers"><img src="https://img.shields.io/github/stars/pavanpajjuri/Movie-Recommendation-System?style=flat-square&color=f59e0b" alt="GitHub stars" /></a>
-  <a href="https://github.com/pavanpajjuri/Movie-Recommendation-System/network/members"><img src="https://img.shields.io/github/forks/pavanpajjuri/Movie-Recommendation-System?style=flat-square&color=06b6d4" alt="GitHub forks" /></a>
-  <a href="https://github.com/pavanpajjuri/Movie-Recommendation-System/commits/main"><img src="https://img.shields.io/github/last-commit/pavanpajjuri/Movie-Recommendation-System?style=flat-square&color=8b5cf6" alt="GitHub last commit" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/pavanpajjuri/Movie-Recommendation-System?style=flat-square&color=22c55e" alt="MIT license" /></a>
+  <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/stargazers"><img src="https://img.shields.io/github/stars/pavanbadempet/Movie-Recommendation-System?style=flat-square&color=f59e0b" alt="GitHub stars" /></a>
+  <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/network/members"><img src="https://img.shields.io/github/forks/pavanbadempet/Movie-Recommendation-System?style=flat-square&color=06b6d4" alt="GitHub forks" /></a>
+  <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/commits/main"><img src="https://img.shields.io/github/last-commit/pavanbadempet/Movie-Recommendation-System?style=flat-square&color=8b5cf6" alt="GitHub last commit" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/pavanbadempet/Movie-Recommendation-System?style=flat-square&color=22c55e" alt="MIT license" /></a>
 </p>
 <p>
   <img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.11+" />
@@ -69,7 +69,7 @@ The default local workflow focuses on the core API, frontend, and recommendation
 
 ```bash
 # Clone and run locally (see Quick Start below)
-git clone https://github.com/pavanpajjuri/Movie-Recommendation-System.git
+git clone https://github.com/pavanbadempet/Movie-Recommendation-System.git
 cd Movie-Recommendation-System
 pip install -r requirements.txt
 uvicorn backend.main:app --host 0.0.0.0 --port 8000
@@ -107,6 +107,18 @@ The system combines:
 
 For the full design, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## Exploring the Codebase
+
+Each module in this project has a single responsibility. If you want to understand how a specific recommendation concept is implemented, here is where to look:
+
+- **6 Ensemble ML Models** → [backend/models](file:///c:/Users/pavan/OneDrive/Documents/GitHub/Movie-Recommendation-System/backend/models) — SASRec, KAN, LightGCN, Diffusion, Hyperbolic, and Quantum-Fluid models.
+- **Adaptive Multi-Tier Serving** → [backend/serving/serving_tier.py](file:///c:/Users/pavan/OneDrive/Documents/GitHub/Movie-Recommendation-System/backend/serving/serving_tier.py) — Auto-detects system memory and GPU presence to dynamically load the appropriate serving tier (Tier 1 vs. 2 vs. 3).
+- **Retrieval Pipelines & ANN Search** → [backend/pipeline/retrieval_pipeline.py](file:///c:/Users/pavan/OneDrive/Documents/GitHub/Movie-Recommendation-System/backend/pipeline/retrieval_pipeline.py) — FAISS approximate nearest neighbors (ANN) index, sparse TF-IDF, and Knowledge Graph traversal.
+- **Ranking & Reranking Orchestration** → [backend/pipeline/ranking_pipeline.py](file:///c:/Users/pavan/OneDrive/Documents/GitHub/Movie-Recommendation-System/backend/pipeline/ranking_pipeline.py) and [backend/pipeline/reranking_pipeline.py](file:///c:/Users/pavan/OneDrive/Documents/GitHub/Movie-Recommendation-System/backend/pipeline/reranking_pipeline.py) — Scoring orchestration, multi-objective ranking, and diversification rerankers.
+- **Online Learning Feedback Loop** → [backend/learning/online_learning_coordinator.py](file:///c:/Users/pavan/OneDrive/Documents/GitHub/Movie-Recommendation-System/backend/learning/online_learning_coordinator.py) — Real-time online updates to SASRec, KAN, and LightGCN models based on streaming feedback.
+- **Differential Privacy** → [backend/privacy/privacy.py](file:///c:/Users/pavan/OneDrive/Documents/GitHub/Movie-Recommendation-System/backend/privacy/privacy.py) and [backend/privacy/privacy_preserving_ml.py](file:///c:/Users/pavan/OneDrive/Documents/GitHub/Movie-Recommendation-System/backend/privacy/privacy_preserving_ml.py) — Implements Laplace noise injection and private gradient training for differential privacy compliance.
+- **Causal Debiased Metrics** → [backend/metrics/debiased_metrics.py](file:///c:/Users/pavan/OneDrive/Documents/GitHub/Movie-Recommendation-System/backend/metrics/debiased_metrics.py) — Evaluates recommendation precision, recall, and NDCG using Inverse Propensity Scoring (IPS) to mitigate popularity bias.
+
 ## Quick Start
 
 ### Requirements
@@ -124,7 +136,7 @@ For the full design, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/pavanpajjuri/Movie-Recommendation-System.git
+git clone https://github.com/pavanbadempet/Movie-Recommendation-System.git
 cd Movie-Recommendation-System
 
 python -m venv venv
@@ -192,7 +204,6 @@ Current offline benchmark:
 - `NDCG@10 = 0.542`
 
 Evaluation protocol:
-
 - leave-one-out evaluation
 - 200 sampled users
 - 100 candidate items per user
@@ -201,8 +212,7 @@ See [docs/MODEL_CARDS.md](docs/MODEL_CARDS.md) for model details, benchmark cont
 
 ---
 
-<details>
-<summary>Architecture Diagram</summary>
+## System Architecture
 
 ```mermaid
 flowchart TD
@@ -251,8 +261,6 @@ flowchart TD
         FA[Fairness Auditor\nGini + KL divergence]
     end
 ```
-
-</details>
 
 ---
 

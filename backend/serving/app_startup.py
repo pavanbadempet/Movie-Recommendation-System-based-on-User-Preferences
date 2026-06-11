@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # Helpers
 # ---------------------------------------------------------------------------
 
-GITHUB_REPO = "https://github.com/pavanpajjuri/Movie-Recommendation-System"
+GITHUB_REPO = "https://github.com/pavanbadempet/Movie-Recommendation-System"
 
 
 def env_truthy(name: str) -> bool:
