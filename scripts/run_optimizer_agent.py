@@ -3,6 +3,7 @@ import asyncio
 import os
 import sys
 import time
+import json
 from datetime import datetime, UTC
 
 # Add parent directory to python path to resolve backend imports
@@ -36,13 +37,11 @@ async def main():
         agent = RecommenderOptimizerAgent(db, name="Recommender Performance & Drift Agent")
         
         # Run agent
-        report_md = await agent.run(hours=args.hours, dry_run=args.dry_run)
+        report_md, report_json = await agent.run(hours=args.hours, dry_run=args.dry_run)
         
         # Save output report with timestamped file
         timestamp = int(time.time())
-        report_file_name = f"recommender_optimization_report_{timestamp}.md"
-        report_path = os.path.join(args.output_dir, report_file_name)
-        
+        report_path = os.path.join(args.output_dir, f"recommender_optimization_report_{timestamp}.md")
         with open(report_path, "w", encoding="utf-8") as f:
             f.write(report_md)
         print(f"Success: Optimization report written to: {report_path}")
@@ -52,6 +51,31 @@ async def main():
         with open(latest_path, "w", encoding="utf-8") as f:
             f.write(report_md)
         print(f"Success: Latest optimization report updated at: {latest_path}")
+
+        # Save JSON Report (for SaaS / API / Downstream integration)
+        json_path = os.path.join(args.output_dir, f"recommender_optimization_report_{timestamp}.json")
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(report_json, f, indent=2)
+        print(f"Success: Structured JSON optimization written to: {json_path}")
+
+        latest_json_path = os.path.join(args.output_dir, "latest_optimization_report.json")
+        with open(latest_json_path, "w", encoding="utf-8") as f:
+            json.dump(report_json, f, indent=2)
+        print(f"Success: Latest JSON optimization link updated at: {latest_json_path}")
+
+        # ---------------------------------------------------------------------
+        # Closed-loop execution: Apply tuned hyperparameters to live system
+        # ---------------------------------------------------------------------
+        if not args.dry_run:
+            config_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../backend/data"))
+            os.makedirs(config_dir, exist_ok=True)
+            config_path = os.path.join(config_dir, "recommender_config.json")
+            
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(report_json["suggested_hyperparameters"], f, indent=2)
+            print(f"Success: Applied tuned hyperparameters to live config: {config_path}")
+        else:
+            print("Notice: Dry run enabled. Tuned hyperparameters were not committed to live config.")
 
         # Print agent reasoning telemetry
         print("\n" + "=" * 40 + "\n")
