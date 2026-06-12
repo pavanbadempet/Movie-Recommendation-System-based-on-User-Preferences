@@ -10,14 +10,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from backend.data.auth import TenantContext
 
 
-def create_browse_router(
-    *,
-    resolve_tenant_context: Callable[..., TenantContext],
-    remote_payload_or_raise: Callable[..., Awaitable[object | None]],
-    get_rec: Callable[..., Any],
-    record_usage: Callable[..., Any],
-) -> APIRouter:
+from backend.router_deps import RouterDeps
+
+
+def create_browse_router(deps: RouterDeps) -> APIRouter:
     """Build browse routes with injected runtime dependencies."""
+    resolve_tenant_context = deps.resolve_tenant_context
+    remote_payload_or_raise = deps.remote_payload_or_raise
+    get_rec = deps.get_rec
+    record_usage = deps.record_usage
     router = APIRouter(tags=["Browse"])
 
     @router.get("/movies")

@@ -18,6 +18,7 @@ import uuid
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import RedirectResponse
+from backend.router_deps import RouterDeps
 
 logger = logging.getLogger(__name__)
 
@@ -274,42 +275,32 @@ def _inject_pydantic_models_into_globals() -> None:
         logger.debug("Could not inject Pydantic models into recommendation_routes globals: %s", exc)
 
 
-def create_recommendation_router(
-    *,
-    get_rec,
-    record_usage,
-    remote_payload_or_raise,
-    record_recommendation_events,
-    resolve_tenant_context,
-    build_user_behavior_profile,
-    assign_experiment,
-    attach_experiment,
-    aggregate_behavior_features,
-    append_event,
-    summarize_recommendation_events,
-    evaluate_artifact_health,
-    build_slo_report,
-    frontend_status_report,
-    configured_frontends,
-    remote_recommender_status,
-    load_ranker,
-    enforce_payload_context,
-    get_db,
-    generate_chat_response,
-    summarize_usage,
-    event_storage_status,
-    get_events_path,
-    limiter,
-    Movie,
-    EnrichedMovie,
-    HealthResponse,
-    RecommendationResponse,
-    EnrichedRecommendationResponse,
-    EventRequest,
-    EventResponse,
-    PlatformContextResponse,
-    UsageResponse,
-):
+def create_recommendation_router(deps: RouterDeps):
+    get_rec = deps.get_rec
+    record_usage = deps.record_usage
+    remote_payload_or_raise = deps.remote_payload_or_raise
+    record_recommendation_events = deps.record_recommendation_events
+    resolve_tenant_context = deps.resolve_tenant_context
+    build_user_behavior_profile = deps.build_user_behavior_profile
+    assign_experiment = deps.assign_experiment
+    attach_experiment = deps.attach_experiment
+    aggregate_behavior_features = deps.aggregate_behavior_features
+    append_event = deps.append_event
+    summarize_recommendation_events = deps.summarize_recommendation_events
+    evaluate_artifact_health = deps.evaluate_artifact_health
+    build_slo_report = deps.build_slo_report
+    frontend_status_report = deps.frontend_status_report
+    configured_frontends = deps.configured_frontends
+    remote_recommender_status = deps.remote_recommender_status
+    load_ranker = deps.load_ranker
+    enforce_payload_context = deps.enforce_payload_context
+    get_db = deps.get_db
+    generate_chat_response = deps.generate_chat_response
+    summarize_usage = deps.summarize_usage
+    event_storage_status = deps.event_storage_status
+    get_events_path = deps.get_events_path
+    limiter = deps.limiter
+
     _inject_pydantic_models_into_globals()
     router = APIRouter()
 
@@ -499,39 +490,29 @@ def create_recommendation_router(
     return router
 
 
-def create_core_router(
-    *,
-    get_rec,
-    record_usage,
-    remote_payload_or_raise,
-    record_recommendation_events,
-    resolve_tenant_context,
-    build_user_behavior_profile,
-    assign_experiment,
-    attach_experiment,
-    aggregate_behavior_features,
-    append_event,
-    summarize_recommendation_events,
-    evaluate_artifact_health,
-    load_ranker,
-    enforce_payload_context,
-    get_db,
-    generate_chat_response,
-    summarize_usage,
-    event_storage_status,
-    get_events_path,
-    limiter,
-    Movie,
-    EnrichedMovie,
-    HealthResponse,
-    RecommendationResponse,
-    EnrichedRecommendationResponse,
-    EventRequest,
-    EventResponse,
-    PlatformContextResponse,
-    UsageResponse,
-):
+def create_core_router(deps: RouterDeps):
     """Core movie/search/recommendation/events/chat router."""
+    get_rec = deps.get_rec
+    record_usage = deps.record_usage
+    remote_payload_or_raise = deps.remote_payload_or_raise
+    record_recommendation_events = deps.record_recommendation_events
+    resolve_tenant_context = deps.resolve_tenant_context
+    build_user_behavior_profile = deps.build_user_behavior_profile
+    assign_experiment = deps.assign_experiment
+    attach_experiment = deps.attach_experiment
+    aggregate_behavior_features = deps.aggregate_behavior_features
+    append_event = deps.append_event
+    summarize_recommendation_events = deps.summarize_recommendation_events
+    evaluate_artifact_health = deps.evaluate_artifact_health
+    load_ranker = deps.load_ranker
+    enforce_payload_context = deps.enforce_payload_context
+    get_db = deps.get_db
+    generate_chat_response = deps.generate_chat_response
+    summarize_usage = deps.summarize_usage
+    event_storage_status = deps.event_storage_status
+    get_events_path = deps.get_events_path
+    limiter = deps.limiter
+
     _inject_pydantic_models_into_globals()
     router = APIRouter()
 
@@ -769,34 +750,27 @@ def create_core_router(
     return router
 
 
-def create_search_movie_router(
-    *,
-    get_rec,
-    record_usage,
-    remote_payload_or_raise,
-    record_recommendation_events,
-    resolve_tenant_context,
-    build_user_behavior_profile,
-    assign_experiment,
-    attach_experiment,
-    aggregate_behavior_features,
-    append_event,
-    summarize_recommendation_events,
-    enforce_payload_context,
-    get_db,
-    generate_chat_response,
-    summarize_usage,
-    event_storage_status,
-    get_events_path,
-    limiter,
-    Movie,
-    EnrichedMovie,
-    RecommendationResponse,
-    EnrichedRecommendationResponse,
-    EventRequest,
-    EventResponse,
-):
+def create_search_movie_router(deps: RouterDeps):
     """Search, movie detail, recommendation, events, and chat router."""
+    get_rec = deps.get_rec
+    record_usage = deps.record_usage
+    remote_payload_or_raise = deps.remote_payload_or_raise
+    record_recommendation_events = deps.record_recommendation_events
+    resolve_tenant_context = deps.resolve_tenant_context
+    build_user_behavior_profile = deps.build_user_behavior_profile
+    assign_experiment = deps.assign_experiment
+    attach_experiment = deps.attach_experiment
+    aggregate_behavior_features = deps.aggregate_behavior_features
+    append_event = deps.append_event
+    summarize_recommendation_events = deps.summarize_recommendation_events
+    enforce_payload_context = deps.enforce_payload_context
+    get_db = deps.get_db
+    generate_chat_response = deps.generate_chat_response
+    summarize_usage = deps.summarize_usage
+    event_storage_status = deps.event_storage_status
+    get_events_path = deps.get_events_path
+    limiter = deps.limiter
+
     _inject_pydantic_models_into_globals()
     from sqlalchemy.orm import Session
 
@@ -1020,24 +994,19 @@ def create_search_movie_router(
     return router
 
 
-def create_rec_engine_router(
-    *,
-    get_rec,
-    record_usage,
-    remote_payload_or_raise,
-    record_recommendation_events,
-    resolve_tenant_context,
-    build_user_behavior_profile,
-    assign_experiment,
-    attach_experiment,
-    generate_chat_response,
-    limiter,
-    Movie,
-    RecommendationResponse,
-    EnrichedRecommendationResponse,
-    EnrichedMovie,
-):
+def create_rec_engine_router(deps: RouterDeps):
     """Recommendation engine endpoints (by-id, by-title, by-user, visual, KG, diagnostics, chat)."""
+    get_rec = deps.get_rec
+    record_usage = deps.record_usage
+    remote_payload_or_raise = deps.remote_payload_or_raise
+    record_recommendation_events = deps.record_recommendation_events
+    resolve_tenant_context = deps.resolve_tenant_context
+    build_user_behavior_profile = deps.build_user_behavior_profile
+    assign_experiment = deps.assign_experiment
+    attach_experiment = deps.attach_experiment
+    generate_chat_response = deps.generate_chat_response
+    limiter = deps.limiter
+
     _inject_pydantic_models_into_globals()
     from urllib.parse import quote
 

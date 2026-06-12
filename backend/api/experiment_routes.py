@@ -10,14 +10,15 @@ from fastapi import APIRouter, Depends, Query
 from backend.data.auth import TenantContext
 
 
-def create_experiment_router(
-    *,
-    resolve_tenant_context: Callable[..., TenantContext],
-    assign_experiment: Callable[..., dict[str, Any]],
-    summarize_experiment_metrics: Callable[..., dict[str, Any]],
-    record_usage: Callable[..., Any],
-) -> APIRouter:
+from backend.router_deps import RouterDeps
+
+
+def create_experiment_router(deps: RouterDeps) -> APIRouter:
     """Build experiment routes with injected runtime dependencies."""
+    resolve_tenant_context = deps.resolve_tenant_context
+    assign_experiment = deps.assign_experiment
+    summarize_experiment_metrics = deps.summarize_experiment_metrics
+    record_usage = deps.record_usage
     router = APIRouter(tags=["Experiments"])
 
     @router.get("/v1/experiments/assignment")

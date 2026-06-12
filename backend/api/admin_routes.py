@@ -13,22 +13,13 @@ from collections.abc import Callable
 from pathlib import Path
 
 from fastapi import APIRouter, Depends
+from backend.router_deps import RouterDeps
 
 
-def create_admin_router(
-    *,
-    resolve_admin_token: Callable,
-    get_apex_engine: Callable,
-) -> APIRouter:
-    """Build the admin router with injected runtime dependencies.
-
-    Parameters
-    ----------
-    resolve_admin_token:
-        FastAPI dependency that validates the admin token and returns it.
-    get_apex_engine:
-        Callable that returns the singleton ApexEnsembleEngine instance.
-    """
+def create_admin_router(deps: RouterDeps) -> APIRouter:
+    """Build the admin router with injected runtime dependencies."""
+    resolve_admin_token = deps.resolve_admin_token
+    get_apex_engine = deps.get_apex_engine
     router = APIRouter(tags=["Admin"])
 
     @router.post("/v1/admin/reload-ensemble-weights")
@@ -44,6 +35,20 @@ def create_admin_router(
             "status": "ok",
             "weights": new_weights,
             "source": source,
+        }
+
+    @router.post("/v1/demo/reset")
+    async def reset_demo(
+        admin_token: str = Depends(resolve_admin_token),
+    ):
+        """Reload baseline demo recommendation artifacts from disk."""
+        rec = deps.get_rec()
+        rec.load()
+        return {
+            "status": "ok",
+            "message": "Demo recommendation artifacts successfully reloaded from disk.",
+            "movie_count": len(rec._movies) if rec._movies is not None else 0,
+            "vector_count": len(rec._vectors) if rec._vectors is not None else 0,
         }
 
     return router

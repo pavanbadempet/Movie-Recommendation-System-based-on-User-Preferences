@@ -2,7 +2,7 @@ services:
   # ---------------------------------------------------------------------------
   # 1. CORE API BACKEND (FastAPI + PyTorch + FAISS + APEX Ensemble)
   # ---------------------------------------------------------------------------
-  nova-backend:
+  apex-backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -32,25 +32,25 @@ services:
       retries: 5
       start_period: 60s
     networks:
-      - nova-net
+      - apex-net
   # ---------------------------------------------------------------------------
   # 2. FRONTEND (React + Vite UI)
   # ---------------------------------------------------------------------------
-  nova-frontend:
+  apex-frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: nova-frontend
+    container_name: apex-frontend
     restart: unless-stopped
     ports:
       - "5173:5173"
     environment:
       - VITE_API_URL=http://localhost:8000
     depends_on:
-      nova-backend:
+      apex-backend:
         condition: service_healthy
     networks:
-      - nova-net
+      - apex-net
 
   # ---------------------------------------------------------------------------
   # 3. MESSAGE BROKER (Kafka for Real-Time Active Inference Stream)
@@ -67,7 +67,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - nova-net
+      - apex-net
 
   kafka:
     image: confluentinc/cp-kafka:7.3.0
@@ -91,7 +91,7 @@ services:
       retries: 5
       start_period: 30s
     networks:
-      - nova-net
+      - apex-net
 
   # ---------------------------------------------------------------------------
   # 3.5 HIGH-THROUGHPUT FEATURE STORE (Redis)
@@ -109,7 +109,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - nova-net
+      - apex-net
 
   # ---------------------------------------------------------------------------
   # 4. BIG DATA COMPUTE (Distributed PySpark Cluster)
@@ -137,7 +137,7 @@ services:
       retries: 5
       start_period: 30s
     networks:
-      - nova-net
+      - apex-net
 
   spark-worker:
     image: bitnami/spark:3.4.1
@@ -165,7 +165,7 @@ services:
       retries: 5
       start_period: 30s
     networks:
-      - nova-net
+      - apex-net
 
   # ---------------------------------------------------------------------------
   # 5. RELATIONAL DATABASE (PostgreSQL for Multi-Tenancy & Auth)
@@ -179,7 +179,7 @@ services:
       # NEVER commit real credentials. See .env.example for variable names.
       POSTGRES_USER: ${POSTGRES_USER:-nova_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nova_password}
-      POSTGRES_DB: ${POSTGRES_DB:-nova_db}
+      POSTGRES_DB: ${POSTGRES_DB:-apex_db}
     ports:
       - "5432:5432"
     volumes:
@@ -191,7 +191,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - nova-net
+      - apex-net
 
   # ---------------------------------------------------------------------------
   # 6. OBSERVABILITY (Prometheus + Grafana for RED Metrics)
@@ -206,7 +206,7 @@ services:
     ports:
       - "9090:9090"
     networks:
-      - nova-net
+      - apex-net
 
   grafana:
     image: grafana/grafana:latest
@@ -223,10 +223,10 @@ services:
     depends_on:
       - prometheus
     networks:
-      - nova-net
+      - apex-net
 
 networks:
-  nova-net:
+  apex-net:
     driver: bridge
 
 volumes:
