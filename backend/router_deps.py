@@ -1,5 +1,7 @@
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Any
+from typing import Any
+
 
 @dataclass
 class RouterDeps:
@@ -24,13 +26,13 @@ class RouterDeps:
     event_storage_status: Callable
     get_events_path: Callable
     limiter: Any
-    
+
     # Extra recommendation / SLO deps
     build_slo_report: Callable | None = None
     frontend_status_report: Callable | None = None
     configured_frontends: Any = None
     remote_recommender_status: Callable | None = None
-    
+
     # Evaluation deps
     evaluate_recommendation_quality: Callable | None = None
     evaluate_search_benchmark: Callable | None = None
@@ -43,7 +45,7 @@ class RouterDeps:
     start_background_recommendation_benchmark: Callable | None = None
     warming_recommendation_benchmark_report: Callable | None = None
     env_truthy: Callable | None = None
-    
+
     # Admin / Auth / Artifact deps
     resolve_admin_token: Callable | None = None
     get_apex_engine: Callable | None = None
@@ -51,7 +53,7 @@ class RouterDeps:
     refresh_artifact_files: Callable | None = None
     serving_lineage: Callable | None = None
     current_recommender: Callable | None = None
-    
+
     # Experiment / Catalog / Browse deps
     summarize_experiment_metrics: Callable | None = None
     profile_catalog_csv: Callable | None = None

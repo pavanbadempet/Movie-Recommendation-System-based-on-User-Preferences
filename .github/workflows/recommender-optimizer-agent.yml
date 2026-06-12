@@ -50,7 +50,7 @@ jobs:
         if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
           DRY_RUN="--dry-run"
         fi
-        
+
         python scripts/run_optimizer_agent.py --hours "$HOURS" $DRY_RUN
 
     - name: Upload Optimization Report Artifact

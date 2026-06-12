@@ -9,10 +9,10 @@ Requirements: 9.1, 9.2, 9.4
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from pathlib import Path
 
 from fastapi import APIRouter, Depends
+
 from backend.router_deps import RouterDeps
 
 

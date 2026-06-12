@@ -1,14 +1,15 @@
+from datetime import UTC, datetime
 import os
 import tempfile
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from datetime import datetime, UTC
 
-from backend.data.database import Base, Tenant, User, UserEvent
 from backend.agents.base_agent import BaseAgent
 from backend.agents.recommender_optimizer_agent import RecommenderOptimizerAgent
+from backend.data.database import Base, Tenant, User, UserEvent
 
 
 # Setup in-memory SQLite database for testing
@@ -28,18 +29,18 @@ def test_base_agent_telemetry():
     """Verify BaseAgent metrics tracking and steps logs."""
     agent = BaseAgent(name="Base Test Agent")
     assert agent.status == "initialized"
-    
+
     agent.start()
     assert agent.status == "running"
-    
+
     agent.log_step("Step Action", "Step Result")
     assert len(agent.steps) == 2
-    
+
     agent.estimate_tokens("Input content context", is_output=False)
     agent.estimate_tokens("Output recommendation parameters", is_output=True)
     assert agent.input_tokens_estimated > 0
     assert agent.output_tokens_estimated > 0
-    
+
     agent.finish()
     assert agent.status == "completed"
     assert agent.duration >= 0.0
@@ -66,13 +67,13 @@ def test_base_agent_github_actions():
 
             # Verify step summary written
             assert os.path.exists(summary_file)
-            with open(summary_file, "r", encoding="utf-8") as f:
+            with open(summary_file, encoding="utf-8") as f:
                 content = f.read()
                 assert "GHA Movie Agent" in content
 
             # Verify outputs written
             assert os.path.exists(output_file)
-            with open(output_file, "r", encoding="utf-8") as f:
+            with open(output_file, encoding="utf-8") as f:
                 lines = f.read().splitlines()
                 assert "agent_status=completed" in lines
 
@@ -82,7 +83,7 @@ async def test_optimizer_agent_no_data(db_session):
     """Verify RecommenderOptimizerAgent behavior on empty database."""
     agent = RecommenderOptimizerAgent(db_session, "Empty DB Optimizer")
     report, report_json = await agent.run(hours=24, dry_run=True)
-    
+
     assert "Recommender System Optimization Report" in report
     assert "Click-Through Rate (CTR)" in report
     assert agent.status == "completed"
@@ -106,20 +107,24 @@ async def test_optimizer_agent_with_data(db_session):
 
     # Seed mock events: 10 recommendations served, 2 clicks -> 20% CTR
     for _ in range(10):
-        db_session.add(UserEvent(
-            tenant_id="test-tenant",
-            user_sk="user-123",
-            event_type="recommendation_served",
-            created_at=datetime.now(UTC).replace(tzinfo=None)
-        ))
-    
+        db_session.add(
+            UserEvent(
+                tenant_id="test-tenant",
+                user_sk="user-123",
+                event_type="recommendation_served",
+                created_at=datetime.now(UTC).replace(tzinfo=None),
+            )
+        )
+
     for _ in range(2):
-        db_session.add(UserEvent(
-            tenant_id="test-tenant",
-            user_sk="user-123",
-            event_type="click",
-            created_at=datetime.now(UTC).replace(tzinfo=None)
-        ))
+        db_session.add(
+            UserEvent(
+                tenant_id="test-tenant",
+                user_sk="user-123",
+                event_type="click",
+                created_at=datetime.now(UTC).replace(tzinfo=None),
+            )
+        )
 
     db_session.commit()
 

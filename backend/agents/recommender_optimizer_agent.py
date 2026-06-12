@@ -1,12 +1,13 @@
+from datetime import UTC, datetime, timedelta
 import os
-from datetime import datetime, timedelta, UTC
-from typing import Any, Dict, List, Tuple
-from sqlalchemy.orm import Session
+from typing import Any
+
 from sqlalchemy import desc
+from sqlalchemy.orm import Session
 
 from backend.agents.base_agent import BaseAgent
 from backend.data.database import UserEvent
-from backend.intelligence.openrouter_client import chat_completion, openrouter_api_key, configured_models
+from backend.intelligence.openrouter_client import chat_completion, configured_models, openrouter_api_key
 
 
 class RecommenderOptimizerAgent(BaseAgent):
@@ -20,7 +21,7 @@ class RecommenderOptimizerAgent(BaseAgent):
         super().__init__(name)
         self.db = db
 
-    async def run(self, hours: int = 24, dry_run: bool = False) -> Tuple[str, Dict[str, Any]]:
+    async def run(self, hours: int = 24, dry_run: bool = False) -> tuple[str, dict[str, Any]]:
         """
         Runs the recommender drift guard and optimization loop.
         Returns:
@@ -31,10 +32,10 @@ class RecommenderOptimizerAgent(BaseAgent):
         # 1. Fetch interaction events
         self.log_step("Fetch Event Telemetry", f"Querying fact_user_event for records in the last {hours} hours.")
         cutoff_time = datetime.now(UTC) - timedelta(hours=hours)
-        
+
         # Read naïve DateTime for database querying compatibility
         naive_cutoff = cutoff_time.replace(tzinfo=None)
-        
+
         events = (
             self.db.query(UserEvent)
             .filter(UserEvent.created_at >= naive_cutoff)
@@ -42,7 +43,9 @@ class RecommenderOptimizerAgent(BaseAgent):
             .all()
         )
 
-        self.log_step("Calculate Recommender Metrics", f"Retrieved {len(events)} user events to compute CTR & engagement.")
+        self.log_step(
+            "Calculate Recommender Metrics", f"Retrieved {len(events)} user events to compute CTR & engagement."
+        )
 
         # 2. Aggregate metrics
         recommendations_served = 0
@@ -67,7 +70,7 @@ class RecommenderOptimizerAgent(BaseAgent):
         elif clicks > 0:
             # Fallback if recommendation_served is not logged but clicks are logged
             ctr = 0.08  # Default mock/baseline
-        
+
         avg_rating = round(sum(ratings) / len(ratings), 2) if ratings else 0.0
 
         # Define baselines
@@ -78,7 +81,7 @@ class RecommenderOptimizerAgent(BaseAgent):
             "Detect Performance Drift",
             f"CTR: {ctr:.2%} (Baseline: {baseline_ctr:.2%}). "
             f"Avg Rating: {avg_rating}/5. "
-            f"Drift Status: {'🚨 DRIFT DETECTED' if drift_detected else '🟢 STABLE'}"
+            f"Drift Status: {'🚨 DRIFT DETECTED' if drift_detected else '🟢 STABLE'}",
         )
 
         # Build dynamic local heuristics
@@ -140,17 +143,16 @@ class RecommenderOptimizerAgent(BaseAgent):
         else:
             try:
                 ai_response = chat_completion(
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
+                    messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
                     models=models,
                     temperature=0.3,
                     timeout_seconds=30.0,
                     api_key=api_key,
-                    use_fast_model=True
+                    use_fast_model=True,
                 )
-                self.log_step("Call OpenRouter Optimizer", f"Successfully fetched optimization recommendations using {models[0]}.")
+                self.log_step(
+                    "Call OpenRouter Optimizer", f"Successfully fetched optimization recommendations using {models[0]}."
+                )
             except Exception as e:
                 self.log_error(f"OpenRouter query failed: {e}")
                 ai_response = (
@@ -169,13 +171,15 @@ class RecommenderOptimizerAgent(BaseAgent):
         report_md.append(f"Generated on: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')} UTC")
         report_md.append(f"Telemetry Window: Past {hours} hours")
         report_md.append("")
-        
+
         report_md.append("## 📊 Quality Performance Metrics")
         report_md.append("| Metric | Value | Baseline / Target | Status |")
         report_md.append("|---|---|---|---|")
         status_str = "🚨 Drift Warning" if drift_detected else "🟢 Healthy"
         report_md.append(f"| **Click-Through Rate (CTR)** | {ctr:.2%} | {baseline_ctr:.2%} | {status_str} |")
-        report_md.append(f"| **Average User Rating** | {avg_rating:.2f}/5 | 4.00/5 | {'🟢 Good' if avg_rating >= 3.8 else '🟡 Fair'} |")
+        report_md.append(
+            f"| **Average User Rating** | {avg_rating:.2f}/5 | 4.00/5 | {'🟢 Good' if avg_rating >= 3.8 else '🟡 Fair'} |"
+        )
         report_md.append(f"| **Recommendations Served** | {recommendations_served:,} | - | - |")
         report_md.append(f"| **Total Clicks** | {clicks:,} | - | - |")
         report_md.append(f"| **Total Searches** | {searches:,} | - | - |")
@@ -184,11 +188,13 @@ class RecommenderOptimizerAgent(BaseAgent):
         report_md.append("## 🧠 OpenRouter AI Diagnosis & Hyperparameter Tuning")
         report_md.append(ai_response)
         report_md.append("")
-        
-        report_md.append("\n*Disclaimer: AI-suggested hyperparameters must be validated on validation/offline testing sets before promotion to production.*")
+
+        report_md.append(
+            "\n*Disclaimer: AI-suggested hyperparameters must be validated on validation/offline testing sets before promotion to production.*"
+        )
 
         self.finish("completed")
-        
+
         report_json = {
             "name": self.name,
             "status": self.status,
@@ -203,12 +209,12 @@ class RecommenderOptimizerAgent(BaseAgent):
                 "ctr": ctr,
                 "baseline_ctr": baseline_ctr,
                 "drift_detected": drift_detected,
-                "avg_rating": avg_rating
+                "avg_rating": avg_rating,
             },
             "suggested_hyperparameters": {
                 "ensemble_weights": suggested_weights,
                 "diversity_alpha": suggested_mmr_alpha,
-                "online_learning_rate": suggested_learning_rate
-            }
+                "online_learning_rate": suggested_learning_rate,
+            },
         }
         return "\n".join(report_md), report_json
