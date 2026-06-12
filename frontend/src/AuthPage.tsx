@@ -1,8 +1,14 @@
 import React, { useState } from "react";
 import { registerUser, loginUser } from "./api";
-import { User, Lock, Sparkles, Loader2, ArrowRight } from "lucide-react";
+import { User, Lock, Sparkles, Loader2, ArrowRight, X } from "lucide-react";
 
-export function AuthPage({ onLogin }: { onLogin: (token: string, username: string) => void }) {
+export function AuthPage({
+  onLogin,
+  onClose,
+}: {
+  onLogin: (token: string, username: string) => void;
+  onClose?: () => void;
+}) {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -45,9 +51,14 @@ export function AuthPage({ onLogin }: { onLogin: (token: string, username: strin
   return (
     <div className="auth-container">
       <div className="auth-box">
+        {onClose && (
+          <button type="button" className="auth-close-btn" onClick={onClose} aria-label="Close">
+            <X size={20} />
+          </button>
+        )}
         <div className="auth-header">
           <Sparkles size={32} className="auth-logo" />
-          <h1>{isLogin ? "Welcome Back" : "Join APEX"}</h1>
+          <h1>{isLogin ? "Welcome Back" : "Join Nova"}</h1>
           <p>{isLogin ? "Sign in to continue your personalized session" : "Create an account for this browser session"}</p>
         </div>
 
