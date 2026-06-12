@@ -60,12 +60,12 @@ describe("AuthPage", () => {
     expect(screen.getByText(/welcome back/i)).toBeInTheDocument();
   });
 
-  it("shows 'Join Nova' heading after switching to register mode", async () => {
+  it("shows 'Join APEX' heading after switching to register mode", async () => {
     render(<AuthPage onLogin={mockOnLogin} />);
     await userEvent.click(
       screen.getByRole("button", { name: /don't have an account/i }),
     );
-    expect(screen.getByText(/join nova/i)).toBeInTheDocument();
+    expect(screen.getByText(/join apex/i)).toBeInTheDocument();
   });
 
   it("renders 'Create Account' submit button in register mode", async () => {
