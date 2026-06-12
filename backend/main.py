@@ -72,6 +72,7 @@ from slowapi.util import get_remote_address
 from backend.api.admin_routes import create_admin_router
 from backend.api.admin_tests import router as admin_router
 from backend.api.artifact_routes import create_artifact_router
+from backend.router_deps import RouterDeps
 from backend.api.auth_routes import router as auth_router
 from backend.api.billing_routes import router as billing_router
 from backend.api.browse_routes import create_browse_router
@@ -522,216 +523,73 @@ def _register_routes() -> None:
         safe_float_fn=_safe_float,
     )
 
-    # --- Evaluation router ---
-    app.include_router(
-        create_evaluation_router(
-            resolve_tenant_context=resolve_tenant_context,
-            remote_payload_or_raise=lambda *a, **kw: remote_payload_or_raise(*a, **kw),
-            record_usage=lambda *a, **kw: record_usage(*a, **kw),
-            get_rec=lambda: get_rec(),
-            evaluate_recommendation_quality=evaluate_recommendation_quality,
-            evaluate_search_benchmark=evaluate_search_benchmark,
-            get_cached_semantic_benchmark=get_cached_semantic_benchmark,
-            compute_semantic_benchmark_cached=compute_semantic_benchmark_cached,
-            start_background_semantic_benchmark=start_background_semantic_benchmark,
-            warming_semantic_benchmark_report=warming_semantic_benchmark_report,
-            get_cached_recommendation_benchmark=get_cached_recommendation_benchmark,
-            compute_recommendation_benchmark_cached=compute_recommendation_benchmark_cached,
-            start_background_recommendation_benchmark=start_background_recommendation_benchmark,
-            warming_recommendation_benchmark_report=warming_recommendation_benchmark_report,
-            env_truthy=_env_truthy,
-        )
+    # Instantiate shared dependencies dataclass
+    deps = RouterDeps(
+        get_rec=lambda: get_rec(),
+        record_usage=lambda *a, **kw: record_usage(*a, **kw),
+        resolve_tenant_context=resolve_tenant_context,
+        remote_payload_or_raise=lambda *a, **kw: remote_payload_or_raise(*a, **kw),
+        record_recommendation_events=lambda *a, **kw: record_recommendation_events(*a, **kw),
+        build_user_behavior_profile=build_user_behavior_profile,
+        assign_experiment=assign_experiment,
+        attach_experiment=attach_experiment,
+        aggregate_behavior_features=aggregate_behavior_features,
+        append_event=append_event,
+        summarize_recommendation_events=summarize_recommendation_events,
+        evaluate_artifact_health=evaluate_artifact_health,
+        load_ranker=load_ranker,
+        enforce_payload_context=enforce_payload_context,
+        get_db=get_db,
+        generate_chat_response=generate_chat_response,
+        summarize_usage=summarize_usage,
+        event_storage_status=event_storage_status,
+        get_events_path=get_events_path,
+        limiter=limiter,
+
+        # Extra recommendation / SLO deps
+        build_slo_report=build_slo_report,
+        frontend_status_report=frontend_status_report,
+        configured_frontends=configured_frontends,
+        remote_recommender_status=remote_recommender_status,
+
+        # Evaluation deps
+        evaluate_recommendation_quality=evaluate_recommendation_quality,
+        evaluate_search_benchmark=evaluate_search_benchmark,
+        get_cached_semantic_benchmark=get_cached_semantic_benchmark,
+        compute_semantic_benchmark_cached=compute_semantic_benchmark_cached,
+        start_background_semantic_benchmark=start_background_semantic_benchmark,
+        warming_semantic_benchmark_report=warming_semantic_benchmark_report,
+        get_cached_recommendation_benchmark=get_cached_recommendation_benchmark,
+        compute_recommendation_benchmark_cached=compute_recommendation_benchmark_cached,
+        start_background_recommendation_benchmark=start_background_recommendation_benchmark,
+        warming_recommendation_benchmark_report=warming_recommendation_benchmark_report,
+        env_truthy=_env_truthy,
+
+        # Admin / Auth / Artifact deps
+        resolve_admin_token=resolve_admin_token,
+        get_apex_engine=get_apex_engine,
+        reload_local_recommender=_reload_local_recommender,
+        refresh_artifact_files=_refresh_artifact_files,
+        serving_lineage=_serving_lineage,
+        current_recommender=lambda: _recommender,
+
+        # Experiment / Catalog / Browse deps
+        summarize_experiment_metrics=summarize_experiment_metrics,
+        profile_catalog_csv=profile_catalog_csv,
+        persist_catalog_upload=persist_catalog_upload,
     )
 
-    # --- Admin router ---
-    app.include_router(
-        create_admin_router(
-            resolve_admin_token=resolve_admin_token,
-            get_apex_engine=get_apex_engine,
-        )
-    )
-
-    # --- Artifact router ---
-    app.include_router(
-        create_artifact_router(
-            resolve_tenant_context=resolve_tenant_context,
-            resolve_admin_token=resolve_admin_token,
-            evaluate_artifact_health=evaluate_artifact_health,
-            record_usage=lambda *a, **kw: record_usage(*a, **kw),
-            reload_local_recommender=_reload_local_recommender,
-            refresh_artifact_files=_refresh_artifact_files,
-            serving_lineage=_serving_lineage,
-            current_recommender=lambda: _recommender,
-        )
-    )
-
-    # --- Experiment router ---
-    app.include_router(
-        create_experiment_router(
-            resolve_tenant_context=resolve_tenant_context,
-            assign_experiment=assign_experiment,
-            summarize_experiment_metrics=summarize_experiment_metrics,
-            record_usage=lambda *a, **kw: record_usage(*a, **kw),
-        )
-    )
-
-    # --- Catalog router ---
-    app.include_router(
-        create_catalog_router(
-            resolve_tenant_context=resolve_tenant_context,
-            profile_catalog_csv=profile_catalog_csv,
-            persist_catalog_upload=persist_catalog_upload,
-            record_usage=lambda *a, **kw: record_usage(*a, **kw),
-        )
-    )
-
-    # --- Browse router ---
-    app.include_router(
-        create_browse_router(
-            resolve_tenant_context=resolve_tenant_context,
-            remote_payload_or_raise=lambda *a, **kw: remote_payload_or_raise(*a, **kw),
-            get_rec=lambda: get_rec(),
-            record_usage=lambda *a, **kw: record_usage(*a, **kw),
-        )
-    )
-
-    # --- Core recommendation routers ---
-    # Common callables shared across all recommendation factories
-    def _rec():
-        return get_rec()
-
-    def _ru(*a, **kw):
-        return record_usage(*a, **kw)
-
-    def _rp(*a, **kw):
-        return remote_payload_or_raise(*a, **kw)
-
-    def _re(*a, **kw):
-        return record_recommendation_events(*a, **kw)
-
-    # Full recommendation router (SLO, frontend status, remote recommender)
-    app.include_router(
-        create_recommendation_router(
-            get_rec=_rec,
-            record_usage=_ru,
-            remote_payload_or_raise=_rp,
-            record_recommendation_events=_re,
-            resolve_tenant_context=resolve_tenant_context,
-            build_user_behavior_profile=build_user_behavior_profile,
-            assign_experiment=assign_experiment,
-            attach_experiment=attach_experiment,
-            aggregate_behavior_features=aggregate_behavior_features,
-            append_event=append_event,
-            summarize_recommendation_events=summarize_recommendation_events,
-            evaluate_artifact_health=evaluate_artifact_health,
-            build_slo_report=build_slo_report,
-            frontend_status_report=frontend_status_report,
-            configured_frontends=configured_frontends,
-            remote_recommender_status=remote_recommender_status,
-            load_ranker=load_ranker,
-            enforce_payload_context=enforce_payload_context,
-            get_db=get_db,
-            generate_chat_response=generate_chat_response,
-            summarize_usage=summarize_usage,
-            event_storage_status=event_storage_status,
-            get_events_path=get_events_path,
-            limiter=limiter,
-            Movie=Movie,
-            EnrichedMovie=EnrichedMovie,
-            HealthResponse=HealthResponse,
-            RecommendationResponse=RecommendationResponse,
-            EnrichedRecommendationResponse=EnrichedRecommendationResponse,
-            EventRequest=EventRequest,
-            EventResponse=EventResponse,
-            PlatformContextResponse=PlatformContextResponse,
-            UsageResponse=UsageResponse,
-        )
-    )
-
-    # Core router
-    app.include_router(
-        create_core_router(
-            get_rec=_rec,
-            record_usage=_ru,
-            remote_payload_or_raise=_rp,
-            record_recommendation_events=_re,
-            resolve_tenant_context=resolve_tenant_context,
-            build_user_behavior_profile=build_user_behavior_profile,
-            assign_experiment=assign_experiment,
-            attach_experiment=attach_experiment,
-            aggregate_behavior_features=aggregate_behavior_features,
-            append_event=append_event,
-            summarize_recommendation_events=summarize_recommendation_events,
-            evaluate_artifact_health=evaluate_artifact_health,
-            load_ranker=load_ranker,
-            enforce_payload_context=enforce_payload_context,
-            get_db=get_db,
-            generate_chat_response=generate_chat_response,
-            summarize_usage=summarize_usage,
-            event_storage_status=event_storage_status,
-            get_events_path=get_events_path,
-            limiter=limiter,
-            Movie=Movie,
-            EnrichedMovie=EnrichedMovie,
-            HealthResponse=HealthResponse,
-            RecommendationResponse=RecommendationResponse,
-            EnrichedRecommendationResponse=EnrichedRecommendationResponse,
-            EventRequest=EventRequest,
-            EventResponse=EventResponse,
-            PlatformContextResponse=PlatformContextResponse,
-            UsageResponse=UsageResponse,
-        )
-    )
-
-    # Search/movie router
-    app.include_router(
-        create_search_movie_router(
-            get_rec=_rec,
-            record_usage=_ru,
-            remote_payload_or_raise=_rp,
-            record_recommendation_events=_re,
-            resolve_tenant_context=resolve_tenant_context,
-            build_user_behavior_profile=build_user_behavior_profile,
-            assign_experiment=assign_experiment,
-            attach_experiment=attach_experiment,
-            aggregate_behavior_features=aggregate_behavior_features,
-            append_event=append_event,
-            summarize_recommendation_events=summarize_recommendation_events,
-            enforce_payload_context=enforce_payload_context,
-            get_db=get_db,
-            generate_chat_response=generate_chat_response,
-            summarize_usage=summarize_usage,
-            event_storage_status=event_storage_status,
-            get_events_path=get_events_path,
-            limiter=limiter,
-            Movie=Movie,
-            EnrichedMovie=EnrichedMovie,
-            RecommendationResponse=RecommendationResponse,
-            EnrichedRecommendationResponse=EnrichedRecommendationResponse,
-            EventRequest=EventRequest,
-            EventResponse=EventResponse,
-        )
-    )
-
-    # Rec engine router
-    app.include_router(
-        create_rec_engine_router(
-            get_rec=_rec,
-            record_usage=_ru,
-            remote_payload_or_raise=_rp,
-            record_recommendation_events=_re,
-            resolve_tenant_context=resolve_tenant_context,
-            build_user_behavior_profile=build_user_behavior_profile,
-            assign_experiment=assign_experiment,
-            attach_experiment=attach_experiment,
-            generate_chat_response=generate_chat_response,
-            limiter=limiter,
-            Movie=Movie,
-            EnrichedMovie=EnrichedMovie,
-            RecommendationResponse=RecommendationResponse,
-            EnrichedRecommendationResponse=EnrichedRecommendationResponse,
-        )
-    )
+    # Include routers using unified RouterDeps instance
+    app.include_router(create_evaluation_router(deps))
+    app.include_router(create_admin_router(deps))
+    app.include_router(create_artifact_router(deps))
+    app.include_router(create_experiment_router(deps))
+    app.include_router(create_catalog_router(deps))
+    app.include_router(create_browse_router(deps))
+    app.include_router(create_recommendation_router(deps))
+    app.include_router(create_core_router(deps))
+    app.include_router(create_search_movie_router(deps))
+    app.include_router(create_rec_engine_router(deps))
 
 
 # Execute route registration

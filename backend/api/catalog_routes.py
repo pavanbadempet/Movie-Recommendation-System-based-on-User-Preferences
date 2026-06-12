@@ -24,14 +24,15 @@ class CatalogUploadRequest(CatalogPreviewRequest):
     """Persisted catalog upload request."""
 
 
-def create_catalog_router(
-    *,
-    resolve_tenant_context: Callable[..., TenantContext],
-    profile_catalog_csv: Callable[..., dict[str, Any]],
-    persist_catalog_upload: Callable[..., dict[str, Any]],
-    record_usage: Callable[..., Any],
-) -> APIRouter:
+from backend.router_deps import RouterDeps
+
+
+def create_catalog_router(deps: RouterDeps) -> APIRouter:
     """Build catalog onboarding routes with injected runtime dependencies."""
+    resolve_tenant_context = deps.resolve_tenant_context
+    profile_catalog_csv = deps.profile_catalog_csv
+    persist_catalog_upload = deps.persist_catalog_upload
+    record_usage = deps.record_usage
     router = APIRouter(tags=["Catalog"])
 
     @router.post("/v1/catalog/preview")

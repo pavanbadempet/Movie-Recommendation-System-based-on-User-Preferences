@@ -14,18 +14,19 @@ from backend.data.auth import TenantContext
 logger = logging.getLogger(__name__)
 
 
-def create_artifact_router(
-    *,
-    resolve_tenant_context: Callable[..., TenantContext],
-    resolve_admin_token: Callable[..., None],
-    evaluate_artifact_health: Callable[..., dict[str, Any]],
-    record_usage: Callable[..., Any],
-    reload_local_recommender: Callable[..., Any],
-    refresh_artifact_files: Callable[..., Any],
-    serving_lineage: Callable[..., dict[str, Any]],
-    current_recommender: Callable[[], Any],
-) -> APIRouter:
+from backend.router_deps import RouterDeps
+
+
+def create_artifact_router(deps: RouterDeps) -> APIRouter:
     """Build artifact routes with injected runtime dependencies."""
+    resolve_tenant_context = deps.resolve_tenant_context
+    resolve_admin_token = deps.resolve_admin_token
+    evaluate_artifact_health = deps.evaluate_artifact_health
+    record_usage = deps.record_usage
+    reload_local_recommender = deps.reload_local_recommender
+    refresh_artifact_files = deps.refresh_artifact_files
+    serving_lineage = deps.serving_lineage
+    current_recommender = deps.current_recommender
     router = APIRouter(tags=["Artifacts"])
 
     @router.get("/v1/artifacts/health")

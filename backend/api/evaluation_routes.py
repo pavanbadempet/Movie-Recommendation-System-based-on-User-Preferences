@@ -11,31 +11,29 @@ from fastapi import APIRouter, Depends, Query
 from starlette.concurrency import run_in_threadpool
 
 from backend.data.auth import TenantContext
+from backend.router_deps import RouterDeps
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _OFFLINE_EVAL_REPORT_PATH = _PROJECT_ROOT / "reports" / "offline_eval_report.json"
 
 
-def create_evaluation_router(
-    *,
-    resolve_tenant_context: Callable[..., TenantContext],
-    remote_payload_or_raise: Callable[..., Awaitable[dict[str, Any] | None]],
-    record_usage: Callable[..., Any],
-    get_rec: Callable[..., Any],
-    evaluate_recommendation_quality: Callable[..., dict[str, Any]],
-    evaluate_search_benchmark: Callable[..., dict[str, Any]],
-    get_cached_semantic_benchmark: Callable[[int], dict[str, Any] | None],
-    compute_semantic_benchmark_cached: Callable[..., dict[str, Any]],
-    start_background_semantic_benchmark: Callable[[int], None],
-    warming_semantic_benchmark_report: Callable[[int], dict[str, Any]],
-    get_cached_recommendation_benchmark: Callable[[int], dict[str, Any] | None],
-    compute_recommendation_benchmark_cached: Callable[..., dict[str, Any]],
-    start_background_recommendation_benchmark: Callable[[int], None],
-    warming_recommendation_benchmark_report: Callable[[int], dict[str, Any]],
-    env_truthy: Callable[[str], bool],
-) -> APIRouter:
+def create_evaluation_router(deps: RouterDeps) -> APIRouter:
     """Build the evaluation router with injected runtime dependencies."""
-    """Build the evaluation router with injected runtime dependencies."""
+    resolve_tenant_context = deps.resolve_tenant_context
+    remote_payload_or_raise = deps.remote_payload_or_raise
+    record_usage = deps.record_usage
+    get_rec = deps.get_rec
+    evaluate_recommendation_quality = deps.evaluate_recommendation_quality
+    evaluate_search_benchmark = deps.evaluate_search_benchmark
+    get_cached_semantic_benchmark = deps.get_cached_semantic_benchmark
+    compute_semantic_benchmark_cached = deps.compute_semantic_benchmark_cached
+    start_background_semantic_benchmark = deps.start_background_semantic_benchmark
+    warming_semantic_benchmark_report = deps.warming_semantic_benchmark_report
+    get_cached_recommendation_benchmark = deps.get_cached_recommendation_benchmark
+    compute_recommendation_benchmark_cached = deps.compute_recommendation_benchmark_cached
+    start_background_recommendation_benchmark = deps.start_background_recommendation_benchmark
+    warming_recommendation_benchmark_report = deps.warming_recommendation_benchmark_report
+    env_truthy = deps.env_truthy
     router = APIRouter(tags=["Evaluation"])
 
     @router.get("/v1/evaluation/recommendations")
