@@ -1,0 +1,60 @@
+name: Daily Recommender Optimizer Agent
+
+on:
+  schedule:
+    # Trigger daily at 7:30 AM UTC (before serving quality gate runs at 8:30 AM)
+    - cron: '30 7 * * *'
+  workflow_dispatch:
+    # Allow manual execution via the Actions tab
+    inputs:
+      hours:
+        description: 'Timeframe scope in hours to analyze'
+        required: true
+        default: '24'
+      dry_run:
+        description: 'Dry run (mock LLM responses)'
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  optimize:
+    name: Run Recommender Optimizer Agent
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # Install minimal database & API dependencies to run agent lightweight
+        pip install requests sqlalchemy python-dotenv
+
+    - name: Run Recommender Optimizer Agent
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        NOVA_BASELINE_CTR: "0.12"
+      run: |
+        # Parse inputs for manual run, fallback to defaults for cron schedule
+        HOURS="${{ github.event.inputs.hours || '24' }}"
+        DRY_RUN=""
+        if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+          DRY_RUN="--dry-run"
+        fi
+        
+        python scripts/run_optimizer_agent.py --hours "$HOURS" $DRY_RUN
+
+    - name: Upload Optimization Report Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: recommender-optimization-report
+        path: output/optimization_reports/
