@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timedelta, UTC
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
@@ -20,9 +20,11 @@ class RecommenderOptimizerAgent(BaseAgent):
         super().__init__(name)
         self.db = db
 
-    async def run(self, hours: int = 24, dry_run: bool = False) -> str:
+    async def run(self, hours: int = 24, dry_run: bool = False) -> Tuple[str, Dict[str, Any]]:
         """
         Runs the recommender drift guard and optimization loop.
+        Returns:
+            A tuple of (report_markdown: str, report_json: dict)
         """
         self.start()
 
@@ -79,6 +81,25 @@ class RecommenderOptimizerAgent(BaseAgent):
             f"Drift Status: {'🚨 DRIFT DETECTED' if drift_detected else '🟢 STABLE'}"
         )
 
+        # Build dynamic local heuristics
+        if drift_detected:
+            suggested_weights = {"sasrec": 0.50, "lightgcn": 0.30, "kan": 0.20}
+            suggested_mmr_alpha = 0.55
+            suggested_learning_rate = 0.002
+            heuristic_diagnosis = (
+                f"Engagement drift detected! CTR ({ctr:.2%}) has dropped below the baseline threshold. "
+                f"Tuning actions: shift weights towards sequential SASRec model (0.50) to boost accuracy, "
+                f"lower diversity penalty alpha to 0.55, and increase online learning rate to 0.002."
+            )
+        else:
+            suggested_weights = {"sasrec": 0.45, "lightgcn": 0.35, "kan": 0.20}
+            suggested_mmr_alpha = 0.65
+            suggested_learning_rate = 0.001
+            heuristic_diagnosis = (
+                f"Engagement is stable. CTR ({ctr:.2%}) is healthy compared to baseline ({baseline_ctr:.2%}). "
+                f"Maintaining default weights (SASRec=0.45, LightGCN=0.35, KAN=0.20) and standard parameters."
+            )
+
         # 3. Query OpenRouter for optimization suggestions
         system_prompt = (
             "You are a Recommender System Optimization Agent. Your goal is to analyze real-time recommendation "
@@ -108,16 +129,16 @@ class RecommenderOptimizerAgent(BaseAgent):
 
         if dry_run or not api_key:
             ai_response = (
-                f"**[DRY RUN DIAGNOSIS]** Engagement is stable. Calculated CTR ({ctr:.2%}) is near baseline.\n"
+                f"**[HEURISTIC LOCAL ASSESSMENT (DRY RUN)]**\n"
+                f"Diagnosis: {heuristic_diagnosis}\n\n"
                 f"Recommendations:\n"
-                f"1. Maintain current ensemble weights: SASRec=0.45, LightGCN=0.35, KAN=0.20.\n"
-                f"2. Keep diversity MMR factor at alpha=0.65.\n"
-                f"3. Keep online learning gradient rate at lr=0.001."
+                f"1. Adjust ensemble weights to: SASRec={suggested_weights['sasrec']}, LightGCN={suggested_weights['lightgcn']}, KAN={suggested_weights['kan']}.\n"
+                f"2. Set diversity MMR factor alpha to {suggested_mmr_alpha}.\n"
+                f"3. Set online learning rate to {suggested_learning_rate}."
             )
             self.log_step("Call OpenRouter Optimizer", "Using mock optimization advice (dry run or missing API key).")
         else:
             try:
-                # Run OpenRouter chat completion synchronously as configured in openrouter_client
                 ai_response = chat_completion(
                     messages=[
                         {"role": "system", "content": system_prompt},
@@ -132,7 +153,13 @@ class RecommenderOptimizerAgent(BaseAgent):
                 self.log_step("Call OpenRouter Optimizer", f"Successfully fetched optimization recommendations using {models[0]}.")
             except Exception as e:
                 self.log_error(f"OpenRouter query failed: {e}")
-                ai_response = "**ERROR:** OpenRouter API query failed. Recommending baseline settings."
+                ai_response = (
+                    f"**[HEURISTIC LOCAL FALLBACK (API ERROR)]**\n"
+                    f"Diagnosis: {heuristic_diagnosis}\n\n"
+                    f"Recommendations:\n"
+                    f"1. Fallback to weights: SASRec={suggested_weights['sasrec']}, LightGCN={suggested_weights['lightgcn']}, KAN={suggested_weights['kan']}.\n"
+                    f"2. Fallback diversity alpha: {suggested_mmr_alpha}."
+                )
 
         self.estimate_tokens(ai_response, is_output=True)
 
@@ -161,4 +188,27 @@ class RecommenderOptimizerAgent(BaseAgent):
         report_md.append("\n*Disclaimer: AI-suggested hyperparameters must be validated on validation/offline testing sets before promotion to production.*")
 
         self.finish("completed")
-        return "\n".join(report_md)
+        
+        report_json = {
+            "name": self.name,
+            "status": self.status,
+            "duration_seconds": self.duration,
+            "cost_usd": self.estimated_cost,
+            "timestamp": datetime.now(UTC).isoformat(),
+            "scope_hours": hours,
+            "metrics": {
+                "recommendations_served": recommendations_served,
+                "clicks": clicks,
+                "searches": searches,
+                "ctr": ctr,
+                "baseline_ctr": baseline_ctr,
+                "drift_detected": drift_detected,
+                "avg_rating": avg_rating
+            },
+            "suggested_hyperparameters": {
+                "ensemble_weights": suggested_weights,
+                "diversity_alpha": suggested_mmr_alpha,
+                "online_learning_rate": suggested_learning_rate
+            }
+        }
+        return "\n".join(report_md), report_json

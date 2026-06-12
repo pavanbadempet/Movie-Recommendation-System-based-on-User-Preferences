@@ -81,12 +81,14 @@ def test_base_agent_github_actions():
 async def test_optimizer_agent_no_data(db_session):
     """Verify RecommenderOptimizerAgent behavior on empty database."""
     agent = RecommenderOptimizerAgent(db_session, "Empty DB Optimizer")
-    report = await agent.run(hours=24, dry_run=True)
+    report, report_json = await agent.run(hours=24, dry_run=True)
     
     assert "Recommender System Optimization Report" in report
     assert "Click-Through Rate (CTR)" in report
     assert agent.status == "completed"
     assert len(agent.steps) == 6  # Init, Fetch, Calculate, Drift, LLM, Shutdown
+    assert report_json["metrics"]["ctr"] == 0.0
+    assert report_json["metrics"]["drift_detected"] is True
 
 
 @pytest.mark.asyncio
@@ -123,12 +125,15 @@ async def test_optimizer_agent_with_data(db_session):
 
     # Run agent
     agent = RecommenderOptimizerAgent(db_session, "Active DB Optimizer")
-    report = await agent.run(hours=24, dry_run=True)
+    report, report_json = await agent.run(hours=24, dry_run=True)
 
     assert "Recommender System Optimization Report" in report
     assert "20.00%" in report  # CTR
-    assert "[DRY RUN DIAGNOSIS]" in report
+    assert "[HEURISTIC LOCAL ASSESSMENT" in report
     assert "SASRec=0.45" in report
     assert agent.status == "completed"
     assert agent.input_tokens_estimated > 0
     assert agent.output_tokens_estimated > 0
+    assert report_json["metrics"]["ctr"] == 0.20
+    assert report_json["metrics"]["drift_detected"] is False
+    assert report_json["suggested_hyperparameters"]["ensemble_weights"]["sasrec"] == 0.45
