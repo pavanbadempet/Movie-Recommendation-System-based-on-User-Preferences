@@ -65,7 +65,7 @@ describe("AuthPage", () => {
     await userEvent.click(
       screen.getByRole("button", { name: /don't have an account/i }),
     );
-    expect(screen.getByText(/join apex/i)).toBeInTheDocument();
+    expect(screen.getByText(/join nova/i)).toBeInTheDocument();
   });
 
   it("renders 'Create Account' submit button in register mode", async () => {

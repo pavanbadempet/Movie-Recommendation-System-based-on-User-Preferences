@@ -1131,15 +1131,7 @@ function AuthModal({
       tabIndex={-1}
       onKeyDown={handleKeyDown}
     >
-      <AuthPage onLogin={(tok, user) => { onLogin(tok, user); }} />
-      <button
-        className="auth-modal-close"
-        type="button"
-        aria-label="Close sign in dialog"
-        onClick={onClose}
-      >
-        ✕
-      </button>
+      <AuthPage onLogin={(tok, user) => { onLogin(tok, user); }} onClose={onClose} />
     </div>
   );
 }
