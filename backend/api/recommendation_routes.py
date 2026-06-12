@@ -18,6 +18,18 @@ import uuid
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import RedirectResponse
+
+from backend.response_models import (
+    EnrichedMovie,
+    EnrichedRecommendationResponse,
+    EventRequest,
+    EventResponse,
+    HealthResponse,
+    Movie,
+    PlatformContextResponse,
+    RecommendationResponse,
+    UsageResponse,
+)
 from backend.router_deps import RouterDeps
 
 logger = logging.getLogger(__name__)

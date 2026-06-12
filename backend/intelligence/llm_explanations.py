@@ -71,18 +71,18 @@ def _compress_genres(genres: str | list) -> str:
     """Compress genre list to reduce tokens. Handles both string and list inputs."""
     if not genres:
         return "various genres"
-    
+
     # Convert list to string if needed
     if isinstance(genres, list):
         genres = ", ".join(genres) if genres else "various genres"
-    
+
     if genres == "various genres":
         return genres
-    
+
     genre_list = [g.strip() for g in genres.split(",")]
     if len(genre_list) <= 2:
         return genres  # No compression needed for short lists
-    
+
     # For long lists, take first 2 and add count
     return f"{', '.join(genre_list[:2])} +{len(genre_list) - 2} more"
 
@@ -105,7 +105,7 @@ def generate_explanation(user_id: str, movie: dict[str, Any], user_context: str 
     cached = _get_cached_explanation(cache_key)
     if cached:
         return cached
-    
+
     # Try semantic cache for similar queries
     semantic_key = f"{title}_{genres}_{signals_str}"
     semantic_cached = get_semantic_cache(semantic_key)
@@ -131,13 +131,10 @@ def generate_explanation(user_id: str, movie: dict[str, Any], user_context: str 
         user_prompt_parts.append(f"Why: {signals_str}")
     if user_context:
         user_prompt_parts.append(f"Taste: {user_context[:100]}")  # Truncate long context
-    
+
     user_prompt = ". ".join(user_prompt_parts)
 
-    messages = [
-        {"role": "system", "content": sys_prompt},
-        {"role": "user", "content": user_prompt}
-    ]
+    messages = [{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_prompt}]
 
     models = configured_models("NOVA_EXPLANATION_MODELS")
 
