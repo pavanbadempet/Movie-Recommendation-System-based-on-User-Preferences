@@ -3,13 +3,16 @@ from unittest.mock import patch
 import pytest
 
 from backend.intelligence.llm_explanations import _explanation_cache, _generate_cache_key, generate_explanation
+from backend.intelligence.semantic_cache import clear_semantic_cache
 
 
 @pytest.fixture(autouse=True)
 def clear_cache():
     _explanation_cache.clear()
+    clear_semantic_cache()
     yield
     _explanation_cache.clear()
+    clear_semantic_cache()
 
 
 @pytest.fixture

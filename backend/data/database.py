@@ -19,7 +19,7 @@ from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, St
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 # PostgreSQL Connection String (Fallback to SQLite if no PGSQL)
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///nova_db.sqlite3")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///apex.db")
 
 if "sqlite" in DATABASE_URL:
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
@@ -136,7 +136,7 @@ def seed_database():
         tenant_id = os.getenv("NOVA_TENANT_ID", "demo-media-co")
         tenant = db.query(Tenant).filter_by(tenant_id=tenant_id).first()
         if not tenant:
-            new_tenant = Tenant(tenant_id=tenant_id, company_name="Demo Media Co", plan_tier="enterprise")
+            new_tenant = Tenant(tenant_id=tenant_id, company_name="APEX Demo Tenant", plan_tier="enterprise")
             db.add(new_tenant)
             db.commit()
     except Exception as e:

@@ -15,7 +15,7 @@
 # Do NOT commit secrets to this file. Use a .env file instead.
 
 services:
-  nova-backend:
+  apex-backend:
     restart: "no"
     environment:
       - ENVIRONMENT=development
@@ -37,7 +37,7 @@ services:
         --reload
         --reload-dir /app/backend
 
-  nova-frontend:
+  apex-frontend:
     restart: "no"
     environment:
       - VITE_API_URL=http://localhost:8000
