@@ -243,7 +243,10 @@ def _get_psycopg():
 
 def _connect_postgres(database_url: str):
     psycopg = _get_psycopg()
-    return psycopg.connect(database_url)
+    cleaned_url = database_url
+    if cleaned_url.startswith("postgresql+"):
+        cleaned_url = "postgresql://" + cleaned_url.split("://", 1)[1]
+    return psycopg.connect(cleaned_url)
 
 
 def _ensure_postgres_events_table(conn: Any, table_name: str) -> None:
