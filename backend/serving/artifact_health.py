@@ -111,7 +111,8 @@ def evaluate_artifact_health(models_dir: Path, data_dir: Path) -> dict[str, Any]
 
     if files["movies"]["exists"]:
         try:
-            movies_ids = pd.read_parquet(paths["movies"], columns=["id"])["id"].astype("int64").to_numpy()
+            import polars as pl
+            movies_ids = pl.read_parquet(paths["movies"], columns=["id"])["id"].to_numpy().astype("int64")
             row_counts["movies"] = len(movies_ids)
         except Exception as exc:
             errors.append(f"movies_transformed.parquet could not be read: {exc}")
@@ -127,7 +128,8 @@ def evaluate_artifact_health(models_dir: Path, data_dir: Path) -> dict[str, Any]
 
     if files["semantic_twins"]["exists"]:
         try:
-            semantic_ids = pd.read_parquet(paths["semantic_twins"], columns=["id"])["id"].astype("int64").to_numpy()
+            import polars as pl
+            semantic_ids = pl.read_parquet(paths["semantic_twins"], columns=["id"])["id"].to_numpy().astype("int64")
             row_counts["semantic_twins"] = len(semantic_ids)
         except Exception as exc:
             errors.append(f"semantic_twins.parquet could not be read: {exc}")

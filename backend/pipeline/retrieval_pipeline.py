@@ -117,6 +117,8 @@ class RetrievalPipeline:
         self.kg_engine = kg_engine
         self.movie_df = movie_df
         self.config = config
+        # Fast lookup mapping to bypass slow DataFrame iloc operations on retrieval hot path
+        self._movie_id_map = movie_df["id"].values if (movie_df is not None and "id" in movie_df.columns) else np.array([])
 
     # ------------------------------------------------------------------
     # Public API
@@ -261,8 +263,7 @@ class RetrievalPipeline:
                 if idx < 0 or idx >= len(self.movie_df):
                     # FAISS returns -1 for padding when fewer than k results exist.
                     continue
-                row = self.movie_df.iloc[idx]
-                movie_id = int(row.get("id", idx))
+                movie_id = int(self._movie_id_map[idx]) if idx < len(self._movie_id_map) else int(idx)
                 candidates.append(
                     CandidateItem(
                         movie_id=movie_id,
@@ -317,8 +318,7 @@ class RetrievalPipeline:
                 score = float(scores[idx])
                 if score <= 0.0:
                     continue
-                row = self.movie_df.iloc[idx]
-                movie_id = int(row.get("id", idx))
+                movie_id = int(self._movie_id_map[idx]) if idx < len(self._movie_id_map) else int(idx)
                 candidates.append(
                     CandidateItem(
                         movie_id=movie_id,
@@ -424,8 +424,7 @@ class RetrievalPipeline:
                 _, indices = self.faiss_index.search(vec, 1)
                 idx = int(indices[0][0])
                 if 0 <= idx < len(self.movie_df):
-                    row = self.movie_df.iloc[idx]
-                    return int(row.get("id", idx))
+                    return int(self._movie_id_map[idx]) if idx < len(self._movie_id_map) else int(idx)
             except Exception as exc:
                 logger.debug(
                     "FAISS seed lookup failed (%s: %s); falling back to movie_df[0].",
@@ -435,8 +434,7 @@ class RetrievalPipeline:
 
         # Fallback: use the first movie in the DataFrame.
         if len(self.movie_df) > 0:
-            row = self.movie_df.iloc[0]
-            return int(row.get("id", 0))
+            return int(self._movie_id_map[0]) if len(self._movie_id_map) > 0 else 0
 
         return None
 

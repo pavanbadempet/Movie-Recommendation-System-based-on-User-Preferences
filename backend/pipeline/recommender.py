@@ -92,6 +92,7 @@ class Recommender:
         self._artifact_movie_ids: np.ndarray | None = None
         self._artifact_manifest: dict[str, Any] | None = None
         self._movie_id_to_index: dict[int, int] = {}
+        self._movie_records: list[dict] = []
         self._content_text: pd.Series | None = None
         self._tfidf_matrix = None
         self._item_tfidf_matrix = None
@@ -208,8 +209,10 @@ class Recommender:
     def _rebuild_lookup_maps(self) -> None:
         """Build row-position lookup maps for hot recommendation paths."""
         self._movie_id_to_index = {}
+        self._movie_records = []
         if self._movies is None or "id" not in self._movies.columns:
             return
+        self._movie_records = self._movies.to_dict(orient="records")
         ids = pd.to_numeric(self._movies["id"], errors="coerce")
         for pos, mid in enumerate(ids):
             if not pd.isna(mid):
@@ -498,6 +501,8 @@ class Recommender:
 
     def get_movie_by_index(self, idx: int) -> dict:
         """Get movie details by DataFrame index."""
+        if self._movie_records and idx < len(self._movie_records):
+            return self._clean_response_record(self._movie_records[idx])
         return self._clean_response_record(self._movies.iloc[idx].to_dict())
 
     def get_all_titles(self, limit: int = 100000) -> list[dict]:
