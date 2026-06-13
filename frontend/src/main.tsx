@@ -42,6 +42,7 @@ import {
   recordEvent,
   searchMovies,
   semanticBenchmark,
+  checkVideoCacheStatus,
 } from "./api";
 import type {
   ArtifactHealth,
@@ -761,6 +762,7 @@ function TrailerFrame({ movie }: { movie: Movie }) {
   const [playing, setPlaying] = React.useState(true);
   const [trailerKey, setTrailerKey] = React.useState<string | null>(movie.trailer_key || null);
   const [videoError, setVideoError] = React.useState(false);
+  const [isCached, setIsCached] = React.useState<boolean | null>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
 
   React.useEffect(() => {
@@ -774,15 +776,31 @@ function TrailerFrame({ movie }: { movie: Movie }) {
     }
   }, [movie.id, movie.trailer_key]);
 
-  // Restart playback and reload video when movie or trailerKey changes
+  // Check if trailer is cached when trailerKey changes
+  React.useEffect(() => {
+    if (!trailerKey) {
+      setIsCached(null);
+      return;
+    }
+    setIsCached(null); // Reset when key changes
+    checkVideoCacheStatus(trailerKey)
+      .then((res) => {
+        setIsCached(res.data.cached);
+      })
+      .catch(() => {
+        setIsCached(false); // Default to false (immediate iframe) if endpoint fails
+      });
+  }, [trailerKey]);
+
+  // Restart playback and reload video when movie, trailerKey, or isCached changes
   React.useEffect(() => {
     setPlaying(true);
     setVideoError(false); // Reset error state when movie changes
-    if (videoRef.current) {
+    if (isCached && videoRef.current) {
       videoRef.current.load();
       videoRef.current.play().catch(() => {});
     }
-  }, [movie.id, trailerKey]);
+  }, [movie.id, trailerKey, isCached]);
 
   function togglePlayback() {
     const nextPlaying = !playing;
@@ -802,7 +820,11 @@ function TrailerFrame({ movie }: { movie: Movie }) {
   return (
     <div className="trailer-frame">
       {trailerKey ? (
-        videoError ? (
+        isCached === null ? (
+          <div className="trailer-loading" style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#94a3b8" }}>
+            <Loader2 className="spin" size={24} />
+          </div>
+        ) : (!isCached || videoError) ? (
           <iframe
             src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&loop=1&playlist=${trailerKey}&controls=0&modestbranding=1&rel=0&iv_load_policy=3`}
             title="Movie Trailer Fallback"
@@ -830,7 +852,7 @@ function TrailerFrame({ movie }: { movie: Movie }) {
       ) : (
         <img src={backdropUrl(movie.poster_path)} alt="" />
       )}
-      {trailerKey && !videoError && (
+      {trailerKey && isCached && !videoError && (
         <button className="video-toggle" type="button" onClick={togglePlayback} aria-label={playing ? "Pause trailer" : "Play trailer"}>
           <span className="visually-hidden">{playing ? "Pause trailer" : "Play trailer"}</span>
         </button>

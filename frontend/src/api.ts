@@ -300,6 +300,15 @@ export async function getUserRecommendations(userId: string, n = 8): Promise<Bac
   return apiGet<Movie[]>(`/v1/recommendations/user/${encodeURIComponent(userId)}`, { n }, 30000);
 }
 
+export interface CacheStatus {
+  youtube_id: string;
+  cached: boolean;
+}
+
+export async function checkVideoCacheStatus(youtubeId: string): Promise<BackendResult<CacheStatus>> {
+  return apiGet<CacheStatus>(`/v1/videos/cache-status/${youtubeId}`, {}, 8000);
+}
+
 export async function recordEvent(payload: EventPayload): Promise<BackendResult<EventResponse>> {
   return apiPost<EventResponse>("/v1/events", payload, 8000);
 }

@@ -943,6 +943,17 @@ def create_search_movie_router(deps: RouterDeps):
 
         return FileResponse(path, media_type="video/mp4")
 
+    @router.get("/v1/videos/cache-status/{youtube_id}")
+    @router.get("/videos/cache-status/{youtube_id}")
+    async def check_video_cache_status(youtube_id: str, background_tasks: BackgroundTasks):
+        from backend.serving.video_cache import CACHE_DIR, get_or_download_video
+        target_path = CACHE_DIR / f"{youtube_id}.mp4"
+        exists = target_path.exists() and target_path.stat().st_size > 0
+        if not exists:
+            # Trigger background download so it's cached for future requests
+            background_tasks.add_task(get_or_download_video, youtube_id)
+        return {"youtube_id": youtube_id, "cached": exists}
+
 
     # ── /v1/events ───────────────────────────────────────────────────────────
     @router.post("/v1/events", response_model=EventResponse)
