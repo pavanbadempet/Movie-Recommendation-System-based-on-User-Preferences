@@ -63,14 +63,10 @@ def update_user_index(event: dict[str, Any]) -> None:
     uid_str = str(uid)
 
     with _realtime_index_lock:
-        # Evict oldest user if at capacity
+        # Evict oldest user if at capacity (O(1) insertion order popup)
         if uid_str not in _realtime_index and len(_realtime_index) >= _MAX_USERS_IN_INDEX:
-            # Remove the user with the oldest most-recent event
             try:
-                oldest_uid = min(
-                    _realtime_index.keys(),
-                    key=lambda u: _realtime_index[u][-1][0] if _realtime_index[u] else "",
-                )
+                oldest_uid = next(iter(_realtime_index))
                 del _realtime_index[oldest_uid]
             except Exception as exc:
                 logger.debug("Could not evict oldest realtime user index entry: %s", exc)

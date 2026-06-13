@@ -15,7 +15,7 @@ import datetime
 # Use generic String for UUID to support SQLite fallback
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, create_engine
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, create_engine, UUID
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 # PostgreSQL Connection String (Fallback to SQLite if no PGSQL)
@@ -48,7 +48,7 @@ def utc_now() -> datetime.datetime:
 
 class Tenant(Base):
     __tablename__ = "dim_tenant"
-    tenant_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    tenant_id = Column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4()))
     company_name = Column(String(255), nullable=False)
     plan_tier = Column(String(50), default="free")
     is_active = Column(Boolean, default=True)
@@ -61,8 +61,8 @@ class Tenant(Base):
 
 class APIKey(Base):
     __tablename__ = "dim_api_key"
-    api_key_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    tenant_id = Column(String(36), ForeignKey("dim_tenant.tenant_id"), nullable=False)
+    api_key_id = Column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4()))
+    tenant_id = Column(UUID(as_uuid=False), ForeignKey("dim_tenant.tenant_id"), nullable=False)
     api_key_hash = Column(String(255), unique=True, nullable=False)
     key_prefix = Column(String(10), nullable=False)
     rate_limit_rpm = Column(Integer, default=60)
@@ -75,8 +75,8 @@ class APIKey(Base):
 
 class User(Base):
     __tablename__ = "dim_user"
-    user_sk = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    tenant_id = Column(String(36), ForeignKey("dim_tenant.tenant_id"), nullable=False)
+    user_sk = Column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4()))
+    tenant_id = Column(UUID(as_uuid=False), ForeignKey("dim_tenant.tenant_id"), nullable=False)
     external_user_id = Column(String(255), nullable=False)
     email = Column(String(255), nullable=True)
     password_hash = Column(String(255), nullable=True)
@@ -88,10 +88,10 @@ class User(Base):
 
 class UserEvent(Base):
     __tablename__ = "fact_user_event"
-    event_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    tenant_id = Column(String(36), ForeignKey("dim_tenant.tenant_id"), nullable=False)
-    user_sk = Column(String(36), ForeignKey("dim_user.user_sk"), nullable=True)
-    movie_sk = Column(String(36), nullable=True)
+    event_id = Column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4()))
+    tenant_id = Column(UUID(as_uuid=False), ForeignKey("dim_tenant.tenant_id"), nullable=False)
+    user_sk = Column(UUID(as_uuid=False), ForeignKey("dim_user.user_sk"), nullable=True)
+    movie_sk = Column(UUID(as_uuid=False), nullable=True)
 
     event_type = Column(String(50), nullable=False)
     event_value = Column(Float, nullable=True)

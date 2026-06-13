@@ -58,7 +58,7 @@ class FeatureStore:
 
             self._item_ids = np.array(movie_ids, dtype=np.int32)
             self._item_matrix = (
-                np.vstack([self._item_factors[m_id] for m_id in movie_ids]) if movie_ids else np.array([])
+                np.vstack(item_embs) if movie_ids else np.array([])
             )
 
             self._is_loaded = True
