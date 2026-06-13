@@ -77,6 +77,28 @@ def test_video_stream_route(tmp_path, monkeypatch):
     assert response.status_code == 404
 
 
+def test_video_cache_status_route(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from backend.main import app
+
+    # Patch CACHE_DIR to use our temp path
+    monkeypatch.setattr(vc, "CACHE_DIR", tmp_path)
+
+    # 1. Check status when file doesn't exist
+    client = TestClient(app)
+    response = client.get("/v1/videos/cache-status/nonexistent-id")
+    assert response.status_code == 200
+    assert response.json() == {"youtube_id": "nonexistent-id", "cached": False}
+
+    # 2. Check status when file does exist
+    video_file = tmp_path / "existing-id.mp4"
+    video_file.write_text("mp4 data")
+
+    response = client.get("/v1/videos/cache-status/existing-id")
+    assert response.status_code == 200
+    assert response.json() == {"youtube_id": "existing-id", "cached": True}
+
+
 def test_latest_movies_endpoint(monkeypatch):
     import backend.pipeline.recommender as rec
     import backend.api.recommendation_routes as rr
