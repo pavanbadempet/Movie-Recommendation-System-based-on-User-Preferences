@@ -6,6 +6,7 @@
 pandas==3.0.2
 numpy==2.4.4
 pyarrow>=18.0.0  # Parquet support — compatible with NumPy 2.x
+polars==1.41.2   # Fast Rust-backed DataFrame library for optimized ingestion
 
 # Machine learning & NLP
 scikit-learn==1.8.0
