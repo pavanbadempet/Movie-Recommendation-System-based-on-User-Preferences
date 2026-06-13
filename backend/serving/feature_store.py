@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
+import polars as pl
 
 logger = logging.getLogger(__name__)
 
@@ -40,27 +40,26 @@ class FeatureStore:
             )
             return False
 
-        logger.info("Loading PySpark ALS embeddings into local Feature Store...")
+        logger.info("Loading PySpark ALS embeddings into local Feature Store using Polars...")
 
         try:
-            # Load user factors into a fast lookup dict
-            user_df = pd.read_parquet(user_path)
-            for _, row in user_df.iterrows():
-                self._user_factors[str(row["user_id"])] = np.array(row["embedding"], dtype=np.float32)
+            # Load user factors into a fast lookup dict using Polars
+            user_df = pl.read_parquet(user_path)
+            user_ids = user_df["user_id"].cast(pl.String).to_list()
+            user_embs = user_df["embedding"].to_list()
+            self._user_factors = {uid: np.array(emb, dtype=np.float32) for uid, emb in zip(user_ids, user_embs)}
 
-            # Load item factors into both a dict and a dense matrix for fast vectorized dot products
-            item_df = pd.read_parquet(item_path)
-            item_ids = []
-            item_vectors = []
-            for _, row in item_df.iterrows():
-                m_id = int(row["movie_id"])
-                vec = np.array(row["embedding"], dtype=np.float32)
-                self._item_factors[m_id] = vec
-                item_ids.append(m_id)
-                item_vectors.append(vec)
+            # Load item factors into a fast lookup dict and a dense matrix using Polars
+            item_df = pl.read_parquet(item_path)
+            movie_ids = item_df["movie_id"].cast(pl.Int32).to_list()
+            item_embs = item_df["embedding"].to_list()
 
-            self._item_ids = np.array(item_ids, dtype=np.int32)
-            self._item_matrix = np.vstack(item_vectors) if item_vectors else np.array([])
+            self._item_factors = {m_id: np.array(emb, dtype=np.float32) for m_id, emb in zip(movie_ids, item_embs)}
+
+            self._item_ids = np.array(movie_ids, dtype=np.int32)
+            self._item_matrix = (
+                np.vstack([self._item_factors[m_id] for m_id in movie_ids]) if movie_ids else np.array([])
+            )
 
             self._is_loaded = True
             logger.info(f"Feature Store loaded: {len(self._user_factors)} Users, {len(self._item_factors)} Items.")
