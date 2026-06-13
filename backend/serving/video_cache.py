@@ -1,8 +1,7 @@
 import asyncio
 import logging
-import os
-import sys
 from pathlib import Path
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -56,19 +55,19 @@ async def get_or_download_video(youtube_id: str) -> Path | None:
             sys.executable,
             "-m",
             "yt_dlp",
-            "-f", "best[height<=720][ext=mp4]/best[ext=mp4]/best",
+            "-f",
+            "best[height<=720][ext=mp4]/best[ext=mp4]/best",
             "--no-playlist",
             "--no-warnings",
             "--quiet",
-            "-o", str(target_path),
-            f"https://www.youtube.com/watch?v={youtube_id}"
+            "-o",
+            str(target_path),
+            f"https://www.youtube.com/watch?v={youtube_id}",
         ]
 
         try:
             proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             stdout, stderr = await proc.communicate()
 
@@ -91,7 +90,7 @@ async def get_or_download_video(youtube_id: str) -> Path | None:
                 return None
 
             logger.info("Successfully downloaded YouTube trailer %s to cache", youtube_id)
-            
+
             # Clean up the cache to remain within limits
             cleanup_cache()
             return target_path

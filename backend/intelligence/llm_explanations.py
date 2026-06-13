@@ -41,19 +41,20 @@ _explanation_cache: collections.OrderedDict[str, str] = collections.OrderedDict(
 # Cache Management Functions
 # ============================================================================
 
+
 def _generate_cache_key(user_id: str, movie_id: int, signals_hash: str) -> str:
     """
     Generate a unique cache key for this user/movie/signal combination.
-    
+
     The cache key incorporates the signals hash to ensure that if the
     recommendation rationale changes (e.g., due to model updates),
     a fresh explanation will be generated.
-    
+
     Args:
         user_id: Unique identifier for the user
         movie_id: The movie ID being explained
         signals_hash: Hash of the retrieval signals that drove the recommendation
-        
+
     Returns:
         A formatted cache key string
     """
@@ -64,14 +65,14 @@ def _generate_cache_key(user_id: str, movie_id: int, signals_hash: str) -> str:
 def _get_cached_explanation(cache_key: str) -> str | None:
     """
     Retrieve an explanation from cache, trying Redis first then falling back to memory.
-    
+
     This implements a two-tier caching strategy:
     1. Redis (distributed, persistent) - checked first
     2. In-memory LRU cache (local, fast) - fallback if Redis fails
-    
+
     Args:
         cache_key: The cache key to look up
-        
+
     Returns:
         The cached explanation string if found, None otherwise
     """
@@ -91,10 +92,10 @@ def _get_cached_explanation(cache_key: str) -> str | None:
 def _set_cached_explanation(cache_key: str, explanation: str, ttl_seconds: int = 86400 * 7):
     """
     Store an explanation in both Redis and in-memory cache.
-    
+
     The explanation is stored in Redis with a TTL for persistence across
     restarts, and in the in-memory LRU cache for fast access.
-    
+
     Args:
         cache_key: The cache key to store under
         explanation: The explanation text to cache
@@ -111,7 +112,7 @@ def _set_cached_explanation(cache_key: str, explanation: str, ttl_seconds: int =
     # Evict the oldest single entry when the cache is full (true LRU behaviour)
     if len(_explanation_cache) >= _EXPLANATION_CACHE_MAX:
         _explanation_cache.popitem(last=False)
-    
+
     # Add to cache and move to end (mark as most recently used)
     _explanation_cache[cache_key] = explanation
     _explanation_cache.move_to_end(cache_key)
@@ -121,16 +122,17 @@ def _set_cached_explanation(cache_key: str, explanation: str, ttl_seconds: int =
 # Signal and Genre Formatting Functions
 # ============================================================================
 
+
 def _format_signals(movie: dict[str, Any]) -> str:
     """
     Extract and format retrieval signals for the LLM with token compression.
-    
+
     This function compresses the retrieval signals to reduce token usage while
     preserving the most important information for generating explanations.
-    
+
     Args:
         movie: Movie dictionary containing retrieval signals and explanation tags
-        
+
     Returns:
         Compressed string representation of the signals
     """
@@ -138,7 +140,7 @@ def _format_signals(movie: dict[str, Any]) -> str:
     explanation_tags = movie.get("explanation", [])
 
     text = []
-    
+
     # Compress: take first 2 tags only to reduce tokens
     if explanation_tags:
         text.append(f"Matches: {', '.join(explanation_tags[:2])}")
@@ -153,13 +155,13 @@ def _format_signals(movie: dict[str, Any]) -> str:
 def _compress_genres(genres: str | list) -> str:
     """
     Compress genre list to reduce token usage in LLM prompts.
-    
+
     Handles both string and list inputs, compressing long genre lists
     to a more compact representation.
-    
+
     Args:
         genres: Either a comma-separated string or list of genre names
-        
+
     Returns:
         Compressed genre string (e.g., "Action, Drama +3 more")
     """
@@ -174,7 +176,7 @@ def _compress_genres(genres: str | list) -> str:
         return genres
 
     genre_list = [g.strip() for g in genres.split(",")]
-    
+
     # No compression needed for short lists
     if len(genre_list) <= 2:
         return genres
@@ -187,24 +189,25 @@ def _compress_genres(genres: str | list) -> str:
 # Main Explanation Generation Function
 # ============================================================================
 
+
 def generate_explanation(user_id: str, movie: dict[str, Any], user_context: str | None = None) -> str:
     """
     Generate a 1-2 sentence personalized explanation using an LLM.
-    
+
     This function implements a multi-layered caching strategy:
     1. Exact cache lookup (user + movie + signals combination)
     2. Semantic cache lookup (similar movie/genre/signal combinations)
     3. LLM generation with prompt optimization
     4. Graceful fallback to template if LLM fails
-    
+
     The function is designed to be fast (2.5s timeout) and cost-effective
     through token compression and caching.
-    
+
     Args:
         user_id: Unique identifier for the user
         movie: Movie dictionary containing id, title, genres, and retrieval signals
         user_context: Optional user taste/context information for personalization
-        
+
     Returns:
         A 1-2 sentence explanation string
     """
