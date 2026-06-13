@@ -760,6 +760,7 @@ function MovieSpotlight({
 function TrailerFrame({ movie }: { movie: Movie }) {
   const [playing, setPlaying] = React.useState(true);
   const [trailerKey, setTrailerKey] = React.useState<string | null>(movie.trailer_key || null);
+  const [videoError, setVideoError] = React.useState(false);
   const videoRef = React.useRef<HTMLVideoElement>(null);
 
   React.useEffect(() => {
@@ -776,6 +777,7 @@ function TrailerFrame({ movie }: { movie: Movie }) {
   // Restart playback and reload video when movie or trailerKey changes
   React.useEffect(() => {
     setPlaying(true);
+    setVideoError(false); // Reset error state when movie changes
     if (videoRef.current) {
       videoRef.current.load();
       videoRef.current.play().catch(() => {});
@@ -800,23 +802,35 @@ function TrailerFrame({ movie }: { movie: Movie }) {
   return (
     <div className="trailer-frame">
       {trailerKey ? (
-        <>
-          <video
-            ref={videoRef}
-            src={videoSrc}
-            autoPlay
-            muted
-            loop
-            playsInline
-            poster={backdropUrl(movie.poster_path)}
-            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+        videoError ? (
+          <iframe
+            src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&loop=1&playlist=${trailerKey}&controls=0&modestbranding=1&rel=0&iv_load_policy=3`}
+            title="Movie Trailer Fallback"
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", border: "none" }}
           />
-          <div className="trailer-overlay" />
-        </>
+        ) : (
+          <>
+            <video
+              ref={videoRef}
+              src={videoSrc}
+              autoPlay
+              muted
+              loop
+              playsInline
+              poster={backdropUrl(movie.poster_path)}
+              onError={() => setVideoError(true)}
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+            />
+            <div className="trailer-overlay" />
+          </>
+        )
       ) : (
         <img src={backdropUrl(movie.poster_path)} alt="" />
       )}
-      {trailerKey && (
+      {trailerKey && !videoError && (
         <button className="video-toggle" type="button" onClick={togglePlayback} aria-label={playing ? "Pause trailer" : "Play trailer"}>
           <span className="visually-hidden">{playing ? "Pause trailer" : "Play trailer"}</span>
         </button>
