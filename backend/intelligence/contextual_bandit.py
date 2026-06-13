@@ -30,10 +30,10 @@ class BanditEngine:
         """
         logger.info("Injecting historical priors into Bandit Engine...")
         try:
-            for _, row in movies_df.iterrows():
+            for row in movies_df.to_dict(orient="records"):
                 movie_id = int(row["id"])
-                votes = int(row.get("vote_count", 0))
-                rating = float(row.get("vote_average", 0.0))
+                votes = int(row.get("vote_count") or 0)
+                rating = float(row.get("vote_average") or 0.0)
 
                 # Scale down slightly to allow new data to easily overtake history
                 prior_impressions = min(votes, 1000)
