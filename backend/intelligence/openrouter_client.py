@@ -71,7 +71,7 @@ def chat_completion(
     enable_prompt_caching: bool = True,
 ) -> str:
     """Call OpenRouter with model fallbacks and return assistant content.
-    
+
     Args:
         use_fast_model: If True, prioritize fast/cheap models for simple tasks (model routing optimization).
         response_format: Optional response format for structured output (e.g., {"type": "json_object"}).
@@ -102,7 +102,7 @@ def chat_completion(
             # Enable prompt caching for cost optimization (90% savings on cached prefixes)
             # This is supported by OpenRouter and compatible providers
             payload["cache"] = {"read": {"enabled": True}, "write": {"enabled": True}}
-        
+
         try:
             response = requests.post(
                 "https://openrouter.ai/api/v1/chat/completions",

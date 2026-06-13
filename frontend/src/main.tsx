@@ -760,7 +760,7 @@ function MovieSpotlight({
 function TrailerFrame({ movie }: { movie: Movie }) {
   const [playing, setPlaying] = React.useState(true);
   const [trailerKey, setTrailerKey] = React.useState<string | null>(movie.trailer_key || null);
-  const iframeRef = React.useRef<HTMLIFrameElement>(null);
+  const videoRef = React.useRef<HTMLVideoElement>(null);
 
   React.useEffect(() => {
     setTrailerKey(movie.trailer_key || null);
@@ -773,32 +773,43 @@ function TrailerFrame({ movie }: { movie: Movie }) {
     }
   }, [movie.id, movie.trailer_key]);
 
-  function sendPlayerCommand(command: "playVideo" | "pauseVideo") {
-    iframeRef.current?.contentWindow?.postMessage(
-      JSON.stringify({
-        event: "command",
-        func: command,
-        args: [],
-      }),
-      "*",
-    );
-  }
+  // Restart playback and reload video when movie or trailerKey changes
+  React.useEffect(() => {
+    setPlaying(true);
+    if (videoRef.current) {
+      videoRef.current.load();
+      videoRef.current.play().catch(() => {});
+    }
+  }, [movie.id, trailerKey]);
 
   function togglePlayback() {
     const nextPlaying = !playing;
-    sendPlayerCommand(nextPlaying ? "playVideo" : "pauseVideo");
+    if (videoRef.current) {
+      if (nextPlaying) {
+        videoRef.current.play().catch(() => {});
+      } else {
+        videoRef.current.pause();
+      }
+    }
     setPlaying(nextPlaying);
   }
+
+  const backendUrl = currentBackend();
+  const videoSrc = trailerKey ? `${backendUrl}/v1/videos/stream/${trailerKey}` : "";
 
   return (
     <div className="trailer-frame">
       {trailerKey ? (
         <>
-          <iframe
-            ref={iframeRef}
-            title={`${movie.title} trailer preview`}
-            src={`https://www.youtube-nocookie.com/embed/${trailerKey}?enablejsapi=1&autoplay=1&mute=1&controls=0&disablekb=1&fs=0&modestbranding=1&loop=1&playlist=${trailerKey}&rel=0&iv_load_policy=3&playsinline=1&showinfo=0&start=6`}
-            allow="autoplay; encrypted-media"
+          <video
+            ref={videoRef}
+            src={videoSrc}
+            autoPlay
+            muted
+            loop
+            playsInline
+            poster={backdropUrl(movie.poster_path)}
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
           />
           <div className="trailer-overlay" />
         </>
@@ -1131,15 +1142,7 @@ function AuthModal({
       tabIndex={-1}
       onKeyDown={handleKeyDown}
     >
-      <AuthPage onLogin={(tok, user) => { onLogin(tok, user); }} />
-      <button
-        className="auth-modal-close"
-        type="button"
-        aria-label="Close sign in dialog"
-        onClick={onClose}
-      >
-        ✕
-      </button>
+      <AuthPage onLogin={(tok, user) => { onLogin(tok, user); }} onClose={onClose} />
     </div>
   );
 }

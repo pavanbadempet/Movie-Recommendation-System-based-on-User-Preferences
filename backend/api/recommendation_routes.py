@@ -18,6 +18,18 @@ import uuid
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import RedirectResponse
+
+from backend.response_models import (
+    EnrichedMovie,
+    EnrichedRecommendationResponse,
+    EventRequest,
+    EventResponse,
+    HealthResponse,
+    Movie,
+    PlatformContextResponse,
+    RecommendationResponse,
+    UsageResponse,
+)
 from backend.router_deps import RouterDeps
 
 logger = logging.getLogger(__name__)
@@ -306,7 +318,11 @@ def create_recommendation_router(deps: RouterDeps):
 
     # ── /movies/latest ──────────────────────────────────────────────────────
     @router.get("/movies/latest")
-    async def get_latest_movies(limit: int = Query(default=8, le=20)):
+    async def get_latest_movies(
+        request: Request,
+        limit: int = Query(default=8, le=20),
+        country: str | None = Query(default=None),
+    ):
         rec = get_rec()
         import math
 
@@ -315,11 +331,42 @@ def create_recommendation_router(deps: RouterDeps):
                 return None
             return v
 
+        # Resolve country code based on query parameter, Cloudflare or HuggingFace headers, defaulting to "US"
+        user_country = (
+            country or 
+            request.headers.get("cf-ipcountry") or 
+            request.headers.get("x-ip-country") or 
+            "US"
+        ).upper().strip()
+        if len(user_country) != 2:
+            user_country = "US"
+
         if not _TMDB_KEY or not (_http_client_getter and _http_client_getter()):
             all_movies = rec.get_all_movies() if hasattr(rec, "get_all_movies") else []
+            # Local fallback location filtering if any matching country languages
+            country_langs = {
+                "IN": {"hi", "te", "ta", "ml", "kn", "mr", "bn", "pa"},
+                "JP": {"ja"},
+                "KR": {"ko"},
+                "FR": {"fr"},
+                "DE": {"de"},
+                "ES": {"es"},
+                "MX": {"es"},
+                "AR": {"es"},
+                "CO": {"es"},
+                "IT": {"it"},
+                "CN": {"zh", "cn"},
+            }
+            target_langs = country_langs.get(user_country, set())
+
+            def local_sort_key(m):
+                lang_boost = 2.0 if m.get("original_language") in target_langs else 1.0
+                rel_date = m.get("release_date", "")
+                return (lang_boost, rel_date)
+
             sorted_movies = sorted(
                 [m for m in all_movies if m.get("poster_path") and m.get("release_date")],
-                key=lambda m: m.get("release_date", ""),
+                key=local_sort_key,
                 reverse=True,
             )
             return [{k: _sanitize_float(v) for k, v in m.items()} for m in sorted_movies[:limit]]
@@ -336,7 +383,10 @@ def create_recommendation_router(deps: RouterDeps):
         tasks = []
         for url in endpoints:
             for page in range(1, 4):
-                tasks.append(http_client.get(url, params={"api_key": _TMDB_KEY, "language": "en-US", "page": page}))
+                params = {"api_key": _TMDB_KEY, "language": "en-US", "page": page}
+                if "trending" not in url:
+                    params["region"] = user_country
+                tasks.append(http_client.get(url, params=params))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -357,8 +407,30 @@ def create_recommendation_router(deps: RouterDeps):
             except Exception as e:
                 logger.warning("Failed to process TMDB latest fetch result: %s", e)
 
-            if len(catalog_matches) >= limit:
-                break
+        # Apply region-based local language boosting to the returned movies list
+        country_langs = {
+            "IN": {"hi", "te", "ta", "ml", "kn", "mr", "bn", "pa"},
+            "JP": {"ja"},
+            "KR": {"ko"},
+            "FR": {"fr"},
+            "DE": {"de"},
+            "ES": {"es"},
+            "MX": {"es"},
+            "AR": {"es"},
+            "CO": {"es"},
+            "IT": {"it"},
+            "CN": {"zh", "cn"},
+            "HK": {"zh", "cn"},
+            "TW": {"zh", "cn"},
+        }
+        target_langs = country_langs.get(user_country, set())
+        if target_langs:
+            catalog_matches.sort(
+                key=lambda m: m.get("popularity", 0.0) * (2.0 if m.get("original_language") in target_langs else 1.0),
+                reverse=True
+            )
+        else:
+            catalog_matches.sort(key=lambda m: m.get("popularity", 0.0), reverse=True)
 
         genre_map = {
             28: "Action",
@@ -858,6 +930,19 @@ def create_search_movie_router(deps: RouterDeps):
         if not _TMDB_KEY:
             return {"trailer_key": None}
         return {"trailer_key": await fetch_trailer(movie_id)}
+
+    @router.get("/v1/videos/stream/{youtube_id}")
+    @router.get("/videos/stream/{youtube_id}")
+    async def stream_cached_video(youtube_id: str):
+        from backend.serving.video_cache import get_or_download_video
+        from fastapi.responses import FileResponse
+
+        path = await get_or_download_video(youtube_id)
+        if not path or not path.exists():
+            raise HTTPException(status_code=404, detail="Failed to fetch video trailer")
+
+        return FileResponse(path, media_type="video/mp4")
+
 
     # ── /v1/events ───────────────────────────────────────────────────────────
     @router.post("/v1/events", response_model=EventResponse)

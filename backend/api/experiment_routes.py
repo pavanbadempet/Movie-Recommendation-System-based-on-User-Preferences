@@ -2,14 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any
-
 from fastapi import APIRouter, Depends, Query
 
 from backend.data.auth import TenantContext
-
-
 from backend.router_deps import RouterDeps
 
 

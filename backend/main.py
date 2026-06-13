@@ -72,7 +72,6 @@ from slowapi.util import get_remote_address
 from backend.api.admin_routes import create_admin_router
 from backend.api.admin_tests import router as admin_router
 from backend.api.artifact_routes import create_artifact_router
-from backend.router_deps import RouterDeps
 from backend.api.auth_routes import router as auth_router
 from backend.api.billing_routes import router as billing_router
 from backend.api.browse_routes import create_browse_router
@@ -141,6 +140,7 @@ from backend.metrics.benchmark_cache import (
 from backend.metrics.evaluation import evaluate_recommendation_quality
 from backend.metrics.recommendation_benchmark import load_recommendation_benchmark
 from backend.metrics.search_benchmark import evaluate_search_benchmark
+from backend.router_deps import RouterDeps
 
 _start_background_semantic_benchmark = start_background_semantic_benchmark
 _start_background_recommendation_benchmark = start_background_recommendation_benchmark
@@ -545,13 +545,11 @@ def _register_routes() -> None:
         event_storage_status=event_storage_status,
         get_events_path=get_events_path,
         limiter=limiter,
-
         # Extra recommendation / SLO deps
         build_slo_report=build_slo_report,
         frontend_status_report=frontend_status_report,
         configured_frontends=configured_frontends,
         remote_recommender_status=remote_recommender_status,
-
         # Evaluation deps
         evaluate_recommendation_quality=evaluate_recommendation_quality,
         evaluate_search_benchmark=evaluate_search_benchmark,
@@ -564,7 +562,6 @@ def _register_routes() -> None:
         start_background_recommendation_benchmark=start_background_recommendation_benchmark,
         warming_recommendation_benchmark_report=warming_recommendation_benchmark_report,
         env_truthy=_env_truthy,
-
         # Admin / Auth / Artifact deps
         resolve_admin_token=resolve_admin_token,
         get_apex_engine=get_apex_engine,
@@ -572,7 +569,6 @@ def _register_routes() -> None:
         refresh_artifact_files=_refresh_artifact_files,
         serving_lineage=_serving_lineage,
         current_recommender=lambda: _recommender,
-
         # Experiment / Catalog / Browse deps
         summarize_experiment_metrics=summarize_experiment_metrics,
         profile_catalog_csv=profile_catalog_csv,
