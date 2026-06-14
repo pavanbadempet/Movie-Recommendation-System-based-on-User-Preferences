@@ -96,12 +96,12 @@ async def test_optimizer_agent_no_data(db_session):
 async def test_optimizer_agent_with_data(db_session):
     """Verify RecommenderOptimizerAgent CTR calculations and report metrics."""
     # Seed Tenant
-    tenant = Tenant(tenant_id="test-tenant", company_name="Test Co", plan_tier="pro")
+    tenant = Tenant(tenant_id="11111111-1111-1111-1111-111111111111", company_name="Test Co", plan_tier="pro")
     db_session.add(tenant)
     db_session.commit()
 
     # Seed User
-    user = User(user_sk="user-123", tenant_id="test-tenant", external_user_id="ext-123")
+    user = User(user_sk="22222222-2222-2222-2222-222222222222", tenant_id="11111111-1111-1111-1111-111111111111", external_user_id="ext-123")
     db_session.add(user)
     db_session.commit()
 
@@ -109,8 +109,8 @@ async def test_optimizer_agent_with_data(db_session):
     for _ in range(10):
         db_session.add(
             UserEvent(
-                tenant_id="test-tenant",
-                user_sk="user-123",
+                tenant_id="11111111-1111-1111-1111-111111111111",
+                user_sk="22222222-2222-2222-2222-222222222222",
                 event_type="recommendation_served",
                 created_at=datetime.now(UTC).replace(tzinfo=None),
             )
@@ -119,8 +119,8 @@ async def test_optimizer_agent_with_data(db_session):
     for _ in range(2):
         db_session.add(
             UserEvent(
-                tenant_id="test-tenant",
-                user_sk="user-123",
+                tenant_id="11111111-1111-1111-1111-111111111111",
+                user_sk="22222222-2222-2222-2222-222222222222",
                 event_type="click",
                 created_at=datetime.now(UTC).replace(tzinfo=None),
             )
