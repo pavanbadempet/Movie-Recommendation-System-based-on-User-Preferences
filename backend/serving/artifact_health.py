@@ -25,9 +25,6 @@ except ImportError:
         return json.loads(s)
 
 
-import pandas as pd
-
-
 def movie_id_sha256(movie_ids: np.ndarray) -> str:
     """Hash the exact ordered int64 movie-id vector."""
     ids = np.asarray(movie_ids, dtype=np.int64).astype("<i8", copy=False)
