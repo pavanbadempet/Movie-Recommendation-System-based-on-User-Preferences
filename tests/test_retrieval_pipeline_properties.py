@@ -171,7 +171,7 @@ def test_retrieval_source_tagging(n):
 
     # Feature: architecture-design-perfection, Property 3: Retrieval Source Tagging
     """
-    VALID_SOURCES = {"faiss", "tfidf", "knowledge_graph", "hybrid"}
+    VALID_SOURCES = {"faiss", "turbovec", "tfidf", "knowledge_graph", "hybrid"}
     n_items = max(n + 10, 20)
     faiss_idx = _make_mock_turbovec(n_items)
     movie_df = _make_mock_movie_df(n_items)
