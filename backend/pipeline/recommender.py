@@ -520,7 +520,7 @@ class Recommender:
                 encoder = self._get_query_encoder()
                 query_embedding = encoder.encode([query], convert_to_numpy=True)
                 query_embedding = query_embedding / np.linalg.norm(query_embedding, axis=1, keepdims=True)
-                candidates = self._retrieval_pipeline.retrieve(query_embedding.astype(np.float32), n=limit)
+                candidates = self._retrieval_pipeline.retrieve(query_embedding.astype(np.float32), n=limit, query_text=query)
                 return [self._candidate_to_dict(item) for item in candidates]
             except Exception as exc:
                 logger.warning("search_movies pipeline failed (%s); falling back.", type(exc).__name__)
@@ -640,7 +640,7 @@ class Recommender:
                 encoder = self._get_query_encoder()
                 query_embedding = encoder.encode([query], convert_to_numpy=True)
                 query_embedding = query_embedding / np.linalg.norm(query_embedding, axis=1, keepdims=True)
-                candidates = self._retrieval_pipeline.retrieve(query_embedding.astype(np.float32), n=n)
+                candidates = self._retrieval_pipeline.retrieve(query_embedding.astype(np.float32), n=n, query_text=query)
                 return [self._candidate_to_dict(item) for item in candidates]
             except Exception as exc:
                 logger.warning("ai_search pipeline failed (%s); falling back.", type(exc).__name__)
