@@ -360,7 +360,7 @@ def sparse_search_movies(rec, query: str, limit: int = 20) -> list:
         series = rec._movies[column]
         if index_subset is not None:
             series = series.loc[index_subset]
-        return series.fillna("").astype(str)
+        return series.astype(object).fillna("").astype(str)
 
     def normalized_text_column(column, index_subset=None):
         frame_id = id(rec._movies)
@@ -565,7 +565,7 @@ def metadata_recommend_by_index(rec, movie_idx: int, n: int = 10) -> list:
 
     genre_overlap = _np.zeros(len(rec._movies), dtype=_np.float32)
     if q_genres and "genres" in rec._movies.columns:
-        genres_col = rec._movies["genres"].fillna("").astype(str).str.lower()
+        genres_col = rec._movies["genres"].astype(object).fillna("").astype(str).str.lower()
         for genre in q_genres:
             genre_mask = genres_col.str.contains(genre, regex=False, na=False).to_numpy()
             genre_overlap += genre_mask.astype(_np.float32)
@@ -574,7 +574,7 @@ def metadata_recommend_by_index(rec, movie_idx: int, n: int = 10) -> list:
         scores += _np.minimum(genre_overlap, 2) * 0.02
 
     if q_director and q_director != "unknown" and "director" in rec._movies.columns:
-        directors = rec._movies["director"].fillna("").astype(str).str.lower()
+        directors = rec._movies["director"].astype(object).fillna("").astype(str).str.lower()
         scores += directors.eq(q_director).to_numpy().astype(_np.float32) * 0.08
 
     if q_language and "original_language" in rec._movies.columns:
@@ -1381,7 +1381,7 @@ def build_sparse_retrieval_index(rec) -> None:
     text_parts = []
     for column in ("title", "overview", "genres", "director", "cast", "original_language"):
         if column in rec._movies.columns:
-            text_parts.append(rec._movies[column].fillna("").astype(str))
+            text_parts.append(rec._movies[column].astype(object).fillna("").astype(str))
     if not text_parts:
         rec._content_text = _pd.Series([""] * len(rec._movies), index=rec._movies.index)
     else:
@@ -1419,7 +1419,7 @@ def build_item_retrieval_index(rec) -> None:
             import pandas as _pd
 
             return _pd.Series([""] * len(rec._movies), index=rec._movies.index)
-        return rec._movies[column].fillna("").astype(str)
+        return rec._movies[column].astype(object).fillna("").astype(str)
 
     item_text = (
         text_column("overview")
