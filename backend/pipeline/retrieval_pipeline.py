@@ -124,7 +124,7 @@ class RetrievalPipeline:
     # Public API
     # ------------------------------------------------------------------
 
-    def retrieve(self, query_embedding: np.ndarray, n: int) -> list[CandidateItem]:
+    def retrieve(self, query_embedding: np.ndarray, n: int, query_text: str | None = None) -> list[CandidateItem]:
         """Retrieve up to *n* candidate movies for the given query embedding.
 
         Retrieval steps (each step is skipped on error with a WARNING):
@@ -189,7 +189,7 @@ class RetrievalPipeline:
         elif self.tfidf_index is None:
             logger.debug("TF-IDF index not available; skipping TF-IDF retrieval.")
         else:
-            tfidf_candidates = self._retrieve_tfidf(query_embedding)
+            tfidf_candidates = self._retrieve_tfidf(query_embedding, query_text=query_text)
             all_candidates.extend(tfidf_candidates)
 
         # ----------------------------------------------------------------
@@ -284,17 +284,18 @@ class RetrievalPipeline:
             )
             return []
 
-    def _retrieve_tfidf(self, query_embedding: np.ndarray) -> list[CandidateItem]:
+    def _retrieve_tfidf(self, query_embedding: np.ndarray, query_text: str | None = None) -> list[CandidateItem]:
         """Query the TF-IDF sparse index and return up to ``tfidf_k`` candidates.
 
-        Uses cosine similarity between the query embedding and the TF-IDF
+        Uses cosine similarity between the vectorized query text and the TF-IDF
         document matrix.
 
         Parameters
         ----------
         query_embedding:
-            Query vector; reshaped to ``(1, d)`` before computing cosine
-            similarity against the TF-IDF matrix.
+            Unused query embedding; kept for signature uniformity.
+        query_text:
+            Optional query search string to vectorize and query.
 
         Returns
         -------
@@ -305,10 +306,15 @@ class RetrievalPipeline:
         try:
             from sklearn.metrics.pairwise import cosine_similarity  # local import
 
+            if not query_text:
+                logger.debug("query_text not provided; skipping TF-IDF retrieval.")
+                return []
+
             vectorizer, tfidf_matrix = self.tfidf_index
             k = self.config.tfidf_k
 
-            scores = cosine_similarity(query_embedding.reshape(1, -1), tfidf_matrix).flatten()
+            query_sparse = vectorizer.transform([query_text])
+            scores = cosine_similarity(query_sparse, tfidf_matrix).flatten()
             top_indices = np.argsort(scores)[::-1][:k]
 
             candidates: list[CandidateItem] = []
