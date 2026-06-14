@@ -41,6 +41,7 @@ const browserGlobals = {
   HTMLInputElement: "readonly",
   HTMLIFrameElement: "readonly",
   HTMLDivElement: "readonly",
+  HTMLVideoElement: "readonly",
   KeyboardEvent: "readonly",
   MouseEvent: "readonly",
   Event: "readonly",

@@ -3,14 +3,16 @@
 # To upgrade: pip install --upgrade <package> && pip freeze | grep <package>
 
 # Core data processing
-pandas==3.0.2
+pandas==2.2.3
 numpy==2.4.4
 pyarrow>=18.0.0  # Parquet support — compatible with NumPy 2.x
+polars==1.41.2   # Fast Rust-backed DataFrame library for optimized ingestion
 
 # Machine learning & NLP
 scikit-learn==1.8.0
 sentence-transformers==5.4.1  # Neural embeddings (SBERT)
 faiss-cpu==1.13.2             # Similarity search (swap for faiss-gpu on GPU hosts)
+yt-dlp>=2025.2.19             # On-demand video download
 turbovec==0.7.0                  # Fast quantized vector search index
 onnx==1.21.0                  # Model export
 onnxruntime==1.26.0           # Lightning-fast CPU inference
@@ -51,3 +53,6 @@ orjson==3.11.8  # Fast JSON serialization; falls back to stdlib json if absent
 # Development & testing
 pytest==8.4.2
 hypothesis==6.152.4  # Property-based testing
+
+# ML experiment tracking
+mlflow==2.18.0  # Model versioning and experiment tracking

@@ -95,16 +95,108 @@ class NovaRanker:
     model: Any
     feature_columns: list[str]
     metadata: dict[str, Any]
+    _movie_df: Any = None
+    _movie_lookup: dict = None
 
-    def predict(self, candidates: list[dict[str, Any]]) -> np.ndarray:
-        if not candidates:
-            return np.array([], dtype=np.float32)
-        features = pd.DataFrame(
-            [candidate_features(candidate) for candidate in candidates],
-            columns=self.feature_columns,
-        )
-        scores = self.model.predict(features)
-        return np.asarray(scores, dtype=np.float32)
+    @property
+    def movie_df(self):
+        if not hasattr(self, "_movie_df") or self._movie_df is None:
+            try:
+                import pandas as pd
+                from pathlib import Path
+                model_path = Path(self.metadata.get("artifact_path", ""))
+                if model_path.exists():
+                    df_path = model_path.parent / "movies_transformed.parquet"
+                else:
+                    df_path = Path(__file__).resolve().parent.parent / "models" / "movies_transformed.parquet"
+                
+                if df_path.exists():
+                    logger.info("NovaRanker lazy loading movie DataFrame from %s", df_path)
+                    df = pd.read_parquet(df_path)
+                    self.movie_df = df
+                else:
+                    logger.warning("NovaRanker could not find movie DataFrame at %s", df_path)
+                    self._movie_df = None
+                    self._movie_lookup = {}
+            except Exception as e:
+                logger.warning("NovaRanker failed to lazy load movie DataFrame: %s", e)
+                self._movie_df = None
+                self._movie_lookup = {}
+        return self._movie_df
+
+    @movie_df.setter
+    def movie_df(self, df):
+        self._movie_df = df
+        if df is not None:
+            required_cols = {'id', 'title', 'vote_average', 'vote_count', 'popularity', 'release_date'}
+            cols = [c for c in df.columns if c in required_cols]
+            self._movie_lookup = {
+                int(row['id']): row for row in df[cols].to_dict(orient='records')
+                if 'id' in row and pd.notna(row['id'])
+            }
+        else:
+            self._movie_lookup = {}
+
+    def predict(
+        self,
+        user_id_or_candidates: Any,
+        candidate_ids: list[int] | None = None,
+        candidates: list[Any] | None = None,
+    ) -> np.ndarray | dict[int, float]:
+        if candidate_ids is not None:
+            # Pipeline predict(user_id, candidate_ids) mode:
+            candidate_map = {}
+            if candidates:
+                candidate_map = {c.movie_id: c for c in candidates}
+            
+            # Trigger lazy load if movie_df not initialized
+            _ = self.movie_df
+            lookup = getattr(self, "_movie_lookup", {}) or {}
+            
+            candidates_list = []
+            for mid in candidate_ids:
+                movie_rec = lookup.get(mid, {})
+                c_item = candidate_map.get(mid)
+                score = c_item.retrieval_score if c_item else 0.0
+                source = c_item.retrieval_source if c_item else "candidate"
+                signals = c_item.metadata if (c_item and c_item.metadata) else {}
+                
+                candidate_dict = {
+                    "similarity_score": score,
+                    "vote_average": movie_rec.get("vote_average"),
+                    "vote_count": movie_rec.get("vote_count"),
+                    "popularity": movie_rec.get("popularity"),
+                    "release_date": movie_rec.get("release_date"),
+                    "retrieval_signals": {
+                        "dense": signals.get("dense_score", score if source in ("faiss", "turbovec") else 0.0),
+                        "sparse": signals.get("sparse_score", score if source == "tfidf" else 0.0),
+                        "metadata": signals.get("metadata_score", score if source == "knowledge_graph" else 0.0),
+                        "behavior": signals.get("behavior_score", score if source == "behavior" else 0.0),
+                        "cross_encoder": signals.get("cross_encoder_score", 0.0),
+                    }
+                }
+                candidates_list.append(candidate_dict)
+            
+            if not candidates_list:
+                return {}
+                
+            features = pd.DataFrame(
+                [candidate_features(c) for c in candidates_list],
+                columns=self.feature_columns,
+            )
+            scores = self.model.predict(features)
+            return {mid: float(s) for mid, s in zip(candidate_ids, scores)}
+        else:
+            # Legacy/candidates mode:
+            candidates_data = user_id_or_candidates
+            if not candidates_data:
+                return np.array([], dtype=np.float32)
+            features = pd.DataFrame(
+                [candidate_features(candidate) for candidate in candidates_data],
+                columns=self.feature_columns,
+            )
+            scores = self.model.predict(features)
+            return np.asarray(scores, dtype=np.float32)
 
     def rerank(self, candidates: list[dict[str, Any]], blend_weight: float = 0.72) -> list[dict[str, Any]]:
         """Blend learned ranker scores into existing candidate scores and resort."""

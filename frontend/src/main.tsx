@@ -42,6 +42,7 @@ import {
   recordEvent,
   searchMovies,
   semanticBenchmark,
+  checkVideoCacheStatus,
 } from "./api";
 import type {
   ArtifactHealth,
@@ -760,6 +761,8 @@ function MovieSpotlight({
 function TrailerFrame({ movie }: { movie: Movie }) {
   const [playing, setPlaying] = React.useState(true);
   const [trailerKey, setTrailerKey] = React.useState<string | null>(movie.trailer_key || null);
+  const [videoError, setVideoError] = React.useState(false);
+  const [isCached, setIsCached] = React.useState<boolean | null>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
 
   React.useEffect(() => {
@@ -773,14 +776,31 @@ function TrailerFrame({ movie }: { movie: Movie }) {
     }
   }, [movie.id, movie.trailer_key]);
 
-  // Restart playback and reload video when movie or trailerKey changes
+  // Check if trailer is cached when trailerKey changes
+  React.useEffect(() => {
+    if (!trailerKey) {
+      setIsCached(null);
+      return;
+    }
+    setIsCached(null); // Reset when key changes
+    checkVideoCacheStatus(trailerKey)
+      .then((res) => {
+        setIsCached(res.data.cached);
+      })
+      .catch(() => {
+        setIsCached(false); // Default to false (immediate iframe) if endpoint fails
+      });
+  }, [trailerKey]);
+
+  // Restart playback and reload video when movie, trailerKey, or isCached changes
   React.useEffect(() => {
     setPlaying(true);
-    if (videoRef.current) {
+    setVideoError(false); // Reset error state when movie changes
+    if (isCached && videoRef.current) {
       videoRef.current.load();
       videoRef.current.play().catch(() => {});
     }
-  }, [movie.id, trailerKey]);
+  }, [movie.id, trailerKey, isCached]);
 
   function togglePlayback() {
     const nextPlaying = !playing;
@@ -800,23 +820,39 @@ function TrailerFrame({ movie }: { movie: Movie }) {
   return (
     <div className="trailer-frame">
       {trailerKey ? (
-        <>
-          <video
-            ref={videoRef}
-            src={videoSrc}
-            autoPlay
-            muted
-            loop
-            playsInline
-            poster={backdropUrl(movie.poster_path)}
-            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+        isCached === null ? (
+          <div className="trailer-loading" style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#94a3b8" }}>
+            <Loader2 className="spin" size={24} />
+          </div>
+        ) : (!isCached || videoError) ? (
+          <iframe
+            src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&loop=1&playlist=${trailerKey}&controls=0&modestbranding=1&rel=0&iv_load_policy=3`}
+            title="Movie Trailer Fallback"
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", border: "none" }}
           />
-          <div className="trailer-overlay" />
-        </>
+        ) : (
+          <>
+            <video
+              ref={videoRef}
+              src={videoSrc}
+              autoPlay
+              muted
+              loop
+              playsInline
+              poster={backdropUrl(movie.poster_path)}
+              onError={() => setVideoError(true)}
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+            />
+            <div className="trailer-overlay" />
+          </>
+        )
       ) : (
         <img src={backdropUrl(movie.poster_path)} alt="" />
       )}
-      {trailerKey && (
+      {trailerKey && isCached && !videoError && (
         <button className="video-toggle" type="button" onClick={togglePlayback} aria-label={playing ? "Pause trailer" : "Play trailer"}>
           <span className="visually-hidden">{playing ? "Pause trailer" : "Play trailer"}</span>
         </button>
@@ -1868,30 +1904,7 @@ function App() {
 
               <section className="workspace">
                 <div className="control-panel">
-                  {isEmbedded && (
-                    <button
-                      type="button"
-                      className="back-button"
-                      onClick={openHome}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        padding: "8px 16px",
-                        background: "rgba(255, 255, 255, 0.05)",
-                        border: "1px solid rgba(255, 255, 255, 0.1)",
-                        borderRadius: "20px",
-                        color: "#e3e0f8",
-                        cursor: "pointer",
-                        marginBottom: "16px",
-                        fontFamily: "var(--font-label, sans-serif)",
-                        fontSize: "0.85rem",
-                        transition: "all 0.2s ease"
-                      }}
-                    >
-                      <House size={14} /> Back to Home
-                    </button>
-                  )}
+
                   <div className="control-heading">
                     <Search size={44} />
                     <h1>{mode === "title" ? "Search & Discover" : "AI Semantic Search"}</h1>

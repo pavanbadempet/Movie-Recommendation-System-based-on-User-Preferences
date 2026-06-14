@@ -196,7 +196,7 @@ class RankingPipeline:
         # ----------------------------------------------------------------
         # Step 2: Learned ranker scoring
         # ----------------------------------------------------------------
-        ranker_scores, effective_ranker_weight = self._get_ranker_scores(user_id, candidate_ids, ensemble_scores)
+        ranker_scores, effective_ranker_weight = self._get_ranker_scores(user_id, candidate_ids, ensemble_scores, candidates=candidates)
 
         # ----------------------------------------------------------------
         # Step 3: Blend scores
@@ -377,6 +377,7 @@ class RankingPipeline:
         user_id: int,
         candidate_ids: list[int],
         ensemble_scores: dict[int, float],
+        candidates: list[CandidateItem] | None = None,
     ) -> tuple[dict[int, float], float]:
         """Obtain learned ranker scores for all candidates.
 
@@ -393,6 +394,8 @@ class RankingPipeline:
             Ordered list of ``movie_id`` values to score.
         ensemble_scores:
             Pre-computed ensemble scores used as fallback values.
+        candidates:
+            Optional list of candidate items from which metadata can be extracted.
 
         Returns
         -------
@@ -415,7 +418,7 @@ class RankingPipeline:
             return fallback_scores, zero_weight
 
         try:
-            scores: dict[int, float] = self.learned_ranker.predict(user_id, candidate_ids)
+            scores: dict[int, float] = self.learned_ranker.predict(user_id, candidate_ids, candidates=candidates)
             # Fill in any missing movie_ids with the ensemble-score fallback.
             for mid in candidate_ids:
                 if mid not in scores:

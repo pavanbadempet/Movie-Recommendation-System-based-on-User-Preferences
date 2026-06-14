@@ -103,13 +103,16 @@ def evaluate_recommendation_quality(recommender: Any, sample_size: int = 25, k: 
     diversity_scores = []
     self_match_hits = 0
 
+    # Pre-extract genres column as a raw array for O(1) indexing in the loop
+    genres_array = movies["genres"].fillna("").astype(str).values if "genres" in movies.columns else np.array([""] * len(movies))
+
     for movie_idx in sample_indices:
         query_vector = np.asarray(vectors[movie_idx], dtype=np.float32).reshape(1, -1)
         distances, indices = index.search(np.ascontiguousarray(query_vector), top_k)
         if len(indices[0]) and int(indices[0][0]) == int(movie_idx):
             self_match_hits += 1
 
-        query_genres = _genre_set(movies.iloc[int(movie_idx)].get("genres", ""))
+        query_genres = _genre_set(genres_array[int(movie_idx)])
         result_genres: set[str] = set()
         result_count = 0
 
@@ -120,7 +123,7 @@ def evaluate_recommendation_quality(recommender: Any, sample_size: int = 25, k: 
 
             result_count += 1
             recommended_ids.add(rec_idx)
-            candidate_genres = _genre_set(movies.iloc[rec_idx].get("genres", ""))
+            candidate_genres = _genre_set(genres_array[rec_idx])
             result_genres.update(candidate_genres)
 
             if query_genres and candidate_genres:

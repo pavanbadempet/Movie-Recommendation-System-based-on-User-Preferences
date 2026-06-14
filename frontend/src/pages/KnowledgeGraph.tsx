@@ -39,15 +39,33 @@ function NodeSidePanel({ movie, onClose }: { movie: Movie; onClose: () => void }
   return (
     <aside ref={panelRef} className="kg-side-panel" aria-label={`Details for ${movie.title}`}>
       <button className="kg-panel-close" type="button" aria-label="Close details panel" onClick={onClose}>
-        <X size={18} aria-hidden="true" />
+        <X size={16} aria-hidden="true" />
       </button>
-      <img src={fullPosterUrl(movie.poster_path)} alt={`Poster for ${movie.title}`} className="kg-panel-poster" />
+      <div className="kg-panel-poster-container">
+        <img src={fullPosterUrl(movie.poster_path)} alt={`Poster for ${movie.title}`} className="kg-panel-poster" />
+      </div>
       <h3 className="kg-panel-title">{movie.title}</h3>
-      {movie.release_date && <p className="kg-panel-meta">{movie.release_date.slice(0, 4)}</p>}
-      {movie.genres && <p className="kg-panel-meta">{movie.genres}</p>}
-      {movie.vote_average != null && movie.vote_average > 0 && (
-        <p className="kg-panel-meta">⭐ {Number(movie.vote_average).toFixed(1)}</p>
+      
+      <div className="kg-panel-meta-row">
+        {movie.release_date && (
+          <span className="kg-meta-badge year">{movie.release_date.slice(0, 4)}</span>
+        )}
+        {movie.vote_average != null && movie.vote_average > 0 && (
+          <span className="kg-meta-badge rating">⭐ {Number(movie.vote_average).toFixed(1)}</span>
+        )}
+      </div>
+
+      {movie.genres && (
+        <div className="kg-panel-genres">
+          {movie.genres.split(",").map((genre) => {
+            const trimmed = genre.trim();
+            return trimmed ? (
+              <span key={trimmed} className="kg-genre-badge">{trimmed}</span>
+            ) : null;
+          })}
+        </div>
       )}
+
       {movie.overview && <p className="kg-panel-overview">{movie.overview}</p>}
     </aside>
   );

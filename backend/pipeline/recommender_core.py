@@ -345,6 +345,7 @@ def sparse_search_movies(rec, query: str, limit: int = 20) -> list:
     """TF-IDF + relevance-scoring fallback for Recommender.search_movies."""
     import numpy as _np
     import pandas as _pd
+    import logging
 
     if not query or rec._movies is None:
         return []
@@ -352,40 +353,110 @@ def sparse_search_movies(rec, query: str, limit: int = 20) -> list:
     q_lower = query.lower().strip()
     q_norm = _re.sub(r"[^a-z0-9]+", " ", q_lower).strip()
 
-    def text_column(column):
+    def text_column(column, index_subset=None):
         if column not in rec._movies.columns:
-            return _pd.Series("", index=rec._movies.index, dtype="string")
-        return rec._movies[column].fillna("").astype(str)
+            target_index = index_subset if index_subset is not None else rec._movies.index
+            return _pd.Series("", index=target_index, dtype="string")
+        series = rec._movies[column]
+        if index_subset is not None:
+            series = series.loc[index_subset]
+        return series.astype(object).fillna("").astype(str)
 
-    def normalized_text_column(column):
+    def normalized_text_column(column, index_subset=None):
         frame_id = id(rec._movies)
         if rec._search_text_cache_frame_id != frame_id:
             rec._search_text_cache.clear()
             rec._search_text_cache_frame_id = frame_id
+        
         cached = rec._search_text_cache.get(column)
-        if cached is not None and cached.index.equals(rec._movies.index):
-            return cached
-        normalized = (
-            text_column(column)
-            .str.lower()
-            .str.replace(r"[^a-z0-9]+", " ", regex=True)
-            .str.replace(r"\s+", " ", regex=True)
-            .str.strip()
-        )
-        rec._search_text_cache[column] = normalized
-        return normalized
+        if cached is None or not cached.index.equals(rec._movies.index):
+            normalized = (
+                text_column(column)
+                .str.lower()
+                .str.replace(r"[^a-z0-9]+", " ", regex=True)
+                .str.replace(r"\s+", " ", regex=True)
+                .str.strip()
+            )
+            rec._search_text_cache[column] = normalized
+            cached = normalized
+            
+        if index_subset is not None:
+            return cached.loc[index_subset]
+        return cached
 
-    def numeric_column(column):
+    def numeric_column(column, index_subset=None):
         if column not in rec._movies.columns:
-            return _pd.Series(0.0, index=rec._movies.index, dtype="float32")
-        return _pd.to_numeric(rec._movies[column], errors="coerce").fillna(0.0)
+            target_index = index_subset if index_subset is not None else rec._movies.index
+            return _pd.Series(0.0, index=target_index, dtype="float32")
+        series = rec._movies[column]
+        if index_subset is not None:
+            series = series.loc[index_subset]
+        return _pd.to_numeric(series, errors="coerce").fillna(0.0)
 
-    titles = text_column("title")
-    overviews = text_column("overview")
-    genres = text_column("genres")
-    normalized_titles = normalized_text_column("title")
-    normalized_overviews = normalized_text_column("overview")
-    normalized_genres = normalized_text_column("genres")
+    # Attempt vectorized TF-IDF search
+    use_vectorized = False
+    try:
+        rec._ensure_sparse_retrieval_index()
+        if rec._tfidf_matrix is not None and rec._vectorizer is not None:
+            use_vectorized = True
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Failed to warm sparse TF-IDF index: %s", exc)
+
+    if use_vectorized:
+        from sklearn.preprocessing import normalize
+        query_vec = rec._vectorizer.transform([query])
+        query_vec_norm = normalize(query_vec, norm='l2', axis=1)
+        scores = rec._tfidf_matrix.dot(query_vec_norm.T).toarray().flatten()
+        
+        # Take a candidate pool of limit * 10, capped at catalog length
+        top_k = min(limit * 10, len(rec._movies))
+        if len(scores) <= top_k:
+            top_indices = _np.argsort(scores)[::-1]
+        else:
+            top_indices = _np.argpartition(scores, -top_k)[-top_k:]
+            top_indices = top_indices[_np.argsort(scores[top_indices])[::-1]]
+            
+        top_indices = [idx for idx in top_indices if scores[idx] > 0.0]
+        if not top_indices:
+            return []
+            
+        matches = rec._movies.iloc[top_indices].copy()
+        matches_index = matches.index
+        
+        # Relevance starts with TF-IDF base score scaled
+        matches["relevance"] = scores[top_indices] * 20.0
+    else:
+        # Fallback: scan all movies using pandas regex (original behavior)
+        titles = text_column("title")
+        overviews = text_column("overview")
+        genres = text_column("genres")
+        normalized_titles = normalized_text_column("title")
+        normalized_overviews = normalized_text_column("overview")
+        normalized_genres = normalized_text_column("genres")
+
+        mask_title = titles.str.lower().str.contains(q_lower, regex=False, na=False)
+        if q_norm:
+            mask_title = mask_title | normalized_titles.str.contains(q_norm, regex=False, na=False)
+        mask_overview = overviews.str.lower().str.contains(q_lower, regex=False, na=False)
+        if q_norm:
+            mask_overview = mask_overview | normalized_overviews.str.contains(q_norm, regex=False, na=False)
+        mask_genre = genres.str.lower().str.contains(q_lower, regex=False, na=False)
+        if q_norm:
+            mask_genre = mask_genre | normalized_genres.str.contains(q_norm, regex=False, na=False)
+
+        matches = rec._movies[mask_title | mask_overview | mask_genre].copy()
+        if len(matches) == 0:
+            return []
+        matches["relevance"] = 0.0
+        matches_index = matches.index
+
+    # Run original relevance boosting logic only on the matches subset
+    titles = text_column("title", matches_index)
+    overviews = text_column("overview", matches_index)
+    genres = text_column("genres", matches_index)
+    normalized_titles = normalized_text_column("title", matches_index)
+    normalized_overviews = normalized_text_column("overview", matches_index)
+    normalized_genres = normalized_text_column("genres", matches_index)
 
     mask_title = titles.str.lower().str.contains(q_lower, regex=False, na=False)
     if q_norm:
@@ -397,13 +468,8 @@ def sparse_search_movies(rec, query: str, limit: int = 20) -> list:
     if q_norm:
         mask_genre = mask_genre | normalized_genres.str.contains(q_norm, regex=False, na=False)
 
-    matches = rec._movies[mask_title | mask_overview | mask_genre].copy()
-    if len(matches) == 0:
-        return []
-
-    matches["relevance"] = 0.0
-    m_title = text_column("title").loc[matches.index].str.lower()
-    m_title_norm = normalized_text_column("title").loc[matches.index]
+    m_title = titles.str.lower()
+    m_title_norm = normalized_titles
     exact_title = m_title == q_lower
     if q_norm:
         exact_title = exact_title | (m_title_norm == q_norm)
@@ -426,11 +492,11 @@ def sparse_search_movies(rec, query: str, limit: int = 20) -> list:
     matches.loc[m_title.str.contains(q_lower, regex=False), "relevance"] += 10.0
     if q_norm:
         matches.loc[m_title_norm.str.contains(q_norm, regex=False), "relevance"] += 10.0
-    matches.loc[mask_genre[matches.index], "relevance"] += 5.0
-    matches.loc[mask_overview[matches.index], "relevance"] += 3.0
+    matches.loc[mask_genre, "relevance"] += 5.0
+    matches.loc[mask_overview, "relevance"] += 3.0
 
-    popularity = numeric_column("popularity").loc[matches.index].clip(lower=0)
-    vote_count = numeric_column("vote_count").loc[matches.index].clip(lower=0)
+    popularity = numeric_column("popularity", matches_index).clip(lower=0)
+    vote_count = numeric_column("vote_count", matches_index).clip(lower=0)
     matches["relevance"] += _np.log1p(popularity) * 2.0
     matches["relevance"] += _np.log1p(vote_count) * 0.8
 
@@ -447,7 +513,19 @@ def sparse_search_movies(rec, query: str, limit: int = 20) -> list:
     matches.loc[franchise_continuation, "relevance"] += 16.0
 
     matches = matches.sort_values("relevance", ascending=False).head(limit)
-    return [rec._clean_response_record(record) for record in matches.to_dict(orient="records")]
+
+    # Pre-cache optimization check: use cached dict records if matching indexes to avoid calling to_dict() per row!
+    response_records = []
+    if hasattr(rec, "_movie_records") and rec._movie_records:
+        for idx in matches.index:
+            if idx < len(rec._movie_records):
+                response_records.append(rec._clean_response_record(rec._movie_records[idx]))
+            else:
+                response_records.append(rec._clean_response_record(rec._movies.iloc[idx].to_dict()))
+    else:
+        response_records = [rec._clean_response_record(record) for record in matches.to_dict(orient="records")]
+
+    return response_records
 
 
 def metadata_recommend_by_index(rec, movie_idx: int, n: int = 10) -> list:
@@ -487,7 +565,7 @@ def metadata_recommend_by_index(rec, movie_idx: int, n: int = 10) -> list:
 
     genre_overlap = _np.zeros(len(rec._movies), dtype=_np.float32)
     if q_genres and "genres" in rec._movies.columns:
-        genres_col = rec._movies["genres"].fillna("").astype(str).str.lower()
+        genres_col = rec._movies["genres"].astype(object).fillna("").astype(str).str.lower()
         for genre in q_genres:
             genre_mask = genres_col.str.contains(genre, regex=False, na=False).to_numpy()
             genre_overlap += genre_mask.astype(_np.float32)
@@ -496,7 +574,7 @@ def metadata_recommend_by_index(rec, movie_idx: int, n: int = 10) -> list:
         scores += _np.minimum(genre_overlap, 2) * 0.02
 
     if q_director and q_director != "unknown" and "director" in rec._movies.columns:
-        directors = rec._movies["director"].fillna("").astype(str).str.lower()
+        directors = rec._movies["director"].astype(object).fillna("").astype(str).str.lower()
         scores += directors.eq(q_director).to_numpy().astype(_np.float32) * 0.08
 
     if q_language and "original_language" in rec._movies.columns:
@@ -1078,10 +1156,14 @@ def load_movie_catalog(rec) -> None:
     ]
     if not rec._low_memory:
         essential_cols.append("cast")
+    import polars as _pl
     try:
-        rec._movies = _pd.read_parquet(movies_path, columns=essential_cols)
-    except (KeyError, ValueError):
-        rec._movies = _pd.read_parquet(movies_path)
+        rec._movies = _pl.read_parquet(movies_path, columns=essential_cols).to_pandas()
+    except (KeyError, ValueError, Exception):
+        try:
+            rec._movies = _pl.read_parquet(movies_path).to_pandas()
+        except Exception:
+            rec._movies = _pd.read_parquet(movies_path)
     rec._optimize_movie_frame()
     rec._rebuild_lookup_maps()
     rec._validate_vector_artifacts()
@@ -1144,7 +1226,17 @@ def load_optional_models(rec) -> None:
         logger.warning("Failed to load Multi-Modal index: %s", e)
 
     try:
-        rec.kg_engine.load()
+        loaded = rec.kg_engine.load()
+        if not loaded or not hasattr(rec.kg_engine, "graph") or rec.kg_engine.graph is None or len(rec.kg_engine.graph) < 100:
+            logger.info("Knowledge Graph is empty or mock. Rebuilding dynamically from catalog...")
+            DATA_DIR = (
+                (recommender_module and getattr(recommender_module, "DATA_DIR", None))
+                or getattr(rec, "DATA_DIR", None)
+                or _pathlib.Path(__file__).parent.parent / "data" / "processed"
+            )
+            twins_path = DATA_DIR / "semantic_twins.parquet"
+            rec.kg_engine.rebuild_from_catalog(rec._movies, twins_path)
+
         try:
             from backend.intelligence.cross_domain_kg import enrich_knowledge_graph_with_cross_domain
 
@@ -1152,7 +1244,7 @@ def load_optional_models(rec) -> None:
         except Exception as exc:
             logger.warning("Cross-domain KG enrichment skipped: %s", exc)
     except Exception as e:
-        logger.warning("Failed to load Knowledge Graph: %s", e)
+        logger.warning("Failed to load/rebuild Knowledge Graph: %s", e)
 
     try:
         from backend.models.two_tower import TwoTowerModel
@@ -1299,7 +1391,7 @@ def build_sparse_retrieval_index(rec) -> None:
     text_parts = []
     for column in ("title", "overview", "genres", "director", "cast", "original_language"):
         if column in rec._movies.columns:
-            text_parts.append(rec._movies[column].fillna("").astype(str))
+            text_parts.append(rec._movies[column].astype(object).fillna("").astype(str))
     if not text_parts:
         rec._content_text = _pd.Series([""] * len(rec._movies), index=rec._movies.index)
     else:
@@ -1337,7 +1429,7 @@ def build_item_retrieval_index(rec) -> None:
             import pandas as _pd
 
             return _pd.Series([""] * len(rec._movies), index=rec._movies.index)
-        return rec._movies[column].fillna("").astype(str)
+        return rec._movies[column].astype(object).fillna("").astype(str)
 
     item_text = (
         text_column("overview")

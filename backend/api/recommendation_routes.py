@@ -333,11 +333,10 @@ def create_recommendation_router(deps: RouterDeps):
 
         # Resolve country code based on query parameter, Cloudflare or HuggingFace headers, defaulting to "US"
         user_country = (
-            country or 
-            request.headers.get("cf-ipcountry") or 
-            request.headers.get("x-ip-country") or 
-            "US"
-        ).upper().strip()
+            (country or request.headers.get("cf-ipcountry") or request.headers.get("x-ip-country") or "US")
+            .upper()
+            .strip()
+        )
         if len(user_country) != 2:
             user_country = "US"
 
@@ -427,7 +426,7 @@ def create_recommendation_router(deps: RouterDeps):
         if target_langs:
             catalog_matches.sort(
                 key=lambda m: m.get("popularity", 0.0) * (2.0 if m.get("original_language") in target_langs else 1.0),
-                reverse=True
+                reverse=True,
             )
         else:
             catalog_matches.sort(key=lambda m: m.get("popularity", 0.0), reverse=True)
@@ -934,8 +933,9 @@ def create_search_movie_router(deps: RouterDeps):
     @router.get("/v1/videos/stream/{youtube_id}")
     @router.get("/videos/stream/{youtube_id}")
     async def stream_cached_video(youtube_id: str):
-        from backend.serving.video_cache import get_or_download_video
         from fastapi.responses import FileResponse
+
+        from backend.serving.video_cache import get_or_download_video
 
         path = await get_or_download_video(youtube_id)
         if not path or not path.exists():
@@ -943,6 +943,17 @@ def create_search_movie_router(deps: RouterDeps):
 
         return FileResponse(path, media_type="video/mp4")
 
+    @router.get("/v1/videos/cache-status/{youtube_id}")
+    @router.get("/videos/cache-status/{youtube_id}")
+    async def check_video_cache_status(youtube_id: str, background_tasks: BackgroundTasks):
+        from backend.serving.video_cache import CACHE_DIR, get_or_download_video
+
+        target_path = CACHE_DIR / f"{youtube_id}.mp4"
+        exists = target_path.exists() and target_path.stat().st_size > 0
+        if not exists:
+            # Trigger background download so it's cached for future requests
+            background_tasks.add_task(get_or_download_video, youtube_id)
+        return {"youtube_id": youtube_id, "cached": exists}
 
     # ── /v1/events ───────────────────────────────────────────────────────────
     @router.post("/v1/events", response_model=EventResponse)

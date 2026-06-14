@@ -60,7 +60,7 @@ def build_item_feedback(events: Iterable[dict[str, Any]]) -> dict[int, float]:
     return {movie_id: round(score / max_score, 6) for movie_id, score in scores.items()}
 
 
-def _catalog_quality_label(row: pd.Series) -> float:
+def _catalog_quality_label(row: dict[str, Any] | pd.Series) -> float:
     if row.get("content_quality_score") is not None:
         try:
             score = float(row.get("content_quality_score"))
@@ -76,7 +76,7 @@ def _catalog_quality_label(row: pd.Series) -> float:
     return float(0.55 * popularity_score + 0.45 * quality)
 
 
-def _row_to_candidate(row: pd.Series, label_hint: float = 0.0) -> dict[str, Any]:
+def _row_to_candidate(row: dict[str, Any] | pd.Series, label_hint: float = 0.0) -> dict[str, Any]:
     metadata_score = _catalog_quality_label(row)
     return {
         "id": int(row.get("id")),
@@ -106,7 +106,7 @@ def build_training_frame(
 
     features = []
     labels = []
-    for _, row in movies.iterrows():
+    for row in movies.to_dict(orient="records"):
         movie_id = int(row.get("id"))
         behavior_label = float(feedback.get(movie_id, 0.0))
         bootstrap_label = _catalog_quality_label(row)

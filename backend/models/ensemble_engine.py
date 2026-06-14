@@ -368,11 +368,29 @@ class ApexEnsembleEngine(nn.Module):
 
         if user_emb_path.exists() and item_emb_path.exists():
             try:
-                users_df = pd.read_parquet(user_emb_path, engine="pyarrow").sort_values("id")
-                items_df = pd.read_parquet(item_emb_path, engine="pyarrow").sort_values("id")
+                import polars as pl
 
-                user_tensor = torch.tensor(np.vstack(users_df["features"].values), dtype=torch.float32)
-                item_tensor = torch.tensor(np.vstack(items_df["features"].values), dtype=torch.float32)
+                def load_embeddings_by_dim(emb_path, target_dim):
+                    files = list(emb_path.glob("*.parquet")) if emb_path.is_dir() else [emb_path]
+                    dfs = []
+                    for f in files:
+                        df = pl.read_parquet(f)
+                        if "features" in df.columns and len(df) > 0:
+                            first_val = df["features"][0]
+                            if first_val is not None and len(first_val) == target_dim:
+                                if "id" in df.columns:
+                                    df = df.with_columns(pl.col("id").cast(pl.Int64))
+                                df = df.with_columns(pl.col("features").cast(pl.List(pl.Float32)))
+                                dfs.append(df)
+                    if not dfs:
+                        raise ValueError(f"No embeddings found with dimension {target_dim} in {emb_path}")
+                    return pl.concat(dfs, how="vertical").sort("id")
+
+                users_df = load_embeddings_by_dim(user_emb_path, self.emb_dim)
+                items_df = load_embeddings_by_dim(item_emb_path, self.emb_dim)
+
+                user_tensor = torch.tensor(np.vstack(users_df["features"].to_list()), dtype=torch.float32)
+                item_tensor = torch.tensor(np.vstack(items_df["features"].to_list()), dtype=torch.float32)
 
                 # Update dimensions to match the actual data
                 self.num_users = user_tensor.shape[0]

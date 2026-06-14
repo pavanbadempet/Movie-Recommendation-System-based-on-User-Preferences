@@ -224,6 +224,9 @@ _tier_detector = None
 _slo_tracker = RequestSloTracker()
 _recommender: Recommender | None = None
 
+from threading import Lock as _Lock
+_recommender_load_lock = _Lock()
+
 # =====================================================================
 # 7. MODULE-LEVEL HELPERS
 # =====================================================================
@@ -242,11 +245,13 @@ async def _trigger_active_inference(movie_id: int, reward: float) -> None:
 
 
 def get_rec() -> Recommender:
-    """Get recommender instance, loading on first call."""
+    """Get recommender instance, loading on first call (thread-safe)."""
     global _recommender
     if _recommender is None:
-        logger.info("Loading recommender on first request...")
-        _recommender = get_recommender()
+        with _recommender_load_lock:
+            if _recommender is None:
+                logger.info("Loading recommender (thread-safe first request)...")
+                _recommender = get_recommender()
     return _recommender
 
 
@@ -281,7 +286,7 @@ async def lifespan(app: FastAPI):
         _recommender = r
 
     state = await _app_startup(
-        recommender_get_fn=lambda: _recommender,
+        recommender_get_fn=get_rec,
         recommender_set_fn=_set_recommender,
     )
 

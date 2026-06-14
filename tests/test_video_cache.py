@@ -1,8 +1,9 @@
+import contextlib
 import os
-import time
-import pytest
-import shutil
 from pathlib import Path
+import shutil
+import time
+
 import backend.serving.video_cache as vc
 
 
@@ -44,14 +45,13 @@ def test_cache_cleanup():
         vc.CACHE_DIR = orig_dir
         vc.MAX_CACHE_FILES = orig_max
         if test_dir.exists():
-            try:
+            with contextlib.suppress(Exception):
                 shutil.rmtree(test_dir)
-            except Exception:
-                pass
 
 
 def test_video_stream_route(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
+
     from backend.main import app
 
     dummy_file = tmp_path / "dummy_video.mp4"
@@ -77,26 +77,68 @@ def test_video_stream_route(tmp_path, monkeypatch):
     assert response.status_code == 404
 
 
+def test_video_cache_status_route(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from backend.main import app
+
+    # Patch CACHE_DIR to use our temp path
+    monkeypatch.setattr(vc, "CACHE_DIR", tmp_path)
+
+    # 1. Check status when file doesn't exist
+    client = TestClient(app)
+    response = client.get("/v1/videos/cache-status/nonexistent-id")
+    assert response.status_code == 200
+    assert response.json() == {"youtube_id": "nonexistent-id", "cached": False}
+
+    # 2. Check status when file does exist
+    video_file = tmp_path / "existing-id.mp4"
+    video_file.write_text("mp4 data")
+
+    response = client.get("/v1/videos/cache-status/existing-id")
+    assert response.status_code == 200
+    assert response.json() == {"youtube_id": "existing-id", "cached": True}
+
+
 def test_latest_movies_endpoint(monkeypatch):
-    import backend.pipeline.recommender as rec
     import backend.api.recommendation_routes as rr
+    import backend.pipeline.recommender as rec
 
     # Mock get_rec() to return a mock recommender
     class MockRecommender:
         def get_all_movies(self):
             return [
-                {"id": 1, "title": "Movie In", "original_language": "hi", "poster_path": "hi.jpg", "release_date": "2026-01-01"},
-                {"id": 2, "title": "Movie Us", "original_language": "en", "poster_path": "us.jpg", "release_date": "2025-01-01"},
-                {"id": 3, "title": "Movie Jp", "original_language": "ja", "poster_path": "jp.jpg", "release_date": "2024-01-01"},
+                {
+                    "id": 1,
+                    "title": "Movie In",
+                    "original_language": "hi",
+                    "poster_path": "hi.jpg",
+                    "release_date": "2026-01-01",
+                },
+                {
+                    "id": 2,
+                    "title": "Movie Us",
+                    "original_language": "en",
+                    "poster_path": "us.jpg",
+                    "release_date": "2025-01-01",
+                },
+                {
+                    "id": 3,
+                    "title": "Movie Jp",
+                    "original_language": "ja",
+                    "poster_path": "jp.jpg",
+                    "release_date": "2024-01-01",
+                },
             ]
 
         def get_movie_by_id(self, movie_id):
             return None
 
     monkeypatch.setattr(rec, "_recommender", MockRecommender())
-    monkeypatch.setattr(rr, "_TMDB_KEY", None) # Force fallback path
+    monkeypatch.setattr(rr, "_TMDB_KEY", None)  # Force fallback path
 
     from fastapi.testclient import TestClient
+
     from backend.main import app
 
     client = TestClient(app)
@@ -114,6 +156,3 @@ def test_latest_movies_endpoint(monkeypatch):
     assert res2.status_code == 200
     movies2 = res2.json()
     assert movies2[0]["title"] == "Movie Jp"
-
-
-

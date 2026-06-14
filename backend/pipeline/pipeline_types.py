@@ -44,7 +44,7 @@ class CandidateItem:
 
     movie_id: int
     retrieval_score: float
-    retrieval_source: Literal["faiss", "tfidf", "knowledge_graph", "hybrid"]
+    retrieval_source: Literal["faiss", "turbovec", "tfidf", "knowledge_graph", "hybrid"]
     metadata: dict = field(default_factory=dict)
 
 
