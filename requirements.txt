@@ -53,3 +53,6 @@ orjson==3.11.8  # Fast JSON serialization; falls back to stdlib json if absent
 # Development & testing
 pytest==8.4.2
 hypothesis==6.152.4  # Property-based testing
+
+# ML experiment tracking
+mlflow==2.18.0  # Model versioning and experiment tracking
