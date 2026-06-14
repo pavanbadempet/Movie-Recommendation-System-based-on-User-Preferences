@@ -86,6 +86,93 @@ class KnowledgeGraphEngine:
             logger.error(f"Failed to load Knowledge Graph: {e}")
             return False
 
+    def rebuild_from_catalog(self, movies_df: Any, twins_path: Any) -> None:
+        """Rebuild the knowledge graph from movies DataFrame and semantic twins parquet."""
+        import json
+        import polars as pl
+        
+        logger.info("Rebuilding Knowledge Graph from movies catalog and semantic twins...")
+        self.graph = nx.Graph()
+        
+        # 1. Load twins parquet
+        parsed_metadata = {}
+        if twins_path and hasattr(twins_path, "exists") and twins_path.exists():
+            try:
+                twins_df = pl.read_parquet(str(twins_path))
+                for row in twins_df.select(["id", "concepts", "emotional_arcs"]).iter_rows():
+                    m_id = row[0]
+                    try:
+                        concepts = json.loads(row[1]) if isinstance(row[1], str) else list(row[1])
+                    except Exception:
+                        concepts = []
+                    try:
+                        moods = json.loads(row[2]) if isinstance(row[2], str) else list(row[2])
+                    except Exception:
+                        moods = []
+                    parsed_metadata[m_id] = {"themes": concepts, "moods": moods}
+            except Exception as e:
+                logger.error(f"Failed to load/parse semantic twins: {e}")
+        else:
+            logger.warning(f"semantic_twins.parquet not found at {twins_path}. Rebuilding empty/genre-only graph.")
+
+        # 2. Add movie nodes, genres, themes, moods
+        movie_records = movies_df.to_dict(orient="records") if hasattr(movies_df, "to_dict") else []
+        for movie in movie_records:
+            m_id = f"MOVIE_{movie['id']}"
+            title = movie.get("title", "Unknown")
+            self.graph.add_node(m_id, type="MOVIE", title=title)
+
+            # Add Genres
+            genres_raw = movie.get("genres")
+            if isinstance(genres_raw, str):
+                if genres_raw.startswith("["):
+                    try:
+                        genres = json.loads(genres_raw)
+                    except Exception:
+                        genres = [g.strip() for g in genres_raw.split(",")]
+                else:
+                    genres = [g.strip() for g in genres_raw.split(",")]
+            elif isinstance(genres_raw, list):
+                genres = genres_raw
+            else:
+                genres = []
+
+            for genre in genres:
+                genre = genre.strip()
+                if genre:
+                    g_id = f"GENRE_{genre}"
+                    self.graph.add_node(g_id, type="GENRE", name=genre)
+                    self.graph.add_edge(m_id, g_id, relation="HAS_GENRE")
+
+            # Add Themes & Moods
+            try:
+                m_id_raw = int(movie['id'])
+            except (ValueError, TypeError):
+                continue
+            meta = parsed_metadata.get(m_id_raw, {})
+            for theme in meta.get("themes", []):
+                theme = theme.strip()
+                if theme:
+                    t_id = f"THEME_{theme}"
+                    self.graph.add_node(t_id, type="THEME", name=theme)
+                    self.graph.add_edge(m_id, t_id, relation="EXPLORES_THEME")
+
+            for mood in meta.get("moods", []):
+                mood = mood.strip()
+                if mood:
+                    md_id = f"MOOD_{mood}"
+                    self.graph.add_node(md_id, type="MOOD", name=mood)
+                    self.graph.add_edge(m_id, md_id, relation="EVOKES_MOOD")
+
+        logger.info(
+            f"Knowledge Graph rebuilt: {self.graph.number_of_nodes()} Nodes, {self.graph.number_of_edges()} Edges."
+        )
+        try:
+            self.save()
+        except Exception as e:
+            logger.warning(f"Could not persist rebuilt Knowledge Graph to disk: {e}")
+
+
     def find_thematically_similar(self, movie_id: int, top_k: int = 10) -> list[tuple[int, float]]:
         """
         Multi-hop reasoning:

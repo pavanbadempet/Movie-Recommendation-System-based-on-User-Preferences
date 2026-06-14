@@ -1226,7 +1226,17 @@ def load_optional_models(rec) -> None:
         logger.warning("Failed to load Multi-Modal index: %s", e)
 
     try:
-        rec.kg_engine.load()
+        loaded = rec.kg_engine.load()
+        if not loaded or not hasattr(rec.kg_engine, "graph") or rec.kg_engine.graph is None or len(rec.kg_engine.graph) < 100:
+            logger.info("Knowledge Graph is empty or mock. Rebuilding dynamically from catalog...")
+            DATA_DIR = (
+                (recommender_module and getattr(recommender_module, "DATA_DIR", None))
+                or getattr(rec, "DATA_DIR", None)
+                or _pathlib.Path(__file__).parent.parent / "data" / "processed"
+            )
+            twins_path = DATA_DIR / "semantic_twins.parquet"
+            rec.kg_engine.rebuild_from_catalog(rec._movies, twins_path)
+
         try:
             from backend.intelligence.cross_domain_kg import enrich_knowledge_graph_with_cross_domain
 
@@ -1234,7 +1244,7 @@ def load_optional_models(rec) -> None:
         except Exception as exc:
             logger.warning("Cross-domain KG enrichment skipped: %s", exc)
     except Exception as e:
-        logger.warning("Failed to load Knowledge Graph: %s", e)
+        logger.warning("Failed to load/rebuild Knowledge Graph: %s", e)
 
     try:
         from backend.models.two_tower import TwoTowerModel

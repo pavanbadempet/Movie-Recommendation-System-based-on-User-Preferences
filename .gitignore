@@ -76,6 +76,7 @@ backend/models/*.npy
 backend/models/*.joblib
 backend/models/*.joblib.metadata.json
 backend/models/*.pth
+backend/models/*.gpickle
 backend/models/pipeline_manifest.json
 backend/artifacts/*.pt
 backend/artifacts/*.pth
