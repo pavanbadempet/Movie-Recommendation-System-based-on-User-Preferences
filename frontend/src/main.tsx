@@ -1904,30 +1904,7 @@ function App() {
 
               <section className="workspace">
                 <div className="control-panel">
-                  {isEmbedded && (
-                    <button
-                      type="button"
-                      className="back-button"
-                      onClick={openHome}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        padding: "8px 16px",
-                        background: "rgba(255, 255, 255, 0.05)",
-                        border: "1px solid rgba(255, 255, 255, 0.1)",
-                        borderRadius: "20px",
-                        color: "#e3e0f8",
-                        cursor: "pointer",
-                        marginBottom: "16px",
-                        fontFamily: "var(--font-label, sans-serif)",
-                        fontSize: "0.85rem",
-                        transition: "all 0.2s ease"
-                      }}
-                    >
-                      <House size={14} /> Back to Home
-                    </button>
-                  )}
+
                   <div className="control-heading">
                     <Search size={44} />
                     <h1>{mode === "title" ? "Search & Discover" : "AI Semantic Search"}</h1>
