@@ -15,7 +15,7 @@ def _candidate_strategy():
         CandidateItem,
         movie_id=st.integers(min_value=0, max_value=100000),
         retrieval_score=st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False),
-        retrieval_source=st.sampled_from(["faiss", "tfidf", "knowledge_graph", "hybrid"]),
+        retrieval_source=st.sampled_from(["faiss", "turbovec", "tfidf", "knowledge_graph", "hybrid"]),
         metadata=st.just({}),
     )
 
