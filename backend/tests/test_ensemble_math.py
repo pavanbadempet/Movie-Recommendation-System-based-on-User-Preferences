@@ -8,20 +8,27 @@ def test_apex_ensemble_initialization():
     """Verify that all 6 neural paradigms initialize with correct tensor dimensions."""
     engine = ApexEnsembleEngine(num_users=100, num_items=100, emb_dim=16)
 
+    # The constructor uses max(num_users, 610) and max(num_items, 9724) to ensure
+    # MovieLens-scale compatibility, so actual shapes use those floors.
+    effective_users = max(100, 610)
+    effective_items = max(100, 9724)
+
     # Check Quantum Fluid
-    assert engine.quantum.user_embedding.amplitude.weight.shape == (100, 16)
-    assert engine.quantum.item_embedding.phase.weight.shape == (100, 16)
+    assert engine.quantum.user_embedding.amplitude.weight.shape == (effective_users, 16)
+    assert engine.quantum.item_embedding.phase.weight.shape == (effective_items, 16)
 
     # Check Hyperbolic
-    assert engine.hyperbolic.user_embedding.weight.shape == (100, 16)
+    assert engine.hyperbolic.user_embedding.weight.shape == (effective_users, 16)
 
     # Check KAN (Requires concat of user+item)
     assert engine.kan is not None
 
-    # Check SASRec and LightGCN
-    assert engine.sasrec.item_emb.weight.shape[0] == 101  # +1 for padding
-    assert engine.sasrec.item_emb.weight.shape[1] == 16
-    assert engine.lightgcn.user_embedding.weight.shape == (100, 16)
+    # Check SASRec and LightGCN (SASRec uses max(num_items, 32660))
+    effective_sasrec_items = max(100, 32660)
+    assert engine.sasrec.item_emb.weight.shape[0] == effective_sasrec_items + 1  # +1 for padding
+    assert engine.sasrec.item_emb.weight.shape[1] == 128  # SASRec hidden_dim
+    # LightGCN uses max(num_users, 1110) and max(num_items, 12966)
+    assert engine.lightgcn.user_embedding.weight.shape == (max(100, 1110), 16)
 
 
 def test_apex_ensemble_forward_pass_no_nans():

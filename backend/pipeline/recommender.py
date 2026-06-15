@@ -520,8 +520,72 @@ class Recommender:
                 encoder = self._get_query_encoder()
                 query_embedding = encoder.encode([query], convert_to_numpy=True)
                 query_embedding = query_embedding / np.linalg.norm(query_embedding, axis=1, keepdims=True)
-                candidates = self._retrieval_pipeline.retrieve(query_embedding.astype(np.float32), n=limit, query_text=query)
-                return [self._candidate_to_dict(item) for item in candidates]
+                # Query a wider pool to make sure exact matches aren't missed by vector approximations
+                candidate_pool_size = max(limit * 3, 50)
+                candidates = self._retrieval_pipeline.retrieve(
+                    query_embedding.astype(np.float32), n=candidate_pool_size, query_text=query
+                )
+                results = [self._candidate_to_dict(item) for item in candidates]
+
+                # Boost exact/prefix matches and format the final sorted search results
+                q_lower = query.lower().strip()
+                import re
+                q_norm = re.sub(r"[^a-z0-9]+", " ", q_lower).strip()
+
+                boosted_results = []
+                for item in results:
+                    title = str(item.get("title", "")).lower().strip()
+                    title_norm = re.sub(r"[^a-z0-9]+", " ", title).strip()
+
+                    # Filter out noise for dense search: if no keyword overlap and similarity is very low, skip.
+                    overview = str(item.get("overview", "")).lower()
+                    genres_val = item.get("genres", "")
+                    if isinstance(genres_val, list):
+                        genres_str = " ".join(str(g).lower() for g in genres_val)
+                    else:
+                        genres_str = str(genres_val).lower()
+
+                    has_keyword = (
+                        q_lower in title 
+                        or q_lower in overview 
+                        or q_lower in genres_str
+                    )
+                    if not has_keyword and q_norm:
+                        has_keyword = (
+                            q_norm in title_norm 
+                            or q_norm in re.sub(r"[^a-z0-9]+", " ", overview) 
+                            or q_norm in re.sub(r"[^a-z0-9]+", " ", genres_str)
+                        )
+
+                    similarity = float(item.get("similarity_score") or 0.0)
+                    if not has_keyword and similarity < 0.22:
+                        continue
+
+                    boost = 0.0
+                    if title == q_lower or (q_norm and title_norm == q_norm):
+                        boost += 100.0  # Exact match priority
+                    elif title.startswith(q_lower + " ") or title.startswith(q_lower + ":") or title.startswith(q_lower + "-"):
+                        boost += 30.0   # Boundary match
+                    elif q_norm and title_norm.startswith(q_norm + " "):
+                        boost += 30.0
+                    elif title.startswith(q_lower):
+                        boost += 10.0   # Prefix match
+                    elif q_norm and title_norm.startswith(q_norm):
+                        boost += 10.0
+                    elif q_lower in title:
+                        boost += 5.0    # Substring match
+
+                    popularity = float(item.get("popularity") or 0.0)
+                    vote_count = float(item.get("vote_count") or 0.0)
+                    quality_boost = np.log1p(popularity) * 2.0 + np.log1p(vote_count) * 0.8
+
+                    item["_search_boosted_score"] = similarity + boost + quality_boost
+                    boosted_results.append(item)
+
+                boosted_results.sort(key=lambda x: x["_search_boosted_score"], reverse=True)
+                for item in boosted_results:
+                    item.pop("_search_boosted_score", None)
+                return boosted_results[:limit]
             except Exception as exc:
                 logger.warning("search_movies pipeline failed (%s); falling back.", type(exc).__name__)
         return self._sparse_search_movies(query, limit)
@@ -582,13 +646,187 @@ class Recommender:
         ):
             return self._metadata_recommend_by_index(movie_idx, n=n)
         try:
+            import re
+
             query_vector = self._vectors[movie_idx].reshape(1, -1).astype(np.float32)
             candidates = self._retrieval_pipeline.retrieve(query_vector, n=min(100, len(self._movies)))
             if not candidates:
                 return self._metadata_recommend_by_index(movie_idx, n=n)
+
             # Filter out the query movie itself
             query_movie_id = int(self._movies.iloc[movie_idx]["id"])
             candidates = [c for c in candidates if c.movie_id != query_movie_id]
+
+            seed_row = self._movies.iloc[movie_idx]
+            seed_genres_str = str(seed_row.get("genres", "") or "")
+            seed_genres = set(g.strip().lower() for g in seed_genres_str.split(",") if g.strip())
+            seed_title = str(seed_row.get("title", "") or "")
+            seed_title_lower = seed_title.lower()
+            seed_collection = seed_row.get("belongs_to_collection", None)
+            seed_director = seed_row.get("director", None)
+
+            # ── Franchise/Sequel Injection ──────────────────────────────
+            from backend.pipeline.pipeline_types import CandidateItem
+
+            existing_ids = {c.movie_id for c in candidates}
+            existing_ids.add(query_movie_id)
+
+            def _extract_franchise(title: str) -> str:
+                t = title.lower().strip()
+                t = re.sub(r"\(\d{4}\)", "", t).strip()
+                t = re.sub(r"\s*:\s+.*$", "", t)
+                t = re.sub(r"\s+(part|chapter|vol\.?|volume|episode)\s+\S+$", "", t, flags=re.IGNORECASE)
+                t = re.sub(r"\s+(i{1,3}|iv|v|vi{0,3}|[2-9]|10|11|12)$", "", t, flags=re.IGNORECASE)
+                return t.strip()
+
+            seed_franchise = _extract_franchise(seed_title_lower)
+            max_retrieval_score = max((c.retrieval_score for c in candidates), default=1.0)
+
+            injected_count = 0
+            if seed_franchise and len(seed_franchise) >= 3 and self._movies is not None:
+                title_col = self._movies["title"] if "title" in self._movies.columns else None
+                if title_col is not None:
+                    for idx_row, row_title in enumerate(title_col):
+                        if injected_count >= 15:
+                            break
+                        row_title_str = str(row_title or "").lower()
+                        if not row_title_str:
+                            continue
+                        row_franchise = _extract_franchise(row_title_str)
+
+                        # Type A: exact franchise match ("alien" == "alien")
+                        exact_franchise = (row_franchise == seed_franchise and row_title_str != seed_title_lower)
+                        # Type B: substring match ("alien" in "alien abduction")
+                        substring_franchise = (
+                            not exact_franchise
+                            and seed_franchise in row_title_str
+                            and row_title_str != seed_title_lower
+                            and len(seed_franchise) >= 4
+                        )
+
+                        if not (exact_franchise or substring_franchise):
+                            continue
+
+                        try:
+                            mid = int(self._movies.iloc[idx_row]["id"])
+                        except (ValueError, TypeError, KeyError):
+                            continue
+                        
+                        meta = {}
+                        for col in ["title", "genres", "release_date", "vote_average", "vote_count", "director"]:
+                            if col in self._movies.columns:
+                                meta[col] = self._movies.iloc[idx_row].get(col)
+
+                        # For substring matches, require at least one shared genre
+                        # to avoid "Alien Abduction" matching "Alien" just by title
+                        if substring_franchise and seed_genres:
+                            cand_g_str = str(meta.get("genres", "") or "")
+                            cand_g = set(g.strip().lower() for g in cand_g_str.split(",") if g.strip())
+                            if not (seed_genres & cand_g):
+                                continue
+
+                        # Exact franchise gets higher boost than substring match
+                        boost = 1.1 if exact_franchise else 0.95
+                        target_score = max_retrieval_score * boost
+
+                        if mid in existing_ids:
+                            # Boost the already retrieved candidate's score if the franchise boost is higher
+                            for c in candidates:
+                                if c.movie_id == mid:
+                                    if target_score > c.retrieval_score:
+                                        c.retrieval_score = target_score
+                                    break
+                            continue
+
+                        candidates.append(CandidateItem(
+                            movie_id=mid,
+                            retrieval_score=target_score,
+                            retrieval_source="hybrid",
+                            metadata=meta,
+                        ))
+                        existing_ids.add(mid)
+                        injected_count += 1
+
+            if seed_collection and isinstance(seed_collection, str) and seed_collection.strip():
+                collection_name = seed_collection.strip().lower()
+                if "belongs_to_collection" in self._movies.columns:
+                    for idx_row in range(len(self._movies)):
+                        if injected_count >= 25:
+                            break
+                        row_coll = self._movies.iloc[idx_row].get("belongs_to_collection", "")
+                        if not row_coll or str(row_coll).strip().lower() != collection_name:
+                            continue
+                        try:
+                            mid = int(self._movies.iloc[idx_row]["id"])
+                        except (ValueError, TypeError, KeyError):
+                            continue
+
+                        meta = {}
+                        for col in ["title", "genres", "release_date", "vote_average", "vote_count", "director"]:
+                            if col in self._movies.columns:
+                                meta[col] = self._movies.iloc[idx_row].get(col)
+
+                        target_score = max_retrieval_score * 1.15
+                        if mid in existing_ids:
+                            # Boost already retrieved collection sequel
+                            for c in candidates:
+                                if c.movie_id == mid:
+                                    if target_score > c.retrieval_score:
+                                        c.retrieval_score = target_score
+                                    break
+                            continue
+
+                        candidates.append(CandidateItem(
+                            movie_id=mid,
+                            retrieval_score=target_score,
+                            retrieval_source="hybrid",
+                            metadata=meta,
+                        ))
+                        existing_ids.add(mid)
+                        injected_count += 1
+
+            # ── Genre-aware score boosting ──────────────────────────────
+            if seed_genres:
+                for c in candidates:
+                    meta = getattr(c, "metadata", {}) or {}
+                    cand_genres_str = str(meta.get("genres", "") or "")
+                    cand_genres = set(g.strip().lower() for g in cand_genres_str.split(",") if g.strip())
+                    cand_title = str(meta.get("title", "") or "").lower()
+
+                    if cand_genres and seed_genres:
+                        overlap = len(seed_genres & cand_genres)
+                        union = len(seed_genres | cand_genres)
+                        jaccard = overlap / union if union > 0 else 0.0
+
+                        if overlap == 0:
+                            c.retrieval_score *= 0.5
+                        else:
+                            c.retrieval_score *= (1.0 + 0.4 * jaccard)
+
+                    if cand_title and seed_title_lower and cand_title != seed_title_lower:
+                        seed_words = set(seed_title_lower.split()) - {"the", "a", "an", "of", "in", "and", "or", "to", "is", "at"}
+                        cand_words = set(cand_title.split()) - {"the", "a", "an", "of", "in", "and", "or", "to", "is", "at"}
+                        shared_title_words = seed_words & cand_words
+                        if shared_title_words and cand_genres and not (seed_genres & cand_genres):
+                            c.retrieval_score *= 0.6
+
+                    # Director boost (e.g. Ridley Scott matching Prometheus for Blade Runner)
+                    cand_director = meta.get("director")
+                    if cand_director and seed_director and str(cand_director).strip().lower() == str(seed_director).strip().lower():
+                        c.retrieval_score *= 1.1
+
+                    # Granular popularity/vote-count penalisation for copycats and niche titles
+                    vote_count = float(meta.get("vote_count", 0) or 0)
+                    if vote_count < 10:
+                        c.retrieval_score *= 0.3
+                    elif vote_count < 100:
+                        c.retrieval_score *= 0.5
+                    elif vote_count < 500:
+                        c.retrieval_score *= 0.75
+                    elif vote_count < 1000:
+                        c.retrieval_score *= 0.90
+
+            candidates.sort(key=lambda c: c.retrieval_score, reverse=True)
             ranked = self._ranking_pipeline.rank(candidates, user_context={})
             final = self._reranking_pipeline.rerank(ranked, constraints={})
             return [self._candidate_to_dict(item) for item in final[:n]]

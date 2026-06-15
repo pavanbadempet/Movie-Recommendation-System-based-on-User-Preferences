@@ -96,6 +96,7 @@ class ApexEnsembleEngine(nn.Module):
         self.emb_dim = emb_dim
         self._device = device or "cpu"
         self._compiled: dict[str, bool] = {}
+        self.has_trained_weights = False
         # LRU session cache: OrderedDict gives O(1) move-to-end for recency tracking.
         # Capped at _SESSION_CACHE_MAX entries; oldest entry evicted when full.
         self._session_cache: collections.OrderedDict[str, tuple[float, list[int]]] = collections.OrderedDict()
@@ -105,10 +106,10 @@ class ApexEnsembleEngine(nn.Module):
 
         logger.info("Initializing the 4 Pillars of the Apex Ensemble...")
         # 1. Quantum Fluid
-        self.quantum = QuantumFluidRecommender(num_users, num_items, emb_dim)
+        self.quantum = QuantumFluidRecommender(max(num_users, 610), max(num_items, 9724), emb_dim)
 
         # 2. Hyperbolic
-        self.hyperbolic = HyperbolicRecommender(num_users, num_items, emb_dim)
+        self.hyperbolic = HyperbolicRecommender(max(num_users, 610), max(num_items, 9724), emb_dim)
 
         # 3. KAN (Kolmogorov-Arnold)
         # KAN expects input size: emb_dim * 2 (user + item concat)
@@ -119,10 +120,10 @@ class ApexEnsembleEngine(nn.Module):
 
         # 5. SASRec (Transformers)
         # SASRec reserves index 0 for padding internally, so pass the content item count directly.
-        self.sasrec = SASRec(num_items=num_items, hidden_dim=emb_dim)
+        self.sasrec = SASRec(num_items=max(num_items, 32660), hidden_dim=128, num_blocks=3, num_heads=4)
 
         # 6. LightGCN (Graph Networks)
-        self.lightgcn = LightGCN(num_users=num_users, num_items=num_items, embedding_dim=emb_dim)
+        self.lightgcn = LightGCN(num_users=max(num_users, 1110), num_items=max(num_items, 12966), embedding_dim=emb_dim)
 
         # 7. Contextual Router (MoE)
         self.router = ContextualRouter(emb_dim=emb_dim)
@@ -409,11 +410,14 @@ class ApexEnsembleEngine(nn.Module):
                 self.lightgcn.item_embedding.weight.data[: self.num_items] = item_tensor
 
                 # Inject into SASRec
-                self.sasrec.item_emb.weight.data[: self.num_items] = item_tensor
+                if self.sasrec.item_emb.weight.data.shape[1] == item_tensor.shape[1]:
+                    limit = min(self.num_items, self.sasrec.item_emb.weight.data.shape[0] - 1)
+                    self.sasrec.item_emb.weight.data[1 : limit + 1] = item_tensor[:limit]
 
                 # Diffusion and KAN do not maintain separate embeddings; they dynamically
                 # route through the Hyperbolic/Quantum priors during the forward pass.
 
+                self.has_trained_weights = True
                 logger.info(
                     "Successfully injected PySpark embeddings (%d users, %d items) into all models.",
                     self.num_users,
@@ -442,7 +446,7 @@ class ApexEnsembleEngine(nn.Module):
             if path.exists():
                 try:
                     model_attr = getattr(self, name)
-                    model_attr.load_state_dict(torch.load(path, weights_only=True))
+                    model_attr.load_state_dict(torch.load(path, map_location="cpu", weights_only=True))
                     ips_tag = " (IPS-debiased)" if name == "lightgcn" and "ips" in path.name else ""
                     logger.info("Loaded %s weights from %s%s", name, path.name, ips_tag)
                     loaded += 1
@@ -451,6 +455,7 @@ class ApexEnsembleEngine(nn.Module):
 
         if loaded > 0:
             logger.info("Successfully loaded trained weights for %d models.", loaded)
+            self.has_trained_weights = True
         else:
             logger.warning("No trained weights found. Models will use random initialization.")
 
@@ -578,6 +583,20 @@ class ApexEnsembleEngine(nn.Module):
         if not candidate_item_ids:
             return {}
 
+        # Check for cold start user context
+        is_cold_start = (user_id % self.num_users == 0)
+        if not is_cold_start:
+            try:
+                events_list = _get_user_event_index().get(str(user_id), [])
+                if not events_list:
+                    if session_sequence is None or len(session_sequence) == 0 or all(s == 0 for s in session_sequence):
+                        is_cold_start = True
+            except Exception:
+                is_cold_start = True
+
+        if is_cold_start:
+            use_router = False
+
         # Try ONNX-accelerated path first (Tier 2) when no user embedding override is requested and router is disabled.
         # This ensures DP overrides (which are processed in PyTorch) and MoE routing are respected.
         if user_emb_override is None and not use_router:
@@ -586,7 +605,7 @@ class ApexEnsembleEngine(nn.Module):
 
                 onnx = get_onnx_engine()
                 if onnx.has_any_onnx_models():
-                    return self._predict_ensemble_onnx(user_id, candidate_item_ids, onnx, session_sequence)
+                    return self._predict_ensemble_onnx(user_id, candidate_item_ids, onnx, session_sequence, is_cold_start=is_cold_start)
             except Exception as exc:
                 logger.debug("ONNX ensemble path unavailable; falling back to PyTorch: %s", exc)
 
@@ -597,10 +616,11 @@ class ApexEnsembleEngine(nn.Module):
             user_emb_override,
             use_router=use_router,
             router_k=router_k,
+            is_cold_start=is_cold_start,
         )
 
     def _predict_ensemble_onnx(
-        self, user_id: int, candidate_item_ids: list[int], onnx, session_sequence: list[int] | None = None
+        self, user_id: int, candidate_item_ids: list[int], onnx, session_sequence: list[int] | None = None, is_cold_start: bool = False
     ) -> dict[int, float]:
         """ONNX Runtime inference path — bypasses Python GIL for 2-5x speedup."""
         import numpy as _np
@@ -618,18 +638,28 @@ class ApexEnsembleEngine(nn.Module):
                 return _np.full_like(arr, 0.5)
             return (arr - mn) / (mx - mn)
 
-        with self._weights_lock:
-            w = dict(self._weights)
+        if is_cold_start:
+            w = {
+                "quantum": 0.40,
+                "hyperbolic": 0.40,
+                "diffusion": 0.20,
+                "lightgcn": 0.00,
+                "sasrec": 0.00,
+                "kan": 0.00,
+            }
+        else:
+            with self._weights_lock:
+                w = dict(self._weights)
 
-        # Use contextual weights if available (context-dependent ensemble blending)
-        try:
-            from backend.models.neural_weight_optimizer import get_contextual_weights
+            # Use contextual weights if available (context-dependent ensemble blending)
+            try:
+                from backend.models.neural_weight_optimizer import get_contextual_weights
 
-            contextual_w = get_contextual_weights({})
-            if contextual_w:
-                w = contextual_w
-        except Exception as exc:
-            logger.debug("Contextual weights unavailable; using static ensemble weights: %s", exc)
+                contextual_w = get_contextual_weights({})
+                if contextual_w:
+                    w = contextual_w
+            except Exception as exc:
+                logger.debug("Contextual weights unavailable; using static ensemble weights: %s", exc)
 
         # LightGCN via ONNX
         try:
@@ -710,6 +740,7 @@ class ApexEnsembleEngine(nn.Module):
         user_emb_override: "torch.Tensor | None" = None,
         use_router: bool = True,
         router_k: int = 2,
+        is_cold_start: bool = False,
     ) -> dict[int, float]:
         if not candidate_item_ids:
             return {}
@@ -873,21 +904,16 @@ class ApexEnsembleEngine(nn.Module):
                     selected_models = None
                     routing_weights = None
 
-            # Filter functions based on router selections
-            if selected_models is not None:
-                active_fns = {m: model_fns[m] for m in selected_models if m in model_fns}
-            else:
-                active_fns = model_fns
-
-            # Apply health monitor filtering — exclude degraded models
-            if self.health_monitor is not None:
-                healthy_models = set(self.health_monitor.get_active_models())
-                active_fns = {m: fn for m, fn in active_fns.items() if m in healthy_models}
-                if not active_fns:
-                    # Safety: if health filter removed everything, fall back to all
-                    active_fns = model_fns
-
-            if selected_models is not None and routing_weights is not None:
+            if is_cold_start:
+                w = {
+                    "quantum": 0.40,
+                    "hyperbolic": 0.40,
+                    "diffusion": 0.20,
+                    "lightgcn": 0.00,
+                    "sasrec": 0.00,
+                    "kan": 0.00,
+                }
+            elif selected_models is not None and routing_weights is not None:
                 # Use normalized routing weights from router
                 w = {name: routing_weights[idx].item() for idx, name in enumerate(selected_models)}
             else:
@@ -904,6 +930,20 @@ class ApexEnsembleEngine(nn.Module):
                         w = contextual_w
                 except Exception as exc:
                     logger.debug("Contextual weights unavailable; using static weights: %s", exc)
+
+            # Filter functions based on router selections or non-zero weights
+            if selected_models is not None:
+                active_fns = {m: model_fns[m] for m in selected_models if m in model_fns}
+            else:
+                active_fns = {m: fn for m, fn in model_fns.items() if w.get(m, 0.0) > 0.0}
+
+            # Apply health monitor filtering — exclude degraded models
+            if self.health_monitor is not None:
+                healthy_models = set(self.health_monitor.get_active_models())
+                active_fns = {m: fn for m, fn in active_fns.items() if m in healthy_models}
+                if not active_fns:
+                    # Safety: if health filter removed everything, fall back to non-zero weight active ones
+                    active_fns = {m: fn for m, fn in model_fns.items() if w.get(m, 0.0) > 0.0}
 
             # Run active models in parallel using the module-level thread pool
             executor = _get_model_thread_pool()

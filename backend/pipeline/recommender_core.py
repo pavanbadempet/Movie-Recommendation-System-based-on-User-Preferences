@@ -402,6 +402,26 @@ def sparse_search_movies(rec, query: str, limit: int = 20) -> list:
     except Exception as exc:
         logging.getLogger(__name__).warning("Failed to warm sparse TF-IDF index: %s", exc)
 
+    # Find candidates by literal keyword matching
+    titles = text_column("title")
+    overviews = text_column("overview")
+    genres = text_column("genres")
+    normalized_titles = normalized_text_column("title")
+    normalized_overviews = normalized_text_column("overview")
+    normalized_genres = normalized_text_column("genres")
+
+    mask_title = titles.str.lower().str.contains(q_lower, regex=False, na=False)
+    if q_norm:
+        mask_title = mask_title | normalized_titles.str.contains(q_norm, regex=False, na=False)
+    mask_overview = overviews.str.lower().str.contains(q_lower, regex=False, na=False)
+    if q_norm:
+        mask_overview = mask_overview | normalized_overviews.str.contains(q_norm, regex=False, na=False)
+    mask_genre = genres.str.lower().str.contains(q_lower, regex=False, na=False)
+    if q_norm:
+        mask_genre = mask_genre | normalized_genres.str.contains(q_norm, regex=False, na=False)
+
+    literal_positions = _np.where(mask_title | mask_overview | mask_genre)[0].tolist()
+
     if use_vectorized:
         from sklearn.preprocessing import normalize
         query_vec = rec._vectorizer.transform([query])
@@ -416,39 +436,31 @@ def sparse_search_movies(rec, query: str, limit: int = 20) -> list:
             top_indices = _np.argpartition(scores, -top_k)[-top_k:]
             top_indices = top_indices[_np.argsort(scores[top_indices])[::-1]]
             
-        top_indices = [idx for idx in top_indices if scores[idx] > 0.0]
-        if not top_indices:
-            return []
-            
-        matches = rec._movies.iloc[top_indices].copy()
-        matches_index = matches.index
-        
-        # Relevance starts with TF-IDF base score scaled
-        matches["relevance"] = scores[top_indices] * 20.0
+        vector_indices = [idx for idx in top_indices if scores[idx] > 0.0]
     else:
-        # Fallback: scan all movies using pandas regex (original behavior)
-        titles = text_column("title")
-        overviews = text_column("overview")
-        genres = text_column("genres")
-        normalized_titles = normalized_text_column("title")
-        normalized_overviews = normalized_text_column("overview")
-        normalized_genres = normalized_text_column("genres")
+        scores = None
+        vector_indices = []
 
-        mask_title = titles.str.lower().str.contains(q_lower, regex=False, na=False)
-        if q_norm:
-            mask_title = mask_title | normalized_titles.str.contains(q_norm, regex=False, na=False)
-        mask_overview = overviews.str.lower().str.contains(q_lower, regex=False, na=False)
-        if q_norm:
-            mask_overview = mask_overview | normalized_overviews.str.contains(q_norm, regex=False, na=False)
-        mask_genre = genres.str.lower().str.contains(q_lower, regex=False, na=False)
-        if q_norm:
-            mask_genre = mask_genre | normalized_genres.str.contains(q_norm, regex=False, na=False)
+    # Merge literal and vector candidates to avoid missing out due to TF-IDF feature vocabulary limit
+    combined_set = set(literal_positions)
+    combined_positions = list(literal_positions)
+    for pos in vector_indices:
+        if pos not in combined_set:
+            combined_positions.append(pos)
+            combined_set.add(pos)
 
-        matches = rec._movies[mask_title | mask_overview | mask_genre].copy()
-        if len(matches) == 0:
-            return []
+    if not combined_positions:
+        return []
+
+    matches = rec._movies.iloc[combined_positions].copy()
+    matches_index = matches.index
+
+    # Initialize relevance: use scaled TF-IDF scores if available, otherwise 0.0
+    if scores is not None:
+        matches["relevance"] = [float(scores[pos]) * 20.0 for pos in combined_positions]
+    else:
         matches["relevance"] = 0.0
-        matches_index = matches.index
+
 
     # Run original relevance boosting logic only on the matches subset
     titles = text_column("title", matches_index)
@@ -518,12 +530,20 @@ def sparse_search_movies(rec, query: str, limit: int = 20) -> list:
     response_records = []
     if hasattr(rec, "_movie_records") and rec._movie_records:
         for idx in matches.index:
+            rel_score = float(matches.loc[idx, "relevance"])
             if idx < len(rec._movie_records):
-                response_records.append(rec._clean_response_record(rec._movie_records[idx]))
+                record = dict(rec._movie_records[idx])
+                record["similarity_score"] = rel_score
+                response_records.append(rec._clean_response_record(record))
             else:
-                response_records.append(rec._clean_response_record(rec._movies.iloc[idx].to_dict()))
+                record = rec._movies.iloc[idx].to_dict()
+                record["similarity_score"] = rel_score
+                response_records.append(rec._clean_response_record(record))
     else:
-        response_records = [rec._clean_response_record(record) for record in matches.to_dict(orient="records")]
+        for record in matches.to_dict(orient="records"):
+            record["similarity_score"] = float(record.get("relevance", 0.0))
+            response_records.append(rec._clean_response_record(record))
+
 
     return response_records
 
@@ -1305,18 +1325,31 @@ def wire_pipelines(rec, is_tier3: bool) -> None:
             movie_df=rec._movies,
             config=RetrievalConfig(low_memory=rec._low_memory, enable_kg=not is_tier3),
         )
+        # Wire the pre-trained neural ensemble engine (ApexEnsembleEngine)
+        try:
+            from backend.models.ensemble_engine import get_apex_engine
+            ensemble = get_apex_engine(num_users=610, num_items=9724)
+        except Exception as exc:
+            logger.warning("Could not load get_apex_engine: %s", exc)
+            ensemble = None
+
+        has_ensemble_weights = False
+        if ensemble is not None:
+            has_ensemble_weights = getattr(ensemble, "has_trained_weights", False)
+
         rec._ranking_pipeline = RankingPipeline(
-            ensemble_engine=None,
+            ensemble_engine=ensemble,
             learned_ranker=rec._learned_ranker,
             config=RankingConfig(
-                use_neural_ensemble=(not is_tier3 or _serving_profile() == "full"),
-                use_learned_ranker=not is_tier3,
+                use_neural_ensemble=has_ensemble_weights and (not is_tier3 or _serving_profile() == "full"),
+                use_learned_ranker=False, # Disable learned ranker until retraining fix
             ),
         )
         rec._reranking_pipeline = RerankingPipeline(
             rl_policy=rec._rl_policy,
             llm_client=None,
             config=RerankingConfig(),
+            movie_df=rec._movies,
         )
         logger.info("Pipeline modules wired: RetrievalPipeline, RankingPipeline, RerankingPipeline")
     except Exception as exc:
