@@ -1311,6 +1311,7 @@ function App() {
       setBackend(response.baseUrl);
       setHomeMovies(movies);
       setHomeHeroIndex(0);
+      setCatalogState("ready");
       if (movies.length === 0) setHomeError("No movies available yet.");
     } catch (error) {
       setHomeError(error instanceof Error ? error.message : "Movies unavailable.");
@@ -1356,6 +1357,7 @@ function App() {
         setLatestMovies(dedupeMovies(movies).slice(0, 8));
         setHomeHeroIndex(0);
       }
+      setCatalogState("ready");
     } catch { /* silent fallback */ }
     finally { setLatestLoading(false); }
   }
@@ -1549,6 +1551,7 @@ function App() {
       setTitleQuery(selectTitleLabel(result.data));
       setTitleSelectOpen(false);
       selectMovie(result.data, "title_search", options.track ?? true);
+      setCatalogState("ready");
       setNotice("Title ready");
       if (options.autoRecommend) {
         void recommend(result.data);
@@ -1593,6 +1596,7 @@ function App() {
       } else {
         setSelectedMovie(null);
       }
+      setCatalogState("ready");
       setNotice(`${movies.length} matches`);
     } catch (error) {
       setCatalogState("error");
@@ -1617,6 +1621,7 @@ function App() {
       setFeedbackByMovieId({});
       setFeedbackNotice("");
       setLastRecommendationRequestId(response.data.request_id || null);
+      setCatalogState("ready");
       setNotice(`${recommendations.length} recommendations ranked`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Recommendations unavailable");
