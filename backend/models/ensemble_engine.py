@@ -96,6 +96,7 @@ class ApexEnsembleEngine(nn.Module):
         self.emb_dim = emb_dim
         self._device = device or "cpu"
         self._compiled: dict[str, bool] = {}
+        self.has_trained_weights = False
         # LRU session cache: OrderedDict gives O(1) move-to-end for recency tracking.
         # Capped at _SESSION_CACHE_MAX entries; oldest entry evicted when full.
         self._session_cache: collections.OrderedDict[str, tuple[float, list[int]]] = collections.OrderedDict()
@@ -416,6 +417,7 @@ class ApexEnsembleEngine(nn.Module):
                 # Diffusion and KAN do not maintain separate embeddings; they dynamically
                 # route through the Hyperbolic/Quantum priors during the forward pass.
 
+                self.has_trained_weights = True
                 logger.info(
                     "Successfully injected PySpark embeddings (%d users, %d items) into all models.",
                     self.num_users,
@@ -453,6 +455,7 @@ class ApexEnsembleEngine(nn.Module):
 
         if loaded > 0:
             logger.info("Successfully loaded trained weights for %d models.", loaded)
+            self.has_trained_weights = True
         else:
             logger.warning("No trained weights found. Models will use random initialization.")
 

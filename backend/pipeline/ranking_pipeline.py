@@ -188,15 +188,24 @@ class RankingPipeline:
         user_id: int = int(user_context.get("user_id", 0))
         candidate_ids: list[int] = [c.movie_id for c in candidates]
 
+        is_item_to_item = ("user_id" not in user_context) or (user_context.get("user_id") is None) or (user_id == 0)
+
         # ----------------------------------------------------------------
         # Step 1: Ensemble scoring
         # ----------------------------------------------------------------
-        ensemble_scores = self._get_ensemble_scores(user_id, candidate_ids, candidates)
+        if is_item_to_item:
+            ensemble_scores = {c.movie_id: c.retrieval_score for c in candidates}
+        else:
+            ensemble_scores = self._get_ensemble_scores(user_id, candidate_ids, candidates)
 
         # ----------------------------------------------------------------
         # Step 2: Learned ranker scoring
         # ----------------------------------------------------------------
-        ranker_scores, effective_ranker_weight = self._get_ranker_scores(user_id, candidate_ids, ensemble_scores, candidates=candidates)
+        if is_item_to_item:
+            ranker_scores = dict(ensemble_scores)
+            effective_ranker_weight = 0.0
+        else:
+            ranker_scores, effective_ranker_weight = self._get_ranker_scores(user_id, candidate_ids, ensemble_scores, candidates=candidates)
 
         # ----------------------------------------------------------------
         # Step 3: Blend scores
