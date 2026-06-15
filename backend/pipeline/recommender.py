@@ -589,6 +589,61 @@ class Recommender:
             # Filter out the query movie itself
             query_movie_id = int(self._movies.iloc[movie_idx]["id"])
             candidates = [c for c in candidates if c.movie_id != query_movie_id]
+
+            # ── Genre-aware score boosting ──────────────────────────────
+            # SBERT embeddings match on text/keyword similarity, which often
+            # returns thematically irrelevant movies that share title words.
+            # We boost candidates sharing genres with the seed and penalize
+            # those with zero genre overlap to dramatically improve quality.
+            seed_row = self._movies.iloc[movie_idx]
+            seed_genres_str = str(seed_row.get("genres", "") or "")
+            seed_genres = set(g.strip().lower() for g in seed_genres_str.split(",") if g.strip())
+            seed_title = str(seed_row.get("title", "") or "").lower()
+
+            if seed_genres:
+                for c in candidates:
+                    meta = getattr(c, "metadata", {}) or {}
+                    cand_genres_str = str(meta.get("genres", "") or "")
+                    cand_genres = set(g.strip().lower() for g in cand_genres_str.split(",") if g.strip())
+                    cand_title = str(meta.get("title", "") or "").lower()
+
+                    # Genre overlap scoring
+                    if cand_genres and seed_genres:
+                        overlap = len(seed_genres & cand_genres)
+                        union = len(seed_genres | cand_genres)
+                        jaccard = overlap / union if union > 0 else 0.0
+
+                        # Boost: up to +40% for perfect genre match
+                        genre_boost = 0.4 * jaccard
+                        # Penalty: -25% for zero genre overlap
+                        if overlap == 0:
+                            genre_boost = -0.25
+
+                        c.retrieval_score = c.retrieval_score * (1.0 + genre_boost)
+
+                    # Title-keyword penalty: penalize movies that only match
+                    # because they share a word with the seed title (e.g.
+                    # "Avatar" → "Avatar (2011 horror)", "Ring" → "The Ring")
+                    if cand_title and seed_title and cand_title != seed_title:
+                        seed_words = set(seed_title.split()) - {"the", "a", "an", "of", "in", "and", "or", "to"}
+                        cand_words = set(cand_title.split()) - {"the", "a", "an", "of", "in", "and", "or", "to"}
+                        shared_title_words = seed_words & cand_words
+                        # If the only reason this movie appeared is title keyword
+                        # overlap AND genres don't match, penalize
+                        if shared_title_words and cand_genres and not (seed_genres & cand_genres):
+                            c.retrieval_score *= 0.7
+
+                    # Popularity floor: heavily penalize very obscure movies
+                    vote_count = float(meta.get("vote_count", 0) or 0)
+                    if vote_count < 10:
+                        c.retrieval_score *= 0.6
+                    elif vote_count < 50:
+                        c.retrieval_score *= 0.85
+
+            # Re-sort after genre-aware boosting
+            candidates.sort(key=lambda c: c.retrieval_score, reverse=True)
+            # ────────────────────────────────────────────────────────────
+
             ranked = self._ranking_pipeline.rank(candidates, user_context={})
             final = self._reranking_pipeline.rerank(ranked, constraints={})
             return [self._candidate_to_dict(item) for item in final[:n]]
