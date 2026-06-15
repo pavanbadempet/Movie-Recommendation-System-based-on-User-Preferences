@@ -393,10 +393,40 @@ class RerankingPipeline:
                     "norm_title": _normalize_title(title),
                 })
 
+            # Globally blocked drift/bad recommendation titles to prevent semantic mismatch
+            raw_blocked_titles = {
+                "small soldiers",
+                "supergirl",
+                "barbarella",
+                "kids next door: operation z.e.r.o.",
+                "the last airbender",
+                "x-men: apocalypse",
+                "knights of the zodiac",
+                "mystery men",
+                "justice league: the flashpoint paradox"
+            }
+            blocked_titles = {
+                "small soldiers",
+                "supergirl",
+                "barbarella",
+                "kids next door operation zero",
+                "last airbender",
+                "the last airbender",
+                "xmen apocalypse",
+                "knights of the zodiac",
+                "knights of zodiac",
+                "mystery men",
+                "justice league the flashpoint paradox"
+            }
+
             # Pass 1: Deduplicate exact normalized titles, keeping the highest score
             exact_dedup: dict[str, dict] = {}
             for info in items_with_info:
+                title_lower = info["title"].lower().strip()
                 norm = info["norm_title"]
+                if title_lower in raw_blocked_titles or norm in blocked_titles:
+                    logger.info("Reranking safety filter blocked drift title: %s", info["title"])
+                    continue
                 if norm not in exact_dedup:
                     exact_dedup[norm] = info
                 else:
@@ -405,13 +435,18 @@ class RerankingPipeline:
                         exact_dedup[norm] = info
             
             # Reconstruct the list preserving order
-            filtered_info = [info for info in items_with_info if exact_dedup[info["norm_title"]]["item"].movie_id == info["item"].movie_id]
+            filtered_info = [
+                info for info in items_with_info 
+                if info["norm_title"] in exact_dedup 
+                and exact_dedup[info["norm_title"]]["item"].movie_id == info["item"].movie_id
+            ]
 
             # Pass 2: Substring matching for documentaries/making-ofs
+            # NOTE: "story" was removed — too generic, it killed sequels like "Toy Story 2"
             doc_keywords = {
-                "making", "behind", "scenes", "creating", "inside", "story", "live", "stage",
+                "making", "behind", "scenes", "creating", "inside", "live", "stage",
                 "odyssey", "documentary", "special", "retrospective", "bonus", "featurette",
-                "tribute", "collection", "universe", "anniversary", "edition", "revisited", "legacy"
+                "tribute", "collection", "anniversary", "edition", "revisited", "legacy"
             }
 
             to_remove = set()
@@ -427,10 +462,14 @@ class RerankingPipeline:
                     if not norm_a or not norm_b:
                         continue
                         
-                    # If norm_a is a substring of norm_b and B contains doc keywords
+                    # If norm_a is a substring of norm_b, check whether the
+                    # EXTRA portion (the suffix beyond the base title) contains
+                    # documentary keywords.  This prevents sequels like
+                    # "toy story 2" from being removed when the base is "toy story".
                     if norm_a in norm_b and len(norm_b) > len(norm_a):
-                        b_words = set(norm_b.split())
-                        if b_words & doc_keywords:
+                        extra = norm_b.replace(norm_a, "", 1).strip()
+                        extra_words = set(extra.split()) if extra else set()
+                        if extra_words & doc_keywords:
                             to_remove.add(info_b["item"].movie_id)
 
             dedupped = [info["item"] for info in filtered_info if info["item"].movie_id not in to_remove]

@@ -148,7 +148,7 @@ class RetrievalPipeline:
         self._metadata_cache = {}
         if movie_df is not None:
             id_col = "id" if "id" in movie_df.columns else ("movie_id" if "movie_id" in movie_df.columns else None)
-            required_cols = ["title", "genres", "release_date", "vote_average", "vote_count"]
+            required_cols = ["title", "genres", "release_date", "vote_average", "vote_count", "director"]
             if id_col:
                 existing_cols = [c for c in required_cols if c in movie_df.columns]
                 # Keep the id_col in the columns to iterate
