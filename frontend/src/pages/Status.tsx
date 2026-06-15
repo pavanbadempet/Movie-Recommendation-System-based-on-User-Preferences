@@ -146,6 +146,10 @@ export function StatusPage() {
             {health?.movie_count != null && (
               <p className="status-detail">{health.movie_count.toLocaleString()} items in catalog</p>
             )}
+            <div className="status-desc">
+              <span><strong>Simple:</strong> Shows if the movie recommendation service is currently online and running.</span>
+              <span><strong>Technical:</strong> Reports current HTTP service readiness from the root `/health` probe.</span>
+            </div>
           </article>
 
           {/* Serving tier */}
@@ -163,6 +167,10 @@ export function StatusPage() {
             {health?.tier_selection_reason && (
               <p className="status-detail">{health.tier_selection_reason}</p>
             )}
+            <div className="status-desc">
+              <span><strong>Simple:</strong> Shows what speed and model level the system is currently using to serve recommendations.</span>
+              <span><strong>Technical:</strong> Active model/inference deployment configuration tier (Tier 1/2/3).</span>
+            </div>
           </article>
 
           {/* p95 latency */}
@@ -180,6 +188,10 @@ export function StatusPage() {
               {loading ? "—" : formatMs(slo?.p95_latency_ms)}
             </div>
             <p className="status-detail">SLO: &lt;25 s</p>
+            <div className="status-desc">
+              <span><strong>Simple:</strong> The response speed that 95% of users experience (the maximum delay for almost everyone).</span>
+              <span><strong>Technical:</strong> 95th percentile response time for API operations in the active window.</span>
+            </div>
           </article>
 
           {/* Error rate */}
@@ -197,6 +209,10 @@ export function StatusPage() {
               {loading ? "—" : formatPercent(slo?.error_rate)}
             </div>
             <p className="status-detail">SLO: &lt;3%</p>
+            <div className="status-desc">
+              <span><strong>Simple:</strong> The percentage of requests that failed or ran into server issues recently.</span>
+              <span><strong>Technical:</strong> Percentage of HTTP 5xx responses out of total API requests.</span>
+            </div>
           </article>
 
           {/* Request volume */}
@@ -214,6 +230,10 @@ export function StatusPage() {
             {slo?.window_seconds && (
               <p className="status-detail">Last {Math.round(slo.window_seconds / 60)} min</p>
             )}
+            <div className="status-desc">
+              <span><strong>Simple:</strong> How much traffic/activity the recommendation system has handled recently.</span>
+              <span><strong>Technical:</strong> Total incoming request volume in the metrics rolling window.</span>
+            </div>
           </article>
 
           {/* Hardware */}
@@ -244,6 +264,10 @@ export function StatusPage() {
                 {loading ? "—" : "N/A"}
               </div>
             )}
+            <div className="status-desc">
+              <span><strong>Simple:</strong> The server specifications (CPU, RAM, GPU) currently powering the AI models.</span>
+              <span><strong>Technical:</strong> Virtual machine resources available for neural/sparse indexing and retrieval.</span>
+            </div>
           </article>
         </div>
       </section>

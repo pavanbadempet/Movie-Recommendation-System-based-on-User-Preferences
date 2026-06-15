@@ -1718,6 +1718,51 @@ input:focus-visible {
   border-bottom: none;
 }
 
+.metric-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.metric-name {
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--text);
+}
+.metric-desc {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.74rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.metric-desc span {
+  display: block;
+}
+.metric-desc strong {
+  color: var(--text-dim, #ccc);
+  font-weight: 600;
+}
+
+.status-desc {
+  margin-top: 10px;
+  border-top: 1px dashed var(--line);
+  padding-top: 8px;
+  font-size: 0.74rem;
+  color: var(--quiet);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.35;
+}
+.status-desc span {
+  display: block;
+}
+.status-desc strong {
+  color: var(--muted);
+  font-weight: 600;
+}
+
 .eval-chip {
   display: inline-flex;
   align-items: center;
