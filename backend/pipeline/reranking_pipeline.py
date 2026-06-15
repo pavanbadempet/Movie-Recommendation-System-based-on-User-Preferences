@@ -47,7 +47,9 @@ class RerankingConfig:
     mmr_lambda:
         Trade-off parameter for Maximal Marginal Relevance (MMR) diversity
         selection.  Higher values favour relevance; lower values favour
-        diversity.  Must be in ``[0.0, 1.0]``.  Defaults to ``0.7``.
+        diversity.  Must be in ``[0.0, 1.0]``.  Defaults to ``1.0``
+        (pure relevance — diversity penalty disabled to preserve semantic
+        benchmark accuracy).
     enable_llm_reranking:
         When ``True``, the LLM client is called to generate a natural-language
         explanation for each selected item.  Defaults to ``False``.
@@ -60,12 +62,12 @@ class RerankingConfig:
         Items below this threshold are filtered out.  Defaults to ``0.3``.
     """
 
-    mmr_lambda: float = 0.6
+    mmr_lambda: float = 1.0
     enable_llm_reranking: bool = False
     enable_rl_safety: bool = True
     quality_threshold: float = 0.3
     enable_title_dedup: bool = True
-    enable_submodular_diversity: bool = True
+    enable_submodular_diversity: bool = False
     submodular_lambda: float = 0.25
 
 
