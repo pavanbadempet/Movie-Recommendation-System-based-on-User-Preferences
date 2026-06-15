@@ -1847,7 +1847,7 @@ function App() {
             {username ? (
               <div className="user-profile-menu">
                 <button className="profile-btn" type="button" onClick={() => setPage("profile")}>
-                  <User size={14} aria-hidden="true" /> Hi, <strong>{username}</strong>
+                  <User size={14} aria-hidden="true" /> <span className="profile-greet">Hi, </span><strong>{username}</strong>
                 </button>
                 <button
                   className="logout-btn"
