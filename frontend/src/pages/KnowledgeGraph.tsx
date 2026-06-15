@@ -473,7 +473,36 @@ export function KnowledgeGraphPage({ titles }: { titles: MovieTitle[] }) {
             <span>Building knowledge graph…</span>
           </div>
         )}
-        {selectedId && error && <p className="dashboard-error" role="alert">{error}</p>}
+        {selectedId && error && (
+          <div className="kg-empty" role="alert">
+            <X size={40} aria-hidden="true" style={{ color: "var(--danger)" }} />
+            <p style={{ color: "var(--text)", fontWeight: 600, marginBottom: 4 }}>
+              Knowledge Graph Unavailable
+            </p>
+            <p style={{ color: "var(--muted)", fontSize: "0.85rem", maxWidth: 420, textAlign: "center", lineHeight: 1.5 }}>
+              {error.includes("503") || error.includes("disabled")
+                ? "The Knowledge Graph requires precomputed graph artifacts that aren't loaded in this environment. This feature is available when running with the full data pipeline."
+                : error}
+            </p>
+            <button
+              type="button"
+              style={{
+                marginTop: 12,
+                padding: "8px 20px",
+                background: "var(--panel-hover)",
+                border: "1px solid var(--line)",
+                borderRadius: 8,
+                color: "var(--text)",
+                fontSize: "0.82rem",
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+              onClick={() => { setSelectedId(null); setQuery(""); }}
+            >
+              Try another movie
+            </button>
+          </div>
+        )}
         {selectedId && !loading && !error && graphData && graphData.nodes.length === 0 && (
           <p role="status">No knowledge graph connections found for this movie.</p>
         )}

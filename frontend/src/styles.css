@@ -857,7 +857,6 @@ input:focus-visible {
   overflow: hidden;
   border: 1px solid var(--line);
   background: var(--panel);
-  aspect-ratio: 2/3;
   cursor: pointer;
   box-shadow: 0 8px 16px rgba(0,0,0,0.3);
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
@@ -870,9 +869,8 @@ input:focus-visible {
   box-shadow: 0 16px 24px rgba(0,0,0,0.6);
 }
 .card-media {
-  flex: 1;
-  min-height: 0;
   position: relative;
+  aspect-ratio: 2/3;
 }
 .poster-card {
   width: 100%;
@@ -890,31 +888,34 @@ input:focus-visible {
   display: block;
 }
 .recommendation-body {
-  padding: 10px 12px;
+  padding: 12px 14px;
   background: var(--panel-hover);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 .card-title-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
 }
 .card-title-row strong {
   font-size: 0.88rem;
   font-weight: 600;
   color: var(--text);
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.3;
   flex: 1;
 }
 .card-title-row span {
   font-size: 0.78rem;
   color: var(--muted);
   flex-shrink: 0;
+  padding-top: 2px;
 }
 .signal-row {
   display: flex;
@@ -945,6 +946,133 @@ input:focus-visible {
   font-size: 0.75rem;
   font-weight: 700;
   z-index: 2;
+}
+
+/* Retrieval stage badge */
+.retrieval-stage-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: rgba(var(--accent-rgb), 0.1);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Retrieval signals */
+.retrieval-signals-dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0;
+  padding: 0;
+  font-size: 0.72rem;
+}
+.retrieval-signal-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.retrieval-signal-row dt {
+  color: var(--quiet);
+  margin: 0;
+  text-transform: capitalize;
+}
+.retrieval-signal-row dd {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Card explanation text */
+.card-explanation {
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.4;
+  margin: 2px 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-style: italic;
+}
+
+/* Evidence chips */
+.evidence-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.evidence-chips span {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--panel-active);
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--muted);
+  text-transform: capitalize;
+}
+.evidence-chips.wide {
+  gap: 6px;
+  margin-top: 8px;
+}
+.evidence-chips.wide span {
+  font-size: 0.75rem;
+  padding: 3px 10px;
+}
+
+/* Feedback row */
+.feedback-row {
+  display: flex;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+.feedback-row button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--quiet);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.feedback-row button:hover {
+  background: var(--panel-hover);
+  border-color: var(--line-strong);
+  color: var(--muted);
+}
+.feedback-row button.active.positive {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: var(--success);
+  color: var(--success);
+}
+.feedback-row button.active.negative {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* Recommendation card body paragraph */
+.recommendation-body > p {
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.4;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* Interactive Spotlight Card (Selected Movie info) */
@@ -1294,6 +1422,30 @@ input:focus-visible {
 }
 .kg-stats-hint {
   color: var(--quiet);
+}
+
+.kg-content {
+  min-height: 400px;
+}
+
+.kg-clear-btn {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--quiet);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+}
+.kg-clear-btn:hover {
+  color: var(--text);
 }
 
 .kg-graph-wrapper {

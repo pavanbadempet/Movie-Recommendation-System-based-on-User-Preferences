@@ -105,12 +105,28 @@ class NovaRanker:
                 import pandas as pd
                 from pathlib import Path
                 model_path = Path(self.metadata.get("artifact_path", ""))
-                if model_path.exists():
-                    df_path = model_path.parent / "movies_transformed.parquet"
-                else:
-                    df_path = Path(__file__).resolve().parent.parent / "models" / "movies_transformed.parquet"
+                df_path = None
+                if model_path and model_path.exists():
+                    p_path = model_path.parent / "movies_transformed.parquet"
+                    if p_path.exists():
+                        df_path = p_path
                 
-                if df_path.exists():
+                if not df_path:
+                    p_path = Path(__file__).resolve().parent.parent / "models" / "movies_transformed.parquet"
+                    if p_path.exists():
+                        df_path = p_path
+                
+                if not df_path:
+                    p_path = Path(__file__).resolve().parent.parent / "data" / "processed" / "movies_transformed.parquet"
+                    if p_path.exists():
+                        df_path = p_path
+                
+                if not df_path:
+                    p_path = Path(__file__).resolve().parent.parent.parent / "data" / "processed" / "movies_transformed.parquet"
+                    if p_path.exists():
+                        df_path = p_path
+                
+                if df_path and df_path.exists():
                     logger.info("NovaRanker lazy loading movie DataFrame from %s", df_path)
                     df = pd.read_parquet(df_path)
                     self.movie_df = df

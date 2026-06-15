@@ -80,7 +80,7 @@ def _row_to_candidate(row: dict[str, Any] | pd.Series, label_hint: float = 0.0) 
     metadata_score = _catalog_quality_label(row)
     return {
         "id": int(row.get("id")),
-        "similarity_score": 0.35 * metadata_score + 0.65 * label_hint,
+        "similarity_score": metadata_score,
         "vote_average": row.get("vote_average"),
         "vote_count": row.get("vote_count"),
         "popularity": row.get("popularity"),
@@ -89,7 +89,7 @@ def _row_to_candidate(row: dict[str, Any] | pd.Series, label_hint: float = 0.0) 
             "dense": 0.0,
             "sparse": 0.0,
             "metadata": metadata_score,
-            "behavior": label_hint,
+            "behavior": 0.0,
             "cross_encoder": 0.0,
         },
     }

@@ -19,23 +19,6 @@ import torch.nn as nn
 logger = logging.getLogger(__name__)
 
 
-class PointWiseFeedForward(nn.Module):
-    """A two-layer feed-forward network applied to each sequence position."""
-
-    def __init__(self, hidden_dim: int, dropout_rate: float):
-        super().__init__()
-        self.conv1 = nn.Conv1d(hidden_dim, hidden_dim, kernel_size=1)
-        self.dropout1 = nn.Dropout(p=dropout_rate)
-        self.relu = nn.ReLU()
-        self.conv2 = nn.Conv1d(hidden_dim, hidden_dim, kernel_size=1)
-        self.dropout2 = nn.Dropout(p=dropout_rate)
-
-    def forward(self, inputs):
-        # inputs shape: [batch_size, seq_len, hidden_dim]
-        outputs = self.dropout2(self.conv2(self.relu(self.dropout1(self.conv1(inputs.transpose(-1, -2))))))
-        return outputs.transpose(-1, -2) + inputs  # Residual connection
-
-
 class SASRec(nn.Module):
     """
     Transformer-based Sequential Recommender.
@@ -64,16 +47,20 @@ class SASRec(nn.Module):
         self.emb_dropout = nn.Dropout(p=dropout_rate)
 
         # Build Transformer Blocks
-        self.attention_layernorms = nn.ModuleList([nn.LayerNorm(hidden_dim) for _ in range(num_blocks)])
-        self.attention_layers = nn.ModuleList(
+        self.blocks = nn.ModuleList(
             [
-                nn.MultiheadAttention(embed_dim=hidden_dim, num_heads=num_heads, dropout=dropout_rate, batch_first=True)
+                nn.TransformerEncoderLayer(
+                    d_model=hidden_dim,
+                    nhead=num_heads,
+                    dim_feedforward=hidden_dim * 4,
+                    dropout=dropout_rate,
+                    batch_first=True,
+                    norm_first=True,
+                )
                 for _ in range(num_blocks)
             ]
         )
-
-        self.forward_layernorms = nn.ModuleList([nn.LayerNorm(hidden_dim) for _ in range(num_blocks)])
-        self.forward_layers = nn.ModuleList([PointWiseFeedForward(hidden_dim, dropout_rate) for _ in range(num_blocks)])
+        self.norm = nn.LayerNorm(hidden_dim)
 
     def forward(self, log_seqs):
         """
@@ -87,29 +74,17 @@ class SASRec(nn.Module):
         # 2. Inject Positional Encodings (so the model knows which movie was watched recently vs long ago)
         positions = torch.arange(seq_len, dtype=torch.long, device=log_seqs.device)
         positions = positions.unsqueeze(0).expand(batch_size, -1)
-        seqs += self.pos_emb(positions)
-
-        seqs = self.emb_dropout(seqs)
+        seqs = self.emb_dropout(seqs + self.pos_emb(positions))
 
         # Create causality mask so the Transformer cannot "look into the future" to predict the present
-        timeline_mask = torch.BoolTensor(log_seqs == 0).to(log_seqs.device)
-        seqs *= ~timeline_mask.unsqueeze(-1)  # Broadcast mask
-
-        attention_mask = ~torch.tril(torch.ones((seq_len, seq_len), dtype=torch.bool, device=log_seqs.device))
+        attention_mask = torch.triu(torch.ones(seq_len, seq_len, device=log_seqs.device, dtype=torch.bool), 1)
 
         # 3. Pass through Transformer Blocks
-        for i in range(len(self.attention_layers)):
-            # Self-Attention
-            Q = self.attention_layernorms[i](seqs)
-            mha_outputs, _ = self.attention_layers[i](Q, seqs, seqs, attn_mask=attention_mask)
-            seqs = seqs + mha_outputs  # Residual connection
-
-            # Point-wise Feed Forward
-            seqs = seqs + self.forward_layers[i](self.forward_layernorms[i](seqs))
-            seqs *= ~timeline_mask.unsqueeze(-1)
+        for blk in self.blocks:
+            seqs = blk(seqs, src_mask=attention_mask, is_causal=False)
 
         # 4. The final output tensor represents the user's "Sequential Intent" at the current moment
-        return seqs
+        return self.norm(seqs)
 
     def predict(self, log_seqs, candidate_items):
         """

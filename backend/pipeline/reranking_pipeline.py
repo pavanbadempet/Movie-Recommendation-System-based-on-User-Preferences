@@ -60,10 +60,13 @@ class RerankingConfig:
         Items below this threshold are filtered out.  Defaults to ``0.3``.
     """
 
-    mmr_lambda: float = 0.7
+    mmr_lambda: float = 0.6
     enable_llm_reranking: bool = False
     enable_rl_safety: bool = True
     quality_threshold: float = 0.3
+    enable_title_dedup: bool = True
+    enable_submodular_diversity: bool = True
+    submodular_lambda: float = 0.25
 
 
 class RerankingPipeline:
@@ -104,10 +107,12 @@ class RerankingPipeline:
         rl_policy,
         llm_client,
         config: RerankingConfig,
+        movie_df=None,
     ) -> None:
         self.rl_policy = rl_policy
         self.llm_client = llm_client
         self.config = config
+        self.movie_df = movie_df
 
     # ------------------------------------------------------------------
     # Public API
@@ -190,9 +195,21 @@ class RerankingPipeline:
         working = self._apply_quality_gate(working)
 
         # ----------------------------------------------------------------
+        # Step 2b: Title-fuzzy deduplication
+        # ----------------------------------------------------------------
+        if self.config.enable_title_dedup:
+            working = self._apply_title_dedup(working)
+
+        # ----------------------------------------------------------------
         # Step 3: MMR diversity selection
         # ----------------------------------------------------------------
         working = self._apply_mmr_diversity(working)
+
+        # ----------------------------------------------------------------
+        # Step 3b: Submodular diversity optimization
+        # ----------------------------------------------------------------
+        if self.config.enable_submodular_diversity:
+            working = self._apply_submodular_diversity(working)
 
         # ----------------------------------------------------------------
         # Step 4: LLM reranking (explanation generation)
@@ -342,6 +359,92 @@ class RerankingPipeline:
             )
             return working
 
+    def _apply_title_dedup(self, working: list[RankedItem]) -> list[RankedItem]:
+        """Remove title-literal duplicates and making-of/behind-the-scenes pollution."""
+        try:
+            if not self.config.enable_title_dedup or not working:
+                return working
+
+            import re
+
+            def _normalize_title(t_str: str) -> str:
+                t = str(t_str or "").lower()
+                t = re.sub(r"\(\d{4}\)", "", t)  # strip year
+                t = re.sub(r"[^\w\s]", "", t)   # strip punctuation
+                t = re.sub(r"\s+", " ", t).strip()
+                t = re.sub(r"^(the|a|an)\s+", "", t)
+                return t
+
+            items_with_info = []
+            for item in working:
+                title = item.metadata.get("title")
+                if not title and self.movie_df is not None:
+                    matches = self.movie_df[self.movie_df["id"] == item.movie_id]
+                    if not matches.empty:
+                        title = matches.iloc[0].get("title", "")
+                if not title:
+                    title = f"movie_id_{item.movie_id}"
+                
+                items_with_info.append({
+                    "item": item,
+                    "title": title,
+                    "norm_title": _normalize_title(title),
+                })
+
+            # Pass 1: Deduplicate exact normalized titles, keeping the highest score
+            exact_dedup: dict[str, dict] = {}
+            for info in items_with_info:
+                norm = info["norm_title"]
+                if norm not in exact_dedup:
+                    exact_dedup[norm] = info
+                else:
+                    existing = exact_dedup[norm]
+                    if info["item"].ranker_score > existing["item"].ranker_score:
+                        exact_dedup[norm] = info
+            
+            # Reconstruct the list preserving order
+            filtered_info = [info for info in items_with_info if exact_dedup[info["norm_title"]]["item"].movie_id == info["item"].movie_id]
+
+            # Pass 2: Substring matching for documentaries/making-ofs
+            doc_keywords = {
+                "making", "behind", "scenes", "creating", "inside", "story", "live", "stage",
+                "odyssey", "documentary", "special", "retrospective", "bonus", "featurette",
+                "tribute", "collection", "universe", "anniversary", "edition", "revisited", "legacy"
+            }
+
+            to_remove = set()
+            for i in range(len(filtered_info)):
+                for j in range(len(filtered_info)):
+                    if i == j:
+                        continue
+                    info_a = filtered_info[i]
+                    info_b = filtered_info[j]
+                    norm_a = info_a["norm_title"]
+                    norm_b = info_b["norm_title"]
+                    
+                    if not norm_a or not norm_b:
+                        continue
+                        
+                    # If norm_a is a substring of norm_b and B contains doc keywords
+                    if norm_a in norm_b and len(norm_b) > len(norm_a):
+                        b_words = set(norm_b.split())
+                        if b_words & doc_keywords:
+                            to_remove.add(info_b["item"].movie_id)
+
+            dedupped = [info["item"] for info in filtered_info if info["item"].movie_id not in to_remove]
+            removed = len(working) - len(dedupped)
+            if removed:
+                logger.debug("Title-fuzzy deduplication removed %d item(s).", removed)
+            return dedupped
+
+        except Exception as exc:
+            logger.warning(
+                "Title-fuzzy deduplication failed with %s: %s — skipping step.",
+                type(exc).__name__,
+                exc,
+            )
+            return working
+
     def _apply_mmr_diversity(self, working: list[RankedItem]) -> list[RankedItem]:
         """Greedy MMR diversity selection.
 
@@ -409,6 +512,50 @@ class RerankingPipeline:
         except Exception as exc:
             logger.warning(
                 "MMR diversity selection failed with %s: %s — skipping step.",
+                type(exc).__name__,
+                exc,
+            )
+            return working
+
+    def _apply_submodular_diversity(self, working: list[RankedItem]) -> list[RankedItem]:
+        """Apply submodular diversity optimization to the working list of RankedItems."""
+        try:
+            if not self.config.enable_submodular_diversity or len(working) <= 1:
+                return working
+
+            # Convert RankedItems to candidates dictionary format expected by submodular_rerank
+            candidates_dicts = []
+            movie_id_to_item = {}
+            for item in working:
+                movie_id_to_item[item.movie_id] = item
+                candidates_dicts.append({
+                    "movie_id": item.movie_id,
+                    "similarity_score": item.ranker_score,
+                    "genres": item.metadata.get("genres", ""),
+                    "release_date": item.metadata.get("release_date", ""),
+                    "vote_average": item.metadata.get("vote_average", 0.0),
+                    "vote_count": item.metadata.get("vote_count", 0),
+                })
+
+            from backend.pipeline.diversity_reranker import submodular_rerank
+
+            # Rerank using submodular diversity
+            reranked_dicts = submodular_rerank(
+                candidates=candidates_dicts,
+                n=len(working),
+                lambda_diversity=self.config.submodular_lambda
+            )
+
+            # Re-map back to RankedItems list in the new order
+            reranked_items = []
+            for c_dict in reranked_dicts:
+                reranked_items.append(movie_id_to_item[c_dict["movie_id"]])
+
+            return reranked_items
+
+        except Exception as exc:
+            logger.warning(
+                "Submodular diversity reranking failed with %s: %s — skipping step.",
                 type(exc).__name__,
                 exc,
             )
@@ -491,10 +638,8 @@ class RerankingPipeline:
 def _ensemble_similarity(a: RankedItem, b: RankedItem) -> float:
     """Compute a similarity proxy between two :class:`RankedItem` objects.
 
-    Uses the absolute difference of ``ensemble_score`` values as a 1-D
-    cosine proxy.  The result is normalised to ``[0.0, 1.0]`` by mapping
-    ``|a - b| = 0`` → similarity ``1.0`` and ``|a - b| >= 1`` → similarity
-    ``0.0``.
+    Uses genre-based Jaccard similarity if available, falling back to absolute
+    difference of ``ensemble_score`` values as a 1-D cosine proxy.
 
     Parameters
     ----------
@@ -508,6 +653,16 @@ def _ensemble_similarity(a: RankedItem, b: RankedItem) -> float:
     float
         Similarity value in ``[0.0, 1.0]``.
     """
+    genres_a = a.metadata.get("genres")
+    genres_b = b.metadata.get("genres")
+    if genres_a is not None and genres_b is not None:
+        set_a = {g.strip().lower() for g in str(genres_a).split(",") if g.strip()}
+        set_b = {g.strip().lower() for g in str(genres_b).split(",") if g.strip()}
+        if set_a or set_b:
+            intersection = len(set_a & set_b)
+            union = len(set_a | set_b)
+            return float(intersection / union) if union > 0 else 0.0
+
     diff = abs(a.ensemble_score - b.ensemble_score)
     # Clamp to [0, 1]: items with identical ensemble_score are maximally
     # similar; items differing by >= 1.0 are treated as maximally dissimilar.

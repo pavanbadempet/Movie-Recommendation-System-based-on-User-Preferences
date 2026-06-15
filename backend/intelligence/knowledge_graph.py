@@ -175,9 +175,8 @@ class KnowledgeGraphEngine:
 
     def find_thematically_similar(self, movie_id: int, top_k: int = 10) -> list[tuple[int, float]]:
         """
-        Multi-hop reasoning:
-        Finds movies that share the highest number of Themes and Moods
-        with the target movie.
+        Multi-hop reasoning with TF-IDF weighting for shared attributes:
+        Finds movies that share themes and moods, weighting rarer connections higher.
         """
         if not self.graph:
             return []
@@ -196,16 +195,28 @@ class KnowledgeGraphEngine:
         if not shared_attributes:
             return []
 
+        # Count total movie nodes for IDF calculation
+        movie_nodes_count = sum(1 for n, d in self.graph.nodes(data=True) if d.get("type") == "MOVIE")
+        if movie_nodes_count <= 0:
+            movie_nodes_count = 75000
+
         # 2-hop: Find all other movies connected to those themes/moods
         movie_scores = {}
+        import math
         for attr in shared_attributes:
+            df = self.graph.degree(attr)
+            # Ignore extremely common attributes (acting like stopwords)
+            if df > 1000:
+                continue
+            # TF-IDF IDF calculation: log((N + 1) / (df + 1))
+            w = math.log((movie_nodes_count + 1.0) / (df + 1.0))
             for potential_movie in self.graph.neighbors(attr):
                 if potential_movie != m_id and self.graph.nodes[potential_movie].get("type") == "MOVIE":
-                    # Extract raw ID
-                    raw_id = int(potential_movie.split("_")[1])
-                    movie_scores[raw_id] = (
-                        movie_scores.get(raw_id, 0.0) + 1.0
-                    )  # +1 point for each shared semantic feature
+                    try:
+                        raw_id = int(potential_movie.split("_")[1])
+                        movie_scores[raw_id] = movie_scores.get(raw_id, 0.0) + w
+                    except (ValueError, IndexError):
+                        continue
 
         # Sort by score descending
         sorted_movies = sorted(movie_scores.items(), key=lambda item: item[1], reverse=True)
