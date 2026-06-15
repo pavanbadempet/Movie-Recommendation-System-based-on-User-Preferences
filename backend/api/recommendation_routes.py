@@ -988,9 +988,17 @@ def create_search_movie_router(deps: RouterDeps):
 
         from backend.data.database import UserEvent
 
+        # Map non-UUID tenant IDs (like 'demo-media-co') to the default public tenant UUID for DB storage
+        db_tenant_id = context.tenant_id
+        try:
+            import uuid
+            uuid.UUID(db_tenant_id)
+        except (ValueError, TypeError):
+            db_tenant_id = "00000000-0000-0000-0000-000000000001"
+
         try:
             pg_event = UserEvent(
-                tenant_id=context.tenant_id,
+                tenant_id=db_tenant_id,
                 event_type=payload.event_type,
                 event_value=payload.rating,
                 query_text=payload.query_text,
