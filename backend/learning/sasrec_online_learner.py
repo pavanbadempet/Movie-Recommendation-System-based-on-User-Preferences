@@ -74,11 +74,10 @@ class SASRecOnlineLearner:
 
         # Fine-tune only item embeddings + the last attention block (layer -1).
         # This keeps gradient computation lightweight for online updates.
-        last_block_idx = len(self.sasrec.attention_layers) - 1
+        last_block_idx = len(self.sasrec.blocks) - 1
         self._trainable_params = list(self.sasrec.item_emb.parameters())
         if last_block_idx >= 0:
-            self._trainable_params += list(self.sasrec.attention_layers[last_block_idx].parameters())
-            self._trainable_params += list(self.sasrec.forward_layers[last_block_idx].parameters())
+            self._trainable_params += list(self.sasrec.blocks[last_block_idx].parameters())
 
     # ------------------------------------------------------------------
     # Public lifecycle API

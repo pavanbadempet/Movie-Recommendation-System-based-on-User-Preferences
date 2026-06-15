@@ -1305,18 +1305,27 @@ def wire_pipelines(rec, is_tier3: bool) -> None:
             movie_df=rec._movies,
             config=RetrievalConfig(low_memory=rec._low_memory, enable_kg=not is_tier3),
         )
+        # Wire the pre-trained neural ensemble engine (ApexEnsembleEngine)
+        try:
+            from backend.models.ensemble_engine import get_apex_engine
+            ensemble = get_apex_engine(num_users=610, num_items=9724)
+        except Exception as exc:
+            logger.warning("Could not load get_apex_engine: %s", exc)
+            ensemble = None
+
         rec._ranking_pipeline = RankingPipeline(
-            ensemble_engine=None,
+            ensemble_engine=ensemble,
             learned_ranker=rec._learned_ranker,
             config=RankingConfig(
                 use_neural_ensemble=(not is_tier3 or _serving_profile() == "full"),
-                use_learned_ranker=not is_tier3,
+                use_learned_ranker=False, # Disable learned ranker until retraining fix
             ),
         )
         rec._reranking_pipeline = RerankingPipeline(
             rl_policy=rec._rl_policy,
             llm_client=None,
             config=RerankingConfig(),
+            movie_df=rec._movies,
         )
         logger.info("Pipeline modules wired: RetrievalPipeline, RankingPipeline, RerankingPipeline")
     except Exception as exc:

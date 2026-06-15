@@ -144,6 +144,20 @@ class RetrievalPipeline:
         # Fast lookup mapping to bypass slow DataFrame iloc operations on retrieval hot path
         self._movie_id_map = movie_df["id"].values if (movie_df is not None and "id" in movie_df.columns) else np.array([])
 
+        # Build metadata cache for fast retrieval lookup
+        self._metadata_cache = {}
+        if movie_df is not None:
+            id_col = "id" if "id" in movie_df.columns else ("movie_id" if "movie_id" in movie_df.columns else None)
+            required_cols = ["title", "genres", "release_date", "vote_average", "vote_count"]
+            if id_col:
+                existing_cols = [c for c in required_cols if c in movie_df.columns]
+                # Keep the id_col in the columns to iterate
+                for row in movie_df[[id_col] + existing_cols].itertuples(index=False):
+                    row_dict = row._asdict()
+                    mid = row_dict.pop(id_col, None)
+                    if mid is not None:
+                        self._metadata_cache[int(mid)] = row_dict
+
     @property
     def faiss_index(self):
         return self.turbovec_index
@@ -296,12 +310,15 @@ class RetrievalPipeline:
                     # TurboVec returns -1 for padding when fewer than k results exist.
                     continue
                 movie_id = int(self._movie_id_map[idx]) if idx < len(self._movie_id_map) else int(idx)
+                meta = {"turbovec_index": int(idx)}
+                if movie_id in self._metadata_cache:
+                    meta.update(self._metadata_cache[movie_id])
                 candidates.append(
                     CandidateItem(
                         movie_id=movie_id,
                         retrieval_score=float(dist),
                         retrieval_source="turbovec",
-                        metadata={"turbovec_index": int(idx)},
+                        metadata=meta,
                     )
                 )
 
@@ -364,12 +381,15 @@ class RetrievalPipeline:
                 if score <= 0.0:
                     continue
                 movie_id = int(self._movie_id_map[idx]) if idx < len(self._movie_id_map) else int(idx)
+                meta = {"tfidf_index": int(idx)}
+                if movie_id in self._metadata_cache:
+                    meta.update(self._metadata_cache[movie_id])
                 candidates.append(
                     CandidateItem(
                         movie_id=movie_id,
                         retrieval_score=score,
                         retrieval_source="tfidf",
-                        metadata={"tfidf_index": int(idx)},
+                        metadata=meta,
                     )
                 )
 
@@ -416,15 +436,21 @@ class RetrievalPipeline:
 
             candidates: list[CandidateItem] = []
             for rank, movie_id in enumerate(neighbor_ids):
+                mid = int(movie_id)
+                # Filter out candidate movies that do not exist in our catalog (movie_df)
+                if mid not in self._metadata_cache:
+                    continue
                 # Assign a decaying score so KG candidates rank below FAISS/TF-IDF
                 # by default but still participate in max-pool deduplication.
                 score = 1.0 / (rank + 1)
+                meta = {"kg_rank": rank, "seed_movie_id": seed_movie_id}
+                meta.update(self._metadata_cache[mid])
                 candidates.append(
                     CandidateItem(
-                        movie_id=int(movie_id),
+                        movie_id=mid,
                         retrieval_score=score,
                         retrieval_source="knowledge_graph",
-                        metadata={"kg_rank": rank, "seed_movie_id": seed_movie_id},
+                        metadata=meta,
                     )
                 )
 
