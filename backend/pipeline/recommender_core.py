@@ -1313,11 +1313,15 @@ def wire_pipelines(rec, is_tier3: bool) -> None:
             logger.warning("Could not load get_apex_engine: %s", exc)
             ensemble = None
 
+        has_ensemble_weights = False
+        if ensemble is not None:
+            has_ensemble_weights = getattr(ensemble, "has_trained_weights", False)
+
         rec._ranking_pipeline = RankingPipeline(
             ensemble_engine=ensemble,
             learned_ranker=rec._learned_ranker,
             config=RankingConfig(
-                use_neural_ensemble=(not is_tier3 or _serving_profile() == "full"),
+                use_neural_ensemble=has_ensemble_weights and (not is_tier3 or _serving_profile() == "full"),
                 use_learned_ranker=False, # Disable learned ranker until retraining fix
             ),
         )
