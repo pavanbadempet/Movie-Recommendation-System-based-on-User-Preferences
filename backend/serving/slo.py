@@ -10,6 +10,9 @@ from threading import Lock
 import time
 from typing import Any
 
+BOOT_TIME = time.time()
+
+
 DEFAULT_EXCLUDED_ROUTE_PREFIXES = (
     "/docs",
     "/redoc",
@@ -304,6 +307,21 @@ def build_slo_report(
     else:
         status = "ok"
 
+    elapsed_since_boot = time.time() - BOOT_TIME
+    uptime_seconds = int(elapsed_since_boot)
+    window_seconds = int(thresholds["window_seconds"])
+    elapsed_for_rate = min(float(window_seconds), max(1.0, elapsed_since_boot))
+    request_rate = round(request_count / elapsed_for_rate, 2)
+
+    routes_dict = {
+        r["route"]: {
+            "p95_ms": r["latency_ms"]["p95"],
+            "error_rate": r["error_rate"],
+            "count": r["count"],
+        }
+        for r in summary["routes"]
+    }
+
     return {
         "status": status,
         "generated_at": (generated_at or datetime.now(UTC)).isoformat(),
@@ -330,4 +348,14 @@ def build_slo_report(
         },
         "traffic": summary,
         "dependencies": dependencies,
+        # Flat top-level keys for frontend compatibility
+        "p95_latency_ms": p95_latency,
+        "p99_latency_ms": summary["latency_ms"]["p99"],
+        "error_rate": summary["error_rate"],
+        "total_requests": request_count,
+        "request_rate": request_rate,
+        "uptime_seconds": uptime_seconds,
+        "window_seconds": window_seconds,
+        "routes": routes_dict,
     }
+
