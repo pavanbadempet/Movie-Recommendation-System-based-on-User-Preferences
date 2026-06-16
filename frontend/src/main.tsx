@@ -1311,6 +1311,7 @@ function App() {
       setBackend(response.baseUrl);
       setHomeMovies(movies);
       setHomeHeroIndex(0);
+      setCatalogState("ready");
       if (movies.length === 0) setHomeError("No movies available yet.");
     } catch (error) {
       setHomeError(error instanceof Error ? error.message : "Movies unavailable.");
@@ -1356,6 +1357,7 @@ function App() {
         setLatestMovies(dedupeMovies(movies).slice(0, 8));
         setHomeHeroIndex(0);
       }
+      setCatalogState("ready");
     } catch { /* silent fallback */ }
     finally { setLatestLoading(false); }
   }
@@ -1511,7 +1513,6 @@ function App() {
   }, [catalogState]);
 
   React.useEffect(() => {
-    if (mode !== "title") return;
     const query = titleQuery.trim();
     if (!query) {
       setResults([]);
@@ -1522,9 +1523,10 @@ function App() {
       return;
     }
 
+    const delay = mode === "semantic" ? 1000 : 300;
     const timer = window.setTimeout(() => {
-      void runSearch("title");
-    }, 300);
+      void runSearch(mode);
+    }, delay);
 
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1549,6 +1551,7 @@ function App() {
       setTitleQuery(selectTitleLabel(result.data));
       setTitleSelectOpen(false);
       selectMovie(result.data, "title_search", options.track ?? true);
+      setCatalogState("ready");
       setNotice("Title ready");
       if (options.autoRecommend) {
         void recommend(result.data);
@@ -1593,6 +1596,7 @@ function App() {
       } else {
         setSelectedMovie(null);
       }
+      setCatalogState("ready");
       setNotice(`${movies.length} matches`);
     } catch (error) {
       setCatalogState("error");
@@ -1617,6 +1621,7 @@ function App() {
       setFeedbackByMovieId({});
       setFeedbackNotice("");
       setLastRecommendationRequestId(response.data.request_id || null);
+      setCatalogState("ready");
       setNotice(`${recommendations.length} recommendations ranked`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Recommendations unavailable");
@@ -2045,7 +2050,30 @@ function App() {
                     />
                   ) : null}
 
-                  {loadingRecs ? (
+                  {isSearching ? (
+                    <section className="results-section">
+                      <div className="section-title">
+                        <div>
+                          <span>{mode === "semantic" ? "AI Semantic Search" : "Catalog Search"}</span>
+                          <h2>{mode === "semantic" ? "Searching catalog by intent..." : "Searching movie database..."}</h2>
+                        </div>
+                      </div>
+                      <div className="poster-grid">
+                        {Array.from({ length: 6 }).map((_, index) => (
+                          <div key={index} className="recommendation-card skeleton-card" style={{ height: "380px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "16px", padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                            <div className="skeleton" style={{ height: "180px", borderRadius: "12px" }}></div>
+                            <div className="skeleton" style={{ height: "24px", width: "80%", borderRadius: "6px" }}></div>
+                            <div className="skeleton" style={{ height: "16px", width: "40%", borderRadius: "4px" }}></div>
+                            <div className="skeleton" style={{ height: "48px", width: "100%", borderRadius: "8px" }}></div>
+                            <div style={{ display: "flex", gap: "8px", marginTop: "auto" }}>
+                              <div className="skeleton" style={{ height: "28px", width: "70px", borderRadius: "20px" }}></div>
+                              <div className="skeleton" style={{ height: "28px", width: "70px", borderRadius: "20px" }}></div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  ) : loadingRecs ? (
                     <section className="results-section">
                       <div className="section-title">
                         <div>
@@ -2098,12 +2126,20 @@ function App() {
                         ))}
                       </div>
                     </section>
-                  ) : results.length === 0 && titleQuery.trim() && !isSearching && !isSelecting ? (
+                  ) : results.length === 0 && resultsKind === "search" && titleQuery.trim() && !isSearching && !isSelecting ? (
                     <section className="results-section no-results">
                       <div style={{ textAlign: "center", padding: "48px 24px", color: "var(--muted)" }}>
                         <Film size={48} style={{ marginBottom: "16px", opacity: 0.5 }} />
                         <h3>No matches found for &quot;{titleQuery}&quot;</h3>
                         <p style={{ fontSize: "0.9rem" }}>Try checking your spelling or describe a plot using our AI Search mode!</p>
+                      </div>
+                    </section>
+                  ) : resultsKind === "idle" && titleQuery.trim() && !isSearching && !isSelecting ? (
+                    <section className="results-section no-results">
+                      <div style={{ textAlign: "center", padding: "48px 24px", color: "var(--muted)" }}>
+                        <Sparkles size={48} className="mode-icon-semantic" style={{ marginBottom: "16px", opacity: 0.5, color: "var(--accent)" }} />
+                        <h3>Press Enter to search by intent</h3>
+                        <p style={{ fontSize: "0.9rem" }}>Type your query and press Enter, or wait a moment for AI Search to automatically run.</p>
                       </div>
                     </section>
                   ) : !titleQuery.trim() ? (
