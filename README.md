@@ -260,6 +260,24 @@ graph TD
 
 <img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
 
+## 🔄 PySpark Medallion Lakehouse & ETL Pipeline
+
+APEX is built on a production-grade data platform that processes both massive historical datasets and real-time interaction events utilizing distributed compute and transactional storage.
+
+### 1. Medallion Lakehouse Architecture (`etl/delta_lakehouse.py`, `etl/pyspark_etl.py`)
+The data platform structures raw user interaction logs and movie metadata using a **Medallion Architecture** on top of **Delta Lake**:
+* **Bronze Layer (Raw Ingestion)**: Ingests raw CSV and JSON events (MovieLens, TMDB metadata) into append-only Delta tables with minimal schema enforcement.
+* **Silver Layer (Cleaned & Consolidated)**: Cleans data types, parses timestamps, applies custom data contracts (`etl/data_contracts.py`), performs multi-way joins, and handles Slowly Changing Dimensions (SCD Type 2) in `etl/scd.py` to preserve historical correctness.
+* **Gold Layer (Feature Store)**: Compiles dense interaction history arrays, user clickstream vectors, and sparse TF-IDF/co-occurrence metrics. Gold tables are optimized for direct ML model consumption.
+
+### 2. High-Throughput Streaming Feedback Loop (`etl/streaming_events.py`)
+To handle live clicks and continuous user feedback without full database rebuilds:
+* Ingests clickstream actions asynchronously through **Redis streams** buffering.
+* Uses an `OnlineLearningCoordinator` to consume mini-batches and run online gradient descent (SGD) updates directly on the user's sequential state vectors.
+* Synchronizes the updated states with local in-memory vector indexes (`turbovec` SIMD / FAISS) for immediate, sub-10ms relevance tuning.
+
+<img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
+
 ## 📐 Architecture Decision Records (ADR) Summary
 
 The system design decisions are captured inside [docs/ARCHITECTURE_DECISIONS.md](docs/ARCHITECTURE_DECISIONS.md). Here is a summary of the choices:
