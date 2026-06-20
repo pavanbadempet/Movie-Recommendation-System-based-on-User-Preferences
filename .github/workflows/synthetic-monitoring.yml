@@ -23,7 +23,7 @@ jobs:
       NOVA_RENDER_GATEWAY_URL: https://movie-recs-api-5qvy.onrender.com
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v5
