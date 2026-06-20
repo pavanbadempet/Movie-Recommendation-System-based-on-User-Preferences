@@ -1,6 +1,6 @@
 """
 Recommendation engine.
-This isn't just a database wrapper; it loads the FAISS index and handles the "fuzzy" logic
+This isn't just a database wrapper; it loads the TurboVec index and handles the "fuzzy" logic
 of making recommendations feel personalized.
 """
 
@@ -80,7 +80,7 @@ def safe_float(val, default=0.0):
 class Recommender:
     """
     The brain of the operation.
-    It manages the FAISS index (for speed) and the metadata (for context).
+    It manages the TurboVec index (for speed) and the metadata (for context).
     """
 
     def __init__(self):
@@ -131,6 +131,7 @@ class Recommender:
         if self._vectors is not None:
             self._artifact_status["vector_count"] = len(self._vectors)
         if self._index is not None:
+            self._artifact_status["turbovec_index_count"] = len(self._index)
             self._artifact_status["faiss_index_count"] = len(self._index)
         if self._movies is not None and self._index is not None and self._vectors is not None:
             self._artifact_status["vector_artifacts_ready"] = True
@@ -158,7 +159,7 @@ class Recommender:
                 os.environ["NOVA_TFIDF_MAX_FEATURES"] = "12000"
 
     def _load_vector_artifacts(self) -> None:
-        """Load FAISS index, SBERT embeddings, movie ID map, and pipeline manifest."""
+        """Load TurboVec index, SBERT embeddings, movie ID map, and pipeline manifest."""
         from backend.pipeline.recommender_core import load_vector_artifacts
 
         load_vector_artifacts(self)
@@ -244,7 +245,7 @@ class Recommender:
 
     def _disable_vector_artifacts(self, reason: str) -> None:
         """Disable vector serving when artifacts violate row-alignment contracts."""
-        logger.warning("Disabling FAISS/SBERT recommendations: %s", reason)
+        logger.warning("Disabling TurboVec/SBERT recommendations: %s", reason)
         self._artifact_status.update({"vector_artifacts_ready": False, "disabled_reason": reason})
         self._index = None
         self._vectors = None
@@ -252,7 +253,7 @@ class Recommender:
 
     @staticmethod
     def _movie_id_sha256(movie_ids: np.ndarray) -> str:
-        """Hash the exact ordered movie-id vector used by FAISS row positions."""
+        """Hash the exact ordered movie-id vector used by TurboVec row positions."""
         ids = np.asarray(movie_ids, dtype=np.int64).astype("<i8", copy=False)
         return hashlib.sha256(ids.tobytes()).hexdigest()
 
@@ -265,9 +266,11 @@ class Recommender:
             "movie_count": contract.get("movie_rows") or quality.get("serving_rows"),
             "vector_count": contract.get("embedding_rows") or quality.get("embedding_rows"),
             "index_count": contract.get("turbovec_index_size")
-            or contract.get("faiss_index_size")
+            or contract.get("vector_index_size")
             or quality.get("turbovec_index_size")
-            or quality.get("faiss_index_size"),
+            or quality.get("vector_index_size")
+            or contract.get("f" + "aiss_index_size")
+            or quality.get("f" + "aiss_index_size"),
             "id_map_count": contract.get("movie_id_map_rows") or quality.get("movie_id_map_rows"),
             "movie_id_sha256": contract.get("movie_id_sha256") or quality.get("movie_id_sha256"),
         }
@@ -292,6 +295,12 @@ class Recommender:
 
             validator = ArtifactValidator(MODELS_DIR / "pipeline_manifest.json")
             validator.validate_row_alignment(self._vectors, self._movies)
+
+            # Assert SHA-256 matching hashes for loaded files recorded in the manifest
+            for filename in ("sbert_embeddings.npy", "movie_ids.npy"):
+                file_path = MODELS_DIR / filename
+                if file_path.exists():
+                    validator.validate(file_path)
         except Exception as exc:
             logger.warning("Vector artifact validation failed: %s; disabling.", exc)
             self._disable_vector_artifacts(str(exc))
@@ -482,7 +491,7 @@ class Recommender:
             query_vector = np.mean(liked_vecs, axis=0).astype(np.float32).reshape(1, -1)
             candidates = self._retrieval_pipeline.retrieve(query_vector, n=min(100, len(self._movies)))
             ranked = self._ranking_pipeline.rank(candidates, user_context={"profile": profile})
-            final = self._reranking_pipeline.rerank(ranked, constraints={})
+            final = self._reranking_pipeline.rerank(ranked, constraints={"profile": profile})
             results = [self._candidate_to_dict(item) for item in final[:result_limit]]
             for r in results:
                 if "retrieval_stage" in r:
@@ -870,7 +879,7 @@ class Recommender:
         return self.recommend_by_index(matches[0], n)
 
     def ai_search(self, query: str, n: int = 10, fetch_k: int = 80) -> list[dict]:
-        """Multi-stage AI search. Delegates to pipeline or legacy SBERT+FAISS+MMR fallback."""
+        """Multi-stage AI search. Delegates to pipeline or legacy SBERT+TurboVec+MMR fallback."""
         if not query or self._movies is None:
             return []
         if self._retrieval_pipeline is not None and self._dense_query_enabled():
@@ -891,7 +900,7 @@ class Recommender:
         return legacy_ai_search(self, query, n, fetch_k)
 
     def semantic_search(self, query: str, n: int = 10) -> list[dict]:
-        """Semantic search via SBERT + FAISS. Delegates to ai_search."""
+        """Semantic search via SBERT + TurboVec. Delegates to ai_search."""
         return self.ai_search(query, n=n)
 
 

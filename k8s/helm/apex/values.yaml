@@ -52,11 +52,11 @@ resources:
 # ---------------------------------------------------------------------------
 # APEX serving tier — controls which ML stack is loaded at startup
 # tier1: GPU + full 6-model PyTorch ensemble + online learning
-# tier2: ONNX CPU quantized inference (default)
-# tier3: FAISS + TF-IDF only (low memory)
+# tier2: ONNX CPU quantized inference (requires externally published ONNX artifacts)
+# tier3: FAISS + TF-IDF only (reproducible default)
 # ---------------------------------------------------------------------------
-servingTier: "tier2"
-servingProfile: "full"
+servingTier: "tier3"
+servingProfile: "lite"
 
 # ---------------------------------------------------------------------------
 # Differential Privacy — Gaussian ε-DP applied to user embeddings at serving

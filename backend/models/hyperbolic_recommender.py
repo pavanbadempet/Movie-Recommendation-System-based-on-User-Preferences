@@ -2,7 +2,7 @@
 Hyperbolic Recommender (Poincaré Ball Model).
 
 This is a profoundly novel approach to recommendation.
-Standard embeddings (FAISS, ALS, Transformers) exist in "Euclidean" (flat) space.
+Standard embeddings (TurboVec, ALS, Transformers) exist in "Euclidean" (flat) space.
 However, movies and user preferences are inherently HIERARCHICAL:
 (Sci-Fi -> Cyberpunk -> The Matrix Franchise -> The Matrix Reloaded).
 

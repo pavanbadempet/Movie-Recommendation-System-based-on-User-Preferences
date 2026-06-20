@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 
 from backend.intelligence.active_inference_engine import ActiveInferenceEngine
 from backend.models.ensemble_engine import ApexEnsembleEngine
@@ -19,6 +20,10 @@ def test_apex_ensemble_initialization():
 
     # Check Hyperbolic
     assert engine.hyperbolic.user_embedding.weight.shape == (effective_users, 16)
+
+    # Check Clifford
+    assert engine.clifford.user_embedding.weight.shape == (effective_users, 16)
+    assert engine.clifford.item_embedding.weight.shape == (effective_items, 16)
 
     # Check KAN (Requires concat of user+item)
     assert engine.kan is not None
@@ -79,3 +84,57 @@ def test_active_inference_gradient_flow():
 
     # 3. The weights must have physically shifted away from the initial state
     assert not torch.allclose(active_engine.dynamic_prior, initial_prior)
+
+
+def test_apex_engine_resolves_item_embedding_by_exact_movie_id():
+    engine = ApexEnsembleEngine.__new__(ApexEnsembleEngine)
+    nn.Module.__init__(engine)
+    engine._item_id_to_index = {42: 1}
+    item_embedding = nn.Embedding(3, 4)
+    item_embedding.weight.data.copy_(
+        torch.tensor(
+            [
+                [0.0, 0.0, 0.0, 0.0],
+                [1.0, 2.0, 3.0, 4.0],
+                [5.0, 6.0, 7.0, 8.0],
+            ]
+        )
+    )
+    engine.lightgcn = nn.Module()
+    engine.lightgcn.item_embedding = item_embedding
+
+    assert torch.equal(engine.get_item_embedding(42), torch.tensor([[1.0, 2.0, 3.0, 4.0]]))
+    assert engine.get_item_embedding(999) is None
+
+
+def test_apex_engine_configurable_uncertainty_penalty(monkeypatch):
+    """Verify that APEX_UNCERTAINTY_PENALTY env var alters uncertainty gating behavior without errors."""
+    engine = ApexEnsembleEngine(num_users=100, num_items=100, emb_dim=16)
+    engine.eval()
+
+    # Test high penalty configuration
+    monkeypatch.setenv("APEX_UNCERTAINTY_PENALTY", "0.9")
+    scores_high = engine.predict_ensemble(5, [10, 20])
+
+    # Test zero penalty configuration
+    monkeypatch.setenv("APEX_UNCERTAINTY_PENALTY", "0.0")
+    scores_zero = engine.predict_ensemble(5, [10, 20])
+
+    assert len(scores_high) == 2
+    assert len(scores_zero) == 2
+    for item_id in [10, 20]:
+        assert 0.0 <= scores_high[item_id] <= 1.0
+        assert 0.0 <= scores_zero[item_id] <= 1.0
+
+
+def test_apex_engine_geometric_blend_mode(monkeypatch):
+    """Verify that APEX_ENSEMBLE_BLEND_MODE=geometric computes scores correctly without mathematical collapse."""
+    engine = ApexEnsembleEngine(num_users=100, num_items=100, emb_dim=16)
+    engine.eval()
+
+    monkeypatch.setenv("APEX_ENSEMBLE_BLEND_MODE", "geometric")
+    scores = engine.predict_ensemble(5, [10, 20])
+
+    assert len(scores) == 2
+    for item_id in [10, 20]:
+        assert 0.0 <= scores[item_id] <= 1.0

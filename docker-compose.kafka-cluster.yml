@@ -12,6 +12,8 @@ x-airflow-common: &airflow-common
     - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=false
     - AIRFLOW__CORE__LOAD_EXAMPLES=false
     - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=true
+    - AIRFLOW_ADMIN_USERNAME=${AIRFLOW_ADMIN_USERNAME:?set AIRFLOW_ADMIN_USERNAME}
+    - AIRFLOW_ADMIN_PASSWORD=${AIRFLOW_ADMIN_PASSWORD:?set AIRFLOW_ADMIN_PASSWORD}
     - KAGGLE_USERNAME=${KAGGLE_USERNAME}
     - KAGGLE_KEY=${KAGGLE_KEY}
     - TMDB_API_KEY=${TMDB_API_KEY}
@@ -46,23 +48,34 @@ services:
   airflow-init:
     <<: *airflow-common
     container_name: airflow-init
-    entrypoint: /bin/bash
-    command: >
-      -c
-      pip install kaggle faiss-cpu scikit-learn pandas pyarrow pandera joblib pyspark kafka-python delta-spark spark-sql-kafka-0-10_2.12:3.5.0 &&
-      airflow db init &&
-      airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com || true &&
-      mkdir -p /root/.kaggle &&
-      echo '{"username":"'$$KAGGLE_USERNAME'","key":"'$$KAGGLE_KEY'"}' > /root/.kaggle/kaggle.json &&
-      chmod 600 /root/.kaggle/kaggle.json
+    entrypoint: ["/bin/bash"]
+    command:
+      - -c
+      - |
+        set -euo pipefail
+        : "$${AIRFLOW_ADMIN_USERNAME:?set AIRFLOW_ADMIN_USERNAME}"
+        : "$${AIRFLOW_ADMIN_PASSWORD:?set AIRFLOW_ADMIN_PASSWORD}"
+        pip install kaggle faiss-cpu scikit-learn pandas pyarrow pandera joblib pyspark kafka-python delta-spark
+        airflow db migrate
+        airflow users create \
+          --username "$$AIRFLOW_ADMIN_USERNAME" \
+          --password "$$AIRFLOW_ADMIN_PASSWORD" \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email admin@example.com \
+          || airflow users list | grep -F "$$AIRFLOW_ADMIN_USERNAME"
+        mkdir -p /root/.kaggle
+        printf '{"username":"%s","key":"%s"}\n' "$$KAGGLE_USERNAME" "$$KAGGLE_KEY" > /root/.kaggle/kaggle.json
+        chmod 600 /root/.kaggle/kaggle.json
     restart: "no"
 
   airflow-webserver:
     <<: *airflow-common
     container_name: airflow-webserver
-    command: bash -c "pip install kaggle faiss-cpu scikit-learn pandas pyarrow pandera joblib pyspark kafka-python delta-spark spark-sql-kafka-0-10_2.12:3.5.0 && airflow webserver"
+    command: bash -c "pip install kaggle faiss-cpu scikit-learn pandas pyarrow pandera joblib pyspark kafka-python delta-spark && airflow webserver"
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     healthcheck:
       test: [ "CMD", "curl", "--fail", "http://localhost:8080/health" ]
       interval: 30s
@@ -73,7 +86,7 @@ services:
   airflow-scheduler:
     <<: *airflow-common
     container_name: airflow-scheduler
-    command: bash -c "pip install kaggle faiss-cpu scikit-learn pandas pyarrow pandera joblib pyspark sentence-transformers httpx kafka-python delta-spark spark-sql-kafka-0-10_2.12:3.5.0 && airflow scheduler"
+    command: bash -c "pip install kaggle faiss-cpu scikit-learn pandas pyarrow pandera joblib pyspark sentence-transformers httpx kafka-python delta-spark && airflow scheduler"
     healthcheck:
       test: [ "CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname $(hostname)" ]
       interval: 30s
@@ -86,7 +99,7 @@ services:
     image: bitnami/kafka:3.6
     container_name: kafka-1
     ports:
-      - "9092:9092"
+      - "127.0.0.1:9092:9092"
     environment:
       - KAFKA_CFG_NODE_ID=1
       - KAFKA_CFG_PROCESS_ROLES=controller,broker
@@ -119,7 +132,7 @@ services:
     image: bitnami/kafka:3.6
     container_name: kafka-2
     ports:
-      - "9093:9092"
+      - "127.0.0.1:9093:9092"
     environment:
       - KAFKA_CFG_NODE_ID=2
       - KAFKA_CFG_PROCESS_ROLES=controller,broker
@@ -152,7 +165,7 @@ services:
     image: bitnami/kafka:3.6
     container_name: kafka-3
     ports:
-      - "9094:9092"
+      - "127.0.0.1:9094:9092"
     environment:
       - KAFKA_CFG_NODE_ID=3
       - KAFKA_CFG_PROCESS_ROLES=controller,broker
@@ -186,7 +199,7 @@ services:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
     ports:
-      - "8082:8080"
+      - "127.0.0.1:8082:8080"
     environment:
       - KAFKA_CLUSTERS_0_NAME=local
       - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka-1:9092,kafka-2:9092,kafka-3:9092
@@ -206,7 +219,7 @@ services:
       dockerfile: Dockerfile
     container_name: movie-rec-backend
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./data:/app/data
       - ./models:/app/models
@@ -235,8 +248,8 @@ services:
       - SPARK_MASTER_HOST=spark
       - SPARK_MASTER_WEBUI_PORT=8080
     ports:
-      - "8081:8080"  # Spark UI
-      - "7077:7077"  # Spark master port
+      - "127.0.0.1:8081:8080"  # Spark UI
+      - "127.0.0.1:7077:7077"  # Spark master port
     volumes:
       - spark-data:/bitnami/spark
       - ./data:/opt/bitnami/spark/data
@@ -262,7 +275,7 @@ services:
       dockerfile: Dockerfile
     container_name: movie-rec-frontend
     ports:
-      - "8501:8501"
+      - "127.0.0.1:8501:8501"
     volumes:
       - ./data:/app/data
       - ./models:/app/models

@@ -35,10 +35,10 @@ class RedisRateLimiter(BaseHTTPMiddleware):
         }
 
     async def dispatch(self, request: Request, call_next: Callable) -> JSONResponse:
-        # 1. Identify the Tenant (For demo purposes, we extract it from a mock header.
-        # In production, this comes from the validated JWT token).
-        tenant_id = request.headers.get("X-Tenant-ID", "anonymous")
-        tenant_tier = request.headers.get("X-Tenant-Tier", "free")
+        # 1. Identify the tenant from server-side context when available.
+        # Caller-supplied tenant/tier headers are not trusted for quota keys or
+        # quota size; unauthenticated traffic is keyed by peer address.
+        tenant_id, tenant_tier = self._resolve_rate_limit_context(request)
 
         limit = self.quotas.get(tenant_tier, 10)
 
@@ -74,3 +74,12 @@ class RedisRateLimiter(BaseHTTPMiddleware):
         # 3. Request is within limits. Proceed to the PyTorch inference nodes.
         response = await call_next(request)
         return response
+
+    @staticmethod
+    def _resolve_rate_limit_context(request: Request) -> tuple[str, str]:
+        ctx = getattr(request.state, "tenant_context", None)
+        if ctx is not None and getattr(ctx, "authenticated", False):
+            return str(ctx.tenant_id), str(ctx.plan or "free")
+
+        client_host = request.client.host if request.client else "unknown"
+        return f"anonymous:{client_host}", "free"

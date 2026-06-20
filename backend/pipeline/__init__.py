@@ -5,9 +5,9 @@ The pipeline decomposes the recommendation process into three focused stages
 with well-defined interfaces (CandidateItem → RankedItem → FinalItem):
 
 Stage 1 — Retrieval (RetrievalPipeline):
-    Sources: FAISS ANN + TF-IDF sparse + Knowledge Graph
+    Sources: TurboVec ANN + TF-IDF sparse + Knowledge Graph
     Output:  ~500 CandidateItem objects, deduplicated via max-pool
-    Config:  RetrievalConfig(faiss_k, tfidf_k, kg_k, low_memory, enable_kg)
+    Config:  RetrievalConfig(turbovec_k, tfidf_k, kg_k, low_memory, enable_kg)
 
 Stage 2 — Ranking (RankingPipeline):
     Sources: 6-model neural ensemble + optional learned ranker (LightGBM/MMoE)
@@ -37,7 +37,7 @@ Import graph (strictly acyclic):
 """
 
 # ---------------------------------------------------------------------------
-# Lazy Imports — Avoid importing heavy ML dependencies (e.g. torch, faiss,
+# Lazy Imports — Avoid importing heavy ML dependencies (e.g. torch, turbovec,
 # numpy, sklearn) at package initialization time.
 # ---------------------------------------------------------------------------
 import importlib

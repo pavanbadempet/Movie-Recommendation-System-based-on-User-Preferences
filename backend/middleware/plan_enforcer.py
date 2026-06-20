@@ -46,7 +46,6 @@ _EXEMPT_PREFIXES = (
     "/v1/billing/webhook",  # webhook must never be blocked
     "/v1/platform/",
     "/ui/",
-    "/",
 )
 
 
@@ -86,12 +85,13 @@ class PlanEnforcerMiddleware(BaseHTTPMiddleware):
         path = request.url.path
 
         # Skip exempt paths
-        if any(path.startswith(p) for p in _EXEMPT_PREFIXES):
+        if path == "/" or any(path.startswith(p) for p in _EXEMPT_PREFIXES):
             return await call_next(request)
 
         tenant_id, plan = self._resolve_tenant(request)
 
-        # Unknown or unauthenticated requests pass through (rate limiter handles IP-level)
+        # Unknown or unauthenticated requests are keyed by peer address rather
+        # than caller-supplied tenant headers.
         if not tenant_id or plan == "demo":
             return await call_next(request)
 
@@ -138,17 +138,17 @@ class PlanEnforcerMiddleware(BaseHTTPMiddleware):
         Extract (tenant_id, plan) from the request without a DB round-trip.
 
         Uses the pre-resolved TenantContext stored in request.state by the
-        auth dependency when available. Falls back to header parsing.
+        auth dependency when available. Never trusts caller-supplied tenant
+        headers for quota decisions.
         """
         # TenantContext may have been resolved by a previous dependency
         ctx = getattr(request.state, "tenant_context", None)
-        if ctx is not None:
+        if ctx is not None and getattr(ctx, "authenticated", False):
             return ctx.tenant_id, ctx.plan
 
-        # Fallback: read X-Tenant-ID + default plan (conservative — assume free)
-        tenant_id = request.headers.get("X-Tenant-ID") or request.headers.get("x-tenant-id")
-        if tenant_id:
-            return tenant_id, "free"
+        client_host = request.client.host if request.client else "unknown"
+        if client_host:
+            return f"anonymous:{client_host}", "free"
 
         return None, "demo"
 

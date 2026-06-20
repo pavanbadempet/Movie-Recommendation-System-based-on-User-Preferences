@@ -1,0 +1,41 @@
+# Token Optimization Rules for AI Coding Assistants
+# This file helps reduce token usage when using Cursor, Claude Code, Codex, Windsurf
+
+## Core Principles
+- Be concise and direct in your requests
+- Avoid asking for explanations unless necessary
+- Focus on specific changes rather than broad refactoring
+- Use file paths instead of describing file contents
+- Request code-only outputs when possible
+
+## When Asking for Changes
+- Specify exact file paths and line numbers
+- Ask for minimal changes to achieve the goal
+- Avoid "explain why" - just ask for the fix
+- Use "change X to Y" instead of "rewrite this function"
+
+## Code Review Requests
+- Ask for specific issue types: "check for security issues" not "review this code"
+- Limit scope: "review lines 50-100" instead of "review this file"
+- Request fixes only: "fix any bugs" not "explain and fix bugs"
+
+## Documentation
+- Only request docstrings for public APIs
+- Ask for inline comments only for complex logic
+- Skip documentation for obvious code
+
+## Testing
+- Ask for specific test cases rather than comprehensive test suites
+- Focus on edge cases you're concerned about
+- Request test code only, not explanations
+
+## Refactoring
+- Request specific refactoring: "extract this function" not "improve code quality"
+- Limit scope to single files when possible
+- Avoid "make it more efficient" - be specific about what to optimize
+
+## Context Management
+- Provide only relevant file contents
+- Use @file references instead of pasting code
+- Remove unnecessary context from conversations
+- Clear conversation history when starting new tasks

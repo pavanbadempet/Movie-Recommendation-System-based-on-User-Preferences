@@ -33,6 +33,10 @@ function sameOriginBackend(): string | undefined {
   return normalizeBackend(window.location.origin);
 }
 
+const isLocalhost =
+  typeof window !== "undefined" &&
+  ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+
 const configuredBackends = [
   import.meta.env.VITE_API_URL,
   import.meta.env.VITE_BACKUP_API_URL,
@@ -41,11 +45,18 @@ const configuredBackends = [
   "http://localhost:8000",
 ]
   .map(normalizeBackend)
-  .filter((url): url is string => Boolean(url));
+  .filter((url): url is string => Boolean(url))
+  .filter((url) => {
+    // If not running locally, ignore localhost backend options to avoid connection timeouts
+    if (!isLocalhost && (url.includes("localhost") || url.includes("127.0.0.1") || url.includes("::1"))) {
+      return false;
+    }
+    return true;
+  });
 
 export const API_BASES = Array.from(new Set(configuredBackends));
 
-let activeBackend = API_BASES[0] || "http://localhost:8000";
+let activeBackend = API_BASES[0] || (isLocalhost ? "http://localhost:8000" : (typeof window !== "undefined" ? window.location.origin : "http://localhost:8000"));
 
 function timeoutSignal(ms: number): { signal: AbortSignal; cancel: () => void } {
   const controller = new AbortController();

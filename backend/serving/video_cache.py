@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from pathlib import Path
+import re
 import sys
 
 logger = logging.getLogger(__name__)
@@ -8,6 +9,7 @@ logger = logging.getLogger(__name__)
 # Cache configuration
 CACHE_DIR = Path("data/video_cache")
 MAX_CACHE_FILES = 15
+YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 # Dict of active download locks to avoid concurrent duplicate downloads
 _download_locks: dict[str, asyncio.Lock] = {}
@@ -19,6 +21,24 @@ def init_cache_dir() -> None:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def validate_youtube_id(youtube_id: str) -> str:
+    """Return a normalized YouTube id or raise ValueError for unsafe input."""
+    youtube_id = str(youtube_id or "").strip()
+    if not YOUTUBE_ID_RE.fullmatch(youtube_id):
+        raise ValueError("Invalid YouTube video id")
+    return youtube_id
+
+
+def cache_path_for_video(youtube_id: str) -> Path:
+    """Return a cache path guaranteed to remain under CACHE_DIR."""
+    safe_id = validate_youtube_id(youtube_id)
+    cache_root = CACHE_DIR.resolve()
+    target_path = (cache_root / f"{safe_id}.mp4").resolve()
+    if target_path.parent != cache_root:
+        raise ValueError("Invalid YouTube video id")
+    return target_path
+
+
 async def get_or_download_video(youtube_id: str) -> Path | None:
     """
     Get the path to the downloaded MP4 trailer file.
@@ -26,7 +46,8 @@ async def get_or_download_video(youtube_id: str) -> Path | None:
     Returns the Path object or None if download failed.
     """
     init_cache_dir()
-    target_path = CACHE_DIR / f"{youtube_id}.mp4"
+    youtube_id = validate_youtube_id(youtube_id)
+    target_path = cache_path_for_video(youtube_id)
 
     # 1. Check if already cached
     if target_path.exists() and target_path.stat().st_size > 0:

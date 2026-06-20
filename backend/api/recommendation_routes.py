@@ -779,6 +779,7 @@ def create_core_router(deps: RouterDeps):
     # ── /v1/usage ────────────────────────────────────────────────────────────
     @router.get("/v1/usage", response_model=UsageResponse)
     async def usage_summary(context=Depends(resolve_tenant_context), limit: int = Query(default=20, ge=1, le=100)):
+        require_authenticated_tenant_context(context, "usage summary")
         record_usage(
             "usage.summary",
             context.tenant_id,
@@ -786,7 +787,7 @@ def create_core_router(deps: RouterDeps):
             plan=context.plan,
             authenticated=context.authenticated,
         )
-        return summarize_usage(limit=limit)
+        return summarize_usage(limit=limit, tenant_id=context.tenant_id, catalog_id=context.catalog_id)
 
     # ── /v1/ranker/status ────────────────────────────────────────────────────
     @router.get("/v1/ranker/status")
@@ -935,7 +936,12 @@ def create_search_movie_router(deps: RouterDeps):
     async def stream_cached_video(youtube_id: str):
         from fastapi.responses import FileResponse
 
-        from backend.serving.video_cache import get_or_download_video
+        from backend.serving.video_cache import get_or_download_video, validate_youtube_id
+
+        try:
+            youtube_id = validate_youtube_id(youtube_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         path = await get_or_download_video(youtube_id)
         if not path or not path.exists():
@@ -946,9 +952,12 @@ def create_search_movie_router(deps: RouterDeps):
     @router.get("/v1/videos/cache-status/{youtube_id}")
     @router.get("/videos/cache-status/{youtube_id}")
     async def check_video_cache_status(youtube_id: str, background_tasks: BackgroundTasks):
-        from backend.serving.video_cache import CACHE_DIR, get_or_download_video
+        from backend.serving.video_cache import cache_path_for_video, get_or_download_video
 
-        target_path = CACHE_DIR / f"{youtube_id}.mp4"
+        try:
+            target_path = cache_path_for_video(youtube_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         exists = target_path.exists() and target_path.stat().st_size > 0
         if not exists:
             # Trigger background download so it's cached for future requests
@@ -1073,6 +1082,7 @@ def create_search_movie_router(deps: RouterDeps):
     async def get_behavior_features(
         limit: int = Query(default=20, ge=1, le=100), context=Depends(resolve_tenant_context)
     ):
+        require_authenticated_tenant_context(context, "event analytics")
         record_usage(
             "events.features",
             context.tenant_id,
@@ -1080,12 +1090,13 @@ def create_search_movie_router(deps: RouterDeps):
             plan=context.plan,
             authenticated=context.authenticated,
         )
-        return aggregate_behavior_features(limit=limit)
+        return aggregate_behavior_features(limit=limit, tenant_id=context.tenant_id, catalog_id=context.catalog_id)
 
     @router.get("/v1/events/recommendation-analytics")
     async def recommendation_event_analytics(
         limit: int = Query(default=20, ge=1, le=100), context=Depends(resolve_tenant_context)
     ):
+        require_authenticated_tenant_context(context, "recommendation analytics")
         record_usage(
             "events.recommendation_analytics",
             context.tenant_id,
@@ -1093,7 +1104,7 @@ def create_search_movie_router(deps: RouterDeps):
             plan=context.plan,
             authenticated=context.authenticated,
         )
-        return summarize_recommendation_events(limit=limit)
+        return summarize_recommendation_events(limit=limit, tenant_id=context.tenant_id, catalog_id=context.catalog_id)
 
     return router
 
@@ -1441,6 +1452,15 @@ def create_rec_engine_router(deps: RouterDeps):
         context=Depends(resolve_tenant_context),
         current_user=Depends(get_optional_user),
     ):
+        require_authenticated_tenant_context(context, "user recommendations")
+        if current_user is not None:
+            current_user_id = getattr(current_user, "external_user_id", None)
+            current_tenant_id = getattr(current_user, "tenant_id", None)
+            if current_user_id and str(current_user_id) != str(user_id):
+                raise HTTPException(status_code=403, detail="user_id does not match authenticated user")
+            if current_tenant_id and str(current_tenant_id) != str(context.tenant_id):
+                raise HTTPException(status_code=403, detail="user tenant does not match API key context")
+
         result_limit = top_k or limit or n
         resolved_request_id = request_id or str(uuid.uuid4())
         remote_payload = await remote_payload_or_raise(
@@ -1476,7 +1496,16 @@ def create_rec_engine_router(deps: RouterDeps):
             )
             return remote_payload
         rec = get_rec()
-        profile = await run_in_threadpool(lambda: build_user_behavior_profile(user_id, limit=12))
+        profile = await run_in_threadpool(
+            lambda: build_user_behavior_profile(
+                user_id,
+                limit=12,
+                tenant_id=context.tenant_id,
+                catalog_id=context.catalog_id,
+            )
+        )
+        if not profile.get("seed_movie_ids") and not profile.get("recent_events") and not profile.get("top_searches"):
+            raise HTTPException(status_code=404, detail="No behavior profile found for this user in the tenant")
         assignment = assign_experiment(subject_id=user_id)
         results = await run_in_threadpool(lambda: rec.recommend_for_user_profile(profile, n=result_limit))
         results = attach_experiment(results, assignment)
@@ -1520,7 +1549,7 @@ def create_rec_engine_router(deps: RouterDeps):
 # ---------------------------------------------------------------------------
 # Diagnostic helpers — moved from backend/main.py (task 6.3)
 # ---------------------------------------------------------------------------
-from backend.data.auth import TenantContext, get_optional_user
+from backend.data.auth import TenantContext, get_optional_user, require_authenticated_tenant_context
 from backend.events.recommendation_events import _serving_lineage
 from backend.metrics.recommendation_benchmark import (
     evaluate_recommendation_case,

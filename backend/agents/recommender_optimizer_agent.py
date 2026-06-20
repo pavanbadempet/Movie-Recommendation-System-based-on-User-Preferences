@@ -64,28 +64,41 @@ class RecommenderOptimizerAgent(BaseAgent):
                 ratings.append(e.event_value)
 
         # Calculate CTR
-        ctr = 0.0
+        ctr: float | None = None
+        ctr_status = "unavailable_no_recommendation_served"
         if recommendations_served > 0:
             ctr = round(clicks / recommendations_served, 4)
+            ctr_status = "observed"
         elif clicks > 0:
-            # Fallback if recommendation_served is not logged but clicks are logged
-            ctr = 0.08  # Default mock/baseline
+            ctr_status = "unavailable_missing_recommendation_served"
 
         avg_rating = round(sum(ratings) / len(ratings), 2) if ratings else 0.0
 
         # Define baselines
         baseline_ctr = float(os.getenv("NOVA_BASELINE_CTR", "0.12"))
-        drift_detected = ctr < (baseline_ctr * 0.85)
+        drift_detected = ctr < (baseline_ctr * 0.85) if ctr is not None else None
+        ctr_display = f"{ctr:.2%}" if ctr is not None else "Unavailable"
+        drift_display = (
+            "🚨 DRIFT DETECTED" if drift_detected is True else ("🟢 STABLE" if drift_detected is False else "⚪ UNKNOWN")
+        )
 
         self.log_step(
             "Detect Performance Drift",
-            f"CTR: {ctr:.2%} (Baseline: {baseline_ctr:.2%}). "
+            f"CTR: {ctr_display} (Baseline: {baseline_ctr:.2%}; status: {ctr_status}). "
             f"Avg Rating: {avg_rating}/5. "
-            f"Drift Status: {'🚨 DRIFT DETECTED' if drift_detected else '🟢 STABLE'}",
+            f"Drift Status: {drift_display}",
         )
 
         # Build dynamic local heuristics
-        if drift_detected:
+        if drift_detected is None:
+            suggested_weights = None
+            suggested_mmr_alpha = None
+            suggested_learning_rate = None
+            heuristic_diagnosis = (
+                "CTR and performance drift are unavailable because recommendation_served impressions "
+                "were not recorded. Restore impression telemetry before changing model parameters."
+            )
+        elif drift_detected:
             suggested_weights = {"sasrec": 0.50, "lightgcn": 0.30, "kan": 0.20}
             suggested_mmr_alpha = 0.55
             suggested_learning_rate = 0.002
@@ -115,9 +128,9 @@ class RecommenderOptimizerAgent(BaseAgent):
             f"Analyze recommendation system metrics for the past {hours} hours:\n\n"
             f"- **Recommendations Served**: {recommendations_served}\n"
             f"- **Clicks**: {clicks}\n"
-            f"- **Calculated CTR**: {ctr:.2%}\n"
+            f"- **CTR**: {ctr_display} ({ctr_status})\n"
             f"- **Target Baseline CTR**: {baseline_ctr:.2%}\n"
-            f"- **Performance Drift Status**: {'🚨 DRIFT DETECTED' if drift_detected else '🟢 STABLE'}\n"
+            f"- **Performance Drift Status**: {drift_display}\n"
             f"- **Average User Rating**: {avg_rating}/5 (based on {len(ratings)} reviews)\n"
             f"- **Total Searches**: {searches}\n\n"
             f"Please output:\n"
@@ -130,7 +143,13 @@ class RecommenderOptimizerAgent(BaseAgent):
         api_key = openrouter_api_key()
         models = configured_models("OPENROUTER_MODELS")
 
-        if dry_run or not api_key:
+        if drift_detected is None:
+            ai_response = (
+                "**[TELEMETRY INCOMPLETE — NO TUNING GENERATED]**\n"
+                f"Diagnosis: {heuristic_diagnosis}"
+            )
+            self.log_step("Call OpenRouter Optimizer", "Skipped tuning because CTR telemetry is incomplete.")
+        elif dry_run or not api_key:
             ai_response = (
                 f"**[HEURISTIC LOCAL ASSESSMENT (DRY RUN)]**\n"
                 f"Diagnosis: {heuristic_diagnosis}\n\n"
@@ -175,8 +194,10 @@ class RecommenderOptimizerAgent(BaseAgent):
         report_md.append("## 📊 Quality Performance Metrics")
         report_md.append("| Metric | Value | Baseline / Target | Status |")
         report_md.append("|---|---|---|---|")
-        status_str = "🚨 Drift Warning" if drift_detected else "🟢 Healthy"
-        report_md.append(f"| **Click-Through Rate (CTR)** | {ctr:.2%} | {baseline_ctr:.2%} | {status_str} |")
+        status_str = (
+            "🚨 Drift Warning" if drift_detected is True else ("🟢 Healthy" if drift_detected is False else "⚪ Insufficient telemetry")
+        )
+        report_md.append(f"| **Click-Through Rate (CTR)** | {ctr_display} | {baseline_ctr:.2%} | {status_str} |")
         report_md.append(
             f"| **Average User Rating** | {avg_rating:.2f}/5 | 4.00/5 | {'🟢 Good' if avg_rating >= 3.8 else '🟡 Fair'} |"
         )
@@ -207,14 +228,19 @@ class RecommenderOptimizerAgent(BaseAgent):
                 "clicks": clicks,
                 "searches": searches,
                 "ctr": ctr,
+                "ctr_status": ctr_status,
                 "baseline_ctr": baseline_ctr,
                 "drift_detected": drift_detected,
                 "avg_rating": avg_rating,
             },
-            "suggested_hyperparameters": {
-                "ensemble_weights": suggested_weights,
-                "diversity_alpha": suggested_mmr_alpha,
-                "online_learning_rate": suggested_learning_rate,
-            },
+            "suggested_hyperparameters": (
+                {
+                    "ensemble_weights": suggested_weights,
+                    "diversity_alpha": suggested_mmr_alpha,
+                    "online_learning_rate": suggested_learning_rate,
+                }
+                if drift_detected is not None
+                else None
+            ),
         }
         return "\n".join(report_md), report_json

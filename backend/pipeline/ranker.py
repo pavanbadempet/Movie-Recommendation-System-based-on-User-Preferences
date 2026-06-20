@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+import hashlib
 import logging
 import math
 import os
@@ -184,7 +185,7 @@ class NovaRanker:
                     "popularity": movie_rec.get("popularity"),
                     "release_date": movie_rec.get("release_date"),
                     "retrieval_signals": {
-                        "dense": signals.get("dense_score", score if source in ("faiss", "turbovec") else 0.0),
+                        "dense": signals.get("dense_score", score if source == "turbovec" else 0.0),
                         "sparse": signals.get("sparse_score", score if source == "tfidf" else 0.0),
                         "metadata": signals.get("metadata_score", score if source == "knowledge_graph" else 0.0),
                         "behavior": signals.get("behavior_score", score if source == "behavior" else 0.0),
@@ -259,10 +260,49 @@ def default_ranker_path(models_dir: Path | None = None) -> Path:
     return models_dir / "nova_ranker.joblib"
 
 
+def ranker_artifact_sha256(path: Path | str) -> str:
+    """Return the SHA-256 digest for a ranker artifact."""
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _expected_ranker_sha256() -> str | None:
+    for env_name in ("NOVA_RANKER_SHA256", "NOVA_RANKER_JOBLIB_SHA256"):
+        value = os.getenv(env_name, "").strip().lower()
+        if value:
+            return value
+    return None
+
+
+def _ranker_artifact_is_trusted(path: Path) -> bool:
+    expected = _expected_ranker_sha256()
+    if not expected:
+        logger.warning(
+            "Refusing to load Nova ranker artifact %s because NOVA_RANKER_SHA256 is not configured.",
+            path,
+        )
+        return False
+    actual = ranker_artifact_sha256(path).lower()
+    if actual != expected:
+        logger.warning(
+            "Refusing to load Nova ranker artifact %s because SHA-256 %s does not match expected %s.",
+            path,
+            actual,
+            expected,
+        )
+        return False
+    return True
+
+
 def load_ranker(path: Path | str | None = None, models_dir: Path | None = None) -> NovaRanker | None:
     """Load a Nova ranker artifact if one is available."""
     artifact_path = Path(path) if path is not None else default_ranker_path(models_dir)
     if not artifact_path.exists() or artifact_path.stat().st_size == 0:
+        return None
+    if not _ranker_artifact_is_trusted(artifact_path):
         return None
 
     try:

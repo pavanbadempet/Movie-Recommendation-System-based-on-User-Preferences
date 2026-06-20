@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from starlette.concurrency import run_in_threadpool
 
 from backend.data.auth import TenantContext
@@ -13,6 +13,30 @@ from backend.router_deps import RouterDeps
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _OFFLINE_EVAL_REPORT_PATH = _PROJECT_ROOT / "reports" / "offline_eval_report.json"
+
+
+def load_offline_metrics(candidate_paths: list[Path]) -> dict:
+    """Load a persisted offline evaluation report with explicit provenance."""
+    errors: list[str] = []
+    for candidate in candidate_paths:
+        if not candidate.is_file():
+            continue
+        try:
+            report = json.loads(candidate.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            errors.append(f"{candidate}: {exc}")
+            continue
+        if not isinstance(report, dict):
+            errors.append(f"{candidate}: report root must be a JSON object")
+            continue
+        result = dict(report)
+        result["provenance"] = {
+            "source": "offline_evaluation_report",
+            "report_path": str(candidate.resolve()),
+        }
+        return result
+    detail = f" ({'; '.join(errors)})" if errors else ""
+    raise FileNotFoundError(f"No valid offline evaluation report is available{detail}")
 
 
 def create_evaluation_router(deps: RouterDeps) -> APIRouter:
@@ -190,35 +214,22 @@ def create_evaluation_router(deps: RouterDeps) -> APIRouter:
         Path("/app/reports/offline_eval_report.json"),
     ]
 
-    # Fallback metrics from the most recent offline evaluation run (MovieLens 100K,
-    # 610 users, leave-one-out protocol). Embedded so the endpoint always returns
-    # useful data even when the report file isn't available in the container.
-    _FALLBACK_OFFLINE_METRICS = {
-        "generated_at": "2026-06-05T04:45:24Z",
-        "num_users": 610,
-        "ndcg_at_10": 0.142,
-        "recall_at_50": 0.387,
-        "ild": 0.312,
-        "cold_start_ndcg_at_10": 0.089,
-        "evaluation_protocol": "leave_one_out",
-        "model_version": "2.0.0",
-        "evaluation_note": "Metrics computed on MovieLens 100K (610 users, leave-one-out protocol).",
-    }
-
     @router.get("/v1/evaluation/offline-metrics")
     async def offline_metrics():
         """Return the most recent offline evaluation report.
 
         Requirements: 2.1, 2.2, 2.3, 2.4, 2.5
         """
-        for candidate in _CANDIDATE_REPORT_PATHS:
-            if candidate.exists():
-                try:
-                    content = candidate.read_text(encoding="utf-8")
-                    return json.loads(content)
-                except (OSError, json.JSONDecodeError):
-                    continue
-        # No report file found — return embedded fallback metrics
-        return _FALLBACK_OFFLINE_METRICS
+        try:
+            return load_offline_metrics(_CANDIDATE_REPORT_PATHS)
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "status": "unavailable",
+                    "reason": "offline_evaluation_report_missing",
+                    "message": str(exc),
+                },
+            ) from exc
 
     return router

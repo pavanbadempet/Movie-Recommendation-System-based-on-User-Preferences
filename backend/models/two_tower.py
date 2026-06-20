@@ -4,7 +4,7 @@ Two-Tower Candidate Generation Model
 The foundation of every modern recommendation system (Netflix, YouTube, Amazon).
 Two separate neural networks (towers) independently encode users and items into
 a shared embedding space. At inference time, item embeddings are pre-computed
-and indexed in FAISS for O(log n) retrieval. Only the user tower runs live.
+and indexed in TurboVec for O(log n) retrieval. Only the user tower runs live.
 
 Architecture:
     User Tower: user_features → MLP → 128d embedding
@@ -94,7 +94,7 @@ class TwoTowerModel(nn.Module):
     Full Two-Tower model for candidate generation.
 
     Forward pass returns dot-product scores between user and item embeddings.
-    During inference, item embeddings are pre-computed and stored in FAISS.
+    During inference, item embeddings are pre-computed and stored in TurboVec.
     Only the user tower runs live per request.
     """
 
@@ -178,7 +178,7 @@ class TwoTowerModel(nn.Module):
             return self.user_tower(user_features)
 
     def encode_items(self, item_features: torch.Tensor) -> torch.Tensor:
-        """Encode item features into embeddings (for FAISS indexing)."""
+        """Encode item features into embeddings (for TurboVec indexing)."""
         self.eval()
         with torch.no_grad():
             return self.item_tower(item_features)

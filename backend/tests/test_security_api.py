@@ -135,20 +135,17 @@ def test_jwt_missing_sub_rejected():
     assert response.status_code == 401
 
 
-def test_optional_user_returns_none_for_bad_token():
+def test_user_recommendations_reject_bad_token():
     """
-    The recommendations endpoint uses get_optional_user (permissive auth).
-    It must return 200 even with an invalid token — the auth is optional.
-    This confirms the endpoint's intentional design: public access with
-    optional personalization when a valid token is present.
+    A forged bearer token must not authorize reads of another user's
+    recommendation profile.
     """
     token = _make_token("nonexistent-user", secret="wrong-secret")
     response = client.get(
         "/v1/recommendations/user/any-user",
         headers={"Authorization": f"Bearer {token}"},
     )
-    # Permissive endpoint: bad tokens are silently ignored, returns 200
-    assert response.status_code == 200
+    assert response.status_code == 401
 
 
 def test_admin_endpoint_requires_token():

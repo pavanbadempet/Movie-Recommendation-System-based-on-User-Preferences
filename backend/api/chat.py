@@ -28,11 +28,11 @@ def generate_chat_response(messages: list[dict]) -> dict:
     user_msg = messages[-1]["content"]
 
     # 1. RETRIEVAL (The "R" in RAG)
-    # Use semantic search (FAISS + SBERT) for meaning-based retrieval
+    # Use semantic search (TurboVec + SBERT) for meaning-based retrieval
     recommender = get_recommender()
 
     try:
-        # Semantic search encodes query with SBERT model and searches FAISS index
+        # Semantic search encodes query with SBERT model and searches TurboVec index
         results = recommender.semantic_search(user_msg, n=5)
         if not results:
             # Fallback to text-based search

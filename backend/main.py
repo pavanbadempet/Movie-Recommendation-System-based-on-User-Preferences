@@ -123,7 +123,7 @@ from backend.events.recommendation_events import (
     record_recommendation_events,
     remote_payload_or_raise,
 )
-from backend.intelligence.active_inference_engine import get_active_inference_engine
+from backend.intelligence.active_inference_engine import get_active_inference_engine, resolve_movie_embedding
 from backend.learning.online_learner import OnlineLearner
 from backend.metrics.benchmark_cache import (
     _recommendation_benchmark_cache,
@@ -225,6 +225,7 @@ _slo_tracker = RequestSloTracker()
 _recommender: Recommender | None = None
 
 from threading import Lock as _Lock
+
 _recommender_load_lock = _Lock()
 
 # =====================================================================
@@ -235,10 +236,9 @@ _recommender_load_lock = _Lock()
 async def _trigger_active_inference(movie_id: int, reward: float) -> None:
     """Dispatch Active Inference self-heal as a background task."""
     try:
-        import torch
-
         engine = get_active_inference_engine()
-        movie_emb = torch.randn(1, engine.emb_dim)
+        movie_emb = resolve_movie_embedding(movie_id, expected_dim=engine.emb_dim)
+        movie_emb = movie_emb.to(engine.dynamic_prior.device)
         engine.self_heal(movie_emb, reward)
     except Exception as exc:
         logger.warning("Active Inference self_heal failed for movie_id=%s: %s", movie_id, exc)
@@ -312,7 +312,7 @@ app = FastAPI(
         "Production-grade AI recommendation engine with a 6-model ensemble "
         "(SASRec, KAN, LightGCN, Diffusion, Quantum-Fluid, Hyperbolic). "
         "Implements Doubly Robust IPS weight optimization, differential privacy, "
-        "and adaptive 3-tier serving (GPU / ONNX CPU / FAISS lite).\n\n"
+        "and adaptive 3-tier serving (GPU / ONNX CPU / TurboVec lite).\n\n"
         "**Interactive docs:** `/docs` (Swagger UI) · `/redoc` (ReDoc)\n\n"
         "**Full API reference:** [docs/API_REFERENCE.md]"
         "(https://github.com/pavanbadempet/Movie-Recommendation-System/blob/main/docs/API_REFERENCE.md)"

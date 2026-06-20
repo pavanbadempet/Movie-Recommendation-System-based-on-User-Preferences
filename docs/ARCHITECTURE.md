@@ -483,7 +483,7 @@ npm run build   # outputs to frontend/dist/
 ```
 
 The built `dist/` is served by FastAPI as a static mount at `/ui/` when present.
-In production it is deployed independently to Cloudflare Pages via
+It can also be deployed independently to GitHub Pages via
 `.github/workflows/frontend-pages.yml`.
 
 ---
@@ -541,7 +541,7 @@ All services share the `nova-net` bridge network.
 | `serving-quality.yml` | post-deploy / daily 08:30 UTC | Live quality gate against HF Spaces + Render |
 | `data-refresh.yml` | daily | Kaggle GPU runner re-trains ALS, rebuilds FAISS, pushes artifacts |
 | `sync-hf.yml` | post-data-refresh | Syncs artifacts to HuggingFace Hub |
-| `frontend-pages.yml` | push to main | Builds and deploys React to Cloudflare Pages |
+| `frontend-pages.yml` | push to main | Tests, builds, and deploys React to GitHub Pages |
 | `load-test.yml` | scheduled | k6 load tests against live endpoints |
 | `synthetic-monitoring.yml` | scheduled | Lightweight uptime probes |
 | `secrets-scan.yml` | push / PR | Detects accidentally committed secrets |

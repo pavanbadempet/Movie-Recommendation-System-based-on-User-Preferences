@@ -99,6 +99,14 @@ MODEL_FILES = {
         "dest": "nova_ranker.joblib.metadata.json",
         "required": False,
     },
+    "contextual_weight_net.pth": {
+        "url": os.getenv(
+            "CONTEXTUAL_WEIGHT_NET_URL",
+            "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/contextual_weight_net.pth",
+        ),
+        "dest": "contextual_weight_net.pth",
+        "required": False,
+    },
 }
 
 
@@ -137,6 +145,17 @@ def download_file(url: str, dest_path: Path, chunk_size: int = 8192, required: b
                             f"  Progress: {pct:.1f}% ({downloaded // (1024 * 1024)}MB / {total_size // (1024 * 1024)}MB)"
                         )
 
+        if dest_path.name == "nova_ranker.joblib":
+            expected_sha256 = _expected_ranker_sha256()
+            actual_sha256 = file_sha256(temp_path)
+            if not expected_sha256 or actual_sha256 != expected_sha256:
+                logger.error(
+                    "Refusing downloaded Nova ranker artifact: SHA-256 %s does not match the pinned digest.",
+                    actual_sha256,
+                )
+                temp_path.unlink(missing_ok=True)
+                return False
+
         shutil.move(str(temp_path), str(dest_path))
         logger.info(f"Downloaded {dest_path.name} ({dest_path.stat().st_size // (1024 * 1024)}MB)")
         return True
@@ -158,6 +177,15 @@ def file_sha256(file_path: Path) -> str | None:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _expected_ranker_sha256() -> str | None:
+    """Return the operator-pinned checksum for the executable ranker artifact."""
+    for env_name in ("NOVA_RANKER_SHA256", "NOVA_RANKER_JOBLIB_SHA256"):
+        value = os.getenv(env_name, "").strip().lower()
+        if value:
+            return value
+    return None
 
 
 def _load_manifest_checksums(models_dir: Path) -> dict[str, dict]:
@@ -184,10 +212,16 @@ def _load_manifest_contract(models_dir: Path) -> dict[str, object]:
 
     contract = dict(manifest.get("serving_contract") or {})
     quality = manifest.get("quality") or {}
+    # Legacy key compatibility mappings
+    for old_key, new_key in [("faiss_index_size", "turbovec_index_size")]:
+        if old_key in contract and new_key not in contract:
+            contract[new_key] = contract[old_key]
+        if old_key in quality and new_key not in quality:
+            quality[new_key] = quality[old_key]
+
     for key in (
         "movie_rows",
         "embedding_rows",
-        "faiss_index_size",
         "turbovec_index_size",
         "movie_id_map_rows",
         "movie_id_sha256",
@@ -242,7 +276,7 @@ def _manifest_contract_matches(
             return True, None
 
         if filename == "turbovec.tq":
-            expected_rows = manifest_contract.get("turbovec_index_size") or manifest_contract.get("faiss_index_size")
+            expected_rows = manifest_contract.get("turbovec_index_size")
             if expected_rows is None:
                 return True, None
             from turbovec import TurboQuantIndex
@@ -412,6 +446,11 @@ def ensure_model_files(
             results[filename] = False
             continue
 
+        if filename == "nova_ranker.joblib" and not _expected_ranker_sha256():
+            logger.warning("Skipping Nova ranker download because NOVA_RANKER_SHA256 is not configured.")
+            results[filename] = False
+            continue
+
         # Try to download if URL is configured
         if url:
             results[filename] = download_file(url, file_path, required=required)
@@ -457,6 +496,7 @@ def default_artifacts_for_serving_profile() -> set[str]:
             "pipeline_manifest.json",
             "nova_ranker.joblib",
             "nova_ranker.joblib.metadata.json",
+            "contextual_weight_net.pth",
         }
 
     return set(MODEL_FILES)

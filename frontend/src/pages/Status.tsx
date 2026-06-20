@@ -149,7 +149,7 @@ export function StatusPage() {
             <div className="status-desc">
               <span>Shows if the recommendation engine service is currently online, active, and successfully passing health probes.</span>
               <span><strong>Technical:</strong> Periodically issues HTTP health check requests to the <code>/health</code> endpoint to verify service uptime, catalog database connectivity, and system sanity.</span>
-              <span><strong>Example:</strong> Returns 'online' when uvicorn is running and SQLite/Postgres connections are healthy.</span>
+              <span><strong>Example:</strong> Returns &apos;online&apos; when uvicorn is running and SQLite/Postgres connections are healthy.</span>
             </div>
           </article>
 

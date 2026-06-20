@@ -47,14 +47,10 @@ jobs:
         run: pip install kaggle jupytext
 
       - name: Convert .py to .ipynb for Kaggle
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           cd notebooks
-          # Inject secret into script securely
-          python -c "import os; text = open('kaggle_etl_pipeline.py').read().replace('HF_TOKEN_PLACEHOLDER', os.environ.get('HF_TOKEN', '')); open('kaggle_etl_pipeline.py', 'w').write(text)"
           jupytext --to notebook kaggle_etl_pipeline.py -o kaggle_etl_pipeline.ipynb
-          echo "Converted .py to .ipynb"
+          echo "Converted .py to .ipynb without materializing GitHub secrets. Kaggle Secrets supplies HF_TOKEN at runtime."
 
       - name: Push notebook to Kaggle (triggers GPU execution)
         env:

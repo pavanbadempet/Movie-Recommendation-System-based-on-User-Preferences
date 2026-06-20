@@ -1,0 +1,97 @@
+# Files to exclude from AI coding assistant context
+# This reduces token usage by preventing unnecessary files from being included
+
+# Dependencies
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+.pytest_cache/
+.hypothesis/
+.coverage
+htmlcov/
+.tox/
+
+# Data
+data/
+*.csv
+*.json
+*.parquet
+*.npz
+*.h5
+
+# Models
+models/
+*.pkl
+*.joblib
+*.onnx
+
+# Logs
+logs/
+*.log
+
+# Cache
+.cache/
+*.cache
+
+# Documentation (exclude from code context)
+docs/
+*.md
+!README.md
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Environment
+.env
+.env.*
+*.env
+
+# Large files
+*.tar.gz
+*.zip
+*.rar
+
+# Node modules (if any frontend)
+node_modules/
+
+# Build artifacts
+build/
+dist/
+out/
+
+# Temporary files
+tmp/
+temp/
+*.tmp

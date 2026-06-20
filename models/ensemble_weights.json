@@ -1,23 +1,13 @@
 {
-  "lightgcn": 0.005,
-  "quantum": 0.010,
-  "sasrec": 0.659,
-  "kan": 0.298,
-  "hyperbolic": 0.004,
-  "diffusion": 0.024,
-  "evaluated_at": "2026-05-26T18:29:56Z",
-  "ndcg_at_10": 0.5423,
-  "hit_rate_at_10": 0.785,
-  "num_candidates_evaluated": 200,
-  "method": "doubly_robust_ips",
-  "dr_score": 3.917076,
-  "model_classifications": {
-    "sasrec": "core",
-    "kan": "core",
-    "diffusion": "core",
-    "quantum": "core",
-    "lightgcn": "experimental",
-    "hyperbolic": "experimental"
-  },
-  "notes": "DR-optimized via 200 Dirichlet-sampled candidates. Core models (SASRec 65.9%, KAN 29.8%, Diffusion 2.4%, Quantum 1.0%) account for 99.1% of ensemble weight. Experimental models (LightGCN 0.5%, Hyperbolic 0.4%) are included for architectural diversity and will gain weight as online learning accumulates interaction data. Ensemble achieves +4.3% NDCG@10 lift over best individual model (SASRec)."
+  "lightgcn": 0.0004447696088831355,
+  "quantum": 0.059876900481180176,
+  "sasrec": 0.5565691613130193,
+  "kan": 0.09281514979364962,
+  "hyperbolic": 0.2676164764470304,
+  "diffusion": 0.02252845774223351,
+  "clifford": 0.00014908461400394904,
+  "evaluated_at": "2026-06-20T12:11:15Z",
+  "ndcg_at_10": 0.457235,
+  "hit_rate_at_10": 0.525,
+  "num_candidates_evaluated": 10000
 }

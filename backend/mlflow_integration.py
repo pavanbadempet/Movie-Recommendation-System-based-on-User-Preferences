@@ -27,7 +27,7 @@ class MLflowTracker:
     Tracks:
     - Training metrics (HR@10, NDCG@10, loss)
     - Model parameters (learning rate, batch size, etc.)
-    - Model artifacts (PyTorch models, FAISS indices)
+    - Model artifacts (PyTorch models, TurboVec indices)
     - Ensemble weights and configuration
     """
 

@@ -76,17 +76,31 @@ def get_active_inference_engine():
     return _engine
 
 
+def resolve_movie_embedding(movie_id: int, expected_dim: int) -> torch.Tensor:
+    """Resolve the exact embedding used by the serving ensemble for a movie."""
+    from backend.models.ensemble_engine import get_apex_engine
+
+    serving_engine = get_apex_engine()
+    movie_embedding = serving_engine.get_item_embedding(movie_id)
+    if movie_embedding is None:
+        raise LookupError(f"No serving embedding found for movie_id={movie_id}")
+    if movie_embedding.ndim != 2 or movie_embedding.shape != (1, expected_dim):
+        raise ValueError(
+            f"Serving embedding for movie_id={movie_id} has shape {tuple(movie_embedding.shape)}, "
+            f"expected (1, {expected_dim})"
+        )
+    return movie_embedding.detach()
+
+
 def process_live_feedback(movie_id: int, feedback_type: str):
     """
     Called by the FastAPI backend when a user clicks thumbs up or thumbs down.
     """
     engine = get_active_inference_engine()
-
-    # Simulate extracting the active embedding for this movie
-    # (In a full deployment, we pull this from the FAISS/Quantum index)
-    dummy_embedding = torch.randn(1, engine.emb_dim)
+    movie_embedding = resolve_movie_embedding(movie_id, expected_dim=engine.emb_dim)
+    movie_embedding = movie_embedding.to(engine.dynamic_prior.device)
 
     # +1 for positive, -1 for negative
     reward = 1.0 if feedback_type == "positive" else -1.0
 
-    engine.self_heal(dummy_embedding, reward)
+    engine.self_heal(movie_embedding, reward)

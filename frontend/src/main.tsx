@@ -9,7 +9,6 @@ import {
   Database,
   Film,
   Gauge,
-  House,
   Loader2,
   Play,
   RefreshCw,
@@ -24,6 +23,9 @@ import {
   X,
   User,
   LogOut,
+  Menu,
+  MoreHorizontal,
+  Network,
 } from "lucide-react";
 import {
   apiGet,
@@ -72,13 +74,6 @@ const imageBase = import.meta.env.VITE_TMDB_IMAGE_BASE || "https://image.tmdb.or
 const RECENT_STORAGE_KEY = "nova_recent_movies_v2";
 const SESSION_STORAGE_KEY = "nova_session_id_v1";
 const TITLE_CATALOG_LIMIT = 5000;
-
-const isEmbedded = typeof window !== "undefined" && (
-  window.self !== window.top ||
-  window.location.hostname.includes("hf.space") ||
-  window.location.hostname.includes("huggingface.co") ||
-  window.location.search.includes("embed=true")
-);
 
 type AppPage = "home" | "search" | "profile" | "dashboard" | "knowledge-graph" | "evaluation" | "admin" | "landing" | "signup" | "pricing" | "getting-started" | "status";
 type SearchMode = "title" | "semantic";
@@ -764,6 +759,7 @@ function TrailerFrame({ movie }: { movie: Movie }) {
   const [videoError, setVideoError] = React.useState(false);
   const [isCached, setIsCached] = React.useState<boolean | null>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
+  const [isMobile, setIsMobile] = React.useState(() => typeof window !== "undefined" ? window.innerWidth <= 768 : false);
 
   React.useEffect(() => {
     setTrailerKey(movie.trailer_key || null);
@@ -792,15 +788,25 @@ function TrailerFrame({ movie }: { movie: Movie }) {
       });
   }, [trailerKey]);
 
+  // Handle window resizing to toggle video playback on mobile
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   // Restart playback and reload video when movie, trailerKey, or isCached changes
   React.useEffect(() => {
     setPlaying(true);
     setVideoError(false); // Reset error state when movie changes
-    if (isCached && videoRef.current) {
+    if (isCached && videoRef.current && !isMobile) {
       videoRef.current.load();
       videoRef.current.play().catch(() => {});
     }
-  }, [movie.id, trailerKey, isCached]);
+  }, [movie.id, trailerKey, isCached, isMobile]);
 
   function togglePlayback() {
     const nextPlaying = !playing;
@@ -819,7 +825,7 @@ function TrailerFrame({ movie }: { movie: Movie }) {
 
   return (
     <div className="trailer-frame">
-      {trailerKey ? (
+      {trailerKey && !isMobile ? (
         isCached === null ? (
           <div className="trailer-loading" style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#94a3b8" }}>
             <Loader2 className="spin" size={24} />
@@ -850,9 +856,12 @@ function TrailerFrame({ movie }: { movie: Movie }) {
           </>
         )
       ) : (
-        <img src={backdropUrl(movie.poster_path)} alt="" />
+        <>
+          <img src={backdropUrl(movie.poster_path)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+          <div className="trailer-overlay" />
+        </>
       )}
-      {trailerKey && isCached && !videoError && (
+      {trailerKey && isCached && !videoError && !isMobile && (
         <button className="video-toggle" type="button" onClick={togglePlayback} aria-label={playing ? "Pause trailer" : "Play trailer"}>
           <span className="visually-hidden">{playing ? "Pause trailer" : "Play trailer"}</span>
         </button>
@@ -908,6 +917,7 @@ function MovieDialog({ movie, onClose }: { movie: Movie; onClose: () => void }) 
       }}
     >
       <section ref={dialogRef} className="movie-dialog" role="dialog" aria-modal="true" aria-label={`${movie.title} details`}>
+        <div className="mobile-sheet-handle" style={{ width: "36px", height: "5px", background: "rgba(255, 255, 255, 0.15)", borderRadius: "10px", margin: "12px auto 0 auto", display: "none" }} />
         <button className="dialog-close" type="button" aria-label="Close movie details" onClick={onClose}>
           <X size={24} />
         </button>
@@ -1224,6 +1234,29 @@ function App() {
   const [latestLoading, setLatestLoading] = React.useState(false);
   const [homeMode, setHomeMode] = React.useState<"foryou" | "latest" | "trending">(() => loadRecentMovies().length > 0 ? "foryou" : "trending");
   const [sessionId] = React.useState(() => getSessionId());
+  const [isMobileViewport, setIsMobileViewport] = React.useState(() => typeof window !== "undefined" ? window.innerWidth <= 768 : false);
+  const [isMobileSimulated, setIsMobileSimulated] = React.useState(false);
+  const [showMoreDrawer, setShowMoreDrawer] = React.useState(false);
+  const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
+
+  React.useEffect(() => {
+    function handleInstallPrompt(e: Event) {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    }
+    window.addEventListener("beforeinstallprompt", handleInstallPrompt);
+    return () => window.removeEventListener("beforeinstallprompt", handleInstallPrompt);
+  }, []);
+
+  React.useEffect(() => {
+    function handleResize() {
+      setIsMobileViewport(window.innerWidth <= 768);
+    }
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const isMobileMode = isMobileViewport || isMobileSimulated;
   const titleSelectRef = React.useRef<HTMLDivElement>(null);
   const bootstrapped = React.useRef(false);
   const loadedPlatform = React.useRef(false);
@@ -1708,6 +1741,441 @@ function App() {
   }
 
   // ── App Shell Pages (Browse, Search, Dashboard, KG, Eval, Profile, Admin) ─
+  if (isAppPage && isMobileMode) {
+    const mobileContent = (
+      <div className="iphone-screen">
+        <div className="mobile-screen-orb" />
+
+        {/* Simplified Sticky Header */}
+        <header className="topbar" style={{ position: "sticky", top: 0, width: "100%", zIndex: 100 }}>
+          <button className="brand-logo" type="button" onClick={openHome} style={{ fontSize: "1.3rem" }}>NOVA</button>
+          <div className="topbar-right" style={{ gap: "12px" }}>
+            <StatusBadge state={catalogState} backend={backend} />
+            {username ? (
+              <button className="profile-btn" type="button" onClick={() => setPage("profile")} style={{ padding: "6px 12px" }}>
+                <strong>{username}</strong>
+              </button>
+            ) : (
+              <button className="signin-nav-btn" type="button" onClick={() => setShowAuthModal(true)}>
+                Sign In
+              </button>
+            )}
+          </div>
+        </header>
+
+        {/* Content Area */}
+        <div className="mobile-shell-content">
+          {page === "home" && (
+            <HomePage
+              movies={homeMovies}
+              heroIndex={homeHeroIndex}
+              loading={homeLoading}
+              error={homeError}
+              onHeroIndex={setHomeHeroIndex}
+              onOpenMovie={setDialogMovie}
+              recentMovies={recentMovies}
+              forYouMovies={forYouMovies}
+              forYouLoading={forYouLoading}
+              latestMovies={latestMovies}
+              latestLoading={latestLoading}
+              homeMode={homeMode}
+              onToggleMode={setHomeMode}
+            />
+          )}
+
+          {page === "search" && (
+            <main className="search-page-layout">
+              {/* Metrics strip in 2x2 grid */}
+              <section className="metrics-strip" aria-label="Platform snapshot" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", marginBottom: "16px" }}>
+                <MetricTile icon={<Database size={14} />} label="Catalog" value={catalogValue ? catalogValue.toLocaleString() : "Loading"} />
+                <MetricTile icon={<Server size={14} />} label="Readiness" value={readinessLabel(readinessReport)} />
+                <MetricTile icon={<Gauge size={14} />} label="Quality" value={qualityLabel(qualityReport)} />
+                <MetricTile icon={<Activity size={14} />} label="Artifacts" value={healthLabel(artifactReport)} />
+              </section>
+
+              <section className="workspace" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div className="control-panel" style={{ padding: "16px", borderRadius: "16px" }}>
+                  <div className="title-select" ref={titleSelectRef}>
+                    <div className="search-box title-select-box" style={{ padding: "4px 8px" }}>
+                      {mode === "semantic" ? <Sparkles size={16} className="mode-icon-semantic" /> : <Search size={16} />}
+                      <input
+                        id="title-search"
+                        value={titleQuery}
+                        onChange={(event) => {
+                          userStarted.current = true;
+                          setMode(mode);
+                          setTitleQuery(event.target.value);
+                          setTitleSelectOpen(true);
+                          if (selectedMovie && event.target.value !== selectedTitleLabel) {
+                            setSelectedMovie(null);
+                            setResults([]);
+                            setResultsKind("idle");
+                            setRecommendationSource(null);
+                            setDialogMovie(null);
+                            setLastRecommendationRequestId(null);
+                          }
+                        }}
+                        onFocus={() => setTitleSelectOpen(true)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") {
+                            setTitleSelectOpen(false);
+                            return;
+                          }
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            setTitleSelectOpen(false);
+                            void runSearch(mode);
+                          }
+                        }}
+                        placeholder={mode === "title" ? "Movie title..." : "Plot, mood..."}
+                        style={{ fontSize: "0.82rem" }}
+                      />
+                      <button
+                        className={`mode-toggle-btn ${mode === "semantic" ? "semantic-active" : ""}`}
+                        type="button"
+                        onClick={() => setMode(mode === "title" ? "semantic" : "title")}
+                        style={{ padding: "4px 8px", fontSize: "0.75rem" }}
+                      >
+                        {mode === "semantic" ? <Sparkles size={12} /> : <Search size={12} />}
+                      </button>
+                    </div>
+
+                    {showTitleSuggestions && mode === "title" && (
+                      <div className="title-list" style={{ maxHeight: "200px" }}>
+                        {filteredTitles.slice(0, 8).map((item) => (
+                          <button
+                            type="button"
+                            key={`${item.id}-${item.title}`}
+                            onClick={() => void chooseTitle(item, { autoRecommend: true })}
+                            style={{ fontSize: "0.82rem", padding: "8px 12px" }}
+                          >
+                            {item.title}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="result-panel">
+                  {selectedMovie && !isEditingTitle ? (
+                    <MovieSpotlight
+                      movie={selectedMovie}
+                      loading={loadingRecs}
+                      onRecommend={() => void recommend()}
+                      userId={username}
+                      sessionId={sessionId}
+                    />
+                  ) : null}
+
+                  {isSearching || loadingRecs ? (
+                    <div style={{ display: "flex", justifyContent: "center", padding: "40px" }}>
+                      <Loader2 className="spin" size={28} style={{ color: "var(--accent)" }} />
+                    </div>
+                  ) : results.length > 0 ? (
+                    <section className="results-section">
+                      <div className="section-title" style={{ fontSize: "0.95rem", margin: "12px 0 6px" }}>
+                        <h2>{resultsKind === "recommendations" ? "Similar Movies" : "Search Results"}</h2>
+                      </div>
+                      <div className="poster-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "10px" }}>
+                        {results.map((movie, index) => (
+                          <RecommendationCard
+                            key={`${movie.id}-${movie.title}`}
+                            movie={movie}
+                            rank={index + 1}
+                            onSelect={selectResultMovie}
+                            feedback={feedbackByMovieId[movie.id]}
+                            onFeedback={recordFeedback}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  ) : (
+                    /* Show trending keywords and popular searches on mobile search if empty */
+                    !selectedMovie && (
+                      <div className="search-suggestions" style={{ marginTop: "16px" }}>
+                        <div style={{ marginBottom: "20px" }}>
+                          <span style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Intent filter</span>
+                          <h3 style={{ fontSize: "0.95rem", color: "#fff", fontWeight: 700, margin: "2px 0 10px", fontFamily: "var(--font-headline)" }}>Trending Searches</h3>
+                          <div className="search-tags" style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                            {["Batman", "Godfather", "Inception", "Sci-Fi", "Action", "Thriller"].map((tag) => (
+                              <button
+                                key={tag}
+                                className="suggestion-tag-btn"
+                                type="button"
+                                onClick={() => {
+                                  setTitleQuery(tag);
+                                  void runSearch("title", tag);
+                                }}
+                              >
+                                {tag}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {latestMovies.length > 0 && (
+                          <div>
+                            <div className="section-title" style={{ fontSize: "0.95rem", margin: "16px 0 10px" }}>
+                              <h2>Popular Searches</h2>
+                            </div>
+                            <div className="poster-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "12px" }}>
+                              {latestMovies.slice(0, 4).map((movie) => (
+                                <button
+                                  type="button"
+                                  key={`mobile-popular-${movie.id}`}
+                                  className="popular-search-card"
+                                  onClick={() => {
+                                    setTitleQuery(selectTitleLabel(movie));
+                                    selectMovie(movie, "title_search");
+                                    void recommend(movie);
+                                  }}
+                                  style={{
+                                    background: "rgba(255,255,255,0.02)",
+                                    border: "1px solid rgba(255,255,255,0.05)",
+                                    borderRadius: "16px",
+                                    padding: "10px",
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: "8px",
+                                    textAlign: "left",
+                                    transition: "all 0.2s ease"
+                                  }}
+                                >
+                                  <img
+                                    src={posterUrl(movie.poster_path)}
+                                    alt={movie.title}
+                                    style={{ width: "100%", aspectRatio: "2/3", objectFit: "cover", borderRadius: "10px" }}
+                                  />
+                                  <div style={{ display: "flex", flexDirection: "column", gap: "2px", overflow: "hidden" }}>
+                                    <strong style={{ fontSize: "0.8rem", color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{movie.title}</strong>
+                                    <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>{movieYear(movie)}</span>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  )}
+                </div>
+              </section>
+            </main>
+          )}
+
+          {page === "dashboard" && <main className="app-shell inner-shell"><ErrorBoundary><Dashboard /></ErrorBoundary></main>}
+          {page === "knowledge-graph" && <main className="app-shell inner-shell"><ErrorBoundary><KnowledgeGraphPage titles={titles} /></ErrorBoundary></main>}
+          {page === "evaluation" && <main className="app-shell inner-shell"><ErrorBoundary><EvaluationPage /></ErrorBoundary></main>}
+          {page === "profile" && (
+            <main className="app-shell inner-shell">
+              <ErrorBoundary>
+                <UserProfilePage
+                  token={token}
+                  username={username}
+                  onRequestLogin={() => setShowAuthModal(true)}
+                  onSelectMovie={(movie) => { setDialogMovie(movie); }}
+                />
+              </ErrorBoundary>
+            </main>
+          )}
+          {page === "admin" && <main className="app-shell inner-shell"><ErrorBoundary><AdminPanel token={token} /></ErrorBoundary></main>}
+        </div>
+
+        {/* Bottom Navigation Bar */}
+        <nav className="mobile-nav-bar" aria-label="Mobile navigation">
+          <button
+            className={`mobile-nav-tab ${page === "home" ? "active" : ""}`}
+            type="button"
+            onClick={() => { openHome(); setShowMoreDrawer(false); }}
+          >
+            <Film size={20} />
+            <span>Browse</span>
+          </button>
+          <button
+            className={`mobile-nav-tab ${page === "search" ? "active" : ""}`}
+            type="button"
+            onClick={() => { openSearch(); setShowMoreDrawer(false); }}
+          >
+            <Search size={20} />
+            <span>Search</span>
+          </button>
+          <button
+            className={`mobile-nav-tab ${page === "knowledge-graph" ? "active" : ""}`}
+            type="button"
+            onClick={() => { setPage("knowledge-graph"); setShowMoreDrawer(false); }}
+          >
+            <Network size={20} />
+            <span>Graph</span>
+          </button>
+          <button
+            className={`mobile-nav-tab ${page === "evaluation" ? "active" : ""}`}
+            type="button"
+            onClick={() => { setPage("evaluation"); setShowMoreDrawer(false); }}
+          >
+            <BarChart3 size={20} />
+            <span>Eval</span>
+          </button>
+          <button
+            className={`mobile-nav-tab ${["dashboard", "profile", "admin"].includes(page) ? "active" : ""}`}
+            type="button"
+            onClick={() => setShowMoreDrawer(true)}
+          >
+            <MoreHorizontal size={20} />
+            <span>More</span>
+          </button>
+        </nav>
+
+        {/* Slide-up bottom sheet drawer for "More" options */}
+        {showMoreDrawer && (
+          <div className="mobile-bottom-sheet-overlay" onClick={() => setShowMoreDrawer(false)} role="presentation">
+            <div className="mobile-bottom-sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="More navigation options">
+              <div className="sheet-handle" />
+              <h3 className="sheet-title">More Options</h3>
+              <div className="sheet-links">
+                {username && (
+                  <button
+                    className="sheet-link-btn"
+                    type="button"
+                    onClick={() => { setPage("profile"); setShowMoreDrawer(false); }}
+                  >
+                    <User size={18} />
+                    <span>My Profile</span>
+                  </button>
+                )}
+                <button
+                  className="sheet-link-btn"
+                  type="button"
+                  onClick={() => { setPage("dashboard"); setShowMoreDrawer(false); }}
+                >
+                  <Activity size={18} />
+                  <span>System Dashboard</span>
+                </button>
+                {username === "admin" && (
+                  <button
+                    className="sheet-link-btn"
+                    type="button"
+                    onClick={() => { setPage("admin"); setShowMoreDrawer(false); }}
+                  >
+                    <Server size={18} />
+                    <span>Admin Panel</span>
+                  </button>
+                )}
+                <button
+                  className="sheet-link-btn"
+                  type="button"
+                  onClick={() => { setPage("status"); setShowMoreDrawer(false); }}
+                >
+                  <Database size={18} />
+                  <span>System Status</span>
+                </button>
+                <button
+                  className="sheet-link-btn"
+                  type="button"
+                  onClick={async () => {
+                    if (deferredPrompt) {
+                      deferredPrompt.prompt();
+                      const { outcome } = await deferredPrompt.userChoice;
+                      if (outcome === "accepted") {
+                        setDeferredPrompt(null);
+                      }
+                    } else {
+                      alert("To install this app on your phone:\n\n1. Tap the Share button in your mobile browser.\n2. Select 'Add to Home Screen'.\n3. Launch Nova directly from your home screen!");
+                    }
+                    setShowMoreDrawer(false);
+                  }}
+                  style={{ background: "rgba(16, 185, 129, 0.08)", borderColor: "rgba(16, 185, 129, 0.2)", color: "#34d399" }}
+                >
+                  <Sparkles size={18} />
+                  <span>Download / Install App</span>
+                </button>
+
+                {isMobileSimulated && !isMobileViewport && (
+                  <button
+                    className="sheet-link-btn"
+                    type="button"
+                    onClick={() => { setIsMobileSimulated(false); setShowMoreDrawer(false); }}
+                    style={{ border: "1px dashed rgba(167, 139, 250, 0.4)", color: "#a78bfa" }}
+                  >
+                    <Play size={18} />
+                    <span>Exit Mobile Simulator</span>
+                  </button>
+                )}
+
+                {username ? (
+                  <button
+                    className="sheet-link-btn logout"
+                    type="button"
+                    onClick={() => {
+                      window.localStorage.removeItem("nova_jwt_token");
+                      window.localStorage.removeItem("nova_username");
+                      setToken(null);
+                      setUsername(null);
+                      setShowMoreDrawer(false);
+                      openHome();
+                    }}
+                  >
+                    <LogOut size={18} />
+                    <span>Sign Out</span>
+                  </button>
+                ) : (
+                  <button
+                    className="sheet-link-btn"
+                    type="button"
+                    onClick={() => { setShowAuthModal(true); setShowMoreDrawer(false); }}
+                    style={{ background: "var(--accent)" }}
+                  >
+                    <User size={18} />
+                    <span>Sign In</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {dialogMovie && <MovieDialog movie={dialogMovie} onClose={() => setDialogMovie(null)} />}
+        {showAuthModal && (
+          <AuthModal
+            onLogin={(tok, user) => { setToken(tok); setUsername(user); setShowAuthModal(false); }}
+            onClose={() => setShowAuthModal(false)}
+          />
+        )}
+      </div>
+    );
+
+    if (isMobileSimulated && !isMobileViewport) {
+      return (
+        <div className="phone-simulator-container">
+          <div className="simulator-controls">
+            <span className="simulator-badge">Simulator Mode</span>
+            <button className="simulator-toggle-btn" type="button" onClick={() => setIsMobileSimulated(false)}>
+              <Play size={14} style={{ transform: "rotate(180deg)" }} />
+              Back to Widescreen
+            </button>
+          </div>
+          <div className="iphone-mockup">
+            <div className="dynamic-island" />
+            <div className="simulator-status-bar">
+              <span>9:41</span>
+              <div className="status-bar-right" style={{ display: "flex", gap: "4px" }}>
+                <Server size={10} />
+                <Activity size={10} />
+                <Database size={10} />
+              </div>
+            </div>
+            {mobileContent}
+            <div className="home-indicator" />
+          </div>
+        </div>
+      );
+    }
+
+    return mobileContent;
+  }
+
+  // ── App Shell Pages (Browse, Search, Dashboard, KG, Eval, Profile, Admin) ─
   if (isAppPage) {
     const navLinks = [
       { id: "home", label: "Browse" },
@@ -1849,6 +2317,21 @@ function App() {
             >
               <RefreshCw size={16} />
             </button>
+            {!isMobileViewport && (
+              <button
+                className="icon-button"
+                type="button"
+                onClick={() => setIsMobileSimulated(!isMobileSimulated)}
+                title={isMobileSimulated ? "Switch to Widescreen Dashboard" : "Simulate Mobile App UI"}
+                style={{
+                  borderColor: isMobileSimulated ? "var(--secondary)" : "var(--line)",
+                  color: isMobileSimulated ? "var(--secondary)" : "var(--muted)",
+                  background: isMobileSimulated ? "rgba(236, 72, 153, 0.08)" : "var(--panel)"
+                }}
+              >
+                <Activity size={16} />
+              </button>
+            )}
             {username ? (
               <div className="user-profile-menu">
                 <button className="profile-btn" type="button" onClick={() => setPage("profile")}>

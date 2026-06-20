@@ -63,12 +63,15 @@ class RerankingConfig:
     """
 
     mmr_lambda: float = 1.0
-    enable_llm_reranking: bool = False
+    enable_llm_reranking: bool = True
     enable_rl_safety: bool = True
     quality_threshold: float = 0.3
     enable_title_dedup: bool = True
     enable_submodular_diversity: bool = False
     submodular_lambda: float = 0.25
+    enable_dynamic_diversity: bool = True
+    dynamic_diversity_min_lambda: float = 0.3
+    dynamic_diversity_max_lambda: float = 0.85
 
 
 class RerankingPipeline:
@@ -205,7 +208,7 @@ class RerankingPipeline:
         # ----------------------------------------------------------------
         # Step 3: MMR diversity selection
         # ----------------------------------------------------------------
-        working = self._apply_mmr_diversity(working)
+        working = self._apply_mmr_diversity(working, constraints)
 
         # ----------------------------------------------------------------
         # Step 3b: Submodular diversity optimization
@@ -217,8 +220,8 @@ class RerankingPipeline:
         # Step 4: LLM reranking (explanation generation)
         # ----------------------------------------------------------------
         explanations: dict[int, str | None] = {}
-        if self.config.enable_llm_reranking and self.llm_client is not None:
-            explanations = self._apply_llm_reranking(working)
+        if self.config.enable_llm_reranking:
+            explanations = self._apply_llm_reranking(working, constraints)
 
         # ----------------------------------------------------------------
         # Convert RankedItem → FinalItem
@@ -486,7 +489,7 @@ class RerankingPipeline:
             )
             return working
 
-    def _apply_mmr_diversity(self, working: list[RankedItem]) -> list[RankedItem]:
+    def _apply_mmr_diversity(self, working: list[RankedItem], constraints: dict | None = None) -> list[RankedItem]:
         """Greedy MMR diversity selection.
 
         At each step, the item that maximises the MMR objective is selected:
@@ -502,6 +505,8 @@ class RerankingPipeline:
         ----------
         working:
             Current working list of :class:`RankedItem` objects.
+        constraints:
+            Optional constraints dict containing user profile for dynamic diversity.
 
         Returns
         -------
@@ -513,7 +518,7 @@ class RerankingPipeline:
             if len(working) <= 1:
                 return working
 
-            lam = self.config.mmr_lambda
+            lam = self._get_dynamic_mmr_lambda(constraints)
             remaining: list[RankedItem] = list(working)
             selected: list[RankedItem] = []
 
@@ -557,6 +562,102 @@ class RerankingPipeline:
                 exc,
             )
             return working
+
+    def _calculate_genre_entropy(self, profile: dict) -> float | None:
+        """Calculate the Shannon entropy of the user's genre history."""
+        try:
+            recent_events = profile.get("recent_events") or []
+            positive_events = [
+                ev for ev in recent_events
+                if not ev.get("negative") and ev.get("movie_id") is not None
+            ]
+            if not positive_events:
+                return None
+
+            import math
+            import pandas as pd
+            from datetime import datetime, UTC
+
+            # Helper for recency decay matching the Recommender logic
+            def get_recency_decay(event_ts: Any, half_life_days: float = 14.0) -> float:
+                if not event_ts:
+                    return 0.65
+                try:
+                    parsed = datetime.fromisoformat(str(event_ts).replace("Z", "+00:00"))
+                    if parsed.tzinfo is None:
+                        parsed = parsed.replace(tzinfo=UTC)
+                    age_days = max(0.0, (datetime.now(UTC) - parsed).total_seconds() / 86400.0)
+                    return float(0.5 ** (age_days / half_life_days))
+                except Exception:
+                    return 0.65
+
+            genre_counts: dict[str, float] = {}
+            for ev in positive_events:
+                movie_id = int(ev["movie_id"])
+                weight = float(ev.get("weight") or 1.0) * get_recency_decay(ev.get("event_ts"))
+
+                # Fetch genres
+                genres = []
+                if self.movie_df is not None:
+                    ids = pd.to_numeric(self.movie_df["id"], errors="coerce")
+                    matches = self.movie_df[ids == movie_id]
+                    if not matches.empty:
+                        genres_str = str(matches.iloc[0].get("genres") or "")
+                        genres = [g.strip().lower() for g in genres_str.split(",") if g.strip()]
+
+                for g in genres:
+                    genre_counts[g] = genre_counts.get(g, 0.0) + weight
+
+            if not genre_counts:
+                return None
+
+            total_weight = sum(genre_counts.values())
+            if total_weight <= 0.0:
+                return None
+
+            entropy = 0.0
+            for count in genre_counts.values():
+                p = count / total_weight
+                if p > 0.0:
+                    entropy -= p * math.log2(p)
+
+            return entropy
+        except Exception as exc:
+            logger.warning(
+                "Genre entropy calculation failed with %s: %s",
+                type(exc).__name__,
+                exc,
+            )
+            return None
+
+    def _get_dynamic_mmr_lambda(self, constraints: dict | None) -> float:
+        """Resolve dynamic MMR lambda based on user history entropy."""
+        if not self.config.enable_dynamic_diversity or not constraints:
+            return self.config.mmr_lambda
+
+        profile = constraints.get("profile")
+        if not profile:
+            return self.config.mmr_lambda
+
+        entropy = self._calculate_genre_entropy(profile)
+        if entropy is None:
+            return self.config.mmr_lambda
+
+        # Monotonous history (entropy <= 1.0) -> lower lambda (more diversity)
+        # Highly diverse history (entropy >= 3.0) -> higher lambda (less diversity)
+        h_min = 1.0
+        h_max = 3.0
+        lam_min = self.config.dynamic_diversity_min_lambda
+        lam_max = self.config.dynamic_diversity_max_lambda
+
+        if entropy <= h_min:
+            return lam_min
+        if entropy >= h_max:
+            return lam_max
+
+        # Linear interpolation
+        ratio = (entropy - h_min) / (h_max - h_min)
+        return lam_min + ratio * (lam_max - lam_min)
 
     def _apply_submodular_diversity(self, working: list[RankedItem]) -> list[RankedItem]:
         """Apply submodular diversity optimization to the working list of RankedItems."""
@@ -602,7 +703,11 @@ class RerankingPipeline:
             )
             return working
 
-    def _apply_llm_reranking(self, working: list[RankedItem]) -> dict[int, str | None]:
+    def _apply_llm_reranking(
+        self,
+        working: list[RankedItem],
+        constraints: dict | None = None,
+    ) -> dict[int, str | None]:
         """Generate LLM explanations for each item in *working*.
 
         Calls ``llm_client.generate_explanation(item)`` for each item.
@@ -613,6 +718,8 @@ class RerankingPipeline:
         ----------
         working:
             Current working list of :class:`RankedItem` objects.
+        constraints:
+            Optional constraints dict containing user profile.
 
         Returns
         -------
@@ -621,9 +728,27 @@ class RerankingPipeline:
         """
         explanations: dict[int, str | None] = {}
 
+        profile = constraints.get("profile") if constraints else None
+        user_id = profile.get("user_id", "anonymous") if profile else "anonymous"
+        user_context = None
+        if profile and profile.get("favorite_genres"):
+            user_context = f"Prefers genres: {', '.join(profile['favorite_genres'])}"
+
         for item in working:
             try:
-                explanation = self.llm_client.generate_explanation(item)
+                if self.llm_client is not None:
+                    explanation = self.llm_client.generate_explanation(item)
+                else:
+                    movie_dict = {
+                        "id": item.movie_id,
+                        "title": item.metadata.get("title") or f"Movie ID {item.movie_id}",
+                        "genres": item.metadata.get("genres") or "",
+                        "retrieval_signals": item.retrieval_signals or {},
+                        "explanation": item.metadata.get("explanation") or [],
+                    }
+                    from backend.intelligence.llm_explanations import generate_explanation
+                    explanation = generate_explanation(user_id, movie_dict, user_context)
+
                 explanations[item.movie_id] = str(explanation) if explanation is not None else None
                 logger.debug("LLM generated explanation for movie_id=%d.", item.movie_id)
             except Exception as exc:

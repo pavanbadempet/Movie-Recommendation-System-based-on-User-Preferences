@@ -29,7 +29,7 @@ import torch.nn.functional as F
 logger = logging.getLogger(__name__)
 
 MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
-WEIGHT_KEYS = ("lightgcn", "quantum", "sasrec", "kan", "hyperbolic", "diffusion")
+WEIGHT_KEYS = ("lightgcn", "quantum", "sasrec", "kan", "hyperbolic", "diffusion", "clifford")
 
 
 class ContextualWeightNetwork(nn.Module):
@@ -37,7 +37,7 @@ class ContextualWeightNetwork(nn.Module):
     A small neural network that outputs context-dependent ensemble weights.
 
     Input: User context vector (20d from _build_rl_state)
-    Output: 6 ensemble weights (softmax-normalized)
+    Output: ensemble weights (softmax-normalized)
 
     This allows the system to automatically learn:
     - Cold-start users → more weight on content-based models
@@ -45,7 +45,7 @@ class ContextualWeightNetwork(nn.Module):
     - Genre-specific users → more weight on KG-based models
     """
 
-    def __init__(self, context_dim: int = 20, n_models: int = 6, hidden_dim: int = 32):
+    def __init__(self, context_dim: int = 20, n_models: int = len(WEIGHT_KEYS), hidden_dim: int = 32):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(context_dim, hidden_dim),
@@ -148,70 +148,156 @@ def train_contextual_weight_network(
     """
     Train the ContextualWeightNetwork on validation data.
 
-    Uses the pre-computed per-model scores from the ensemble optimizer
-    to learn which weights work best for which user contexts.
+    Uses gradient-based meta-learning to optimize contextual weights.
+    For each user, we feed their context (scalars + base embedding) into
+    the network, obtain the model weights, compute the blended scores,
+    and update the network to minimize binary cross-entropy loss against
+    their validation ground-truth items.
     """
-    from backend.events import build_user_behavior_profile, iter_events
-
-    logger.info("Training ContextualWeightNetwork...")
-
-    # Collect user contexts and their optimal weights
-    # For now, use the static optimal weights as supervision signal
-    # In production, this would use A/B test results
-    static_weights = _load_static_weights()
-    target = torch.tensor(
-        [static_weights[k] for k in WEIGHT_KEYS],
-        dtype=torch.float32,
+    from backend.events import iter_events
+    from backend.models.ensemble_engine import ApexEnsembleEngine
+    from scripts.optimize_ensemble_weights import (
+        _build_validation_split,
+        _load_interaction_data,
+        _precompute_per_model_scores,
     )
+    import random
+    from collections import defaultdict
 
-    # Build training data from user behavior profiles
-    user_contexts = []
-    all_events = list(iter_events())
-    user_ids = list({str(e.get("user_id")) for e in all_events if e.get("user_id")})[:1000]
+    logger.info("Training ContextualWeightNetwork via gradient-based meta-learning...")
 
-    for uid in user_ids:
-        try:
-            profile = build_user_behavior_profile(uid, limit=50)
-            scalars = [
-                math.log1p(max(len(profile.get("recent_events", [])), 0)) / math.log1p(1000),
-                float(np.mean([e.get("rating", 3.0) for e in profile.get("recent_events", []) if e.get("rating")]))
-                / 5.0
-                if profile.get("recent_events")
-                else 0.6,
-                float(sum(1 for e in profile.get("recent_events", []) if e.get("event_type") == "click"))
-                / math.log1p(500),
-                float(sum(1 for e in profile.get("recent_events", []) if e.get("event_type") == "view"))
-                / math.log1p(500),
-            ] + [0.0] * 16
-            user_contexts.append(scalars)
-        except Exception:
-            continue
+    # Load interaction data and build validation splits
+    user_events = _load_interaction_data()
+    train_history, val_ground_truth = _build_validation_split(user_events)
+    valid_users = {uid for uid, gt in val_ground_truth.items() if gt}
 
-    if len(user_contexts) < 10:
-        logger.warning("Too few user contexts (%d) for contextual weight training", len(user_contexts))
+    if len(valid_users) < 10:
+        logger.warning("Too few validation users (%d) for contextual weight network training", len(valid_users))
         return
 
-    X = torch.tensor(user_contexts, dtype=torch.float32)
-    # Target: all users get the same static optimal weights (supervised by DR optimization)
-    Y = target.unsqueeze(0).expand(len(user_contexts), -1)
+    val_ground_truth = {uid: val_ground_truth[uid] for uid in valid_users}
+    train_history = {uid: train_history[uid] for uid in valid_users if uid in train_history}
+
+    # Load ensemble engine with matching size
+    try:
+        from backend.pipeline.recommender import get_recommender
+
+        rec = get_recommender()
+        num_items = len(rec.movies) if rec._movies is not None else 50000
+    except Exception:
+        num_items = 50000
+    engine = ApexEnsembleEngine(num_users=1000, num_items=num_items)
+    rng = random.Random(42)
+
+    # Pre-compute scores ONCE for validation users
+    per_model_scores = _precompute_per_model_scores(engine, train_history, val_ground_truth, rng)
+
+    if not per_model_scores:
+        logger.warning("No precomputed scores available for training")
+        return
+
+    # Load raw events to build detailed user behavior profiles
+    all_events = list(iter_events())
+    user_raw_events = defaultdict(list)
+    for event in all_events:
+        uid = event.get("user_id")
+        if uid:
+            user_raw_events[str(uid)].append(event)
+
+    # Prepare datasets
+    X_list = []
+    scores_matrices = []
+    labels_list = []
+
+    for user_id, item_scores in per_model_scores.items():
+        gt = val_ground_truth.get(user_id, set())
+        if not gt or not item_scores:
+            continue
+
+        # 1. Build Behavior Profile
+        events = user_raw_events.get(str(user_id), [])
+        total_ratings = sum(1 for e in events if str(e.get("event_type")).lower() == "rating")
+        ratings_list = [float(e["rating"]) for e in events if str(e.get("event_type")).lower() == "rating" and e.get("rating") is not None]
+        avg_rating = sum(ratings_list) / len(ratings_list) if ratings_list else 3.5
+        click_count = sum(1 for e in events if str(e.get("event_type")).lower() == "click")
+        view_count = sum(1 for e in events if str(e.get("event_type")).lower() == "view")
+
+        scalars = [
+            math.log1p(max(total_ratings, 0)) / math.log1p(1000),
+            avg_rating / 5.0,
+            math.log1p(max(click_count, 0)) / math.log1p(500),
+            math.log1p(max(view_count, 0)) / math.log1p(500),
+        ]
+
+        # 2. Get User Base Embedding
+        try:
+            uid_int = int(user_id)
+        except (ValueError, TypeError):
+            uid_int = abs(hash(user_id))
+        safe_uid = uid_int % engine.num_users
+
+        u_tensor = torch.tensor([safe_uid], dtype=torch.long)
+        with torch.no_grad():
+            base_u_emb = engine.lightgcn.user_embedding(u_tensor).squeeze().cpu().numpy()
+
+        emb = np.asarray(base_u_emb, dtype=np.float32).flatten()[:16]
+        emb_list = emb.tolist() + [0.0] * (16 - len(emb))
+        context_vector = scalars + emb_list
+
+        X_list.append(context_vector)
+
+        # 3. Construct Scores Matrix & Labels
+        candidate_ids = list(item_scores.keys())
+        # [N_candidates, 6]
+        scores_mat = np.array([item_scores[iid] for iid in candidate_ids], dtype=np.float32)
+        scores_matrices.append(torch.tensor(scores_mat, dtype=torch.float32))
+
+        labels = np.array([1.0 if iid in gt else 0.0 for iid in candidate_ids], dtype=np.float32)
+        labels_list.append(torch.tensor(labels, dtype=torch.float32))
+
+    if len(X_list) == 0:
+        logger.warning("No valid user training samples constructed")
+        return
+
+    X = torch.tensor(X_list, dtype=torch.float32)
 
     net = ContextualWeightNetwork()
-    optimizer = torch.optim.Adam(net.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(net.parameters(), lr=lr, weight_decay=1e-5)
+
+    logger.info("Starting training loop over %d validation users...", len(X_list))
 
     for epoch in range(epochs):
         net.train()
-        pred = net(X)
-        loss = F.kl_div(pred.log(), Y, reduction="batchmean")
         optimizer.zero_grad()
-        loss.backward()
+
+        # Predict weights for all users: shape [N_users, 6]
+        pred_weights = net(X)
+
+        epoch_loss = 0.0
+        for i in range(len(X_list)):
+            w_u = pred_weights[i]  # [6]
+            scores_u = scores_matrices[i]  # [N_candidates, 6]
+            labels_u = labels_list[i]  # [N_candidates]
+
+            # blended score: [N_candidates]
+            blended = torch.matmul(scores_u, w_u)
+            # Clip to prevent log(0)
+            blended_clipped = torch.clamp(blended, 1e-6, 1.0 - 1e-6)
+            loss_u = F.binary_cross_entropy(blended_clipped, labels_u)
+            epoch_loss += loss_u
+
+        epoch_loss = epoch_loss / len(X_list)
+        epoch_loss.backward()
         torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0)
         optimizer.step()
-        if (epoch + 1) % 20 == 0:
-            logger.info("  ContextualWeightNet Epoch %d/%d | Loss: %.4f", epoch + 1, epochs, loss.item())
+
+        if (epoch + 1) % 20 == 0 or epoch == 0:
+            logger.info("  ContextualWeightNet Epoch %d/%d | Loss: %.6f", epoch + 1, epochs, epoch_loss.item())
 
     save_path = MODELS_DIR / "contextual_weight_net.pth"
+    save_path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(net.state_dict(), save_path)
-    logger.info("ContextualWeightNetwork saved to %s", save_path)
+    logger.info("ContextualWeightNetwork saved successfully to %s", save_path)
 
 
 if __name__ == "__main__":

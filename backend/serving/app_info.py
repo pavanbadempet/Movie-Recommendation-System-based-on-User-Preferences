@@ -8,6 +8,7 @@ API base URL without requiring the recommender model to be loaded.
 
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import Request
 
@@ -62,11 +63,17 @@ def app_metadata() -> dict[str, str | None]:
 
 
 def public_base_url(request: Request) -> str:
-    """Return the externally visible API base URL behind hosted proxies."""
-    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
-    forwarded_host = request.headers.get("x-forwarded-host", "").split(",")[0].strip()
-    proto = forwarded_proto or request.url.scheme
-    host = forwarded_host or request.headers.get("host") or request.url.netloc
-    if proto == "http" and host.endswith((".hf.space", ".onrender.com", ".streamlit.app")):
-        proto = "https"
-    return f"{proto}://{host.strip('/')}/"
+    """Return the configured public API base URL for absolute local links.
+
+    Host and forwarded-host headers are intentionally ignored here. When no
+    canonical public base URL is configured, same-origin frontend redirects
+    remain relative (for example `/ui/`) instead of being resolved against an
+    attacker-controlled Host value.
+    """
+    configured = os.getenv("NOVA_PUBLIC_BASE_URL", "").strip()
+    if not configured:
+        return ""
+    parsed = urlparse(configured)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return ""
+    return configured.rstrip("/") + "/"

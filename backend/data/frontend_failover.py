@@ -263,7 +263,7 @@ def choose_frontend(frontends: list[dict[str, Any]], preferred: str | None = Non
 
 def absolute_frontend_url(url: str, base_url: str) -> str:
     """Resolve local frontend paths against the current API host."""
-    if url.startswith("/"):
+    if url.startswith("/") and base_url:
         return urljoin(base_url.rstrip("/") + "/", url.lstrip("/"))
     return url
 

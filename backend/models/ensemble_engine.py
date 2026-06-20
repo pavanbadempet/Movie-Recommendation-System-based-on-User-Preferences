@@ -7,12 +7,12 @@ import threading
 import time
 
 import numpy as np
-import pandas as pd
 import torch
 import torch.nn as nn
 
 from backend.events import iter_events
 from backend.learning.adaptive_router_trainer import AdaptiveRouterTrainer
+from backend.models.clifford_recommender import CliffordRecommender
 from backend.models.contextual_router import ContextualRouter
 from backend.models.diffusion_recommender import LatentDiffusionRecommender
 from backend.models.hyperbolic_recommender import HyperbolicRecommender
@@ -33,14 +33,14 @@ MODELS_DIR = Path("models")
 # ---------------------------------------------------------------------------
 # Module-level user event index — built once, avoids full JSONL scan per request
 # ---------------------------------------------------------------------------
-_user_event_index: dict[str, list[tuple[str, int]]] | None = None
+_user_event_index: dict[str, list[tuple[str, int, str, float | None]]] | None = None
 _user_event_index_lock = threading.Lock()
 _user_event_index_built_at: float = 0.0
 _USER_EVENT_INDEX_TTL = 300.0  # rebuild every 5 minutes
 
 
-def _get_user_event_index() -> dict[str, list[tuple[str, int]]]:
-    """Return a cached user→[(event_ts, movie_id)] index, rebuilding every 5 minutes."""
+def _get_user_event_index() -> dict[str, list[tuple[str, int, str, float | None]]]:
+    """Return a cached user→[(event_ts, movie_id, event_type, rating)] index, rebuilding every 5 minutes."""
     global _user_event_index, _user_event_index_built_at
     now = time.time()
     if _user_event_index is not None and (now - _user_event_index_built_at) < _USER_EVENT_INDEX_TTL:
@@ -50,7 +50,7 @@ def _get_user_event_index() -> dict[str, list[tuple[str, int]]]:
         if _user_event_index is not None and (time.time() - _user_event_index_built_at) < _USER_EVENT_INDEX_TTL:
             return _user_event_index
         logger.info("Building user event index from Event Store...")
-        index: dict[str, list[tuple[str, int]]] = defaultdict(list)
+        index = defaultdict(list)
         INTERACTION_TYPES = {"click", "rating", "view"}
         try:
             for event in iter_events():
@@ -68,7 +68,12 @@ def _get_user_event_index() -> dict[str, list[tuple[str, int]]]:
                 except (TypeError, ValueError):
                     continue
                 ts = str(event.get("event_ts") or "")
-                index[str(uid)].append((ts, mid))
+                rating_val = event.get("rating")
+                try:
+                    rating = float(rating_val) if rating_val is not None else None
+                except (TypeError, ValueError):
+                    rating = None
+                index[str(uid)].append((ts, mid, et, rating))
         except Exception as exc:
             logger.warning("Failed to build user event index: %s", exc)
             index = defaultdict(list)
@@ -97,6 +102,7 @@ class ApexEnsembleEngine(nn.Module):
         self._device = device or "cpu"
         self._compiled: dict[str, bool] = {}
         self.has_trained_weights = False
+        self._item_id_to_index: dict[int, int] = {}
         # LRU session cache: OrderedDict gives O(1) move-to-end for recency tracking.
         # Capped at _SESSION_CACHE_MAX entries; oldest entry evicted when full.
         self._session_cache: collections.OrderedDict[str, tuple[float, list[int]]] = collections.OrderedDict()
@@ -124,6 +130,9 @@ class ApexEnsembleEngine(nn.Module):
 
         # 6. LightGCN (Graph Networks)
         self.lightgcn = LightGCN(num_users=max(num_users, 1110), num_items=max(num_items, 12966), embedding_dim=emb_dim)
+
+        # 7. Clifford Geometric Algebra (Multivectors)
+        self.clifford = CliffordRecommender(num_users=max(num_users, 610), num_items=max(num_items, 9724), emb_dim=emb_dim)
 
         # 7. Contextual Router (MoE)
         self.router = ContextualRouter(emb_dim=emb_dim)
@@ -186,13 +195,14 @@ class ApexEnsembleEngine(nn.Module):
     # Ensemble weight loading                                              #
     # ------------------------------------------------------------------ #
 
-    _REQUIRED_WEIGHT_KEYS = ("lightgcn", "quantum", "sasrec", "kan", "hyperbolic", "diffusion")
+    _REQUIRED_WEIGHT_KEYS = ("lightgcn", "quantum", "sasrec", "kan", "hyperbolic", "diffusion", "clifford")
     _DEFAULT_WEIGHTS: dict[str, float] = {
-        "lightgcn": 0.65,
-        "quantum": 0.25,
+        "lightgcn": 0.60,
+        "quantum": 0.20,
         "sasrec": 0.10,
+        "clifford": 0.05,
         "kan": 0.00,
-        "hyperbolic": 0.00,
+        "hyperbolic": 0.05,
         "diffusion": 0.00,
     }
 
@@ -362,6 +372,22 @@ class ApexEnsembleEngine(nn.Module):
             logger.info("Pre-computed item embedding cache: %d items", self.num_items)
         return self._item_emb_cache
 
+    def get_item_embedding(self, movie_id: int) -> torch.Tensor | None:
+        """Return the exact serving embedding for a catalog movie ID."""
+        try:
+            item_index = self._item_id_to_index.get(int(movie_id))
+        except (TypeError, ValueError):
+            return None
+        if item_index is None:
+            return None
+
+        weight = self.lightgcn.item_embedding.weight
+        if item_index < 0 or item_index >= weight.shape[0]:
+            return None
+        with torch.no_grad():
+            index = torch.tensor([item_index], dtype=torch.long, device=weight.device)
+            return self.lightgcn.item_embedding(index).detach().clone()
+
     def _inject_pyspark_priors(self):
         """Loads real PySpark ALS embeddings from the Delta Lake if available."""
         user_emb_path = GOLD_DIR / "model_user_embeddings"
@@ -389,6 +415,9 @@ class ApexEnsembleEngine(nn.Module):
 
                 users_df = load_embeddings_by_dim(user_emb_path, self.emb_dim)
                 items_df = load_embeddings_by_dim(item_emb_path, self.emb_dim)
+                self._item_id_to_index = {
+                    int(movie_id): index for index, movie_id in enumerate(items_df["id"].to_list())
+                }
 
                 user_tensor = torch.tensor(np.vstack(users_df["features"].to_list()), dtype=torch.float32)
                 item_tensor = torch.tensor(np.vstack(items_df["features"].to_list()), dtype=torch.float32)
@@ -435,6 +464,7 @@ class ApexEnsembleEngine(nn.Module):
             "hyperbolic": MODELS_DIR / "hyperbolic.pth",
             "kan": MODELS_DIR / "kan_ranker.pth",
             "sasrec": MODELS_DIR / "sasrec.pth",
+            "clifford": MODELS_DIR / "clifford.pth",
             # Prefer IPS-debiased weights when available; fall back to standard weights
             "lightgcn": MODELS_DIR / "lightgcn_ips.pth"
             if (MODELS_DIR / "lightgcn_ips.pth").exists()
@@ -527,7 +557,7 @@ class ApexEnsembleEngine(nn.Module):
             if not recent:
                 return torch.zeros((1, SEQ_LEN), dtype=torch.long)
 
-            safe_ids = [item_id % self.num_items for _, item_id in recent]
+            safe_ids = [x[1] % self.num_items for x in recent]
 
             # Cache the result with proper LRU eviction
             with self._session_cache_lock:
@@ -646,6 +676,7 @@ class ApexEnsembleEngine(nn.Module):
                 "lightgcn": 0.00,
                 "sasrec": 0.00,
                 "kan": 0.00,
+                "clifford": 0.00,
             }
         else:
             with self._weights_lock:
@@ -717,6 +748,9 @@ class ApexEnsembleEngine(nn.Module):
         except Exception:
             scores_list.append(("diffusion", _np.full(len(safe_item_ids), 0.5)))
 
+        # Clifford via ONNX (fallback since ONNX isn't exported yet)
+        scores_list.append(("clifford", _np.full(len(safe_item_ids), 0.5)))
+
         # Blend
         key_map = {
             "lightgcn": "lightgcn",
@@ -725,6 +759,7 @@ class ApexEnsembleEngine(nn.Module):
             "kan": "kan",
             "hyperbolic": "hyperbolic",
             "diffusion": "diffusion",
+            "clifford": "clifford",
         }
         final = _np.zeros(len(safe_item_ids), dtype=_np.float32)
         for name, s in scores_list:
@@ -852,6 +887,11 @@ class ApexEnsembleEngine(nn.Module):
             with torch.no_grad():
                 return _norm((lgcn_u_emb * lgcn_i_emb).sum(dim=1))
 
+        def score_clifford():
+            with torch.no_grad():
+                s = self.clifford.predict(u_tensor, i_tensor).squeeze()
+                return _norm(s.unsqueeze(0) if s.dim() == 0 else s)
+
         scores = {}
         try:
             from concurrent.futures import as_completed
@@ -863,6 +903,7 @@ class ApexEnsembleEngine(nn.Module):
                 "diffusion": score_diffusion,
                 "sasrec": score_sasrec,
                 "lightgcn": score_lightgcn,
+                "clifford": score_clifford,
             }
 
             # Run contextual router (Mixture of Experts) to determine active models
@@ -912,6 +953,7 @@ class ApexEnsembleEngine(nn.Module):
                     "lightgcn": 0.00,
                     "sasrec": 0.00,
                     "kan": 0.00,
+                    "clifford": 0.00,
                 }
             elif selected_models is not None and routing_weights is not None:
                 # Use normalized routing weights from router
@@ -925,7 +967,25 @@ class ApexEnsembleEngine(nn.Module):
                 try:
                     from backend.models.neural_weight_optimizer import get_contextual_weights
 
-                    contextual_w = get_contextual_weights({})
+                    # Build real behavior profile from event index cache
+                    events = _get_user_event_index().get(str(safe_user_id), [])
+                    total_ratings = sum(1 for e in events if e[2] == "rating")
+                    ratings_list = [float(e[3]) for e in events if e[2] == "rating" and e[3] is not None]
+                    avg_rating = sum(ratings_list) / len(ratings_list) if ratings_list else 3.5
+                    click_count = sum(1 for e in events if e[2] == "click")
+                    view_count = sum(1 for e in events if e[2] == "view")
+
+                    profile = {
+                        "total_ratings": total_ratings,
+                        "avg_rating": avg_rating,
+                        "click_count": click_count,
+                        "view_count": view_count,
+                    }
+
+                    contextual_w = get_contextual_weights(
+                        behavior_profile=profile,
+                        als_user_embedding=base_u_emb.cpu().numpy() if base_u_emb is not None else None,
+                    )
                     if contextual_w:
                         w = contextual_w
                 except Exception as exc:
@@ -995,9 +1055,26 @@ class ApexEnsembleEngine(nn.Module):
                 logger.debug("Uncertainty gating failed; skipping: %s", exc)
                 confidence_gate = torch.ones(len(safe_item_ids), device=self._device)
 
-            final_scores = torch.zeros(len(safe_item_ids), device=self._device)
-            for m in active_names:
-                final_scores += results[m] * w.get(m, 0.0)
+            blend_mode = os.getenv("APEX_ENSEMBLE_BLEND_MODE", "linear").lower()
+            if blend_mode == "geometric":
+                # Normalize active weights to sum to 1
+                active_weights = torch.tensor([w.get(m, 0.0) for m in active_names], device=self._device)
+                w_sum = active_weights.sum()
+                if w_sum > 1e-8:
+                    active_weights = active_weights / w_sum
+                else:
+                    active_weights = torch.ones_like(active_weights) / len(active_names)
+
+                log_scores = torch.zeros(len(safe_item_ids), device=self._device)
+                eps = 1e-6
+                for idx, m in enumerate(active_names):
+                    log_scores += active_weights[idx] * torch.log(results[m] + eps)
+                final_scores = torch.exp(log_scores)
+            else:
+                final_scores = torch.zeros(len(safe_item_ids), device=self._device)
+                for m in active_names:
+                    final_scores += results[m] * w.get(m, 0.0)
+
             final_scores = final_scores * confidence_gate  # Apply uncertainty gate
 
             for idx, original_item_id in enumerate(candidate_item_ids):

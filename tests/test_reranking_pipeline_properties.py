@@ -15,7 +15,7 @@ def _ranked_item_strategy():
         RankedItem,
         movie_id=st.integers(min_value=0, max_value=100000),
         retrieval_score=st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False),
-        retrieval_source=st.sampled_from(["faiss", "turbovec", "tfidf", "knowledge_graph", "hybrid"]),
+        retrieval_source=st.sampled_from(["turbovec", "tfidf", "knowledge_graph", "hybrid"]),
         ensemble_score=st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False),
         ranker_score=st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False),
         final_rank=st.integers(min_value=1, max_value=1000),
