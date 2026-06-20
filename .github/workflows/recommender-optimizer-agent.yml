@@ -54,7 +54,7 @@ jobs:
         python scripts/run_optimizer_agent.py --hours "$HOURS" $DRY_RUN
 
     - name: Upload Optimization Report Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: recommender-optimization-report
         path: output/optimization_reports/

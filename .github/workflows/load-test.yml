@@ -71,7 +71,7 @@ jobs:
           --out json=load-test-results.json
 
     - name: Upload k6 results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       if: always()
       with:
         name: k6-load-test-results
