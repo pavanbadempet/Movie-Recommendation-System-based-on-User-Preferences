@@ -3035,6 +3035,41 @@ input:focus-visible {
   .dialog-title-row h2 {
     font-size: 1.3rem !important;
   }
+
+  /* Knowledge Graph Mobile overrides */
+  .kg-graph-wrapper {
+    flex-direction: column !important;
+    height: auto !important;
+    min-height: auto !important;
+    gap: 16px !important;
+  }
+  .kg-graph-container {
+    height: 380px !important;
+    min-height: 380px !important;
+  }
+  .kg-side-panel {
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Evaluation page Mobile overrides */
+  .metric-desc span:nth-child(n+2) {
+    display: none !important;
+  }
+  .eval-section {
+    overflow-x: auto !important;
+  }
+
+  /* Service notice mobile overrides */
+  .notice {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    text-align: center !important;
+    gap: 8px !important;
+  }
+  .notice button {
+    align-self: center !important;
+  }
 }
 
 /* Suggestion tags for Search & Discover empty states */
