@@ -85,7 +85,7 @@ async def list_plans() -> list[PlanDefinition]:
             plan_tier="free",
             price_monthly_usd=0,
             daily_request_limit=100,
-            serving_tier="Tier 3 — FAISS + TF-IDF",
+            serving_tier="Tier 3 — TurboVec + TF-IDF",
             support="Community",
         ),
         PlanDefinition(

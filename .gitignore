@@ -39,8 +39,10 @@ backend/data/processed/*.json
 
 # Local runtime state and temporary artifacts
 .hadoop/
-*.sqlite3            # covers nova_db.sqlite3 and any other local DBs
+*.sqlite3
 *.sqlite3-*
+*.db
+*.gpickle
 *.bak
 benchmark_temp.json
 movies_temp.parquet

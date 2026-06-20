@@ -21,6 +21,10 @@ def test_apex_ensemble_initialization():
     # Check Hyperbolic
     assert engine.hyperbolic.user_embedding.weight.shape == (effective_users, 16)
 
+    # Check Clifford
+    assert engine.clifford.user_embedding.weight.shape == (effective_users, 16)
+    assert engine.clifford.item_embedding.weight.shape == (effective_items, 16)
+
     # Check KAN (Requires concat of user+item)
     assert engine.kan is not None
 
@@ -101,3 +105,36 @@ def test_apex_engine_resolves_item_embedding_by_exact_movie_id():
 
     assert torch.equal(engine.get_item_embedding(42), torch.tensor([[1.0, 2.0, 3.0, 4.0]]))
     assert engine.get_item_embedding(999) is None
+
+
+def test_apex_engine_configurable_uncertainty_penalty(monkeypatch):
+    """Verify that APEX_UNCERTAINTY_PENALTY env var alters uncertainty gating behavior without errors."""
+    engine = ApexEnsembleEngine(num_users=100, num_items=100, emb_dim=16)
+    engine.eval()
+
+    # Test high penalty configuration
+    monkeypatch.setenv("APEX_UNCERTAINTY_PENALTY", "0.9")
+    scores_high = engine.predict_ensemble(5, [10, 20])
+
+    # Test zero penalty configuration
+    monkeypatch.setenv("APEX_UNCERTAINTY_PENALTY", "0.0")
+    scores_zero = engine.predict_ensemble(5, [10, 20])
+
+    assert len(scores_high) == 2
+    assert len(scores_zero) == 2
+    for item_id in [10, 20]:
+        assert 0.0 <= scores_high[item_id] <= 1.0
+        assert 0.0 <= scores_zero[item_id] <= 1.0
+
+
+def test_apex_engine_geometric_blend_mode(monkeypatch):
+    """Verify that APEX_ENSEMBLE_BLEND_MODE=geometric computes scores correctly without mathematical collapse."""
+    engine = ApexEnsembleEngine(num_users=100, num_items=100, emb_dim=16)
+    engine.eval()
+
+    monkeypatch.setenv("APEX_ENSEMBLE_BLEND_MODE", "geometric")
+    scores = engine.predict_ensemble(5, [10, 20])
+
+    assert len(scores) == 2
+    for item_id in [10, 20]:
+        assert 0.0 <= scores[item_id] <= 1.0

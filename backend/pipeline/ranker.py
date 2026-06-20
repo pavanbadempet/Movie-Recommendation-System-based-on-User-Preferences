@@ -185,7 +185,7 @@ class NovaRanker:
                     "popularity": movie_rec.get("popularity"),
                     "release_date": movie_rec.get("release_date"),
                     "retrieval_signals": {
-                        "dense": signals.get("dense_score", score if source in ("faiss", "turbovec") else 0.0),
+                        "dense": signals.get("dense_score", score if source == "turbovec" else 0.0),
                         "sparse": signals.get("sparse_score", score if source == "tfidf" else 0.0),
                         "metadata": signals.get("metadata_score", score if source == "knowledge_graph" else 0.0),
                         "behavior": signals.get("behavior_score", score if source == "behavior" else 0.0),

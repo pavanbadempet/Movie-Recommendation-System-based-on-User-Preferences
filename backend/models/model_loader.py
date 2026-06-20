@@ -99,6 +99,14 @@ MODEL_FILES = {
         "dest": "nova_ranker.joblib.metadata.json",
         "required": False,
     },
+    "contextual_weight_net.pth": {
+        "url": os.getenv(
+            "CONTEXTUAL_WEIGHT_NET_URL",
+            "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/contextual_weight_net.pth",
+        ),
+        "dest": "contextual_weight_net.pth",
+        "required": False,
+    },
 }
 
 
@@ -204,10 +212,16 @@ def _load_manifest_contract(models_dir: Path) -> dict[str, object]:
 
     contract = dict(manifest.get("serving_contract") or {})
     quality = manifest.get("quality") or {}
+    # Legacy key compatibility mappings
+    for old_key, new_key in [("faiss_index_size", "turbovec_index_size")]:
+        if old_key in contract and new_key not in contract:
+            contract[new_key] = contract[old_key]
+        if old_key in quality and new_key not in quality:
+            quality[new_key] = quality[old_key]
+
     for key in (
         "movie_rows",
         "embedding_rows",
-        "faiss_index_size",
         "turbovec_index_size",
         "movie_id_map_rows",
         "movie_id_sha256",
@@ -262,7 +276,7 @@ def _manifest_contract_matches(
             return True, None
 
         if filename == "turbovec.tq":
-            expected_rows = manifest_contract.get("turbovec_index_size") or manifest_contract.get("faiss_index_size")
+            expected_rows = manifest_contract.get("turbovec_index_size")
             if expected_rows is None:
                 return True, None
             from turbovec import TurboQuantIndex
@@ -482,6 +496,7 @@ def default_artifacts_for_serving_profile() -> set[str]:
             "pipeline_manifest.json",
             "nova_ranker.joblib",
             "nova_ranker.joblib.metadata.json",
+            "contextual_weight_net.pth",
         }
 
     return set(MODEL_FILES)

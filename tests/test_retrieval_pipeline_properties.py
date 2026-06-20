@@ -56,16 +56,16 @@ def test_retrieval_bounds_guarantee(n):
     # Feature: architecture-design-perfection, Property 1: Retrieval Bounds Guarantee
     """
     n_items = max(n + 10, 20)
-    faiss_idx = _make_mock_turbovec(n_items)
+    turbovec_idx = _make_mock_turbovec(n_items)
     movie_df = _make_mock_movie_df(n_items)
     config = RetrievalConfig(
-        faiss_k=min(n * 2, n_items),
+        turbovec_k=min(n * 2, n_items),
         tfidf_k=0,
         kg_k=0,
         enable_kg=False,
     )
     pipeline = RetrievalPipeline(
-        faiss_index=faiss_idx,
+        turbovec_index=turbovec_idx,
         tfidf_index=None,
         kg_engine=None,
         movie_df=movie_df,
@@ -85,7 +85,7 @@ def test_retrieval_deduplication_invariant(n):
     """
     **Validates: Requirements 1.2**
 
-    When FAISS and TF-IDF sources return overlapping movie_id sets,
+    When TurboVec and TF-IDF sources return overlapping movie_id sets,
     the pipeline must deduplicate so that all movie_id values in the
     result are unique.
     # Feature: architecture-design-perfection, Property 2: Retrieval Deduplication Invariant
@@ -107,7 +107,7 @@ def test_retrieval_deduplication_invariant(n):
         }
     )
 
-    # Mock FAISS index that always returns the SAME first min(n, n_items) indices
+    # Mock TurboVec index that always returns the SAME first min(n, n_items) indices
     # — guarantees overlap with TF-IDF which also returns the same indices.
     class OverlappingTurboVecIndex:
         def __init__(self, total):
@@ -123,7 +123,7 @@ def test_retrieval_deduplication_invariant(n):
             dists = np.ones((1, k), dtype=np.float32)
             return dists, idxs
 
-    faiss_idx = OverlappingTurboVecIndex(n_items)
+    turbovec_idx = OverlappingTurboVecIndex(n_items)
 
     # Mock TF-IDF index: a sparse identity-like matrix so cosine similarity
     # returns non-zero scores for the same first n_items rows.
@@ -142,13 +142,13 @@ def test_retrieval_deduplication_invariant(n):
     tfidf_index = (MockVectorizer(), tfidf_matrix)
 
     config = RetrievalConfig(
-        faiss_k=min(n * 2, n_items),
+        turbovec_k=min(n * 2, n_items),
         tfidf_k=min(n * 2, n_items),
         kg_k=0,
         enable_kg=False,
     )
     pipeline = RetrievalPipeline(
-        faiss_index=faiss_idx,
+        turbovec_index=turbovec_idx,
         tfidf_index=tfidf_index,
         kg_engine=None,
         movie_df=movie_df,
@@ -171,13 +171,13 @@ def test_retrieval_source_tagging(n):
 
     # Feature: architecture-design-perfection, Property 3: Retrieval Source Tagging
     """
-    VALID_SOURCES = {"faiss", "turbovec", "tfidf", "knowledge_graph", "hybrid"}
+    VALID_SOURCES = {"turbovec", "tfidf", "knowledge_graph", "hybrid"}
     n_items = max(n + 10, 20)
-    faiss_idx = _make_mock_turbovec(n_items)
+    turbovec_idx = _make_mock_turbovec(n_items)
     movie_df = _make_mock_movie_df(n_items)
-    config = RetrievalConfig(faiss_k=min(n * 2, n_items), tfidf_k=0, kg_k=0, enable_kg=False)
+    config = RetrievalConfig(turbovec_k=min(n * 2, n_items), tfidf_k=0, kg_k=0, enable_kg=False)
     pipeline = RetrievalPipeline(
-        faiss_index=faiss_idx,
+        turbovec_index=turbovec_idx,
         tfidf_index=None,
         kg_engine=None,
         movie_df=movie_df,

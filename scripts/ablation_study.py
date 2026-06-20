@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Model names that participate in the ablation
 # ---------------------------------------------------------------------------
-ABLATION_MODELS = ("lightgcn", "quantum", "sasrec", "kan", "hyperbolic", "diffusion")
+ABLATION_MODELS = ("lightgcn", "quantum", "sasrec", "kan", "hyperbolic", "diffusion", "clifford")
 
 
 # ---------------------------------------------------------------------------
@@ -125,10 +125,10 @@ def _ndcg_at_10(rank: int | None) -> float:
 
 
 def _build_synthetic_eval_data(sample_size: int, num_items: int = 10_000) -> list[dict[str, Any]]:
-    """Generate synthetic (user_id, test_item_id) pairs for evaluation.
+    """Generate synthetic (user_id, seed_item_id, test_item_id) pairs for evaluation.
 
     Used when the event store contains no interaction data.  Each synthetic
-    user is assigned a random test item drawn uniformly from [1, num_items].
+    user is assigned a random seed item and a different test item.
 
     Parameters
     ----------
@@ -139,16 +139,22 @@ def _build_synthetic_eval_data(sample_size: int, num_items: int = 10_000) -> lis
 
     Returns
     -------
-    list of dicts with keys ``user_id`` (int) and ``test_item_id`` (int).
+    list of dicts with keys ``user_id`` (int), ``seed_item_id`` (int), and ``test_item_id`` (int).
     """
     rng = random.Random(42)
-    return [
-        {
+    eval_data = []
+    for i in range(sample_size):
+        seed_item = rng.randint(1, num_items)
+        test_item = rng.randint(1, num_items)
+        while test_item == seed_item:
+            test_item = rng.randint(1, num_items)
+        eval_data.append({
             "user_id": i,
-            "test_item_id": rng.randint(1, num_items),
-        }
-        for i in range(sample_size)
-    ]
+            "seed_item_id": seed_item,
+            "test_item_id": test_item,
+        })
+    return eval_data
+
 
 
 # ---------------------------------------------------------------------------
@@ -157,10 +163,11 @@ def _build_synthetic_eval_data(sample_size: int, num_items: int = 10_000) -> lis
 
 
 def _sample_eval_data_from_events(sample_size: int) -> list[dict[str, Any]]:
-    """Sample up to *sample_size* (user_id, test_item_id) pairs from the event store.
+    """Sample up to *sample_size* (user_id, seed_item_id, test_item_id) pairs from the event store.
 
     Reads all interaction events (click / rating / view), groups by user, and
-    for each user uses the most-recent interaction as the held-out test item.
+    for each user with >= 2 interactions uses the second-most-recent as seed and
+    the most-recent interaction as the held-out test item.
     Returns an empty list when the event store is unavailable or empty.
 
     Parameters
@@ -170,7 +177,7 @@ def _sample_eval_data_from_events(sample_size: int) -> list[dict[str, Any]]:
 
     Returns
     -------
-    list of dicts with keys ``user_id`` and ``test_item_id``.
+    list of dicts with keys ``user_id``, ``seed_item_id``, and ``test_item_id``.
     """
     try:
         from backend.events import iter_events
@@ -209,15 +216,26 @@ def _sample_eval_data_from_events(sample_size: int) -> list[dict[str, Any]]:
     if not user_interactions:
         return []
 
-    # For each user, pick the most-recent interaction as the test item
+    # For each user with >= 2 interactions, pick the second-most-recent as seed and most-recent as test
     eval_data: list[dict[str, Any]] = []
     for uid_str, interactions in user_interactions.items():
         interactions.sort(key=lambda x: x[0])  # sort ascending by timestamp
-        _, test_item_id = interactions[-1]
+        if len(interactions) < 2:
+            continue
+        seed_item_id = interactions[-2][1]
+        test_item_id = interactions[-1][1]
         try:
-            eval_data.append({"user_id": int(uid_str), "test_item_id": test_item_id})
+            eval_data.append({
+                "user_id": int(uid_str),
+                "seed_item_id": seed_item_id,
+                "test_item_id": test_item_id,
+            })
         except ValueError:
-            eval_data.append({"user_id": uid_str, "test_item_id": test_item_id})
+            eval_data.append({
+                "user_id": uid_str,
+                "seed_item_id": seed_item_id,
+                "test_item_id": test_item_id,
+            })
 
     # Shuffle deterministically and cap at sample_size
     rng = random.Random(42)
@@ -236,9 +254,8 @@ def _evaluate_ndcg(
 ) -> float:
     """Compute mean NDCG@10 over *eval_data* using *recommender*.
 
-    For each (user_id, test_item_id) pair, calls
-    ``recommender.recommend_by_id(test_item_id, n=10)`` and checks whether
-    ``test_item_id`` appears in the top-10 results.
+    For each pair, calls ``recommender.recommend_by_id(seed_item_id, n=10)``
+    and checks whether ``test_item_id`` appears in the top-10 results.
 
     Parameters
     ----------
@@ -246,7 +263,7 @@ def _evaluate_ndcg(
         A loaded ``Recommender`` instance (or any object with a
         ``recommend_by_id(movie_id, n)`` method).
     eval_data:
-        List of dicts with ``user_id`` and ``test_item_id`` keys.
+        List of dicts with ``user_id``, ``seed_item_id``, and ``test_item_id`` keys.
 
     Returns
     -------
@@ -259,11 +276,13 @@ def _evaluate_ndcg(
     ndcg_scores: list[float] = []
 
     for i, sample in enumerate(eval_data):
+        seed_item_id = sample.get("seed_item_id")
         test_item_id = sample["test_item_id"]
+        query_item_id = seed_item_id if seed_item_id is not None else test_item_id
         try:
-            recs = recommender.recommend_by_id(int(test_item_id), n=10)
+            recs = recommender.recommend_by_id(int(query_item_id), n=10)
         except Exception as exc:
-            logger.debug("recommend_by_id failed for test_item=%s: %s", test_item_id, exc)
+            logger.debug("recommend_by_id failed for test_item=%s: %s", query_item_id, exc)
             ndcg_scores.append(0.0)
             continue
 
@@ -370,6 +389,8 @@ class AblationStudy:
         Mean NDCG@10 over the evaluation dataset.
         """
         logger.info("Running full-ensemble evaluation (all 6 models active) …")
+        if hasattr(self.recommender, "_rec_cache"):
+            self.recommender._rec_cache.clear()
         ndcg = _evaluate_ndcg(self.recommender, self._get_eval_data())
         logger.info("Full-ensemble NDCG@10 = %.4f", ndcg)
         return ndcg
@@ -455,6 +476,8 @@ class AblationStudy:
         # Run evaluation with the modified ensemble
         ndcg: float | None
         try:
+            if hasattr(self.recommender, "_rec_cache"):
+                self.recommender._rec_cache.clear()
             ndcg = _evaluate_ndcg(self.recommender, self._get_eval_data())
             logger.info("Leave-one-out NDCG@10 without '%s' = %.4f", model_name, ndcg)
         except Exception as exc:
@@ -642,6 +665,17 @@ def main() -> None:
 
         recommender = get_recommender()
         logger.info("Recommender loaded successfully.")
+
+        # Monkey-patch get_contextual_weights to prevent weights from being overridden during leave-one-out runs
+        try:
+            import backend.models.neural_weight_optimizer
+            from backend.models.ensemble_engine import get_apex_engine
+            engine = get_apex_engine()
+            if engine is not None:
+                backend.models.neural_weight_optimizer.get_contextual_weights = lambda behavior_profile, als_user_embedding=None: engine._weights
+                logger.info("Successfully monkey-patched get_contextual_weights to respect in-memory weight changes.")
+        except Exception as e:
+            logger.warning("Could not monkey-patch get_contextual_weights: %s", e)
     except Exception as exc:
         logger.error("Failed to load recommender: %s", exc)
         logger.warning("Proceeding with a stub recommender — results will reflect synthetic evaluation data only.")

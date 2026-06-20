@@ -5,13 +5,13 @@ Public API surface for the APEX recommendation engine.
 
 Pipeline architecture (3-stage):
     RetrievalPipeline  → RankingPipeline  → RerankingPipeline
-    (FAISS+TF-IDF+KG)    (6-model ensemble)  (MMR+RL+LLM)
+    (TurboVec+TF-IDF+KG)    (6-model ensemble)  (MMR+RL+LLM)
 
 Shared data types flow between stages via pipeline_types:
     CandidateItem → RankedItem → FinalItem
 
 Serving tier auto-detection:
-    TierDetector resolves Tier1 (GPU) / Tier2 (ONNX CPU) / Tier3 (FAISS lite)
+    TierDetector resolves Tier1 (GPU) / Tier2 (ONNX CPU) / Tier3 (TurboVec lite)
     at startup based on available hardware.
 
 Ensemble models (6):

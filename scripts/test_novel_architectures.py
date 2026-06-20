@@ -20,6 +20,7 @@ import torch.nn.functional as F
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
+from backend.models.clifford_recommender import CliffordRecommender
 from backend.models.hyperbolic_recommender import HyperbolicRecommender
 from backend.models.kan_ranker import KANRanker
 from backend.models.lightgcn import LightGCN
@@ -135,6 +136,29 @@ def test_lightgcn():
     logger.info(f"LightGCN Success. BPR Loss: {loss.item():.4f}")
 
 
+def test_clifford_recommender():
+    logger.info("--- Testing Clifford Geometric Algebra Recommender ---")
+    batch_size = 64
+    num_users = 1000
+    num_items = 1000
+
+    users = torch.randint(0, num_users, (batch_size,))
+    pos_items = torch.randint(0, num_items, (batch_size,))
+    neg_items = torch.randint(0, num_items, (batch_size,))
+
+    model = CliffordRecommender(num_users=num_users, num_items=num_items, emb_dim=32)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+
+    # Forward Pass (Margin Loss)
+    loss = model(users, pos_items, neg_items)
+
+    # Backward Pass (testing gradient flow)
+    loss.backward()
+    optimizer.step()
+
+    logger.info(f"Clifford Recommender Success. Margin Loss: {loss.item():.4f}")
+
+
 if __name__ == "__main__":
     logger.info("Starting Master Test Harness for Novel Architectures...")
     try:
@@ -142,6 +166,7 @@ if __name__ == "__main__":
         test_hyperbolic_recommender()
         test_sasrec()
         test_lightgcn()
+        test_clifford_recommender()
         logger.info("ALL TESTS PASSED: Architecture is mathematically sound and stable.")
     except Exception as e:
         logger.error(f"TEST FAILED: {e}")

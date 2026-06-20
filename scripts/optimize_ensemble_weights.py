@@ -40,14 +40,15 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 MODELS_DIR = _REPO_ROOT / "models"
-WEIGHT_KEYS = ("lightgcn", "quantum", "sasrec", "kan", "hyperbolic", "diffusion")
+WEIGHT_KEYS = ("lightgcn", "quantum", "sasrec", "kan", "hyperbolic", "diffusion", "clifford")
 
 _DEFAULT_WEIGHTS: dict[str, float] = {
-    "lightgcn": 0.65,
-    "quantum": 0.25,
+    "lightgcn": 0.60,
+    "quantum": 0.20,
     "sasrec": 0.10,
+    "clifford": 0.05,
     "kan": 0.00,
-    "hyperbolic": 0.00,
+    "hyperbolic": 0.05,
     "diffusion": 0.00,
 }
 
@@ -210,6 +211,12 @@ def _precompute_per_model_scores(
                     ss = ss.unsqueeze(0)
                 sar_s = ss.numpy()
 
+                # Clifford
+                cliffs = engine.clifford.predict(u_t, i_t).squeeze()
+                if cliffs.dim() == 0:
+                    cliffs = cliffs.unsqueeze(0)
+                cliff_s = cliffs.numpy()
+
             def _norm(arr):
                 mn, mx = arr.min(), arr.max()
                 if mx - mn < 1e-6:
@@ -217,8 +224,8 @@ def _precompute_per_model_scores(
                 return (arr - mn) / (mx - mn)
 
             scores_matrix = np.stack(
-                [_norm(lgcn_s), _norm(q_s), _norm(sar_s), _norm(k_s), _norm(h_s), _norm(d_s)], axis=1
-            )  # [N_items, 6]
+                [_norm(lgcn_s), _norm(q_s), _norm(sar_s), _norm(k_s), _norm(h_s), _norm(d_s), _norm(cliff_s)], axis=1
+            )  # [N_items, 7]
 
             per_model_scores[user_id] = {
                 orig_id: scores_matrix[idx].tolist() for idx, orig_id in enumerate(candidate_ids)
@@ -263,8 +270,16 @@ def run_dirichlet_grid_search(
     k: int = 10,
     output_path: Path = Path("models/ensemble_weights.json"),
     engine: ApexEnsembleEngine | None = None,
+    dirichlet_alpha: float | None = None,
 ) -> dict[str, float]:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s — %(message)s")
+
+    import os
+    if dirichlet_alpha is None:
+        try:
+            dirichlet_alpha = float(os.getenv("APEX_DIRICHLET_ALPHA", "1.0"))
+        except ValueError:
+            dirichlet_alpha = 1.0
 
     logger.info("Loading interaction data from Event Store …")
     user_events = _load_interaction_data()
@@ -305,11 +320,11 @@ def run_dirichlet_grid_search(
         logger.warning("No per-model scores computed; returning defaults.")
         return dict(_DEFAULT_WEIGHTS)
 
-    logger.info("Starting Dirichlet grid-search with %d candidates …", num_candidates)
+    logger.info("Starting Dirichlet grid-search with %d candidates (alpha=%.2f) …", num_candidates, dirichlet_alpha)
     results: list[tuple[float, float, np.ndarray]] = []
 
     for i in range(num_candidates):
-        wv = np.random.dirichlet([1.0] * len(WEIGHT_KEYS))
+        wv = np.random.dirichlet([dirichlet_alpha] * len(WEIGHT_KEYS))
         ndcg, hit_rate = _evaluate_weights_fast(wv, per_model_scores, val_ground_truth, k)
         results.append((ndcg, hit_rate, wv))
         if (i + 1) % 100 == 0:
@@ -365,6 +380,7 @@ def _parse_args(argv=None):
     parser.add_argument("--num-candidates", type=int, default=500)
     parser.add_argument("--k", type=int, default=10)
     parser.add_argument("--output-path", type=Path, default=MODELS_DIR / "ensemble_weights.json")
+    parser.add_argument("--dirichlet-alpha", type=float, default=None, help="Dirichlet concentration parameter (alpha)")
     return parser.parse_args(argv)
 
 
@@ -374,5 +390,6 @@ if __name__ == "__main__":
         num_candidates=args.num_candidates,
         k=args.k,
         output_path=args.output_path,
+        dirichlet_alpha=args.dirichlet_alpha,
     )
     print("\nReturned weights:", best, flush=True)

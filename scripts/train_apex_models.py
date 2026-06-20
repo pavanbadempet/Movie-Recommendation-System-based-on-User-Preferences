@@ -406,6 +406,65 @@ def train_hyperbolic(data: dict):
 
 
 # ============================================================
+# 4.5. Clifford Geometric Algebra Training
+# ============================================================
+
+
+def train_clifford(data: dict):
+    """Train Clifford Geometric Algebra model."""
+    from backend.models.clifford_recommender import CliffordRecommender
+
+    logger.info("=" * 50)
+    logger.info("Training Clifford Geometric Algebra Model")
+    logger.info("=" * 50)
+
+    num_users = data["num_users"]
+    num_items = data["num_items"]
+    emb_dim = 16
+
+    model = CliffordRecommender(num_users=num_users, num_items=num_items, emb_dim=emb_dim)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+
+    train = data["train_df"]
+    user_indices = train["user_idx"].values
+    pos_indices = train["item_idx"].values
+
+    num_epochs = 20
+    batch_size = 512
+
+    for epoch in range(num_epochs):
+        model.train()
+        total_loss = 0
+        perm = np.random.permutation(len(user_indices))
+
+        for start in range(0, len(perm), batch_size):
+            batch_idx = perm[start : start + batch_size]
+            users = torch.LongTensor(user_indices[batch_idx])
+            pos_items = torch.LongTensor(pos_indices[batch_idx])
+
+            neg_items_list = [sample_negatives(u, num_items, data["user_interactions"])[0] for u in users.numpy()]
+            neg_items = torch.LongTensor(neg_items_list)
+
+            loss = model(users, pos_items, neg_items)
+
+            optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            optimizer.step()
+            total_loss += loss.item()
+
+        num_batches = max(1, len(perm) // batch_size)
+        avg_loss = total_loss / num_batches
+        if (epoch + 1) % 5 == 0 or epoch == 0:
+            logger.info(f"  Epoch {epoch + 1:3d}/{num_epochs} | Loss: {avg_loss:.4f}")
+
+    path = MODELS_DIR / "clifford.pth"
+    torch.save(model.state_dict(), path)
+    logger.info(f"  Saved: {path}")
+    return avg_loss
+
+
+# ============================================================
 # 5. KAN Ranker Training
 # ============================================================
 
@@ -511,7 +570,7 @@ def train_kan(data: dict):
 
 def main():
     logger.info("=" * 60)
-    logger.info("PHASE 4: Training All 5 Neural Ensemble Models")
+    logger.info("PHASE 4: Training All 6 Neural Ensemble Models")
     logger.info("=" * 60)
 
     # Initialize MLflow tracking
@@ -544,6 +603,10 @@ def main():
         results["hyperbolic"] = train_hyperbolic(data)
         mlflow.log_metric("hyperbolic_loss", results["hyperbolic"])
 
+        # 4.5. Clifford Geometric Algebra
+        results["clifford"] = train_clifford(data)
+        mlflow.log_metric("clifford_loss", results["clifford"])
+
         # 5. KAN Ranker
         results["kan"] = train_kan(data)
         mlflow.log_metric("kan_loss", results["kan"])
@@ -552,7 +615,7 @@ def main():
         mlflow.log_metric("total_training_time_sec", elapsed)
 
         logger.info("=" * 60)
-        logger.info("PHASE 4 COMPLETE — All 5 Models Trained")
+        logger.info("PHASE 4 COMPLETE — All 6 Models Trained")
         logger.info(f"  Total time: {elapsed:.0f}s ({elapsed / 60:.1f} min)")
         for name, loss in results.items():
             path = MODELS_DIR / f"{name}.pth" if name != "kan" else MODELS_DIR / "kan_ranker.pth"

@@ -34,7 +34,7 @@ def serving_lineage(rec) -> dict:
         "vector_artifacts_ready": artifact_status.get("vector_artifacts_ready"),
         "movie_count": artifact_status.get("movie_count"),
         "vector_count": artifact_status.get("vector_count"),
-        "faiss_index_count": artifact_status.get("faiss_index_count"),
+        "turbovec_index_count": artifact_status.get("turbovec_index_count") or artifact_status.get("faiss_index_count"),
         "ranker_available": ranker is not None,
         "ranker_training_mode": ranker_metadata.get("training_mode"),
         "ranker_promoted_at": ranker_metadata.get("promoted_at"),

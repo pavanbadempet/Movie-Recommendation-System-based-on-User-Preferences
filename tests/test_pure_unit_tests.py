@@ -261,8 +261,8 @@ class TestPipelineLogic:
     def test_candidate_combination(self):
         """Test combining candidates from multiple sources."""
         source_a = [
-            {"id": 1, "source": "faiss"},
-            {"id": 2, "source": "faiss"}
+            {"id": 1, "source": "turbovec"},
+            {"id": 2, "source": "turbovec"}
         ]
         
         source_b = [

@@ -13,7 +13,7 @@ HOW IT WORKS:
 2. We condition the Diffusion model on the User's Historical Vector.
 3. The model "denoises" the static, step-by-step, hallucinating the mathematically "perfect"
    item embedding that the user would want to watch right now.
-4. We take this generated embedding, pass it to FAISS, and find the nearest REAL movie in the catalog.
+4. We take this generated embedding, pass it to TurboVec, and find the nearest REAL movie in the catalog.
 
 This completely bypasses the Softmax bottleneck and candidate ranking entirely.
 It is Generative Retrieval.
@@ -155,13 +155,14 @@ class LatentDiffusionRecommender(nn.Module):
         # x is now the mathematically perfect, hallucinated movie embedding
         return x
 
-    def retrieve_candidates(self, user_emb, faiss_index, top_k=10):
+    def retrieve_candidates(self, user_emb, vector_index=None, top_k=10, **kwargs):
         """
-        Pass the hallucinated embedding into FAISS to find the closest REAL movies.
+        Pass the hallucinated embedding into TurboVec to find the closest REAL movies.
         """
+        idx = vector_index if vector_index is not None else kwargs.get("faiss_index")
         ideal_emb = self.generate_ideal_embedding(user_emb)
         ideal_emb_np = ideal_emb.cpu().numpy()
 
         # Find the real movies that best match this hallucinated dream movie
-        distances, indices = faiss_index.search(ideal_emb_np, top_k)
+        distances, indices = idx.search(ideal_emb_np, top_k)
         return indices, distances

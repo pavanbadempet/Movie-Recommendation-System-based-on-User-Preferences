@@ -35,7 +35,7 @@ class CandidateItem:
         Higher is more relevant.
     retrieval_source:
         Which retrieval mechanism produced this candidate.
-        One of ``"faiss"``, ``"tfidf"``, ``"knowledge_graph"``, or
+        One of ``"turbovec"``, ``"tfidf"``, ``"knowledge_graph"``, or
         ``"hybrid"`` (when scores from multiple sources are merged).
     metadata:
         Arbitrary key/value pairs forwarded from the retrieval source
@@ -44,7 +44,7 @@ class CandidateItem:
 
     movie_id: int
     retrieval_score: float
-    retrieval_source: Literal["faiss", "turbovec", "tfidf", "knowledge_graph", "hybrid"]
+    retrieval_source: Literal["turbovec", "tfidf", "knowledge_graph", "hybrid"]
     metadata: dict = field(default_factory=dict)
 
 

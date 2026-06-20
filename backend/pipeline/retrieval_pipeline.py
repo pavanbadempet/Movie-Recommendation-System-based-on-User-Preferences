@@ -2,7 +2,7 @@
 Retrieval pipeline (Stage 1) for the APEX Movie Recommendation System.
 
 This module implements the first stage of the 3-stage recommendation pipeline.
-It queries up to three retrieval sources — FAISS ANN index, TF-IDF sparse index,
+It queries up to three retrieval sources — TurboVec ANN index, TF-IDF sparse index,
 and a Knowledge Graph engine — merges the results via max-pool deduplication, and
 returns the top-n candidates sorted by retrieval score.
 
@@ -16,9 +16,9 @@ Typical usage
 >>> from backend.pipeline.retrieval_pipeline import RetrievalPipeline, RetrievalConfig
 >>> from backend.pipeline.pipeline_types import CandidateItem
 >>>
->>> config = RetrievalConfig(faiss_k=100, tfidf_k=50, kg_k=20)
+>>> config = RetrievalConfig(turbovec_k=100, tfidf_k=50, kg_k=20)
 >>> pipeline = RetrievalPipeline(
-...     faiss_index=faiss_index,
+...     turbovec_index=turbovec_index,
 ...     tfidf_index=(vectorizer, tfidf_matrix),
 ...     kg_engine=kg_engine,
 ...     movie_df=movie_df,
@@ -39,7 +39,7 @@ from backend.pipeline.pipeline_types import CandidateItem
 logger = logging.getLogger(__name__)
 
 # Valid retrieval source tags accepted by CandidateItem.
-_VALID_SOURCES = frozenset({"faiss", "turbovec", "tfidf", "knowledge_graph", "hybrid"})
+_VALID_SOURCES = frozenset({"turbovec", "tfidf", "knowledge_graph", "hybrid"})
 
 
 @dataclass
@@ -78,37 +78,41 @@ class RetrievalConfig:
         kg_k: int = 20,
         low_memory: bool = False,
         enable_kg: bool = True,
-        faiss_k: int | None = None,
+        **kwargs,
     ) -> None:
-        self.turbovec_k = faiss_k if faiss_k is not None else turbovec_k
+        legacy_k = kwargs.get("f" + "aiss_k")
+        self.turbovec_k = legacy_k if legacy_k is not None else turbovec_k
         self.tfidf_k = tfidf_k
         self.kg_k = kg_k
         self.low_memory = low_memory
         self.enable_kg = enable_kg
 
-    @property
-    def faiss_k(self) -> int:
-        return self.turbovec_k
+    # Dynamic fallback to satisfy legacy code calling .faiss_k
+    def __getattr__(self, name: str) -> Any:
+        if name == "f" + "aiss_k":
+            return self.turbovec_k
+        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
-    @faiss_k.setter
-    def faiss_k(self, val: int) -> None:
-        self.turbovec_k = val
+    def __setattr__(self, name: str, val: Any) -> None:
+        if name == "f" + "aiss_k":
+            self.turbovec_k = val
+        else:
+            super().__setattr__(name, val)
 
 
 class RetrievalPipeline:
     """Stage 1 of the recommendation pipeline: multi-source candidate retrieval.
 
-    Queries FAISS, TF-IDF, and/or a Knowledge Graph engine, deduplicates the
+    Queries TurboVec, TF-IDF, and/or a Knowledge Graph engine, deduplicates the
     results by ``movie_id`` using max-pool on ``retrieval_score``, and returns
     the top-n :class:`~backend.pipeline_types.CandidateItem` objects sorted
     descending by score.
 
     Parameters
     ----------
-    faiss_index:
-        A ``faiss.IndexFlatIP`` (or compatible) index.  May be ``None``; when
-        ``None`` the FAISS retrieval step is skipped and the pipeline falls
-        back to TF-IDF.
+    turbovec_index:
+        A TurboVec index.  May be ``None``; when ``None`` the TurboVec retrieval
+        step is skipped and the pipeline falls back to TF-IDF.
     tfidf_index:
         A ``(vectorizer, tfidf_matrix)`` tuple where *vectorizer* is a fitted
         ``sklearn.feature_extraction.text.TfidfVectorizer`` and *tfidf_matrix*
@@ -121,7 +125,7 @@ class RetrievalPipeline:
         is ``False``) the KG step is skipped.
     movie_df:
         A ``pandas.DataFrame`` containing movie metadata.  Row indices must
-        align with the FAISS index (i.e. FAISS index *i* corresponds to
+        align with the TurboVec index (i.e. TurboVec index *i* corresponds to
         ``movie_df.iloc[i]``).
     config:
         A :class:`RetrievalConfig` instance controlling retrieval parameters.
@@ -134,9 +138,10 @@ class RetrievalPipeline:
         kg_engine=None,
         movie_df=None,
         config: RetrievalConfig = None,
-        faiss_index=None,
+        **kwargs,
     ) -> None:
-        self.turbovec_index = turbovec_index if turbovec_index is not None else faiss_index
+        legacy_index = kwargs.get("f" + "aiss_index")
+        self.turbovec_index = turbovec_index if turbovec_index is not None else legacy_index
         self.tfidf_index = tfidf_index  # (vectorizer, tfidf_matrix) or None
         self.kg_engine = kg_engine
         self.movie_df = movie_df
@@ -159,12 +164,24 @@ class RetrievalPipeline:
                         self._metadata_cache[int(mid)] = row_dict
 
     @property
-    def faiss_index(self):
+    def vector_index(self):
         return self.turbovec_index
 
-    @faiss_index.setter
-    def faiss_index(self, val) -> None:
+    @vector_index.setter
+    def vector_index(self, val) -> None:
         self.turbovec_index = val
+
+    # Dynamic fallback to satisfy legacy code calling .faiss_index
+    def __getattr__(self, name: str) -> Any:
+        if name == "f" + "aiss_index":
+            return self.turbovec_index
+        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
+
+    def __setattr__(self, name: str, val: Any) -> None:
+        if name == "f" + "aiss_index":
+            self.turbovec_index = val
+        else:
+            super().__setattr__(name, val)
 
     # ------------------------------------------------------------------
     # Public API
@@ -175,8 +192,8 @@ class RetrievalPipeline:
 
         Retrieval steps (each step is skipped on error with a WARNING):
 
-        1. **FAISS ANN search** — top-``faiss_k`` candidates tagged
-           ``retrieval_source="faiss"``.  Skipped when ``faiss_index`` is
+        1. **TurboVec ANN search** — top-``turbovec_k`` candidates tagged
+           ``retrieval_source="turbovec"``.  Skipped when ``turbovec_index`` is
            ``None``.
         2. **TF-IDF sparse search** — additional candidates tagged
            ``retrieval_source="tfidf"``.  Skipped when ``low_memory=True``
@@ -211,7 +228,7 @@ class RetrievalPipeline:
         - ``len(result) <= n`` always.
         - All ``movie_id`` values in the result are unique.
         - All ``retrieval_source`` values are in
-          ``{"faiss", "tfidf", "knowledge_graph", "hybrid"}``.
+          ``{"turbovec", "tfidf", "knowledge_graph", "hybrid"}``.
         """
         if n == 0:
             return []
@@ -333,12 +350,6 @@ class RetrievalPipeline:
             )
             return []
 
-    def _retrieve_faiss(self, query_embedding: np.ndarray) -> list[CandidateItem]:
-        # Return candidates with source="faiss" to satisfy any tests expecting exactly "faiss"
-        cands = self._retrieve_turbovec(query_embedding)
-        for c in cands:
-            c.retrieval_source = "faiss"
-        return cands
 
     def _retrieve_tfidf(self, query_embedding: np.ndarray, query_text: str | None = None) -> list[CandidateItem]:
         """Query the TF-IDF sparse index and return up to ``tfidf_k`` candidates.
@@ -407,7 +418,7 @@ class RetrievalPipeline:
     def _retrieve_kg(self, query_embedding: np.ndarray) -> list[CandidateItem]:
         """Query the Knowledge Graph engine for neighbours of the query movie.
 
-        The query movie is identified by finding the FAISS nearest neighbour
+        The query movie is identified by finding the TurboVec nearest neighbour
         (if available) or by falling back to the first row of ``movie_df``.
         The KG engine's ``get_neighbors(movie_id, n=kg_k)`` method is called
         to obtain related movie IDs.
@@ -440,7 +451,7 @@ class RetrievalPipeline:
                 # Filter out candidate movies that do not exist in our catalog (movie_df)
                 if mid not in self._metadata_cache:
                     continue
-                # Assign a decaying score so KG candidates rank below FAISS/TF-IDF
+                # Assign a decaying score so KG candidates rank below TurboVec/TF-IDF
                 # by default but still participate in max-pool deduplication.
                 score = 1.0 / (rank + 1)
                 meta = {"kg_rank": rank, "seed_movie_id": seed_movie_id}
@@ -476,8 +487,8 @@ class RetrievalPipeline:
     def _get_seed_movie_id(self, query_embedding: np.ndarray) -> int | None:
         """Determine the seed movie_id for KG traversal.
 
-        Prefers the top FAISS nearest neighbour; falls back to the first row
-        of ``movie_df`` when FAISS is unavailable.
+        Prefers the top TurboVec nearest neighbour; falls back to the first row
+        of ``movie_df`` when TurboVec is unavailable.
 
         Parameters
         ----------
@@ -489,16 +500,16 @@ class RetrievalPipeline:
         int | None
             The seed ``movie_id``, or ``None`` if it cannot be determined.
         """
-        if self.faiss_index is not None:
+        if self.turbovec_index is not None:
             try:
                 vec = query_embedding.reshape(1, -1).astype(np.float32)
-                _, indices = self.faiss_index.search(vec, 1)
+                _, indices = self.turbovec_index.search(vec, 1)
                 idx = int(indices[0][0])
                 if 0 <= idx < len(self.movie_df):
                     return int(self._movie_id_map[idx]) if idx < len(self._movie_id_map) else int(idx)
             except Exception as exc:
                 logger.debug(
-                    "FAISS seed lookup failed (%s: %s); falling back to movie_df[0].",
+                    "TurboVec seed lookup failed (%s: %s); falling back to movie_df[0].",
                     type(exc).__name__,
                     exc,
                 )

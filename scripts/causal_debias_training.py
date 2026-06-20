@@ -271,6 +271,7 @@ def train_lightgcn_ips(
 def select_weights_doubly_robust(
     num_candidates: int = 200,
     clip_val: float = 10.0,
+    dirichlet_alpha: float | None = None,
 ) -> dict[str, float]:
     """
     Select ensemble blend weights using Doubly Robust (DR) estimation.
@@ -358,12 +359,19 @@ def select_weights_doubly_robust(
 
         return dr_total / max(n_users, 1)
 
-    logger.info("Running DR weight selection with %d candidates...", num_candidates)
+    import os
+    if dirichlet_alpha is None:
+        try:
+            dirichlet_alpha = float(os.getenv("APEX_DIRICHLET_ALPHA", "1.0"))
+        except ValueError:
+            dirichlet_alpha = 1.0
+
+    logger.info("Running DR weight selection with %d candidates (alpha=%.2f)...", num_candidates, dirichlet_alpha)
     best_score, best_wv = 0.0, None
     results = []
 
     for _ in range(num_candidates):
-        wv = np.random.dirichlet([1.0] * len(WEIGHT_KEYS))
+        wv = np.random.dirichlet([dirichlet_alpha] * len(WEIGHT_KEYS))
         score = _dr_score(wv)
         results.append((score, wv))
         if score > best_score:
@@ -412,6 +420,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--dr-candidates", type=int, default=200, help="DR weight search candidates")
     p.add_argument("--skip-lgcn", action="store_true", help="Skip LightGCN IPS training")
     p.add_argument("--skip-dr", action="store_true", help="Skip DR weight selection")
+    p.add_argument("--dirichlet-alpha", type=float, default=None, help="Dirichlet concentration parameter (alpha)")
     return p.parse_args()
 
 
@@ -431,6 +440,7 @@ if __name__ == "__main__":
         weights = select_weights_doubly_robust(
             num_candidates=args.dr_candidates,
             clip_val=args.clip_val,
+            dirichlet_alpha=args.dirichlet_alpha,
         )
         logger.info("Final DR weights: %s", {k: round(v, 3) for k, v in weights.items()})
 

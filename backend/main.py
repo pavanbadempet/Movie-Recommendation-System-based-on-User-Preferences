@@ -312,7 +312,7 @@ app = FastAPI(
         "Production-grade AI recommendation engine with a 6-model ensemble "
         "(SASRec, KAN, LightGCN, Diffusion, Quantum-Fluid, Hyperbolic). "
         "Implements Doubly Robust IPS weight optimization, differential privacy, "
-        "and adaptive 3-tier serving (GPU / ONNX CPU / FAISS lite).\n\n"
+        "and adaptive 3-tier serving (GPU / ONNX CPU / TurboVec lite).\n\n"
         "**Interactive docs:** `/docs` (Swagger UI) · `/redoc` (ReDoc)\n\n"
         "**Full API reference:** [docs/API_REFERENCE.md]"
         "(https://github.com/pavanbadempet/Movie-Recommendation-System/blob/main/docs/API_REFERENCE.md)"
