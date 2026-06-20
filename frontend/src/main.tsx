@@ -759,6 +759,7 @@ function TrailerFrame({ movie }: { movie: Movie }) {
   const [videoError, setVideoError] = React.useState(false);
   const [isCached, setIsCached] = React.useState<boolean | null>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
+  const [isMobile, setIsMobile] = React.useState(() => typeof window !== "undefined" ? window.innerWidth <= 768 : false);
 
   React.useEffect(() => {
     setTrailerKey(movie.trailer_key || null);
@@ -787,15 +788,25 @@ function TrailerFrame({ movie }: { movie: Movie }) {
       });
   }, [trailerKey]);
 
+  // Handle window resizing to toggle video playback on mobile
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   // Restart playback and reload video when movie, trailerKey, or isCached changes
   React.useEffect(() => {
     setPlaying(true);
     setVideoError(false); // Reset error state when movie changes
-    if (isCached && videoRef.current) {
+    if (isCached && videoRef.current && !isMobile) {
       videoRef.current.load();
       videoRef.current.play().catch(() => {});
     }
-  }, [movie.id, trailerKey, isCached]);
+  }, [movie.id, trailerKey, isCached, isMobile]);
 
   function togglePlayback() {
     const nextPlaying = !playing;
@@ -814,7 +825,7 @@ function TrailerFrame({ movie }: { movie: Movie }) {
 
   return (
     <div className="trailer-frame">
-      {trailerKey ? (
+      {trailerKey && !isMobile ? (
         isCached === null ? (
           <div className="trailer-loading" style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#94a3b8" }}>
             <Loader2 className="spin" size={24} />
@@ -845,9 +856,12 @@ function TrailerFrame({ movie }: { movie: Movie }) {
           </>
         )
       ) : (
-        <img src={backdropUrl(movie.poster_path)} alt="" />
+        <>
+          <img src={backdropUrl(movie.poster_path)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+          <div className="trailer-overlay" />
+        </>
       )}
-      {trailerKey && isCached && !videoError && (
+      {trailerKey && isCached && !videoError && !isMobile && (
         <button className="video-toggle" type="button" onClick={togglePlayback} aria-label={playing ? "Pause trailer" : "Play trailer"}>
           <span className="visually-hidden">{playing ? "Pause trailer" : "Play trailer"}</span>
         </button>
@@ -1876,7 +1890,76 @@ function App() {
                         ))}
                       </div>
                     </section>
-                  ) : null}
+                  ) : (
+                    /* Show trending keywords and popular searches on mobile search if empty */
+                    !selectedMovie && (
+                      <div className="search-suggestions" style={{ marginTop: "16px" }}>
+                        <div style={{ marginBottom: "20px" }}>
+                          <span style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Intent filter</span>
+                          <h3 style={{ fontSize: "0.95rem", color: "#fff", fontWeight: 700, margin: "2px 0 10px", fontFamily: "var(--font-headline)" }}>Trending Searches</h3>
+                          <div className="search-tags" style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                            {["Batman", "Godfather", "Inception", "Sci-Fi", "Action", "Thriller"].map((tag) => (
+                              <button
+                                key={tag}
+                                className="suggestion-tag-btn"
+                                type="button"
+                                onClick={() => {
+                                  setTitleQuery(tag);
+                                  void runSearch("title", tag);
+                                }}
+                              >
+                                {tag}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {latestMovies.length > 0 && (
+                          <div>
+                            <div className="section-title" style={{ fontSize: "0.95rem", margin: "16px 0 10px" }}>
+                              <h2>Popular Searches</h2>
+                            </div>
+                            <div className="poster-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "12px" }}>
+                              {latestMovies.slice(0, 4).map((movie) => (
+                                <button
+                                  type="button"
+                                  key={`mobile-popular-${movie.id}`}
+                                  className="popular-search-card"
+                                  onClick={() => {
+                                    setTitleQuery(selectTitleLabel(movie));
+                                    selectMovie(movie, "title_search");
+                                    void recommend(movie);
+                                  }}
+                                  style={{
+                                    background: "rgba(255,255,255,0.02)",
+                                    border: "1px solid rgba(255,255,255,0.05)",
+                                    borderRadius: "16px",
+                                    padding: "10px",
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: "8px",
+                                    textAlign: "left",
+                                    transition: "all 0.2s ease"
+                                  }}
+                                >
+                                  <img
+                                    src={posterUrl(movie.poster_path)}
+                                    alt={movie.title}
+                                    style={{ width: "100%", aspectRatio: "2/3", objectFit: "cover", borderRadius: "10px" }}
+                                  />
+                                  <div style={{ display: "flex", flexDirection: "column", gap: "2px", overflow: "hidden" }}>
+                                    <strong style={{ fontSize: "0.8rem", color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{movie.title}</strong>
+                                    <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>{movieYear(movie)}</span>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  )}
                 </div>
               </section>
             </main>
