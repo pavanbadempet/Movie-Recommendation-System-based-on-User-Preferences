@@ -278,6 +278,9 @@ def _expected_ranker_sha256() -> str | None:
 
 
 def _ranker_artifact_is_trusted(path: Path) -> bool:
+    if os.getenv("NOVA_TRUST_LOCAL_RANKER", "").strip().lower() in {"1", "true", "yes", "on"}:
+        logger.info("Trusting local Nova ranker artifact %s via NOVA_TRUST_LOCAL_RANKER override.", path)
+        return True
     expected = _expected_ranker_sha256()
     if not expected:
         logger.warning(

@@ -147,6 +147,36 @@ def apply_learned_ranker(
         return candidates
 
     try:
+        from backend.serving.serving_tier import get_tier_detector
+        active_tier, _ = get_tier_detector().resolve()
+        is_tier3 = (active_tier == "tier3")
+    except Exception:
+        is_tier3 = False
+
+    from backend.pipeline.recommender import _recommender
+    heavy_loaded = getattr(_recommender, "_heavy_models_loaded", False)
+
+    if is_tier3 or not heavy_loaded:
+        # Enforce low-memory/warmup fallback immediately: skip neural models and populate default metrics
+        for candidate in candidates:
+            if "metrics" not in candidate:
+                candidate["metrics"] = {
+                    "p_click": 0.5,
+                    "p_watch": 0.5,
+                    "p_satisfaction": 0.5,
+                    "ensemble_prior": 0.0,
+                    "churn_risk": 0.0,
+                    "preference_stability": 1.0,
+                    "cold_start": True,
+                }
+            if "explanation" not in candidate:
+                candidate["explanation"] = []
+            tag = "Tier-3 Fallback Ranker (Base Relevance)" if is_tier3 else "Warmup Fallback Ranker (Base Relevance)"
+            candidate["explanation"].insert(0, tag)
+        candidates.sort(key=lambda x: x.get("similarity_score", 0.0), reverse=True)
+        return candidates
+
+    try:
         import torch
 
         from backend.models.ensemble_engine import get_apex_engine
@@ -1514,62 +1544,77 @@ def load_optional_models(rec) -> None:
         rec.multimodal_index = None
         logger.warning("Failed to load Multi-Modal index: %s", e)
 
-    try:
-        loaded = rec.kg_engine.load()
-        if not loaded or not hasattr(rec.kg_engine, "graph") or rec.kg_engine.graph is None or len(rec.kg_engine.graph) < 100:
-            logger.info("Knowledge Graph is empty or mock. Rebuilding dynamically from catalog...")
-            DATA_DIR = (
-                (recommender_module and getattr(recommender_module, "DATA_DIR", None))
-                or getattr(rec, "DATA_DIR", None)
-                or _pathlib.Path(__file__).parent.parent / "data" / "processed"
-            )
-            twins_path = DATA_DIR / "semantic_twins.parquet"
-            rec.kg_engine.rebuild_from_catalog(rec._movies, twins_path)
+    is_tier3 = getattr(rec, "_low_memory", False) or (hasattr(rec, "_resolve_active_tier") and rec._resolve_active_tier() == "tier3")
+    if not is_tier3:
+        try:
+            loaded = rec.kg_engine.load()
+            if not loaded or not hasattr(rec.kg_engine, "graph") or rec.kg_engine.graph is None or len(rec.kg_engine.graph) < 100:
+                logger.info("Knowledge Graph is empty or mock. Rebuilding dynamically from catalog in background...")
+                DATA_DIR = (
+                    (recommender_module and getattr(recommender_module, "DATA_DIR", None))
+                    or getattr(rec, "DATA_DIR", None)
+                    or _pathlib.Path(__file__).parent.parent / "data" / "processed"
+                )
+                twins_path = DATA_DIR / "semantic_twins.parquet"
+                from threading import Thread
+                def bg_rebuild():
+                    try:
+                        rec.kg_engine.rebuild_from_catalog(rec._movies, twins_path)
+                        try:
+                            from backend.intelligence.cross_domain_kg import enrich_knowledge_graph_with_cross_domain
+                            enrich_knowledge_graph_with_cross_domain(rec.kg_engine)
+                        except Exception as exc:
+                            logger.warning("Cross-domain KG enrichment skipped: %s", exc)
+                    except Exception as exc:
+                        logger.error("Background Knowledge Graph rebuild failed: %s", exc)
+                Thread(target=bg_rebuild, name="kg-rebuild", daemon=True).start()
+            else:
+                try:
+                    from backend.intelligence.cross_domain_kg import enrich_knowledge_graph_with_cross_domain
+                    enrich_knowledge_graph_with_cross_domain(rec.kg_engine)
+                except Exception as exc:
+                    logger.warning("Cross-domain KG enrichment skipped: %s", exc)
+        except Exception as e:
+            logger.warning("Failed to load/rebuild Knowledge Graph: %s", e)
+    else:
+        logger.info("Tier3 / low-memory serving profile active: skipping Knowledge Graph load and rebuild.")
+
+    if not is_tier3:
+        try:
+            from backend.models.two_tower import TwoTowerModel
+
+            two_tower_finetuned_path = MODELS_DIR / "two_tower_finetuned.pth"
+            if two_tower_finetuned_path.exists():
+                if not hasattr(rec, "_two_tower_model") or rec._two_tower_model is None:
+                    rec._two_tower_model = TwoTowerModel(
+                        user_input_dim=18, item_input_dim=20, embedding_dim=128, temperature=0.07
+                    )
+                state_dict = _torch.load(two_tower_finetuned_path, map_location="cpu", weights_only=True)
+                rec._two_tower_model.load_state_dict(state_dict)
+                logger.info("Loaded fine-tuned Two-Tower weights from %s", two_tower_finetuned_path)
+        except Exception as exc:
+            logger.warning("Could not load fine-tuned Two-Tower weights: %s — using base weights", exc)
 
         try:
-            from backend.intelligence.cross_domain_kg import enrich_knowledge_graph_with_cross_domain
+            from backend.learning.rl_policy import ActorCriticPolicy
 
-            enrich_knowledge_graph_with_cross_domain(rec.kg_engine)
-        except Exception as exc:
-            logger.warning("Cross-domain KG enrichment skipped: %s", exc)
-    except Exception as e:
-        logger.warning("Failed to load/rebuild Knowledge Graph: %s", e)
-
-    try:
-        from backend.models.two_tower import TwoTowerModel
-
-        two_tower_finetuned_path = MODELS_DIR / "two_tower_finetuned.pth"
-        if two_tower_finetuned_path.exists():
-            if not hasattr(rec, "_two_tower_model") or rec._two_tower_model is None:
-                rec._two_tower_model = TwoTowerModel(
-                    user_input_dim=18, item_input_dim=20, embedding_dim=128, temperature=0.07
-                )
-            state_dict = _torch.load(two_tower_finetuned_path, map_location="cpu", weights_only=True)
-            rec._two_tower_model.load_state_dict(state_dict)
-            logger.info("Loaded fine-tuned Two-Tower weights from %s", two_tower_finetuned_path)
-    except Exception as exc:
-        logger.warning("Could not load fine-tuned Two-Tower weights: %s — using base weights", exc)
-
-    try:
-        from backend.learning.rl_policy import ActorCriticPolicy
-
-        rl_policy_path = MODELS_DIR / "rl_policy.pth"
-        if not rl_policy_path.exists():
-            logger.debug("rl_policy.pth not found; RL score adjustment disabled.")
+            rl_policy_path = MODELS_DIR / "rl_policy.pth"
+            if not rl_policy_path.exists():
+                logger.debug("rl_policy.pth not found; RL score adjustment disabled.")
+                rec._rl_policy = None
+            else:
+                policy = ActorCriticPolicy(state_dim=20, action_dim=16)
+                state_dict = _torch.load(rl_policy_path, map_location="cpu", weights_only=True)
+                policy.load_state_dict(state_dict)
+                policy.eval()
+                rec._rl_policy = policy
+                logger.info("Loaded ActorCriticPolicy from %s", rl_policy_path)
+        except RuntimeError as exc:
+            logger.warning("Could not load RL policy (state_dim mismatch or corrupt file): %s", exc)
             rec._rl_policy = None
-        else:
-            policy = ActorCriticPolicy(state_dim=20, action_dim=16)
-            state_dict = _torch.load(rl_policy_path, map_location="cpu", weights_only=True)
-            policy.load_state_dict(state_dict)
-            policy.eval()
-            rec._rl_policy = policy
-            logger.info("Loaded ActorCriticPolicy from %s", rl_policy_path)
-    except RuntimeError as exc:
-        logger.warning("Could not load RL policy (state_dim mismatch or corrupt file): %s", exc)
-        rec._rl_policy = None
-    except Exception as exc:
-        logger.warning("Could not load RL policy: %s", exc)
-        rec._rl_policy = None
+        except Exception as exc:
+            logger.warning("Could not load RL policy: %s", exc)
+            rec._rl_policy = None
 
 
 def wire_pipelines(rec, is_tier3: bool) -> None:
@@ -1595,12 +1640,14 @@ def wire_pipelines(rec, is_tier3: bool) -> None:
             config=RetrievalConfig(low_memory=rec._low_memory, enable_kg=not is_tier3),
         )
         # Wire the pre-trained neural ensemble engine (ApexEnsembleEngine)
-        try:
-            from backend.models.ensemble_engine import get_apex_engine
-            ensemble = get_apex_engine(num_users=610, num_items=9724)
-        except Exception as exc:
-            logger.warning("Could not load get_apex_engine: %s", exc)
-            ensemble = None
+        ensemble = None
+        if not is_tier3 and getattr(rec, "_heavy_models_loaded", False):
+            try:
+                from backend.models.ensemble_engine import get_apex_engine
+                ensemble = get_apex_engine(num_users=610, num_items=9724)
+            except Exception as exc:
+                logger.warning("Could not load get_apex_engine: %s", exc)
+                ensemble = None
 
         has_ensemble_weights = False
         if ensemble is not None:

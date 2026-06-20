@@ -113,17 +113,19 @@ class Recommender:
         self._retrieval_pipeline = None
         self._ranking_pipeline = None
         self._reranking_pipeline = None
+        self._heavy_models_loaded = False
 
     def load(self) -> "Recommender":
-        """Load all heavy artifacts. Delegates to private sub-loaders."""
-        logger.info("Loading recommendation engine...")
+        """Load recommendation engine in a fast 2-phase sequence.
+        Loads fast catalog metadata synchronously so health/basic endpoints are ready under 0.5s,
+        then loads heavy models in a background daemon thread to avoid blocking FastAPI startup.
+        """
+        logger.info("Loading recommendation engine - Phase 1 (Sync Fast Load)...")
         active_tier = self._resolve_active_tier()
         is_tier3 = active_tier == "tier3"
         self._apply_tier3_constraints(is_tier3)
         self._load_vector_artifacts()
         self._load_movie_catalog()
-        self._load_ranker_and_behavior()
-        self._load_optional_models()
         self._wire_pipelines(is_tier3)
 
         if self._movies is not None:
@@ -135,6 +137,26 @@ class Recommender:
             self._artifact_status["faiss_index_count"] = len(self._index)
         if self._movies is not None and self._index is not None and self._vectors is not None:
             self._artifact_status["vector_artifacts_ready"] = True
+
+        if not is_tier3:
+            def bg_heavy_load():
+                try:
+                    logger.info("Loading recommendation engine - Phase 2 (Async Heavy Load) started in background...")
+                    self._load_ranker_and_behavior()
+                    self._load_optional_models()
+                    self._heavy_models_loaded = True
+                    self._wire_pipelines(is_tier3)
+                    logger.info("Loading recommendation engine - Phase 2 (Async Heavy Load) completed.")
+                except Exception as exc:
+                    logger.exception("Failed to load heavy recommender models in background: %s", exc)
+
+            import threading
+            threading.Thread(target=bg_heavy_load, name="recommender-heavy-loader", daemon=True).start()
+        else:
+            self._load_ranker_and_behavior()
+            self._load_optional_models()
+            self._heavy_models_loaded = True
+            self._wire_pipelines(is_tier3)
 
         return self
 
