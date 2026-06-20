@@ -1,0 +1,55 @@
+name: Performance Regression Tests
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "backend/**"
+      - "scripts/check_performance_regression.py"
+      - "tests/test_performance_regression.py"
+      - ".github/baselines/benchmark-baseline.json"
+      - ".github/workflows/performance-regression.yml"
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  production-benchmarks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install benchmark dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+          pip install pytest-benchmark
+      - name: Benchmark production ranking and metrics code
+        run: |
+          python -m pytest tests/test_performance_regression.py \
+            --benchmark-only \
+            --benchmark-json=benchmark-results.json \
+            -q
+      - name: Enforce committed performance budgets
+        run: |
+          python scripts/check_performance_regression.py \
+            --current benchmark-results.json \
+            --baseline .github/baselines/benchmark-baseline.json \
+            --threshold 0.25 \
+            --output performance-regression-report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: performance-regression-results
+          path: |
+            benchmark-results.json
+            performance-regression-report.json

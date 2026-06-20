@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 
 from backend.intelligence.active_inference_engine import ActiveInferenceEngine
 from backend.models.ensemble_engine import ApexEnsembleEngine
@@ -79,3 +80,24 @@ def test_active_inference_gradient_flow():
 
     # 3. The weights must have physically shifted away from the initial state
     assert not torch.allclose(active_engine.dynamic_prior, initial_prior)
+
+
+def test_apex_engine_resolves_item_embedding_by_exact_movie_id():
+    engine = ApexEnsembleEngine.__new__(ApexEnsembleEngine)
+    nn.Module.__init__(engine)
+    engine._item_id_to_index = {42: 1}
+    item_embedding = nn.Embedding(3, 4)
+    item_embedding.weight.data.copy_(
+        torch.tensor(
+            [
+                [0.0, 0.0, 0.0, 0.0],
+                [1.0, 2.0, 3.0, 4.0],
+                [5.0, 6.0, 7.0, 8.0],
+            ]
+        )
+    )
+    engine.lightgcn = nn.Module()
+    engine.lightgcn.item_embedding = item_embedding
+
+    assert torch.equal(engine.get_item_embedding(42), torch.tensor([[1.0, 2.0, 3.0, 4.0]]))
+    assert engine.get_item_embedding(999) is None

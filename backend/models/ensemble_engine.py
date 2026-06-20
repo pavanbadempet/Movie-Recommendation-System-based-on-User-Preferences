@@ -7,7 +7,6 @@ import threading
 import time
 
 import numpy as np
-import pandas as pd
 import torch
 import torch.nn as nn
 
@@ -97,6 +96,7 @@ class ApexEnsembleEngine(nn.Module):
         self._device = device or "cpu"
         self._compiled: dict[str, bool] = {}
         self.has_trained_weights = False
+        self._item_id_to_index: dict[int, int] = {}
         # LRU session cache: OrderedDict gives O(1) move-to-end for recency tracking.
         # Capped at _SESSION_CACHE_MAX entries; oldest entry evicted when full.
         self._session_cache: collections.OrderedDict[str, tuple[float, list[int]]] = collections.OrderedDict()
@@ -362,6 +362,22 @@ class ApexEnsembleEngine(nn.Module):
             logger.info("Pre-computed item embedding cache: %d items", self.num_items)
         return self._item_emb_cache
 
+    def get_item_embedding(self, movie_id: int) -> torch.Tensor | None:
+        """Return the exact serving embedding for a catalog movie ID."""
+        try:
+            item_index = self._item_id_to_index.get(int(movie_id))
+        except (TypeError, ValueError):
+            return None
+        if item_index is None:
+            return None
+
+        weight = self.lightgcn.item_embedding.weight
+        if item_index < 0 or item_index >= weight.shape[0]:
+            return None
+        with torch.no_grad():
+            index = torch.tensor([item_index], dtype=torch.long, device=weight.device)
+            return self.lightgcn.item_embedding(index).detach().clone()
+
     def _inject_pyspark_priors(self):
         """Loads real PySpark ALS embeddings from the Delta Lake if available."""
         user_emb_path = GOLD_DIR / "model_user_embeddings"
@@ -389,6 +405,9 @@ class ApexEnsembleEngine(nn.Module):
 
                 users_df = load_embeddings_by_dim(user_emb_path, self.emb_dim)
                 items_df = load_embeddings_by_dim(item_emb_path, self.emb_dim)
+                self._item_id_to_index = {
+                    int(movie_id): index for index, movie_id in enumerate(items_df["id"].to_list())
+                }
 
                 user_tensor = torch.tensor(np.vstack(users_df["features"].to_list()), dtype=torch.float32)
                 item_tensor = torch.tensor(np.vstack(items_df["features"].to_list()), dtype=torch.float32)

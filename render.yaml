@@ -5,19 +5,19 @@ services:
     dockerContext: .
     dockerfilePath: ./Dockerfile
     # ---------------------------------------------------------------------------
-    # Tier 2 — ONNX CPU ensemble (200–800 ms latency)
-    # Upgrade to "pro" + NOVA_SERVING_TIER=tier1 for GPU inference (50–200 ms)
+    # Tier 3 — reproducible source deployment using tracked/downloaded FAISS artifacts.
+    # Select Tier 2 only after publishing the required ONNX model set.
     # ---------------------------------------------------------------------------
     plan: standard
     healthCheckPath: /health
     envVars:
       - key: ENVIRONMENT
         value: production
-      # Full ensemble — activates Tier 2 (ONNX CPU) on standard plan hardware
+      # Clean source deployments do not contain ONNX binaries.
       - key: NOVA_SERVING_PROFILE
-        value: full
+        value: lite
       - key: NOVA_SERVING_TIER
-        value: tier2
+        value: tier3
       # Background warmup enabled — model artifacts loaded before first request
       - key: NOVA_HEALTH_LOAD_RECOMMENDER
         value: "true"

@@ -1,0 +1,26 @@
+{
+  "benchmarks": [
+    {
+      "fullname": "tests/test_performance_regression.py::test_ips_ndcg_throughput",
+      "stats": {
+        "mean": 0.0002
+      }
+    },
+    {
+      "fullname": "tests/test_performance_regression.py::test_ranker_throughput",
+      "stats": {
+        "mean": 0.01
+      }
+    },
+    {
+      "fullname": "tests/test_performance_regression.py::test_rl_state_throughput",
+      "stats": {
+        "mean": 0.001
+      }
+    }
+  ],
+  "metadata": {
+    "kind": "initial_cross-platform_budget",
+    "update_policy": "Replace with reviewed ubuntu-latest results after intentional performance changes."
+  }
+}

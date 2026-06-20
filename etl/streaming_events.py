@@ -9,7 +9,10 @@ arrive continuously and become ranking/personalization signals.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
+from pathlib import Path
+from typing import Dict, Any
 
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import (
@@ -22,8 +25,9 @@ from pyspark.sql.functions import (
     sha2,
     to_date,
     to_timestamp,
+    udf,
 )
-from pyspark.sql.types import FloatType, StringType, StructField, StructType
+from pyspark.sql.types import BooleanType, FloatType, StringType, StructField, StructType
 
 from etl.config import paths
 from etl.delta_lakehouse import get_delta_table
@@ -51,9 +55,81 @@ EVENT_PAYLOAD_SCHEMA = StructType(
 )
 
 
+class LocalSchemaRegistryClient:
+    """
+    Mock/Local Confluent Schema Registry Client.
+    Validates streaming records against defined JSON schemas to prevent schema drift
+    before Delta Lake appends.
+    """
+    def __init__(self, schemas_dir: Path | None = None):
+        if schemas_dir is None:
+            self.schemas_dir = Path(__file__).resolve().parent.parent / "contracts"
+        else:
+            self.schemas_dir = schemas_dir
+        self._schemas: Dict[str, Dict[str, Any]] = {}
+
+    def get_latest_schema(self, subject: str) -> dict:
+        """Retrieve the latest schema definition for a subject/topic."""
+        if subject not in self._schemas:
+            schema_path = self.schemas_dir / f"{subject}.schema.json"
+            if not schema_path.exists():
+                schema_path = self.schemas_dir / "raw_events.schema.json"
+            with open(schema_path, "r", encoding="utf-8") as f:
+                self._schemas[subject] = json.load(f)
+        return self._schemas[subject]
+
+    def validate_record(self, record: dict, subject: str) -> bool:
+        """Validate an individual record dictionary against the registered schema."""
+        try:
+            schema = self.get_latest_schema(subject)
+            required = schema.get("required_columns", [])
+            for col in required:
+                if col not in record or record[col] is None:
+                    return False
+
+            columns = schema.get("columns", {})
+            for col_name, rules in columns.items():
+                if col_name not in record or record[col_name] is None:
+                    continue
+                val = record[col_name]
+                expected_type = rules.get("type")
+                if expected_type == "string" and not isinstance(val, str):
+                    return False
+                elif expected_type == "integer" and not isinstance(val, (int, float)):
+                    return False
+                elif expected_type == "number" and not isinstance(val, (int, float)):
+                    return False
+                elif expected_type == "boolean" and not isinstance(val, bool):
+                    return False
+            return True
+        except Exception:
+            return False
+
+
+# Global client instance
+schema_registry = LocalSchemaRegistryClient()
+
+
+@udf(BooleanType())
+def validate_event_payload(payload_str: str, subject: str = "raw_events") -> bool:
+    """Spark UDF to validate event payload string against the schema registry contract."""
+    if not payload_str:
+        return False
+    try:
+        record = json.loads(payload_str)
+        return schema_registry.validate_record(record, subject)
+    except Exception:
+        return False
+
+
 def parse_kafka_event_stream(raw_stream: DataFrame) -> DataFrame:
     """Parse Kafka JSON values into the canonical tenant-aware event fact schema."""
-    parsed = raw_stream.select(
+    # Enforce Schema Registry contract validation filter
+    compliant_stream = raw_stream.filter(
+        validate_event_payload(col("value").cast("string"), lit("raw_events"))
+    )
+
+    parsed = compliant_stream.select(
         from_json(col("value").cast("string"), EVENT_PAYLOAD_SCHEMA).alias("event"),
         col("timestamp").alias("kafka_timestamp"),
     ).select("event.*", "kafka_timestamp")

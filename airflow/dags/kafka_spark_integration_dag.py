@@ -9,8 +9,19 @@ from datetime import datetime, timedelta
 
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
-
 from airflow import DAG
+
+# Import decoupled remote Spark operator
+try:
+    from operators.remote_spark import RemoteSparkSubmitOperator
+except ImportError:
+    try:
+        from dags.operators.remote_spark import RemoteSparkSubmitOperator
+    except ImportError:
+        import sys
+        from pathlib import Path
+        sys.path.append(str(Path(__file__).parent))
+        from operators.remote_spark import RemoteSparkSubmitOperator
 
 # Default args
 default_args = {
@@ -137,7 +148,7 @@ with DAG(
         cd /opt/airflow/movie-rec
         python -c "
         from pyspark.sql import SparkSession
-        from pyspark.sql.functions import col, from_json
+        from pyspark.sql.functions import col, from_json, lower, trim
         from pyspark.sql.types import StructType, StructField, StringType, IntegerType
 
         # Create Spark session
@@ -155,6 +166,7 @@ with DAG(
             StructField('user_id', IntegerType(), True),
             StructField('rating', IntegerType(), True)
         ])
+        allowed_event_types = ['view', 'click', 'rating', 'search', 'recommendation_request', 'recommendation_impression']
 
         # Read from Kafka (Bronze layer topic)
         df = spark.readStream \\
@@ -162,15 +174,20 @@ with DAG(
             .option('kafka.bootstrap.servers', 'kafka-1:9092,kafka-2:9092,kafka-3:9092') \\
             .option('subscribe', 'raw_movie_events') \\
             .option('startingOffsets', 'earliest') \\
+            .option('maxOffsetsPerTrigger', '1000') \\
+            .option('failOnDataLoss', 'false') \\
             .load()
 
-        # Parse JSON and apply schema
+        # Parse JSON, normalize event type, and bound state cardinality
         parsed_df = df.select(
             from_json(col('value').cast('string'), schema).alias('data')
         ).select('data.*')
+        validated_df = parsed_df.withColumn(
+            'event_type', lower(trim(col('event_type')))
+        ).filter(col('event_type').isin(allowed_event_types))
 
         # Process data
-        processed_df = parsed_df.groupBy('event_type').count()
+        processed_df = validated_df.groupBy('event_type').count()
 
         # Write to console (for demo purposes)
         query = processed_df.writeStream \\
@@ -187,7 +204,8 @@ with DAG(
     )
 
     # Task 6: Run Spark ETL with Delta Lake support
-    t5_spark_etl = BashOperator(
+    # Decoupled via RemoteSparkSubmitOperator (routes to remote cluster or local fallback)
+    t5_spark_etl = RemoteSparkSubmitOperator(
         task_id="run_spark_etl_with_delta",
         bash_command=(
             "cd /opt/airflow/movie-rec && python etl/pyspark_etl.py "

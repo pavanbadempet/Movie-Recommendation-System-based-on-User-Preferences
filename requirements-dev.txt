@@ -14,9 +14,10 @@ types-requests==2.32.0.20241016
 types-PyYAML==6.0.12.20240917
 
 # Testing
-pytest==8.4.2
+pytest==9.0.3
 pytest-cov==6.2.1
 pytest-asyncio==1.0.0
+pytest-benchmark==5.2.3
 hypothesis==6.152.4
 httpx==0.28.1           # Required by FastAPI TestClient in async mode
 

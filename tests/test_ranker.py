@@ -2,6 +2,9 @@
 Tests for Nova's learned ranking layer.
 """
 
+import hashlib
+
+import joblib
 import pandas as pd
 
 from backend.pipeline.ranker import candidate_features, load_ranker
@@ -11,6 +14,14 @@ from backend.pipeline.ranker_training import (
     promotion_decision,
     train_nova_ranker,
 )
+
+
+def artifact_sha256(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def sample_movies() -> pd.DataFrame:
@@ -58,7 +69,15 @@ def test_build_item_feedback_aggregates_implicit_events():
     assert feedback[200] == 1.0
 
 
-def test_train_ranker_saves_loadable_artifact(tmp_path):
+def test_load_ranker_rejects_artifact_without_trusted_checksum(tmp_path, monkeypatch):
+    artifact_path = tmp_path / "nova_ranker.joblib"
+    joblib.dump({"model": object(), "feature_columns": [], "metadata": {}}, artifact_path)
+    monkeypatch.delenv("NOVA_RANKER_SHA256", raising=False)
+
+    assert load_ranker(artifact_path) is None
+
+
+def test_train_ranker_saves_loadable_artifact(tmp_path, monkeypatch):
     events = [
         {"event_type": "view", "movie_id": 100},
         {"event_type": "click", "movie_id": 200},
@@ -68,6 +87,7 @@ def test_train_ranker_saves_loadable_artifact(tmp_path):
     artifact_path = tmp_path / "nova_ranker.joblib"
 
     report = train_nova_ranker(sample_movies(), events, artifact_path)
+    monkeypatch.setenv("NOVA_RANKER_SHA256", artifact_sha256(artifact_path))
     ranker = load_ranker(artifact_path)
 
     assert artifact_path.exists()

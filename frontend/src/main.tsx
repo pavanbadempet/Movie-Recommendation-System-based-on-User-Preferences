@@ -9,7 +9,6 @@ import {
   Database,
   Film,
   Gauge,
-  House,
   Loader2,
   Play,
   RefreshCw,
@@ -72,13 +71,6 @@ const imageBase = import.meta.env.VITE_TMDB_IMAGE_BASE || "https://image.tmdb.or
 const RECENT_STORAGE_KEY = "nova_recent_movies_v2";
 const SESSION_STORAGE_KEY = "nova_session_id_v1";
 const TITLE_CATALOG_LIMIT = 5000;
-
-const isEmbedded = typeof window !== "undefined" && (
-  window.self !== window.top ||
-  window.location.hostname.includes("hf.space") ||
-  window.location.hostname.includes("huggingface.co") ||
-  window.location.search.includes("embed=true")
-);
 
 type AppPage = "home" | "search" | "profile" | "dashboard" | "knowledge-graph" | "evaluation" | "admin" | "landing" | "signup" | "pricing" | "getting-started" | "status";
 type SearchMode = "title" | "semantic";

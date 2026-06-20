@@ -1,0 +1,42 @@
+# Claude Code Token Optimization Rules
+# Optimized for Claude Code CLI and VS Code extension
+
+## Plugin Installation
+Install the token-optimizer plugin:
+/plugin marketplace add alexgreensh/token-optimizer
+/plugin install token-optimizer@alexgreensh-token-optimizer
+
+Enable auto-update:
+/plugin → Marketplaces tab → select alexgreensh-token-optimizer → Enable auto-update
+
+## Basic Commands
+/token-optimizer          # Run optimization audit
+/token-coach             # Get coaching on token usage
+/token-optimizer quick   # Quick optimization
+
+## Conversation Management
+- Use /compact to compress conversation history
+- Clear context between unrelated tasks
+- Avoid long back-and-forth conversations
+
+## Prompt Best Practices
+- Be direct: "fix this bug" not "I think there might be a bug"
+- Use file references: @backend/main.py instead of pasting code
+- Request specific changes: "change line 50 to X" not "improve this"
+- Avoid explanations: just ask for the code
+
+## Context Optimization
+- Only include relevant files in context
+- Use .cursorignore to exclude unnecessary files
+- Keep system prompts minimal
+- Remove redundant information
+
+## Cache Management
+- Use prompt caching for repeated operations
+- Keep tool definitions compact
+- Cache common patterns and snippets
+
+## Session Management
+- Use shorter sessions for focused work
+- Break large tasks into smaller sessions
+- Clear memory between major task switches

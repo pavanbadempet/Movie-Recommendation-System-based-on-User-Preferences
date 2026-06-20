@@ -59,7 +59,7 @@ def test_video_stream_route(tmp_path, monkeypatch):
 
     # Mock the get_or_download_video function
     async def mock_get_or_download(youtube_id):
-        if youtube_id == "success-id":
+        if youtube_id == "abc123_DEF-":
             return dummy_file
         return None
 
@@ -68,13 +68,17 @@ def test_video_stream_route(tmp_path, monkeypatch):
     client = TestClient(app)
 
     # 1. Test success case
-    response = client.get("/v1/videos/stream/success-id")
+    response = client.get("/v1/videos/stream/abc123_DEF-")
     assert response.status_code == 200
     assert response.text == "dummy video file contents"
 
     # 2. Test fail case
-    response = client.get("/v1/videos/stream/fail-id")
+    response = client.get("/v1/videos/stream/Zyx987-AB_c")
     assert response.status_code == 404
+
+    # 3. Invalid YouTube IDs are rejected before cache path construction.
+    response = client.get("/v1/videos/stream/bad..id")
+    assert response.status_code == 400
 
 
 def test_video_cache_status_route(tmp_path, monkeypatch):
@@ -87,17 +91,20 @@ def test_video_cache_status_route(tmp_path, monkeypatch):
 
     # 1. Check status when file doesn't exist
     client = TestClient(app)
-    response = client.get("/v1/videos/cache-status/nonexistent-id")
+    response = client.get("/v1/videos/cache-status/abc123_DEF-")
     assert response.status_code == 200
-    assert response.json() == {"youtube_id": "nonexistent-id", "cached": False}
+    assert response.json() == {"youtube_id": "abc123_DEF-", "cached": False}
 
     # 2. Check status when file does exist
-    video_file = tmp_path / "existing-id.mp4"
+    video_file = tmp_path / "Zyx987-AB_c.mp4"
     video_file.write_text("mp4 data")
 
-    response = client.get("/v1/videos/cache-status/existing-id")
+    response = client.get("/v1/videos/cache-status/Zyx987-AB_c")
     assert response.status_code == 200
-    assert response.json() == {"youtube_id": "existing-id", "cached": True}
+    assert response.json() == {"youtube_id": "Zyx987-AB_c", "cached": True}
+
+    response = client.get("/v1/videos/cache-status/bad..id")
+    assert response.status_code == 400
 
 
 def test_latest_movies_endpoint(monkeypatch):
