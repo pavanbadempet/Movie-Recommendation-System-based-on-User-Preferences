@@ -19,8 +19,8 @@
   "dependencies": {
     "d3": "^7.9.0",
     "lucide-react": "^0.561.0",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3"
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   },
   "devDependencies": {
     "@axe-core/react": "^4.10.0",
@@ -31,7 +31,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.5.2",
     "@types/d3": "^7.4.3",
-    "@types/react": "^19.2.7",
+    "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@typescript-eslint/eslint-plugin": "^8.60.0",
     "@typescript-eslint/parser": "^8.60.0",
