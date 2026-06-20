@@ -3070,6 +3070,50 @@ input:focus-visible {
   .notice button {
     align-self: center !important;
   }
+
+  /* Auth Modal Mobile overrides */
+  .auth-modal-overlay {
+    align-items: flex-start !important;
+    overflow-y: auto !important;
+    padding-top: 40px !important;
+  }
+  .auth-box {
+    padding: 24px !important;
+    max-width: 100% !important;
+  }
+
+  /* Movie Dialog Media Mobile overrides */
+  .dialog-media {
+    flex: 0 0 200px !important;
+    height: 200px !important;
+  }
+
+  /* Status Page Banner Mobile overrides */
+  .status-banner {
+    flex-direction: column !important;
+    text-align: center !important;
+    padding: 20px !important;
+    gap: 12px !important;
+  }
+  .status-banner-text {
+    width: 100% !important;
+  }
+  .status-refresh-btn {
+    align-self: center !important;
+  }
+
+  /* Getting Started Step Indicator Mobile overrides */
+  .step-dot-label {
+    display: none !important;
+  }
+  .step-indicator ol {
+    justify-content: space-around !important;
+  }
+
+  /* Admin Weights Table Mobile overrides */
+  .weights-table-wrapper {
+    overflow-x: auto !important;
+  }
 }
 
 /* Suggestion tags for Search & Discover empty states */
