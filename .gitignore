@@ -31,6 +31,8 @@ data/events/*.jsonl
 data/events/*.dlq
 data/processed/*.parquet
 data/processed/*_summary.json
+data/video_cache/
+
 
 # Runtime event logs and processed data inside backend package
 backend/data/events/*.jsonl
@@ -69,6 +71,7 @@ models/*.joblib
 models/*.joblib.metadata.json
 models/*.pth
 models/*.gpickle
+models/*.tq
 models/onnx/
 models/pipeline_manifest.json
 
@@ -79,6 +82,7 @@ backend/models/*.joblib
 backend/models/*.joblib.metadata.json
 backend/models/*.pth
 backend/models/*.gpickle
+backend/models/*.tq
 backend/models/pipeline_manifest.json
 backend/artifacts/*.pt
 backend/artifacts/*.pth
