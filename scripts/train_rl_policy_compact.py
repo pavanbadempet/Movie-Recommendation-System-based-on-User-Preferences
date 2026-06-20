@@ -17,9 +17,10 @@ Action vector (16 floats):
 
 Training approach:
   - Offline behavioral cloning from real Event Store interactions
+  - Actions derived from the interacted movie's real 16d Gold embedding
   - Conservative Q-Learning (CQL) penalty to prevent out-of-distribution actions
   - Reward shaping: +1.0 for rating>=4.0, -0.5 for rating<=2.0, +0.3 for click
-  - Falls back to synthetic data if fewer than 50 real interactions exist
+  - Fails without enough real, embedding-backed reward signals
 
 Usage:
     python scripts/train_rl_policy_compact.py [--epochs N] [--lr LR] [--batch-size B]
@@ -49,6 +50,7 @@ logger = logging.getLogger(__name__)
 
 MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
 MODELS_DIR.mkdir(parents=True, exist_ok=True)
+GOLD_ITEM_EMBEDDINGS = Path(__file__).resolve().parent.parent / "data" / "datalake" / "gold" / "model_item_embeddings"
 
 # Must match backend/recommender.py _build_rl_state
 STATE_DIM = 20
@@ -95,18 +97,51 @@ def build_state(
 # ---------------------------------------------------------------------------
 
 
-def load_training_data(min_interactions: int = 50) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def load_item_action_embeddings(
+    embeddings_path: Path | str = GOLD_ITEM_EMBEDDINGS,
+) -> dict[int, np.ndarray]:
+    """Load exact 16d item embeddings keyed by external movie ID."""
+    import pandas as pd
+
+    embeddings_path = Path(embeddings_path)
+    files = sorted(embeddings_path.glob("*.parquet")) if embeddings_path.is_dir() else [embeddings_path]
+    embeddings: dict[int, np.ndarray] = {}
+    for file_path in files:
+        frame = pd.read_parquet(file_path)
+        if frame.empty or not {"id", "features"}.issubset(frame.columns):
+            continue
+        first = np.asarray(frame.iloc[0]["features"], dtype=np.float32).reshape(-1)
+        if len(first) != ACTION_DIM:
+            continue
+        for row in frame.itertuples(index=False):
+            vector = np.asarray(row.features, dtype=np.float32).reshape(-1)
+            if len(vector) == ACTION_DIM and np.isfinite(vector).all():
+                embeddings[int(row.id)] = vector
+    if not embeddings:
+        raise FileNotFoundError(
+            f"No {ACTION_DIM}d item embeddings found at {embeddings_path}. "
+            "Run the Gold embedding pipeline before RL training."
+        )
+    return embeddings
+
+
+def load_training_data(
+    min_interactions: int = 50,
+    item_embeddings: dict[int, np.ndarray] | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Build (states, actions, rewards) from the Event Store.
 
     State: 20-float vector per user (aggregated from all their events)
-    Action: random unit vector in 16d (proxy — we don't have ground-truth actions)
+    Action: normalized 16d embedding of the interacted movie
     Reward: shaped from rating/click signals
 
     Returns arrays of shape [N, STATE_DIM], [N, ACTION_DIM], [N, 1].
-    Falls back to synthetic data if fewer than min_interactions real events exist.
+    Raises when fewer than min_interactions embedding-backed reward signals exist.
     """
     logger.info("Loading interaction data from Event Store...")
+    if item_embeddings is None:
+        item_embeddings = load_item_action_embeddings()
 
     # Aggregate per-user stats
     user_stats: dict[str, dict] = defaultdict(
@@ -115,7 +150,7 @@ def load_training_data(min_interactions: int = 50) -> tuple[np.ndarray, np.ndarr
             "rating_sum": 0.0,
             "click_count": 0,
             "view_count": 0,
-            "rewards": [],
+            "signals": [],
         }
     )
 
@@ -124,23 +159,29 @@ def load_training_data(min_interactions: int = 50) -> tuple[np.ndarray, np.ndarr
         et = str(event.get("event_type", "")).lower()
         uid = str(event.get("user_id") or "anonymous")
         stats = user_stats[uid]
+        movie_id = event.get("movie_id")
+        try:
+            movie_id = int(movie_id) if movie_id is not None else None
+        except (TypeError, ValueError):
+            movie_id = None
 
         if et == "rating":
-            rating = event.get("rating")
+            rating = event.get("rating", event.get("event_value"))
             if rating is not None:
                 try:
                     r = float(rating)
                     stats["total_ratings"] += 1
                     stats["rating_sum"] += r
                     reward = 1.0 if r >= 4.0 else (-0.5 if r <= 2.0 else 0.0)
-                    if reward != 0.0:
-                        stats["rewards"].append(reward)
+                    if reward != 0.0 and movie_id in item_embeddings:
+                        stats["signals"].append((movie_id, reward))
                     total_events += 1
                 except (TypeError, ValueError):
                     pass
         elif et == "click":
             stats["click_count"] += 1
-            stats["rewards"].append(0.3)
+            if movie_id in item_embeddings:
+                stats["signals"].append((movie_id, 0.3))
             total_events += 1
         elif et == "view":
             stats["view_count"] += 1
@@ -148,23 +189,13 @@ def load_training_data(min_interactions: int = 50) -> tuple[np.ndarray, np.ndarr
 
     logger.info("Found %d qualifying events across %d users.", total_events, len(user_stats))
 
-    if total_events < min_interactions:
-        logger.warning(
-            "Only %d real interactions found (minimum %d). Falling back to synthetic training data.",
-            total_events,
-            min_interactions,
-        )
-        return _synthetic_data(batch_size=512)
-
     # Build training samples — one per reward signal
     states_list: list[np.ndarray] = []
     actions_list: list[np.ndarray] = []
     rewards_list: list[float] = []
 
-    rng = np.random.default_rng(seed=42)
-
     for _uid, stats in user_stats.items():
-        if not stats["rewards"]:
+        if not stats["signals"]:
             continue
 
         avg_rating = stats["rating_sum"] / stats["total_ratings"] if stats["total_ratings"] > 0 else 3.0
@@ -175,25 +206,24 @@ def load_training_data(min_interactions: int = 50) -> tuple[np.ndarray, np.ndarr
             view_count=stats["view_count"],
         )
 
-        for reward in stats["rewards"]:
+        for movie_id, reward in stats["signals"]:
             states_list.append(state)
-            # Action proxy: unit vector in direction of reward signal
-            action = rng.standard_normal(ACTION_DIM).astype(np.float32)
-            action /= np.linalg.norm(action) + 1e-8
+            action = np.asarray(item_embeddings[movie_id], dtype=np.float32).copy()
+            norm = float(np.linalg.norm(action))
+            if not math.isfinite(norm) or norm <= 1e-8:
+                states_list.pop()
+                continue
+            action /= norm
             if reward < 0:
-                action = -action  # negative reward → push away
+                action = -action
             actions_list.append(action)
             rewards_list.append(reward)
 
     if len(states_list) < min_interactions:
-        logger.warning(
-            "Only %d reward-bearing samples built. Augmenting with synthetic data.",
-            len(states_list),
+        raise RuntimeError(
+            f"Only {len(states_list)} real reward-bearing interactions have usable movie embeddings; "
+            f"{min_interactions} are required."
         )
-        s_syn, a_syn, r_syn = _synthetic_data(batch_size=max(256, min_interactions))
-        states_list.extend(s_syn.tolist())
-        actions_list.extend(a_syn.tolist())
-        rewards_list.extend(r_syn.squeeze().tolist())
 
     states = np.array(states_list, dtype=np.float32)
     actions = np.array(actions_list, dtype=np.float32)
@@ -205,19 +235,6 @@ def load_training_data(min_interactions: int = 50) -> tuple[np.ndarray, np.ndarr
         STATE_DIM,
         ACTION_DIM,
     )
-    return states, actions, rewards
-
-
-def _synthetic_data(batch_size: int = 512) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Generate synthetic training data when real events are insufficient."""
-    rng = np.random.default_rng(seed=0)
-    states = rng.standard_normal((batch_size, STATE_DIM)).astype(np.float32)
-    # Clip to plausible range [0, 1] for the scalar features
-    states[:, :4] = np.clip(states[:, :4] * 0.3 + 0.5, 0.0, 1.0)
-    actions = rng.standard_normal((batch_size, ACTION_DIM)).astype(np.float32)
-    norms = np.linalg.norm(actions, axis=1, keepdims=True) + 1e-8
-    actions /= norms
-    rewards = (rng.standard_normal((batch_size, 1)) * 0.3 + 0.5).astype(np.float32)
     return states, actions, rewards
 
 

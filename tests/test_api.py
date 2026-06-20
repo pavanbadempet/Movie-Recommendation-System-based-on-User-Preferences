@@ -391,8 +391,13 @@ class TestPlatformEndpoint:
         monkeypatch.setattr(main, "record_usage", lambda *args, **kwargs: None)
         monkeypatch.setattr(main, "record_recommendation_events", lambda *args, **kwargs: "test-request")
 
+        headers = {}
+        if request_url.startswith("/v1/recommendations/user/"):
+            monkeypatch.setenv("NOVA_API_KEYS", "secret-key:demo-media-co:tmdb-movies:free")
+            headers["X-Nova-API-Key"] = "secret-key"
+
         client = TestClient(app)
-        resp = client.get(request_url)
+        resp = client.get(request_url, headers=headers)
 
         assert resp.status_code == 200
         assert calls
@@ -417,6 +422,254 @@ class TestPlatformEndpoint:
 
         assert resp.status_code == 503
         assert resp.json()["detail"] == "Remote recommender unavailable"
+
+
+class TestProtectedTenantWriteEndpoints:
+    def test_billing_checkout_rejects_anonymous_tenant_headers(self, mock_artifacts, monkeypatch):
+        import backend.api.billing_routes as billing_routes
+
+        monkeypatch.setattr(billing_routes, "is_available", lambda: True)
+        monkeypatch.setattr(
+            billing_routes,
+            "create_checkout_session",
+            lambda **_: "https://stripe.example/checkout",
+        )
+
+        from backend.main import app
+
+        client = TestClient(app)
+        resp = client.post(
+            "/v1/billing/checkout",
+            headers={"X-Tenant-ID": "victim-tenant", "X-Catalog-ID": "victim-catalog"},
+            json={
+                "plan": "pro",
+                "success_url": "https://app.example/success",
+                "cancel_url": "https://app.example/cancel",
+                "email": "attacker@example.com",
+            },
+        )
+
+        assert resp.status_code == 401
+
+    def test_billing_portal_rejects_anonymous_tenant_headers(self, mock_artifacts, monkeypatch):
+        import backend.api.billing_routes as billing_routes
+
+        monkeypatch.setattr(billing_routes, "is_available", lambda: True)
+
+        from backend.main import app
+
+        client = TestClient(app)
+        resp = client.post(
+            "/v1/billing/portal",
+            headers={"X-Tenant-ID": "victim-tenant", "X-Catalog-ID": "victim-catalog"},
+            json={"return_url": "https://app.example/account"},
+        )
+
+        assert resp.status_code == 401
+
+    def test_catalog_upload_rejects_anonymous_tenant_headers(self, tmp_path, monkeypatch, mock_artifacts):
+        monkeypatch.setenv("NOVA_CATALOG_UPLOAD_PATH", str(tmp_path))
+
+        from backend.main import app
+
+        client = TestClient(app)
+        resp = client.post(
+            "/v1/catalog/upload",
+            headers={"X-Tenant-ID": "victim-tenant", "X-Catalog-ID": "victim-catalog"},
+            json={
+                "filename": "catalog.csv",
+                "csv_text": (
+                    "id,title,overview,genres\n"
+                    "1,Poisoned,A catalog row that should not be stored for another tenant,Drama\n"
+                ),
+            },
+        )
+
+        assert resp.status_code == 401
+        assert not any(tmp_path.rglob("raw.csv"))
+
+    def test_record_event_rejects_anonymous_tenant_and_user_payload(self, tmp_path, monkeypatch, mock_artifacts):
+        monkeypatch.setenv("EVENT_LOG_PATH", str(tmp_path / "events.jsonl"))
+
+        from backend.main import app
+
+        client = TestClient(app)
+        resp = client.post(
+            "/v1/events",
+            headers={"X-Tenant-ID": "victim-tenant", "X-Catalog-ID": "victim-catalog"},
+            json={
+                "event_type": "view",
+                "tenant_id": "victim-tenant",
+                "catalog_id": "victim-catalog",
+                "content_id": "content-123",
+                "user_id": "victim-user",
+            },
+        )
+
+        assert resp.status_code == 401
+        assert not (tmp_path / "events.jsonl").exists()
+
+
+class TestProtectedTenantReadEndpoints:
+    def test_billing_usage_rejects_anonymous_tenant_headers(self, mock_artifacts):
+        from backend.main import app
+
+        client = TestClient(app)
+        resp = client.get(
+            "/v1/billing/usage",
+            headers={"X-Tenant-ID": "victim-tenant", "X-Catalog-ID": "victim-catalog"},
+        )
+
+        assert resp.status_code == 401
+
+    def test_billing_usage_counts_only_authenticated_tenant(self, mock_artifacts, monkeypatch):
+        monkeypatch.setenv("NOVA_API_KEYS", "key-a:tenant-a:catalog-a:free")
+
+        from backend.data.usage import record_usage
+        from backend.main import app
+
+        record_usage("movies.list", "tenant-a", "catalog-a", plan="free", authenticated=True)
+        record_usage("movies.list", "tenant-b", "catalog-b", plan="free", authenticated=True)
+
+        client = TestClient(app)
+        resp = client.get("/v1/billing/usage", headers={"X-Nova-API-Key": "key-a"})
+
+        assert resp.status_code == 200
+        assert resp.json()["tenant_id"] == "tenant-a"
+        assert resp.json()["requests_today"] == 1
+
+    def test_usage_summary_filters_to_authenticated_tenant(self, mock_artifacts, monkeypatch):
+        monkeypatch.setenv("NOVA_API_KEYS", "key-a:tenant-a:catalog-a:free")
+
+        from backend.data.usage import record_usage
+        from backend.main import app
+
+        record_usage("movies.list", "tenant-a", "catalog-a", plan="free", authenticated=True)
+        record_usage("events.features", "tenant-b", "catalog-b", plan="free", authenticated=True)
+
+        client = TestClient(app)
+        resp = client.get("/v1/usage", headers={"X-Nova-API-Key": "key-a"})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "tenant-b:catalog-b" not in data["tenant_counts"]
+        assert set(data["tenant_counts"]) == {"tenant-a:catalog-a"}
+
+    def test_event_features_filter_to_authenticated_tenant(self, mock_artifacts, monkeypatch):
+        monkeypatch.setenv(
+            "NOVA_API_KEYS",
+            "key-a:tenant-a:catalog-a:free,key-b:tenant-b:catalog-b:free",
+        )
+
+        from backend.main import app
+
+        client = TestClient(app)
+        assert (
+            client.post(
+                "/v1/events",
+                headers={"X-Nova-API-Key": "key-a"},
+                json={"event_type": "view", "tenant_id": "tenant-a", "catalog_id": "catalog-a", "content_id": "a-1"},
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                "/v1/events",
+                headers={"X-Nova-API-Key": "key-b"},
+                json={"event_type": "view", "tenant_id": "tenant-b", "catalog_id": "catalog-b", "content_id": "b-1"},
+            ).status_code
+            == 200
+        )
+
+        resp = client.get("/v1/events/features", headers={"X-Nova-API-Key": "key-a"})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_events"] == 1
+        assert set(data["trending_movies"]) == {"a-1"}
+
+    def test_recommendation_analytics_filter_to_authenticated_tenant(self, mock_artifacts, monkeypatch):
+        monkeypatch.setenv(
+            "NOVA_API_KEYS",
+            "key-a:tenant-a:catalog-a:free,key-b:tenant-b:catalog-b:free",
+        )
+
+        from backend.main import app
+
+        client = TestClient(app)
+        assert (
+            client.post(
+                "/v1/events",
+                headers={"X-Nova-API-Key": "key-a"},
+                json={
+                    "event_type": "recommendation_impression",
+                    "tenant_id": "tenant-a",
+                    "catalog_id": "catalog-a",
+                    "movie_id": 100,
+                    "request_id": "req-a",
+                },
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                "/v1/events",
+                headers={"X-Nova-API-Key": "key-b"},
+                json={
+                    "event_type": "recommendation_impression",
+                    "tenant_id": "tenant-b",
+                    "catalog_id": "catalog-b",
+                    "movie_id": 200,
+                    "request_id": "req-b",
+                },
+            ).status_code
+            == 200
+        )
+
+        resp = client.get("/v1/events/recommendation-analytics", headers={"X-Nova-API-Key": "key-a"})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["impression_count"] == 1
+        assert data["top_recommended_movies"] == [{"movie_id": "100", "impression_count": 1}]
+
+    def test_user_recommendations_reject_anonymous_profile_reads(self, mock_artifacts):
+        from backend.main import app
+
+        client = TestClient(app)
+        resp = client.get("/v1/recommendations/user/victim-user", params={"top_k": 1})
+
+        assert resp.status_code == 401
+
+    def test_user_recommendations_do_not_use_other_tenant_profile(self, mock_artifacts, monkeypatch):
+        monkeypatch.setenv(
+            "NOVA_API_KEYS",
+            "key-a:tenant-a:catalog-a:free,key-b:tenant-b:catalog-b:free",
+        )
+
+        from backend.main import app
+
+        client = TestClient(app)
+        event_resp = client.post(
+            "/v1/events",
+            headers={"X-Nova-API-Key": "key-b"},
+            json={
+                "event_type": "view",
+                "tenant_id": "tenant-b",
+                "catalog_id": "catalog-b",
+                "movie_id": 200,
+                "user_id": "victim-user",
+            },
+        )
+        assert event_resp.status_code == 200
+
+        resp = client.get(
+            "/v1/recommendations/user/victim-user",
+            headers={"X-Nova-API-Key": "key-a"},
+            params={"top_k": 1},
+        )
+
+        assert resp.status_code == 404
 
 
 class TestCorsPolicy:
@@ -844,12 +1097,14 @@ class TestMoviesEndpoint:
 class TestEventsEndpoint:
     def test_record_event_and_read_features(self, tmp_path, monkeypatch, mock_artifacts):
         monkeypatch.setenv("EVENT_LOG_PATH", str(tmp_path / "events.jsonl"))
+        monkeypatch.setenv("NOVA_API_KEYS", "secret-key:demo-media-co:tmdb-movies:free")
 
         from backend.main import app
 
         client = TestClient(app)
         resp = client.post(
             "/events",
+            headers={"X-Nova-API-Key": "secret-key"},
             json={"event_type": "view", "movie_id": 100, "user_id": "test-user"},
         )
 
@@ -858,7 +1113,7 @@ class TestEventsEndpoint:
         assert data["status"] == "accepted"
         assert "event_id" in data
 
-        features_resp = client.get("/events/features")
+        features_resp = client.get("/events/features", headers={"X-Nova-API-Key": "secret-key"})
         assert features_resp.status_code == 200
         features = features_resp.json()
         assert features["total_events"] == 1
@@ -866,12 +1121,14 @@ class TestEventsEndpoint:
 
     def test_v1_event_alias_accepts_content_id(self, tmp_path, monkeypatch, mock_artifacts):
         monkeypatch.setenv("EVENT_LOG_PATH", str(tmp_path / "events.jsonl"))
+        monkeypatch.setenv("NOVA_API_KEYS", "secret-key:ott-startup:short-films:free")
 
         from backend.main import app
 
         client = TestClient(app)
         resp = client.post(
             "/v1/events",
+            headers={"X-Nova-API-Key": "secret-key"},
             json={
                 "event_type": "view",
                 "tenant_id": "ott-startup",
@@ -881,7 +1138,7 @@ class TestEventsEndpoint:
         )
 
         assert resp.status_code == 200
-        features_resp = client.get("/v1/events/features")
+        features_resp = client.get("/v1/events/features", headers={"X-Nova-API-Key": "secret-key"})
         assert features_resp.status_code == 200
         assert features_resp.json()["trending_movies"]["content-123"]["tenant_id"] == "ott-startup"
 
@@ -907,23 +1164,26 @@ class TestEventsEndpoint:
 
     def test_record_event_requires_movie_id_for_movie_events(self, tmp_path, monkeypatch):
         monkeypatch.setenv("EVENT_LOG_PATH", str(tmp_path / "events.jsonl"))
+        monkeypatch.setenv("NOVA_API_KEYS", "secret-key:demo-media-co:tmdb-movies:free")
 
         from backend.main import app
 
         client = TestClient(app)
-        resp = client.post("/events", json={"event_type": "click"})
+        resp = client.post("/events", headers={"X-Nova-API-Key": "secret-key"}, json={"event_type": "click"})
 
         assert resp.status_code == 400
         assert resp.json()["detail"] == "movie_id or content_id is required for content events"
 
     def test_record_event_validates_rating_range(self, tmp_path, monkeypatch):
         monkeypatch.setenv("EVENT_LOG_PATH", str(tmp_path / "events.jsonl"))
+        monkeypatch.setenv("NOVA_API_KEYS", "secret-key:demo-media-co:tmdb-movies:free")
 
         from backend.main import app
 
         client = TestClient(app)
         resp = client.post(
             "/events",
+            headers={"X-Nova-API-Key": "secret-key"},
             json={"event_type": "rating", "movie_id": 100, "rating": 6},
         )
 
@@ -947,6 +1207,7 @@ class TestRecommendEndpoints:
     def test_recommend_by_id_writes_request_and_impression_events(self, tmp_path, monkeypatch, mock_artifacts):
         event_path = tmp_path / "recommendation_events.jsonl"
         monkeypatch.setenv("EVENT_LOG_PATH", str(event_path))
+        monkeypatch.setenv("NOVA_API_KEYS", "secret-key:demo-media-co:tmdb-movies:free")
 
         from backend.events import iter_events
         from backend.main import app
@@ -954,6 +1215,7 @@ class TestRecommendEndpoints:
         client = TestClient(app)
         resp = client.get(
             "/v1/recommendations/id/100",
+            headers={"X-Nova-API-Key": "secret-key"},
             params={
                 "n": 2,
                 "request_id": "req-test-1",
@@ -981,7 +1243,10 @@ class TestRecommendEndpoints:
         assert [event["metadata"]["rank"] for event in impression_events] == [1, 2]
         assert all(event["metadata"]["retrieval_stage"] for event in impression_events)
 
-        analytics_resp = client.get("/v1/events/recommendation-analytics")
+        analytics_resp = client.get(
+            "/v1/events/recommendation-analytics",
+            headers={"X-Nova-API-Key": "secret-key"},
+        )
         assert analytics_resp.status_code == 200
         analytics = analytics_resp.json()
         assert analytics["request_count"] == 1
@@ -1073,17 +1338,23 @@ class TestRecommendEndpoints:
 
     def test_recommend_for_user_from_events(self, tmp_path, monkeypatch, mock_artifacts):
         monkeypatch.setenv("EVENT_LOG_PATH", str(tmp_path / "events.jsonl"))
+        monkeypatch.setenv("NOVA_API_KEYS", "secret-key:demo-media-co:tmdb-movies:free")
 
         from backend.main import app
 
         client = TestClient(app)
         event_resp = client.post(
             "/v1/events",
+            headers={"X-Nova-API-Key": "secret-key"},
             json={"event_type": "view", "movie_id": 100, "user_id": "user-1"},
         )
         assert event_resp.status_code == 200
 
-        resp = client.get("/v1/recommendations/user/user-1", params={"top_k": 1})
+        resp = client.get(
+            "/v1/recommendations/user/user-1",
+            headers={"X-Nova-API-Key": "secret-key"},
+            params={"top_k": 1},
+        )
 
         assert resp.status_code == 200
         results = resp.json()
@@ -1140,12 +1411,14 @@ class TestExperimentsEndpoint:
 
     def test_experiment_metrics_from_events(self, tmp_path, monkeypatch, mock_artifacts):
         monkeypatch.setenv("EVENT_LOG_PATH", str(tmp_path / "events.jsonl"))
+        monkeypatch.setenv("NOVA_API_KEYS", "secret-key:demo-media-co:tmdb-movies:free")
 
         from backend.main import app
 
         client = TestClient(app)
         event_resp = client.post(
             "/v1/events",
+            headers={"X-Nova-API-Key": "secret-key"},
             json={
                 "event_type": "recommendation_impression",
                 "movie_id": 100,
@@ -1154,7 +1427,7 @@ class TestExperimentsEndpoint:
         )
         assert event_resp.status_code == 200
 
-        resp = client.get("/v1/experiments/metrics")
+        resp = client.get("/v1/experiments/metrics", headers={"X-Nova-API-Key": "secret-key"})
 
         assert resp.status_code == 200
         rows = resp.json()["experiments"]
@@ -1187,6 +1460,7 @@ class TestCatalogOnboardingEndpoints:
 
     def test_catalog_upload_stores_manifest(self, tmp_path, monkeypatch, mock_artifacts):
         monkeypatch.setenv("NOVA_CATALOG_UPLOAD_PATH", str(tmp_path))
+        monkeypatch.setenv("NOVA_API_KEYS", "secret-key:demo-media-co:tmdb-movies:free")
 
         from backend.main import app
 
@@ -1198,6 +1472,7 @@ class TestCatalogOnboardingEndpoints:
         )
         resp = client.post(
             "/v1/catalog/upload",
+            headers={"X-Nova-API-Key": "secret-key"},
             json={"filename": "catalog.csv", "csv_text": csv_text},
         )
 

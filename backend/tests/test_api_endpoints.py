@@ -32,7 +32,7 @@ def test_api_ai_search():
     assert isinstance(data, list)
 
 
-def test_record_telemetry_event():
+def test_record_telemetry_event(monkeypatch):
     """
     Verify the telemetry endpoint can ingest a Dislike event
     which triggers the Active Inference Engine.
@@ -46,12 +46,9 @@ def test_record_telemetry_event():
         "timestamp": "2026-05-17T00:00:00Z",
     }
 
-    # Inject required tenant context headers
+    monkeypatch.setenv("NOVA_API_KEYS", "telemetry-key:test-tenant:test-catalog:enterprise")
     headers = {
-        "X-Tenant-ID": "test-tenant",
-        "X-Catalog-ID": "test-catalog",
-        "X-Tenant-Plan": "enterprise",
-        "X-Tenant-Tier": "enterprise",
+        "X-Nova-API-Key": "telemetry-key",
     }
     response = client.post("/v1/events", json=payload, headers=headers)
 

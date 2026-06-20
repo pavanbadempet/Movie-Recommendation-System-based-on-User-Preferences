@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from backend.data.auth import TenantContext, resolve_tenant_context
+from backend.data.auth import TenantContext, require_authenticated_tenant_context, resolve_tenant_context
 from backend.data.billing import (
     DAILY_LIMITS,
     create_checkout_session,
@@ -119,6 +119,8 @@ async def billing_checkout(
 
     Requires a valid API key (X-Nova-API-Key header).
     """
+    require_authenticated_tenant_context(context, "billing checkout")
+
     if not is_available():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -169,6 +171,8 @@ async def billing_portal(
     Requires a valid API key for an authenticated tenant that has an active
     Stripe subscription.
     """
+    require_authenticated_tenant_context(context, "billing portal")
+
     if not is_available():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -243,7 +247,9 @@ async def billing_usage(
     Returns API usage summary for the authenticated tenant in the current period.
     Includes daily limit, current consumption, and upgrade prompt if near limit.
     """
-    summary = summarize_usage()
+    require_authenticated_tenant_context(context, "billing usage")
+
+    summary = summarize_usage(tenant_id=context.tenant_id, catalog_id=context.catalog_id)
     daily_limit = DAILY_LIMITS.get(context.plan)
 
     # Filter summary to this tenant only

@@ -88,8 +88,9 @@ async def test_optimizer_agent_no_data(db_session):
     assert "Click-Through Rate (CTR)" in report
     assert agent.status == "completed"
     assert len(agent.steps) == 6  # Init, Fetch, Calculate, Drift, LLM, Shutdown
-    assert report_json["metrics"]["ctr"] == 0.0
-    assert report_json["metrics"]["drift_detected"] is True
+    assert report_json["metrics"]["ctr"] is None
+    assert report_json["metrics"]["ctr_status"] == "unavailable_no_recommendation_served"
+    assert report_json["metrics"]["drift_detected"] is None
 
 
 @pytest.mark.asyncio
@@ -142,3 +143,31 @@ async def test_optimizer_agent_with_data(db_session):
     assert report_json["metrics"]["ctr"] == 0.20
     assert report_json["metrics"]["drift_detected"] is False
     assert report_json["suggested_hyperparameters"]["ensemble_weights"]["sasrec"] == 0.45
+
+
+@pytest.mark.asyncio
+async def test_optimizer_agent_does_not_fabricate_ctr_without_impressions(db_session):
+    tenant = Tenant(tenant_id="33333333-3333-3333-3333-333333333333", company_name="Test Co", plan_tier="pro")
+    user = User(
+        user_sk="44444444-4444-4444-4444-444444444444",
+        tenant_id=tenant.tenant_id,
+        external_user_id="ext-click-only",
+    )
+    db_session.add_all([tenant, user])
+    db_session.commit()
+    db_session.add(
+        UserEvent(
+            tenant_id=tenant.tenant_id,
+            user_sk=user.user_sk,
+            event_type="click",
+            created_at=datetime.now(UTC).replace(tzinfo=None),
+        )
+    )
+    db_session.commit()
+
+    report, report_json = await RecommenderOptimizerAgent(db_session).run(hours=24, dry_run=True)
+
+    assert "Unavailable" in report
+    assert report_json["metrics"]["ctr"] is None
+    assert report_json["metrics"]["ctr_status"] == "unavailable_missing_recommendation_served"
+    assert report_json["metrics"]["drift_detected"] is None

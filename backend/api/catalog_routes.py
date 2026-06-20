@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from backend.data.auth import TenantContext
+from backend.data.auth import TenantContext, require_authenticated_tenant_context
 
 
 class CatalogPreviewRequest(BaseModel):
@@ -62,6 +62,8 @@ def create_catalog_router(deps: RouterDeps) -> APIRouter:
         payload: CatalogUploadRequest,
         context: TenantContext = Depends(resolve_tenant_context),
     ):
+        require_authenticated_tenant_context(context, "catalog upload")
+
         try:
             manifest = persist_catalog_upload(
                 payload.csv_text,

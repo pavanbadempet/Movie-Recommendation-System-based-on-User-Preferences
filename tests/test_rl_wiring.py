@@ -284,17 +284,23 @@ class TestActiveInferenceDispatch:
 
         mock_engine = MagicMock()
         mock_engine.emb_dim = 16
+        mock_engine.dynamic_prior.device = torch.device("cpu")
         mock_engine.self_heal = MagicMock(return_value=0.5)
+        expected_embedding = torch.arange(16, dtype=torch.float32).reshape(1, 16)
 
-        with patch("backend.main.get_active_inference_engine", return_value=mock_engine):
+        with (
+            patch("backend.main.get_active_inference_engine", return_value=mock_engine),
+            patch("backend.main.resolve_movie_embedding", return_value=expected_embedding) as resolve_embedding,
+        ):
             # Run the async function synchronously
             asyncio.run(_trigger_active_inference(movie_id=42, reward=1.0))
 
+        resolve_embedding.assert_called_once_with(42, expected_dim=16)
         mock_engine.self_heal.assert_called_once()
         call_args = mock_engine.self_heal.call_args
         # First arg is the movie embedding tensor, second is the reward
         emb_arg, reward_arg = call_args[0]
-        assert isinstance(emb_arg, torch.Tensor), "self_heal should receive a tensor embedding"
+        assert torch.equal(emb_arg, expected_embedding)
         assert reward_arg == pytest.approx(1.0), "self_heal should receive reward=+1.0"
 
     def test_trigger_active_inference_negative_reward(self):
@@ -306,13 +312,19 @@ class TestActiveInferenceDispatch:
 
         mock_engine = MagicMock()
         mock_engine.emb_dim = 16
+        mock_engine.dynamic_prior.device = torch.device("cpu")
         mock_engine.self_heal = MagicMock(return_value=0.5)
+        expected_embedding = torch.full((1, 16), 2.0)
 
-        with patch("backend.main.get_active_inference_engine", return_value=mock_engine):
+        with (
+            patch("backend.main.get_active_inference_engine", return_value=mock_engine),
+            patch("backend.main.resolve_movie_embedding", return_value=expected_embedding),
+        ):
             asyncio.run(_trigger_active_inference(movie_id=99, reward=-1.0))
 
         mock_engine.self_heal.assert_called_once()
-        _, reward_arg = mock_engine.self_heal.call_args[0]
+        embedding_arg, reward_arg = mock_engine.self_heal.call_args[0]
+        assert torch.equal(embedding_arg, expected_embedding)
         assert reward_arg == pytest.approx(-1.0), "self_heal should receive reward=-1.0"
 
     def test_trigger_active_inference_swallows_exceptions(self):
@@ -324,8 +336,42 @@ class TestActiveInferenceDispatch:
 
         mock_engine = MagicMock()
         mock_engine.emb_dim = 16
+        mock_engine.dynamic_prior.device = torch.device("cpu")
         mock_engine.self_heal = MagicMock(side_effect=RuntimeError("engine failure"))
 
-        with patch("backend.main.get_active_inference_engine", return_value=mock_engine):
+        with (
+            patch("backend.main.get_active_inference_engine", return_value=mock_engine),
+            patch("backend.main.resolve_movie_embedding", return_value=torch.zeros(1, 16)),
+        ):
             # Should not raise
             asyncio.run(_trigger_active_inference(movie_id=7, reward=1.0))
+
+    def test_process_live_feedback_uses_exact_movie_embedding(self):
+        from backend.intelligence import active_inference_engine as active_module
+
+        mock_engine = MagicMock()
+        mock_engine.emb_dim = 16
+        mock_engine.dynamic_prior.device = torch.device("cpu")
+        expected_embedding = torch.arange(16, dtype=torch.float32).reshape(1, 16)
+
+        with (
+            patch.object(active_module, "get_active_inference_engine", return_value=mock_engine),
+            patch.object(active_module, "resolve_movie_embedding", return_value=expected_embedding) as resolver,
+        ):
+            active_module.process_live_feedback(movie_id=123, feedback_type="positive")
+
+        resolver.assert_called_once_with(123, expected_dim=16)
+        mock_engine.self_heal.assert_called_once_with(expected_embedding, 1.0)
+
+    def test_resolve_movie_embedding_uses_serving_engine_lookup(self):
+        from backend.intelligence.active_inference_engine import resolve_movie_embedding
+
+        expected_embedding = torch.arange(16, dtype=torch.float32).reshape(1, 16)
+        serving_engine = MagicMock()
+        serving_engine.get_item_embedding.return_value = expected_embedding
+
+        with patch("backend.models.ensemble_engine.get_apex_engine", return_value=serving_engine):
+            actual = resolve_movie_embedding(456, expected_dim=16)
+
+        serving_engine.get_item_embedding.assert_called_once_with(456)
+        assert torch.equal(actual, expected_embedding)

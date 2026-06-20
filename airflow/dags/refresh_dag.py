@@ -3,11 +3,19 @@ import os
 
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
-
 from airflow import DAG
 
-# Import Kafka and Spark related operators if needed
-# (imported on-demand or in respective sub-modules if utilized)
+# Import decoupled remote Spark operator
+try:
+    from operators.remote_spark import RemoteSparkSubmitOperator
+except ImportError:
+    try:
+        from dags.operators.remote_spark import RemoteSparkSubmitOperator
+    except ImportError:
+        import sys
+        from pathlib import Path
+        sys.path.append(str(Path(__file__).parent))
+        from operators.remote_spark import RemoteSparkSubmitOperator
 
 
 # Function to check for Kaggle credentials
@@ -59,8 +67,8 @@ with DAG(
     )
 
     # Task 3: Run Spark ETL with Delta Lake format (Medallion Architecture)
-    # IDEMPOTENCY: Pass logical date {{ ds }} for partitioning
-    t2_spark_etl = BashOperator(
+    # Decoupled via RemoteSparkSubmitOperator (routes to remote cluster or local fallback)
+    t2_spark_etl = RemoteSparkSubmitOperator(
         task_id="run_spark_etl",
         bash_command=(
             "cd movie-rec && python etl/pyspark_etl.py "

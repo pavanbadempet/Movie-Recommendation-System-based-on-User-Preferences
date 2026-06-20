@@ -470,6 +470,8 @@ def iter_events(event_path: str | Path | None = None) -> Iterator[dict[str, Any]
 def aggregate_behavior_features(
     event_path: str | Path | None = None,
     limit: int = 20,
+    tenant_id: str | None = None,
+    catalog_id: str | None = None,
 ) -> dict[str, Any]:
     """Aggregate product behavior into lightweight recommender features."""
     path = get_events_path(event_path)
@@ -491,6 +493,13 @@ def aggregate_behavior_features(
 
     total_events = 0
     for event in iter_events(event_path):
+        event_tenant_id = str(event.get("tenant_id") or DEFAULT_TENANT_ID)
+        event_catalog_id = str(event.get("catalog_id") or DEFAULT_CATALOG_ID)
+        if tenant_id is not None and event_tenant_id != str(tenant_id):
+            continue
+        if catalog_id is not None and event_catalog_id != str(catalog_id):
+            continue
+
         event_type = str(event.get("event_type", "")).lower()
         if event_type not in ALLOWED_EVENT_TYPES:
             continue
@@ -580,6 +589,8 @@ def aggregate_behavior_features(
 def summarize_recommendation_events(
     event_path: str | Path | None = None,
     limit: int = 20,
+    tenant_id: str | None = None,
+    catalog_id: str | None = None,
 ) -> dict[str, Any]:
     """Summarize request/impression events for serving-quality analytics."""
     storage = event_storage_status(event_path)
@@ -594,6 +605,13 @@ def summarize_recommendation_events(
     request_impressions: Counter[str] = Counter()
 
     for event in iter_events(event_path):
+        event_tenant_id = str(event.get("tenant_id") or DEFAULT_TENANT_ID)
+        event_catalog_id = str(event.get("catalog_id") or DEFAULT_CATALOG_ID)
+        if tenant_id is not None and event_tenant_id != str(tenant_id):
+            continue
+        if catalog_id is not None and event_catalog_id != str(catalog_id):
+            continue
+
         event_type = str(event.get("event_type", "")).lower()
         request_id = str(event.get("request_id") or "")
         metadata = event.get("metadata") if isinstance(event.get("metadata"), dict) else {}
@@ -655,6 +673,8 @@ def build_user_behavior_profile(
     user_id: str,
     event_path: str | Path | None = None,
     limit: int = 10,
+    tenant_id: str | None = None,
+    catalog_id: str | None = None,
 ) -> dict[str, Any]:
     """Build a lightweight implicit-feedback profile from local event logs."""
     user_id = str(user_id)
@@ -669,6 +689,12 @@ def build_user_behavior_profile(
     }
 
     for event in iter_events(event_path):
+        event_tenant_id = str(event.get("tenant_id") or DEFAULT_TENANT_ID)
+        event_catalog_id = str(event.get("catalog_id") or DEFAULT_CATALOG_ID)
+        if tenant_id is not None and event_tenant_id != str(tenant_id):
+            continue
+        if catalog_id is not None and event_catalog_id != str(catalog_id):
+            continue
         if str(event.get("user_id")) != user_id:
             continue
 

@@ -2,8 +2,10 @@
 # Run: streamlit run app.py
 
 from datetime import datetime, timedelta
+import logging
 import os
 import time
+import urllib.parse
 
 import pandas as pd
 import plotly.express as px
@@ -11,6 +13,11 @@ import requests
 from st_clickable_images import clickable_images
 import streamlit as st
 import streamlit.components.v1 as components
+
+from frontend.html_safety import escape_html, safe_css_class, safe_https_url, valid_youtube_id
+from frontend.monitoring import build_monitoring_snapshot
+
+logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="Nova Recommendation Console", page_icon="N", layout="wide")
 
@@ -397,7 +404,8 @@ def fetch_all_movie_titles(backend_urls, version=4):
                 data = r.json()
                 if data:
                     return {"api_url": api_url, "titles": data}
-        except Exception:
+        except Exception as exc:
+            logger.debug("Movie title fetch failed for %s: %s", api_url, exc)
             continue
 
     # Do not cache a failed catalog fetch; free-tier backends may still be warming.
@@ -464,7 +472,8 @@ def get_recommendations(movie_id, n=10):
 
 def display_fullscreen_video(youtube_key):
     """Display YouTube video as dimmed background."""
-    if not youtube_key:
+    youtube_key = valid_youtube_id(youtube_key)
+    if youtube_key is None:
         return
 
     # Simple dimmed video background - NO overlay affecting top UI
@@ -502,18 +511,18 @@ def display_fullscreen_video(youtube_key):
 
 def display_movie_card(rec, tmdb, credits, similarity):
     """Premium movie detail card with full details."""
-    title = rec.get("title", "Unknown")
-    year = tmdb.get("release_date", "")[:4] if tmdb.get("release_date") else "N/A"
+    title = escape_html(rec.get("title", "Unknown"))
+    year = escape_html(tmdb.get("release_date", "")[:4] if tmdb.get("release_date") else "N/A")
     rating = rec.get("vote_average", 0)
     votes = int(rec.get("vote_count", 0))
     genres = rec.get("genres", "N/A")
-    overview = rec.get("overview", "No overview available.")
+    overview = escape_html(rec.get("overview", "No overview available."))
     runtime = tmdb.get("runtime", 0)
     budget = tmdb.get("budget", 0)
     revenue = tmdb.get("revenue", 0)
     popularity = rec.get("popularity", 0)
-    cast = credits.get("cast", "N/A")
-    director = credits.get("director", "N/A")
+    cast = escape_html(credits.get("cast", "N/A"))
+    director = escape_html(credits.get("director", "N/A"))
 
     # Format budget/revenue in millions
     budget_m = f"${budget // 1000000}M" if budget else "N/A"
@@ -597,7 +606,9 @@ def display_movie_card(rec, tmdb, credits, similarity):
     )
 
     # Genre tags
-    genre_html = "".join([f'<span class="genre-pill">{g.strip()}</span>' for g in str(genres).split(",")[:4]])
+    genre_html = "".join(
+        [f'<span class="genre-pill">{escape_html(g.strip())}</span>' for g in str(genres).split(",")[:4]]
+    )
     st.markdown(f'<div style="margin: 8px 0;">{genre_html}</div>', unsafe_allow_html=True)
 
     # Match badge
@@ -732,11 +743,12 @@ def show_movie_dialog(rec):
     if providers:
         cards = ""
         for p in providers[:4]:  # Limit to 4 to save space
-            logo = f"https://image.tmdb.org/t/p/original{p.get('logo_path')}"
-            name = p.get("provider_name")
+            logo = safe_https_url(f"https://image.tmdb.org/t/p/original{p.get('logo_path') or ''}")
+            raw_name = p.get("provider_name") or "provider"
+            name = escape_html(raw_name)
             # Create a Google Search link for the movie on this provider
-            query = f"watch {rec.get('title')} on {name}"
-            url = f"https://www.google.com/search?q={query}"
+            query = urllib.parse.urlencode({"q": f"watch {rec.get('title', '')} on {raw_name}"})
+            url = safe_https_url(f"https://www.google.com/search?{query}")
 
             cards += f'<a href="{url}" target="_blank" style="text-decoration:none; cursor:pointer;"><div style="display:inline-block; margin-right:10px; text-align:center; transition: transform 0.2s;"><img src="{logo}" style="width:40px; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.5);" title="Watch on {name}"></div></a>'
 
@@ -746,17 +758,21 @@ def show_movie_dialog(rec):
     overview_text = rec.get("overview", "")
     if len(overview_text) > 200:
         overview_text = overview_text[:200].rsplit(" ", 1)[0] + "..."
+    overview_text = escape_html(overview_text)
 
     # Build clickable Google search links for director and cast
-    import urllib.parse
-
     director_name = credits.get("director", "Unknown")
-    director_link = f'<a href="https://www.google.com/search?q={urllib.parse.quote(director_name)}" target="_blank" class="credit-link">{director_name}</a>'
+    director_query = urllib.parse.urlencode({"q": director_name})
+    director_link = (
+        f'<a href="https://www.google.com/search?{director_query}" target="_blank" class="credit-link">'
+        f"{escape_html(director_name)}</a>"
+    )
 
     cast_names = credits.get("cast", "").split(", ")
     cast_links = ", ".join(
         [
-            f'<a href="https://www.google.com/search?q={urllib.parse.quote(name.strip())}" target="_blank" class="credit-link">{name.strip()}</a>'
+            f'<a href="https://www.google.com/search?{urllib.parse.urlencode({"q": name.strip()})}" '
+            f'target="_blank" class="credit-link">{escape_html(name.strip())}</a>'
             for name in cast_names
             if name.strip()
         ]
@@ -769,11 +785,12 @@ def show_movie_dialog(rec):
     # === RENDER BILLBOARD WITH COMPONENTS.HTML FOR JS SUPPORT ===
     # Using components.html allows JavaScript execution for click-to-mute
 
-    player_id = f"player_{movie_id}"
+    player_id = f"player_{safe_css_class(movie_id)}"
 
     # YouTube Player API for reliable mute control
+    trailer_key = valid_youtube_id(trailer_key)
     if trailer_key:
-        player_id = f"ytplayer_{movie_id}"
+        player_id = f"ytplayer_{safe_css_class(movie_id)}"
         video_html = f'<div id="{player_id}" class="db-video-layer"></div>'
         youtube_js = f"""
         <script>
@@ -839,13 +856,13 @@ def show_movie_dialog(rec):
         </script>
         """
     else:
-        poster_url = fetch_poster(tmdb.get("backdrop_path") or rec.get("poster_path"))
+        poster_url = safe_https_url(fetch_poster(tmdb.get("backdrop_path") or rec.get("poster_path")))
         video_html = f'<div class="db-video-layer"><img src="{poster_url}" alt="backdrop"></div>'
         youtube_js = ""
 
     explanation_html = ""
     if rec.get("explanation_text"):
-        explanation_html = f'<div style="font-size: 0.85rem; color: #fff; background: rgba(229,9,20,0.2); border-left: 3px solid #e50914; padding: 8px 12px; margin: 10px 0; border-radius: 4px; animation: fadeInUp 0.6s ease-out 0.45s both;"><strong>🤖 CineBot Vibe Check:</strong> {rec.get("explanation_text")}</div>'
+        explanation_html = f'<div style="font-size: 0.85rem; color: #fff; background: rgba(229,9,20,0.2); border-left: 3px solid #e50914; padding: 8px 12px; margin: 10px 0; border-radius: 4px; animation: fadeInUp 0.6s ease-out 0.45s both;"><strong>🤖 CineBot Vibe Check:</strong> {escape_html(rec.get("explanation_text"))}</div>'
 
     billboard_html = f"""
     <!DOCTYPE html>
@@ -1040,7 +1057,7 @@ def show_movie_dialog(rec):
             {video_html}
             <div class="db-content-layer">
                 <div class="db-title-row">
-                    <div class="db-title">{rec.get("title")}</div>
+                    <div class="db-title">{escape_html(rec.get("title"))}</div>
                     <div class="rating-circle">
                         <svg width="48" height="48">
                             <circle class="bg" cx="24" cy="24" r="20"></circle>
@@ -1049,7 +1066,7 @@ def show_movie_dialog(rec):
                         <div class="value">{rating:.1f}</div>
                     </div>
                 </div>
-                <div class="db-meta">{year} • {runtime} • {str(genres).split(",")[0]}</div>
+                <div class="db-meta">{escape_html(year)} • {escape_html(runtime)} • {escape_html(str(genres).split(",")[0])}</div>
                 <div class="db-overview">{overview_text}</div>
                 {explanation_html}
                 <div class="db-credits">Directed by {director_link} • Cast: {cast_links}</div>
@@ -1433,12 +1450,19 @@ if st.session_state.page == "home":
 
             # Render Billboard
             video_embed = ""
+            trailer_key = valid_youtube_id(trailer_key)
             if trailer_key:
                 video_embed = f'<iframe src="https://www.youtube.com/embed/{trailer_key}?autoplay=1&mute=1&controls=0&disablekb=1&modestbranding=1&loop=1&playlist={trailer_key}" style="width:100%; height:100%; border:none; pointer-events: none;"></iframe>'
             else:
-                poster_url = fetch_poster(hero.get("backdrop_path"))
+                poster_url = safe_https_url(fetch_poster(hero.get("backdrop_path")))
                 video_embed = f'<img src="{poster_url}" style="width:100%; height:100%; object-fit:cover;">'
 
+            hero_title = escape_html(hero.get("title"))
+            hero_genres = escape_html(genres)
+            hero_runtime = escape_html(runtime)
+            hero_overview = escape_html(hero.get("overview"))
+            hero_director = escape_html(credits.get("director"))
+            hero_cast = escape_html(credits.get("cast"))
             st.markdown(
                 f"""
             <div class="billboard-container">
@@ -1446,12 +1470,12 @@ if st.session_state.page == "home":
                     {video_embed}
                 </div>
                 <div class="billboard-info">
-                    <div class="bb-title">{hero.get("title")}</div>
-                    <div class="bb-meta">⭐ {hero.get("vote_average", 0):.1f} | {genres} | {runtime}</div>
-                    <div class="bb-desc">{hero.get("overview")}</div>
+                    <div class="bb-title">{hero_title}</div>
+                    <div class="bb-meta">⭐ {hero.get("vote_average", 0):.1f} | {hero_genres} | {hero_runtime}</div>
+                    <div class="bb-desc">{hero_overview}</div>
                     <div class="bb-credits">
-                        Directed by <strong>{credits.get("director")}</strong><br>
-                        Starring: {credits.get("cast")}
+                        Directed by <strong>{hero_director}</strong><br>
+                        Starring: {hero_cast}
                     </div>
                 </div>
             </div>
@@ -1594,8 +1618,8 @@ elif st.session_state.page == "console":
                 showlegend=False,
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
-                font=dict(color="#ffffff"),
-                margin=dict(t=10, b=10, l=10, r=10),
+                font={"color": "#ffffff"},
+                margin={"t": 10, "b": 10, "l": 10, "r": 10},
             )
             st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
             st.dataframe(component_df, use_container_width=True, hide_index=True)
@@ -1624,8 +1648,8 @@ elif st.session_state.page == "console":
                     showlegend=False,
                     paper_bgcolor="rgba(0,0,0,0)",
                     plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(color="#ffffff"),
-                    margin=dict(t=10, b=10, l=10, r=10),
+                    font={"color": "#ffffff"},
+                    margin={"t": 10, "b": 10, "l": 10, "r": 10},
                 )
                 st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
             else:
@@ -1646,8 +1670,8 @@ elif st.session_state.page == "console":
                 fig.update_layout(
                     paper_bgcolor="rgba(0,0,0,0)",
                     plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(color="#ffffff"),
-                    margin=dict(t=10, b=10, l=10, r=10),
+                    font={"color": "#ffffff"},
+                    margin={"t": 10, "b": 10, "l": 10, "r": 10},
                 )
                 st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
             else:
@@ -1814,8 +1838,8 @@ elif st.session_state.page == "console":
                 showlegend=False,
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
-                font=dict(color="#ffffff"),
-                margin=dict(t=10, b=10, l=10, r=10),
+                font={"color": "#ffffff"},
+                margin={"t": 10, "b": 10, "l": 10, "r": 10},
             )
             st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
             with st.expander("Raw quality report"):
@@ -2041,17 +2065,22 @@ elif st.session_state.page == "search":
         # Preview
         poster_url = fetch_poster(movie.get("poster_path"))
         credits = fetch_credits(movie.get("id"))
+        safe_poster_url = safe_https_url(poster_url)
+        safe_movie_title = escape_html(movie.get("title"))
+        safe_movie_year = escape_html(movie.get("release_date", "")[:4])
+        safe_movie_overview = escape_html(movie.get("overview", ""))
+        safe_movie_cast = escape_html(credits.get("cast", "N/A"))
 
         # Highlight Card
         st.markdown(
             f"""
         <div style="display: flex; gap: 20px; background: rgba(255,255,255,0.05); padding: 20px; border-radius: 15px; margin-top: 20px;">
-            <img src="{poster_url}" width="120" style="border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
+            <img src="{safe_poster_url}" width="120" style="border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
             <div>
-                <div style="font-size: 1.5rem; font-weight: 700; margin-bottom: 5px;">{movie.get("title")}</div>
-                <div style="color: #bbb; margin-bottom: 10px;">{movie.get("release_date", "")[:4]} • ⭐ {movie.get("vote_average", 0):.1f}/10</div>
-                <div style="font-size: 0.9rem; line-height: 1.5; color: #ddd;">{movie.get("overview", "")}</div>
-                <div style="margin-top: 10px; font-size: 0.8rem; color: #888;">🎭 {credits.get("cast", "N/A")}</div>
+                <div style="font-size: 1.5rem; font-weight: 700; margin-bottom: 5px;">{safe_movie_title}</div>
+                <div style="color: #bbb; margin-bottom: 10px;">{safe_movie_year} • ⭐ {movie.get("vote_average", 0):.1f}/10</div>
+                <div style="font-size: 0.9rem; line-height: 1.5; color: #ddd;">{safe_movie_overview}</div>
+                <div style="margin-top: 10px; font-size: 0.8rem; color: #888;">🎭 {safe_movie_cast}</div>
             </div>
         </div>
         """,
@@ -2158,8 +2187,65 @@ elif st.session_state.page == "chat":
             except Exception as e:
                 st.error(f"Error: {e}")
 
-# ===== PAGE 4: REAL-TIME MONITORING =====
+# ===== PAGE 4: BACKEND TELEMETRY MONITORING =====
 elif st.session_state.page == "monitoring":
+    c1, c2 = st.columns([1, 8])
+    with c1:
+        if st.button("🏠 Home", key="back_monitoring"):
+            go_home()
+            st.rerun()
+
+    st.title("📊 Backend Telemetry Monitoring")
+    st.caption("Point-in-time health, artifact, event-store, and recommendation telemetry from the active API.")
+
+    if st.button("🔄 Refresh telemetry", key="refresh_real_monitoring"):
+        st.rerun()
+
+    snapshot = build_monitoring_snapshot(api_get)
+
+    status_cols = st.columns(4)
+    status_cols[0].metric("API health", snapshot["health_status"])
+    status_cols[1].metric("Platform", snapshot["platform_status"])
+    status_cols[2].metric("Artifacts", snapshot["artifact_status"])
+    status_cols[3].metric("Serving tier", snapshot["serving_tier"])
+
+    event_cols = st.columns(4)
+    event_cols[0].metric("Catalog movies", f"{snapshot['movie_count']:,}")
+    event_cols[1].metric("Recorded events", f"{snapshot['total_events']:,}")
+    event_cols[2].metric("Event store", snapshot["event_store"])
+    event_cols[3].metric("Durable", "Yes" if snapshot["durable"] else "No")
+
+    st.subheader("Observed event telemetry")
+    if snapshot["event_features_available"]:
+        event_counts = snapshot["event_type_counts"]
+        if event_counts:
+            event_frame = pd.DataFrame(
+                {"Event type": list(event_counts), "Count": list(event_counts.values())}
+            )
+            st.bar_chart(event_frame.set_index("Event type"))
+        else:
+            st.info("The event endpoint returned no event-type counts.")
+    else:
+        st.warning("Event analytics are unavailable. Configure NOVA_API_KEY to access tenant-scoped telemetry.")
+
+    st.subheader("Recommendation telemetry")
+    if snapshot["analytics_available"]:
+        rec_cols = st.columns(3)
+        rec_cols[0].metric("Impressions", f"{snapshot['impression_count']:,}")
+        rec_cols[1].metric("Clicks", f"{snapshot['click_count']:,}")
+        ctr = snapshot["click_through_rate"]
+        rec_cols[2].metric("CTR", f"{float(ctr):.2%}" if ctr is not None else "Unavailable")
+    else:
+        st.warning("Recommendation analytics are unavailable for the current tenant credentials.")
+
+    with st.expander("Artifact row counts"):
+        st.json(snapshot["artifact_rows"])
+
+    st.caption("Source: live backend API responses. No synthetic events or randomized metrics are generated.")
+
+
+# ===== OPTIONAL DEMO PAGE: SYNTHETIC PIPELINE VISUALIZATION =====
+elif st.session_state.page == "monitoring_demo":
     # Header navigation
     c1, c2 = st.columns([1, 8])
     with c1:
@@ -2167,8 +2253,8 @@ elif st.session_state.page == "monitoring":
             go_home()
             st.rerun()
 
-    st.title("📊 Real-Time Data Pipeline Monitoring")
-    st.caption("Kafka event stream and Delta table state visualization")
+    st.title("📊 Synthetic Pipeline Visualization")
+    st.caption("Demonstration-only Kafka and Delta visualization; values on this page are randomized.")
 
     # Custom CSS for monitoring page
     st.markdown(
@@ -2454,17 +2540,18 @@ elif st.session_state.page == "monitoring":
         event_stream_html = '<div class="event-stream">'
         for event in st.session_state.monitoring_data["kafka_events"]:
             event_type = event.get("event_type", "unknown")
-            event_class = f"event-item {event_type}"
+            safe_event_type = safe_css_class(event_type)
+            event_class = f"event-item {safe_event_type}"
 
             event_details = f"""
-            <div class="event-timestamp">{event.get("timestamp", "")}</div>
+            <div class="event-timestamp">{escape_html(event.get("timestamp", ""))}</div>
             <div class="event-details">
-                <strong>{event.get("title", "Unknown Movie")}</strong><br>
-                {event_type.upper()} by user {event.get("user_id", "?")}
+                <strong>{escape_html(event.get("title", "Unknown Movie"))}</strong><br>
+                {escape_html(str(event_type).upper())} by user {escape_html(event.get("user_id", "?"))}
             """
 
             if event_type == "rating":
-                event_details += f" (Rating: {event.get('rating', '?')}/5)"
+                event_details += f" (Rating: {escape_html(event.get('rating', '?'))}/5)"
 
             event_details += "</div>"
 
@@ -2503,10 +2590,10 @@ elif st.session_state.page == "monitoring":
             hole=0.4,
         )
         fig.update_layout(
-            margin=dict(t=0, b=0, l=0, r=0),
+            margin={"t": 0, "b": 0, "l": 0, "r": 0},
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#ffffff"),
+            font={"color": "#ffffff"},
             showlegend=True,
         )
         fig.update_traces(textposition="inside", textinfo="percent+label")
@@ -2534,15 +2621,15 @@ elif st.session_state.page == "monitoring":
         # Create line chart
         fig = px.line(df, x="Time", y="Events", line_shape="spline", color_discrete_sequence=["#e50914"])
         fig.update_layout(
-            margin=dict(t=0, b=0, l=0, r=0),
+            margin={"t": 0, "b": 0, "l": 0, "r": 0},
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#ffffff"),
-            xaxis=dict(showgrid=False, title=None),
-            yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.1)", title=None),
+            font={"color": "#ffffff"},
+            xaxis={"showgrid": False, "title": None},
+            yaxis={"showgrid": True, "gridcolor": "rgba(255,255,255,0.1)", "title": None},
             showlegend=False,
         )
-        fig.update_traces(line=dict(width=3))
+        fig.update_traces(line={"width": 3})
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
         st.markdown("</div>", unsafe_allow_html=True)

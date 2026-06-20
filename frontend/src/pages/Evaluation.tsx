@@ -195,7 +195,7 @@ function pct(v?: number | null): string {
 }
 
 // Ensure good hit count formatting doesn't show raw percentages
-function fmtVal(key: string, val: any): string {
+function fmtVal(key: string, val: unknown): string {
   if (typeof val !== "number") return "—";
   if (key === "good_hit_count" || key === "bad_hit_count" || key === "case_pass_count") {
     return val.toString();

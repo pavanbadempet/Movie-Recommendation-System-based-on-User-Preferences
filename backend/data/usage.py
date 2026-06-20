@@ -68,7 +68,11 @@ def record_usage(
     return record
 
 
-def summarize_usage(limit: int = 20) -> dict[str, Any]:
+def summarize_usage(
+    limit: int = 20,
+    tenant_id: str | None = None,
+    catalog_id: str | None = None,
+) -> dict[str, Any]:
     """Aggregate lightweight usage metrics for the console/admin API."""
     path = get_usage_path()
     operation_counts: Counter[str] = Counter()
@@ -86,9 +90,15 @@ def summarize_usage(limit: int = 20) -> dict[str, Any]:
                     record = _usage_loads(line)
                 except (json.JSONDecodeError, Exception):
                     continue
+                record_tenant_id = str(record.get("tenant_id") or "unknown")
+                record_catalog_id = str(record.get("catalog_id") or "unknown")
+                if tenant_id is not None and record_tenant_id != str(tenant_id):
+                    continue
+                if catalog_id is not None and record_catalog_id != str(catalog_id):
+                    continue
                 total += 1
                 operation_counts[str(record.get("operation") or "unknown")] += 1
-                tenant_key = f"{record.get('tenant_id', 'unknown')}:{record.get('catalog_id', 'unknown')}"
+                tenant_key = f"{record_tenant_id}:{record_catalog_id}"
                 tenant_counts[tenant_key] += 1
                 last_seen = max(last_seen or "", str(record.get("ts") or "")) or None
 

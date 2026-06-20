@@ -88,20 +88,31 @@ def _start_tier1_engine(tier_detector) -> tuple:
 def _start_tier2_engine(tier_detector) -> None:
     """Initialise the ONNX CPU engine for Tier 2.
 
-    Falls back to Tier 3 behaviour when no ONNX models are found.
+    Explicit Tier 2 configuration fails closed when required artifacts are
+    missing. Hardware auto-detection may fall back to Tier 3.
     """
+    explicit_tier2 = os.getenv("NOVA_SERVING_TIER", "").strip().lower() == "tier2"
     try:
         from backend.serving.onnx_engine import get_onnx_engine
 
         cpu_cores = getattr(getattr(tier_detector, "_profile", None), "cpu_cores", 0)
         onnx_engine = get_onnx_engine(cpu_cores=cpu_cores)
-        if not onnx_engine.has_any_onnx_models():
-            logger.warning("No ONNX models found; falling back to tier3 behaviour.")
+        missing = onnx_engine.missing_required_models()
+        if missing:
+            message = f"Tier 2 requires ONNX sessions for: {', '.join(missing)}"
+            if explicit_tier2:
+                raise RuntimeError(message)
+            logger.warning("%s; falling back to tier3 behaviour.", message)
             if tier_detector is not None:
                 tier_detector._tier = "tier3"
                 tier_detector._reason = "onnx_fallback"
     except Exception as exc:
-        logger.warning("Failed to initialise Tier2 ONNX engine: %s", exc)
+        if explicit_tier2:
+            raise RuntimeError(f"Explicit Tier 2 startup failed: {exc}") from exc
+        logger.warning("Failed to initialise Tier2 ONNX engine; falling back to Tier 3: %s", exc)
+        if tier_detector is not None:
+            tier_detector._tier = "tier3"
+            tier_detector._reason = "onnx_initialization_error"
 
 
 def _preload_realtime_index() -> None:

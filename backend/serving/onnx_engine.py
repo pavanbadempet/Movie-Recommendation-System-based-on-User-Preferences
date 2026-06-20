@@ -15,6 +15,16 @@ logger = logging.getLogger(__name__)
 
 MODELS_DIR = Path("models")
 ONNX_DIR = MODELS_DIR / "onnx"
+REQUIRED_TIER2_MODELS = frozenset(
+    {
+        "mmoe_ranker",
+        "lightgcn",
+        "hyperbolic",
+        "kan_ranker",
+        "sasrec",
+        "diffusion",
+    }
+)
 
 
 class ONNXEngine:
@@ -53,6 +63,14 @@ class ONNXEngine:
     def has_any_onnx_models(self) -> bool:
         """Return True if at least one ONNX model session loaded successfully."""
         return len(self.sessions) > 0
+
+    def missing_required_models(self) -> list[str]:
+        """Return required Tier 2 model names without a loaded ONNX session."""
+        return sorted(REQUIRED_TIER2_MODELS - set(self.sessions))
+
+    def has_required_models(self) -> bool:
+        """Return True only when the complete supported Tier 2 set is loaded."""
+        return not self.missing_required_models()
 
     def predict_mmoe(self, user_ids: np.ndarray, item_ids: np.ndarray):
         """Runs the Multi-Task Ranker via C++ runtime."""

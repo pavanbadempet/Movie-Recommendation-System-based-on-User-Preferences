@@ -245,12 +245,29 @@ def resolve_tenant_context(
     )
 
 
+def require_authenticated_tenant_context(
+    context: TenantContext,
+    operation: str = "this operation",
+) -> None:
+    """Require a tenant context proven by an API key.
+
+    `resolve_tenant_context` intentionally supports public demo reads by
+    returning an unauthenticated default/header-selected context when no API
+    key is supplied. Tenant-scoped writes and billing actions must call this
+    helper before using that context for protected state.
+    """
+    if not context.authenticated:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Valid X-Nova-API-Key required for {operation}.",
+        )
+
+
 def enforce_payload_context(
     payload: Any,
     context: TenantContext,
 ) -> None:
-    if not context.authenticated:
-        return
+    require_authenticated_tenant_context(context, "event ingestion")
     payload_tenant = getattr(payload, "tenant_id", None)
     payload_catalog = getattr(payload, "catalog_id", None)
     if payload_tenant and payload_tenant != context.tenant_id:

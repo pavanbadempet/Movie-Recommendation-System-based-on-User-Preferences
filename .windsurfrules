@@ -1,0 +1,32 @@
+# Windsurf Token Optimization Rules
+# Optimized for Windsurf AI coding assistant
+
+## Conversation Management
+- Start new conversations for different tasks
+- Clear context when switching between unrelated features
+- Use /reset when conversation becomes too long
+
+## Prompt Efficiency
+- Use single-line requests when possible
+- Avoid multi-step instructions in one prompt
+- Be specific: "fix bug in line 42" not "there's a bug somewhere"
+
+## File Operations
+- Use @file to reference files instead of pasting content
+- Request specific file operations: "update function X in file Y"
+- Avoid asking to "read and understand" - just state what needs changing
+
+## Code Generation
+- Request minimal viable implementations
+- Ask for specific patterns: "use try-except here"
+- Avoid "make it production-ready" - be specific about requirements
+
+## Debugging
+- Provide error messages and stack traces directly
+- Specify exact line numbers when possible
+- Ask for specific fixes: "handle this exception" not "fix error handling"
+
+## Token-Saving Commands
+- Use /compact to compress conversation history
+- Use /focus to limit context to current task
+- Use /clear to remove unnecessary context

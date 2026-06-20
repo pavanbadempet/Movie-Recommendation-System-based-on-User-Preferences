@@ -51,9 +51,22 @@ NUM_USERS_MMOE = 611
 NUM_ITEMS_MMOE = 193610
 
 
+def load_checkpoint_strict(model, checkpoint_path, model_name, state_dict=None):
+    """Load a checkpoint or fail before an artifact can be exported."""
+    checkpoint_path = Path(checkpoint_path)
+    if state_dict is None:
+        state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+    try:
+        model.load_state_dict(state_dict)
+    except Exception as exc:
+        raise RuntimeError(f"{model_name} checkpoint is incompatible: {checkpoint_path}") from exc
+    return model
+
+
 def export_model_to_onnx(model, dummy_inputs, filename, input_names, output_names, dynamic_axes):
     """Generic ONNX exporter with dynamic batch sizing."""
     onnx_path = ONNX_DIR / filename
+    ONNX_DIR.mkdir(parents=True, exist_ok=True)
     model.eval()
 
     # Set UTF-8 encoding for stdout/stderr to handle emoji in model docstrings on Windows
@@ -66,21 +79,19 @@ def export_model_to_onnx(model, dummy_inputs, filename, input_names, output_name
         except Exception:
             pass
 
-    try:
-        torch.onnx.export(
-            model,
-            dummy_inputs,
-            str(onnx_path),
-            export_params=True,
-            opset_version=14,
-            do_constant_folding=True,
-            input_names=input_names,
-            output_names=output_names,
-            dynamic_axes=dynamic_axes,
-        )
-        logger.info("Exported %s successfully.", filename)
-    except Exception as e:
-        logger.error("Failed to export %s: %s", filename, str(e).encode("ascii", "replace").decode())
+    torch.onnx.export(
+        model,
+        dummy_inputs,
+        str(onnx_path),
+        export_params=True,
+        opset_version=14,
+        do_constant_folding=True,
+        input_names=input_names,
+        output_names=output_names,
+        dynamic_axes=dynamic_axes,
+    )
+    logger.info("Exported %s successfully.", filename)
+    return onnx_path
 
 
 class LightGCNWrapper(torch.nn.Module):
@@ -158,7 +169,7 @@ def main():
     if mmoe_path.exists():
         logger.info("Exporting MMoE Ranker...")
         mmoe = MMoERanker(user_vocab_size=NUM_USERS_MMOE, item_vocab_size=NUM_ITEMS_MMOE)
-        mmoe.load_state_dict(torch.load(mmoe_path, map_location="cpu", weights_only=True))
+        load_checkpoint_strict(mmoe, mmoe_path, "MMoE ranker")
 
         u_dummy = torch.randint(0, NUM_USERS_MMOE, (10,))
         i_dummy = torch.randint(0, NUM_ITEMS_MMOE, (10,))
@@ -190,7 +201,7 @@ def main():
         ni = ckpt["item_embedding.weight"].shape[0]
         ed = ckpt["user_embedding.weight"].shape[1]
         lightgcn = LightGCN(num_users=nu, num_items=ni, embedding_dim=ed)
-        lightgcn.load_state_dict(ckpt)
+        load_checkpoint_strict(lightgcn, lightgcn_path, "LightGCN", state_dict=ckpt)
 
         wrapper = LightGCNWrapper(lightgcn)
 
@@ -221,23 +232,7 @@ def main():
         except KeyError:
             nu, ni, ed = NUM_USERS_ENSEMBLE, NUM_ITEMS_ENSEMBLE, 16
         quantum = QuantumFluidRecommender(nu, ni, ed)
-        try:
-            quantum.load_state_dict(ckpt)
-        except Exception:
-            logger.warning("Quantum weights mismatch; exporting with random weights")
-
-        wrapper = QuantumWrapper(quantum)
-        u_dummy = torch.tensor([1], dtype=torch.long)
-        i_dummy = torch.randint(0, ni, (5,))
-
-        export_model_to_onnx(
-            wrapper,
-            (u_dummy, i_dummy),
-            "quantum_fluid.onnx",
-            input_names=["user_ids", "item_ids"],
-            output_names=["scores"],
-            dynamic_axes={"item_ids": {0: "batch_size"}, "scores": {0: "batch_size"}},
-        )
+        load_checkpoint_strict(quantum, quantum_path, "Quantum Fluid", state_dict=ckpt)
 
         wrapper = QuantumWrapper(quantum)
         u_dummy = torch.tensor([1], dtype=torch.long)
@@ -266,10 +261,7 @@ def main():
         except KeyError:
             nu, ni, ed = NUM_USERS_ENSEMBLE, NUM_ITEMS_ENSEMBLE, 16
         hyper = HyperbolicRecommender(nu, ni, ed)
-        try:
-            hyper.load_state_dict(ckpt)
-        except Exception:
-            logger.warning("Hyperbolic weights mismatch; exporting with random weights")
+        load_checkpoint_strict(hyper, hyper_path, "Hyperbolic", state_dict=ckpt)
 
         wrapper = HyperbolicWrapper(hyper)
         u_dummy = torch.tensor([1], dtype=torch.long)
@@ -291,10 +283,7 @@ def main():
     if kan_path.exists():
         logger.info("Exporting KAN Ranker...")
         kan = KANRanker(input_dim=32, hidden_dim=64)  # emb_dim*2 = 16*2
-        try:
-            kan.load_state_dict(torch.load(kan_path, map_location="cpu", weights_only=True))
-        except Exception:
-            logger.warning("KAN weights mismatch; exporting with random weights")
+        load_checkpoint_strict(kan, kan_path, "KAN ranker")
         wrapper = KANWrapper(kan)
         u_dummy = torch.randn(5, 16)
         i_dummy = torch.randn(5, 16)
@@ -314,10 +303,7 @@ def main():
     if sasrec_path.exists():
         logger.info("Exporting SASRec...")
         sasrec = SASRec(num_items=NUM_ITEMS_ENSEMBLE, hidden_dim=64)
-        try:
-            sasrec.load_state_dict(torch.load(sasrec_path, map_location="cpu", weights_only=True))
-        except Exception:
-            logger.warning("SASRec weights mismatch; exporting with random weights")
+        load_checkpoint_strict(sasrec, sasrec_path, "SASRec")
         wrapper = SASRecWrapper(sasrec)
         seq_dummy = torch.zeros((1, 50), dtype=torch.long)
         cand_dummy = torch.randint(0, NUM_ITEMS_ENSEMBLE, (1, 5))
@@ -340,10 +326,7 @@ def main():
     if diffusion_path.exists():
         logger.info("Exporting Diffusion Denoiser...")
         diffusion = LatentDiffusionRecommender(emb_dim=16, num_timesteps=20)
-        try:
-            diffusion.load_state_dict(torch.load(diffusion_path, map_location="cpu", weights_only=True))
-        except Exception:
-            logger.warning("Diffusion weights mismatch; exporting with random weights")
+        load_checkpoint_strict(diffusion, diffusion_path, "Diffusion")
         wrapper = DiffusionDenoiserWrapper(diffusion)
         x_dummy = torch.randn(5, 16)
         t_dummy = torch.ones(5, 1) * 0.5

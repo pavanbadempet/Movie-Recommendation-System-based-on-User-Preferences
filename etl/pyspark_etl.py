@@ -136,8 +136,11 @@ def create_spark_session(
     )
 
     if enable_delta:
-        builder = builder.config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension").config(
-            "spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog"
+        builder = (
+            builder.config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+            .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+            .config("spark.databricks.delta.properties.defaults.autoOptimize.optimizeWrite", "true")
+            .config("spark.databricks.delta.properties.defaults.autoOptimize.autoCompact", "true")
         )
         try:
             from delta import configure_spark_with_delta_pip
@@ -482,6 +485,12 @@ def upsert_movie_scd_dimension(
                     "left_anti",
                 )
                 inserts_df.write.format("delta").mode("append").save(dimension_path)
+
+                # Optimize Delta layout with Z-Ordering to speed up future merges
+                try:
+                    spark.sql(f"OPTIMIZE delta.`{dimension_path}` ZORDER BY (id)")
+                except Exception as optimize_exc:
+                    logger.warning("Could not optimize Delta table %s: %s", dimension_path, optimize_exc)
 
             scd_df = spark.read.format("delta").load(dimension_path)
         except ImportError as exc:

@@ -1,3 +1,9 @@
+"""Generate an evidence-backed internal fairness diagnostic."""
+
+from __future__ import annotations
+
+import argparse
+import json
 import logging
 from pathlib import Path
 import sys
@@ -15,133 +21,142 @@ DATA_DIR = PROJECT_ROOT / "data" / "processed"
 
 
 class FairnessAuditor:
-    """
-    Audits the recommendation system for popularity bias, demographic parity,
-    and calibration. Generates compliance reports.
-    """
+    """Compute bounded fairness diagnostics from supplied production evidence."""
 
-    def __init__(self):
-        self.movies = None
-        self.load_data()
+    def __init__(self, data_dir: Path | str = DATA_DIR):
+        self.data_dir = Path(data_dir)
+        self.movies = self.load_data()
 
-    def load_data(self):
-        movies_path = DATA_DIR / "movies_transformed.parquet"
-        if movies_path.exists():
-            self.movies = pd.read_parquet(movies_path)
-        else:
-            logger.warning("No movies_transformed.parquet found. Using mocked data for audit.")
-            # Mock data for demonstration of the audit logic
-            self.movies = pd.DataFrame(
-                {
-                    "id": range(1, 1001),
-                    "popularity": np.random.exponential(scale=10, size=1000),
-                    "genres": [["Action"] if i % 2 == 0 else ["Comedy"] for i in range(1000)],
-                }
+    def load_data(self) -> pd.DataFrame:
+        movies_path = self.data_dir / "movies_transformed.parquet"
+        if not movies_path.is_file():
+            raise FileNotFoundError(
+                f"Required catalog evidence not found: {movies_path}. "
+                "Run the production data pipeline before auditing."
             )
+        movies = pd.read_parquet(movies_path)
+        if "id" not in movies.columns:
+            raise ValueError(f"Catalog evidence has no id column: {movies_path}")
+        return movies
 
     def measure_popularity_bias(self, recommended_items: list[list[int]]) -> float:
-        """
-        Calculates the Gini Coefficient of recommendations to detect Popularity Bias.
-        A Gini of 0 means perfect equality (all items recommended equally).
-        A Gini of 1 means extreme inequality (only 1 item is ever recommended).
-        Target: < 0.7
-        """
-        # Count frequency of each item being recommended
+        """Calculate the Gini coefficient of observed recommendation slates."""
         item_counts: dict[int, int] = {}
         total_recs = 0
         for rec_list in recommended_items:
             for item in rec_list:
-                item_counts[item] = item_counts.get(item, 0) + 1
+                item_counts[int(item)] = item_counts.get(int(item), 0) + 1
                 total_recs += 1
-
         if total_recs == 0:
-            return 0.0
+            raise ValueError("At least one observed recommendation is required")
 
-        # Convert to array and sort
-        counts = np.array(list(item_counts.values()), dtype=np.float64)
-        counts = np.sort(counts)
-
-        # Calculate Gini
+        counts = np.sort(np.array(list(item_counts.values()), dtype=np.float64))
         n = len(counts)
         index = np.arange(1, n + 1)
-        gini = (np.sum((2 * index - n - 1) * counts)) / (n * np.sum(counts))
-        return float(gini)
+        return float(np.sum((2 * index - n - 1) * counts) / (n * np.sum(counts)))
 
     def measure_calibration(self, user_history_genres: dict, recommended_genres: dict) -> float:
-        """
-        Measures if the genre distribution of recommendations matches the user's historical tastes.
-        Returns Kullback-Leibler (KL) Divergence. Lower is better (more calibrated).
-        """
+        """Calculate KL divergence between observed history and recommendation genres."""
 
-        # Normalize to probability distributions
-        def normalize(d):
-            total = sum(d.values())
-            if total == 0:
-                return {k: 1.0 / len(d) for k in d}
-            return {k: v / total for k, v in d.items()}
+        def normalize(values: dict) -> dict:
+            if not values:
+                raise ValueError("Genre evidence must not be empty")
+            total = sum(float(value) for value in values.values())
+            if total <= 0:
+                raise ValueError("Genre evidence totals must be positive")
+            return {key: float(value) / total for key, value in values.items()}
 
         p = normalize(user_history_genres)
         q = normalize(recommended_genres)
-
-        # Calculate KL divergence (sum of p(x) * log(p(x)/q(x)))
         kl_div = 0.0
-        all_genres = set(p.keys()) | set(q.keys())
-
-        for g in all_genres:
-            px = p.get(g, 1e-10)  # Avoid log(0)
-            qx = q.get(g, 1e-10)
+        for genre in set(p) | set(q):
+            px = p.get(genre, 1e-10)
+            qx = q.get(genre, 1e-10)
             kl_div += px * np.log(px / qx)
-
         return float(kl_div)
 
-    def generate_report(self, mock_recommendation_slates: list[list[int]]) -> str:
-        """Generates a markdown audit report."""
-        logger.info("Generating Fairness & Bias Audit Report...")
+    def generate_report(
+        self,
+        recommendation_slates: list[list[int]],
+        user_history_genres: dict,
+        recommended_genres: dict,
+        privacy_evidence: dict | None = None,
+    ) -> str:
+        """Generate an internal diagnostic without making legal compliance claims."""
+        logger.info("Generating evidence-backed fairness diagnostic...")
+        gini = self.measure_popularity_bias(recommendation_slates)
+        kl_div = self.measure_calibration(user_history_genres, recommended_genres)
 
-        gini = self.measure_popularity_bias(mock_recommendation_slates)
-
-        # Mocking genre calibration
-        kl_div = self.measure_calibration({"Action": 10, "Comedy": 5}, {"Action": 8, "Comedy": 7})
+        privacy_lines = ["- **Status:** NOT EVALUATED", "- No privacy-runtime evidence was supplied."]
+        if privacy_evidence:
+            mechanism = str(privacy_evidence.get("mechanism") or "").strip()
+            epsilon = privacy_evidence.get("epsilon")
+            source = str(privacy_evidence.get("source") or "").strip()
+            if mechanism and epsilon is not None and source:
+                privacy_lines = [
+                    "- **Status:** EVIDENCE PROVIDED (manual verification required)",
+                    f"- **Mechanism:** {mechanism}",
+                    f"- **Epsilon:** {epsilon}",
+                    f"- **Evidence source:** {source}",
+                ]
 
         report = [
-            "# AI Fairness & Bias Audit Report",
-            "**Compliance Standard:** EU AI Act (2024) / internal trust & safety guidelines",
+            "# Fairness Diagnostic Report",
             "",
-            "## 1. Popularity Bias (Gini Coefficient)",
+            "> **Scope:** Internal engineering diagnostic only; this is not a compliance certification.",
+            "> Results describe only the supplied recommendation and genre evidence.",
+            "",
+            "## Evidence Summary",
+            f"- Observed slates: {len(recommendation_slates)}",
+            f"- Observed recommendations: {sum(len(slate) for slate in recommendation_slates)}",
+            "",
+            "## Popularity Bias (Gini Coefficient)",
             f"- **Score:** {gini:.4f}",
-            "- **Target:** < 0.70",
-            "- **Status:** " + ("✅ PASS" if gini < 0.7 else "❌ FAIL"),
-            "> *The Gini coefficient measures the inequality of recommendation distribution. A passing score proves the system surfaces long-tail/niche content and doesn't just blindly recommend blockbusters.*",
+            "- **Internal target:** < 0.70",
+            "- **Threshold result:** " + ("WITHIN TARGET" if gini < 0.7 else "OUTSIDE TARGET"),
             "",
-            "## 2. Recommendation Calibration (KL Divergence)",
+            "## Recommendation Calibration (KL Divergence)",
             f"- **Score:** {kl_div:.4f}",
-            "- **Target:** < 0.50",
-            "- **Status:** " + ("✅ PASS" if kl_div < 0.5 else "❌ FAIL"),
-            "> *Measures if the genre distribution of recommendations accurately reflects the user's historical viewing proportions without over-amplifying dominant genres.*",
+            "- **Internal target:** < 0.50",
+            "- **Threshold result:** " + ("WITHIN TARGET" if kl_div < 0.5 else "OUTSIDE TARGET"),
             "",
-            "## 3. Differential Privacy",
-            "- **Status:** ✅ ACTIVE",
-            "> *Gaussian and Laplace noise mechanisms are actively bounded to user embeddings (epsilon=1.0) to prevent reverse-engineering of user behavioral telemetry.*",
+            "## Differential Privacy Evidence",
+            *privacy_lines,
         ]
-
         return "\n".join(report)
 
 
-if __name__ == "__main__":
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--evidence",
+        type=Path,
+        required=True,
+        help="JSON file containing recommendation_slates, user_history_genres, and recommended_genres.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=PROJECT_ROOT / "docs" / "FAIRNESS_AUDIT_REPORT.md",
+    )
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = _parse_args()
+    evidence = json.loads(args.evidence.read_text(encoding="utf-8"))
     auditor = FairnessAuditor()
-    # Simulate recommendation slates across 1000 users
-    # We use a Zipf distribution to simulate a slight popularity bias, but keep it within bounds
-    num_users = 1000
-    items = np.arange(1, 1000)
-    probabilities = 1.0 / (items**0.5)  # Alpha = 0.5 (mild popularity bias)
-    probabilities /= probabilities.sum()
+    report_md = auditor.generate_report(
+        recommendation_slates=evidence["recommendation_slates"],
+        user_history_genres=evidence["user_history_genres"],
+        recommended_genres=evidence["recommended_genres"],
+        privacy_evidence=evidence.get("privacy_evidence"),
+    )
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(report_md, encoding="utf-8")
+    logger.info("Diagnostic written to %s", args.output)
+    return 0
 
-    mock_slates = [np.random.choice(items, size=10, p=probabilities).tolist() for _ in range(num_users)]
 
-    report_md = auditor.generate_report(mock_slates)
-
-    report_path = PROJECT_ROOT / "docs" / "FAIRNESS_AUDIT_REPORT.md"
-    report_path.write_text(report_md, encoding="utf-8")
-
-    logger.info(f"Report written to {report_path}")
-    print("\n" + report_md)
+if __name__ == "__main__":
+    raise SystemExit(main())

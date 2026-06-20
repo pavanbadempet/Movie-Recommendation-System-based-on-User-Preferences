@@ -40,18 +40,17 @@ kubectl create secret generic apex-secrets \
 ### 2. Install the chart
 
 ```bash
-# Tier 2 (ONNX CPU — default)
+# Tier 3 (FAISS + TF-IDF — clean-deployment default)
 helm install apex ./k8s/helm/apex \
   --set secretRefs.jwtSecretKey=jwt-secret-key \
   --set secretRefs.tmdbApiKey=tmdb-api-key \
   --set secretRefs.adminToken=admin-token
 
-# Tier 3 (FAISS only — minimal resources)
+# Tier 2 requires the complete ONNX artifact set to be supplied to /app/models/onnx.
+# Explicit Tier 2 startup fails closed when required models are missing.
 helm install apex ./k8s/helm/apex \
-  --set servingTier=tier3 \
-  --set servingProfile=lite \
-  --set resources.requests.memory=512Mi \
-  --set resources.limits.memory=1Gi
+  --set servingTier=tier2 \
+  --set servingProfile=full
 ```
 
 ### 3. Verify deployment
@@ -67,8 +66,8 @@ curl http://localhost:8000/health
 | Tier | `servingTier` | `servingProfile` | Memory | Use Case |
 |---|---|---|---|---|
 | **Tier 1** | `tier1` | `full` | ≥16Gi | GPU server, full 6-model ensemble + online learning |
-| **Tier 2** | `tier2` | `full` | 4–8Gi | CPU server, ONNX quantized inference (default) |
-| **Tier 3** | `tier3` | `lite` | 0.5–2Gi | Low-memory, FAISS + TF-IDF only |
+| **Tier 2** | `tier2` | `full` | 4–8Gi | CPU server, requires complete external ONNX model set |
+| **Tier 3** | `tier3` | `lite` | 0.5–2Gi | Clean-deployment default, FAISS + TF-IDF |
 
 ### Upgrading to Tier 1 (GPU)
 
@@ -158,7 +157,7 @@ Key values:
 | Value | Default | Description |
 |---|---|---|
 | `replicaCount` | `2` | Pod replicas |
-| `servingTier` | `tier2` | ML serving tier |
+| `servingTier` | `tier3` | ML serving tier |
 | `dpEpsilon` | `1.0` | Differential privacy budget |
 | `autoscaling.enabled` | `true` | Enable HPA |
 | `podDisruptionBudget.enabled` | `true` | Enable PDB |

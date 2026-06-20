@@ -137,6 +137,17 @@ def download_file(url: str, dest_path: Path, chunk_size: int = 8192, required: b
                             f"  Progress: {pct:.1f}% ({downloaded // (1024 * 1024)}MB / {total_size // (1024 * 1024)}MB)"
                         )
 
+        if dest_path.name == "nova_ranker.joblib":
+            expected_sha256 = _expected_ranker_sha256()
+            actual_sha256 = file_sha256(temp_path)
+            if not expected_sha256 or actual_sha256 != expected_sha256:
+                logger.error(
+                    "Refusing downloaded Nova ranker artifact: SHA-256 %s does not match the pinned digest.",
+                    actual_sha256,
+                )
+                temp_path.unlink(missing_ok=True)
+                return False
+
         shutil.move(str(temp_path), str(dest_path))
         logger.info(f"Downloaded {dest_path.name} ({dest_path.stat().st_size // (1024 * 1024)}MB)")
         return True
@@ -158,6 +169,15 @@ def file_sha256(file_path: Path) -> str | None:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _expected_ranker_sha256() -> str | None:
+    """Return the operator-pinned checksum for the executable ranker artifact."""
+    for env_name in ("NOVA_RANKER_SHA256", "NOVA_RANKER_JOBLIB_SHA256"):
+        value = os.getenv(env_name, "").strip().lower()
+        if value:
+            return value
+    return None
 
 
 def _load_manifest_checksums(models_dir: Path) -> dict[str, dict]:
@@ -409,6 +429,11 @@ def ensure_model_files(
         if downloads_disabled:
             log_fn = logger.warning if required else logger.info
             log_fn("Skipping %s download because NOVA_DISABLE_MODEL_DOWNLOADS is set.", filename)
+            results[filename] = False
+            continue
+
+        if filename == "nova_ranker.joblib" and not _expected_ranker_sha256():
+            logger.warning("Skipping Nova ranker download because NOVA_RANKER_SHA256 is not configured.")
             results[filename] = False
             continue
 

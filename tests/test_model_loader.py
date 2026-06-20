@@ -36,6 +36,21 @@ def test_ensure_model_files_can_disable_external_downloads(tmp_path, monkeypatch
     assert result["movie_ids.npy"] is False
 
 
+def test_ranker_joblib_download_requires_pinned_sha(tmp_path, monkeypatch):
+    """Unsafe joblib artifacts must not be pulled from mutable remote URLs without an expected digest."""
+    import backend.models.model_loader as loader
+
+    monkeypatch.delenv("NOVA_DISABLE_MODEL_DOWNLOADS", raising=False)
+    monkeypatch.delenv("NOVA_RANKER_SHA256", raising=False)
+    calls = []
+    monkeypatch.setattr(loader, "download_file", lambda *args, **kwargs: calls.append(args) or True)
+
+    result = loader.ensure_model_files(tmp_path, selected_files={"nova_ranker.joblib"})
+
+    assert result["nova_ranker.joblib"] is False
+    assert calls == []
+
+
 def test_low_memory_profile_still_downloads_serving_metadata(monkeypatch):
     """Lite hosts still need small alignment and semantic health artifacts."""
     import backend.models.model_loader as loader
