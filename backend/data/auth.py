@@ -188,11 +188,20 @@ def resolve_tenant_context(
     x_tenant_id: str | None = Header(default=None, alias="X-Tenant-ID"),
     x_catalog_id: str | None = Header(default=None, alias="X-Catalog-ID"),
     db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
 ) -> TenantContext:
     """
     Resolve request tenant context directly from PostgreSQL `dim_api_key`
-    using bcrypt validation.
+    using bcrypt validation or from JWT bearer token.
     """
+    if current_user is not None:
+        return TenantContext(
+            tenant_id=str(current_user.tenant_id),
+            catalog_id=x_catalog_id or DEFAULT_CATALOG_ID,
+            plan="demo",
+            authenticated=True,
+            api_key_label=f"user:{current_user.external_user_id}",
+        )
     static_keys = _configured_static_api_keys()
     if static_keys:
         if not x_nova_api_key:
