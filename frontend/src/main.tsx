@@ -23,7 +23,6 @@ import {
   X,
   User,
   LogOut,
-  Menu,
   MoreHorizontal,
   Network,
 } from "lucide-react";
@@ -1278,6 +1277,7 @@ function App() {
   const [isMobileViewport, setIsMobileViewport] = React.useState(() => typeof window !== "undefined" ? window.innerWidth <= 768 : false);
   const [isMobileSimulated, setIsMobileSimulated] = React.useState(false);
   const [showMoreDrawer, setShowMoreDrawer] = React.useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
 
   React.useEffect(() => {
@@ -1402,7 +1402,7 @@ function App() {
         } else {
           setHomeError("No movies found in catalog.");
         }
-      } catch (fallbackError) {
+      } catch {
         setHomeError(error instanceof Error ? error.message : "Movies unavailable during warmup.");
       }
     } finally {
@@ -2087,6 +2087,7 @@ function App() {
         {/* Slide-up bottom sheet drawer for "More" options */}
         {showMoreDrawer && (
           <div className="mobile-bottom-sheet-overlay" onClick={() => setShowMoreDrawer(false)} role="presentation">
+            {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/click-events-have-key-events */}
             <div className="mobile-bottom-sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="More navigation options">
               <div className="sheet-handle" />
               <h3 className="sheet-title">More Options</h3>
@@ -2138,7 +2139,7 @@ function App() {
                         setDeferredPrompt(null);
                       }
                     } else {
-                      alert("To install this app on your phone:\n\n1. Tap the Share button in your mobile browser.\n2. Select 'Add to Home Screen'.\n3. Launch Nova directly from your home screen!");
+                      window.alert("To install this app on your phone:\n\n1. Tap the Share button in your mobile browser.\n2. Select 'Add to Home Screen'.\n3. Launch Nova directly from your home screen!");
                     }
                     setShowMoreDrawer(false);
                   }}

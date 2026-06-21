@@ -14,10 +14,8 @@ the Clifford Sandwich Product:
 where ~U is the reversal of U (negating the bivector component).
 """
 
-import math
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class CliffordRecommender(nn.Module):

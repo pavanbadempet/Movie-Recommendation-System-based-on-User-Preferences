@@ -373,9 +373,10 @@ import re as _re
 
 def sparse_search_movies(rec, query: str, limit: int = 20) -> list:
     """TF-IDF + relevance-scoring fallback for Recommender.search_movies."""
+    import logging
+
     import numpy as _np
     import pandas as _pd
-    import logging
 
     if not query or rec._movies is None:
         return []
@@ -397,7 +398,7 @@ def sparse_search_movies(rec, query: str, limit: int = 20) -> list:
         if rec._search_text_cache_frame_id != frame_id:
             rec._search_text_cache.clear()
             rec._search_text_cache_frame_id = frame_id
-        
+
         cached = rec._search_text_cache.get(column)
         if cached is None or not cached.index.equals(rec._movies.index):
             normalized = (
@@ -409,7 +410,7 @@ def sparse_search_movies(rec, query: str, limit: int = 20) -> list:
             )
             rec._search_text_cache[column] = normalized
             cached = normalized
-            
+
         if index_subset is not None:
             return cached.loc[index_subset]
         return cached
@@ -457,7 +458,7 @@ def sparse_search_movies(rec, query: str, limit: int = 20) -> list:
         query_vec = rec._vectorizer.transform([query])
         query_vec_norm = normalize(query_vec, norm='l2', axis=1)
         scores = rec._tfidf_matrix.dot(query_vec_norm.T).toarray().flatten()
-        
+
         # Take a candidate pool of limit * 10, capped at catalog length
         top_k = min(limit * 10, len(rec._movies))
         if len(scores) <= top_k:
@@ -465,7 +466,7 @@ def sparse_search_movies(rec, query: str, limit: int = 20) -> list:
         else:
             top_indices = _np.argpartition(scores, -top_k)[-top_k:]
             top_indices = top_indices[_np.argsort(scores[top_indices])[::-1]]
-            
+
         vector_indices = [idx for idx in top_indices if scores[idx] > 0.0]
     else:
         scores = None
@@ -580,9 +581,10 @@ def sparse_search_movies(rec, query: str, limit: int = 20) -> list:
 
 def metadata_recommend_by_index(rec, movie_idx: int, n: int = 10) -> list:
     """Content-based fallback recommender when vector artifacts are unavailable."""
+    import re as _re
+
     import numpy as _np
     import pandas as _pd
-    import re as _re
 
     if rec._movies is None or movie_idx < 0 or movie_idx >= len(rec._movies):
         return []
@@ -676,7 +678,7 @@ def metadata_recommend_by_index(rec, movie_idx: int, n: int = 10) -> list:
         benchmark_cases = []
         for path in possible_paths:
             if path.exists():
-                with open(path, "r", encoding="utf-8") as f:
+                with open(path, encoding="utf-8") as f:
                     data = _json.load(f)
                     benchmark_cases = data.get("cases", [])
                 break
@@ -791,7 +793,7 @@ def metadata_recommend_by_index(rec, movie_idx: int, n: int = 10) -> list:
             row_title_lower_no_art = _re.sub(r"^(the|a|an)\s+", "", row_title.lower()).strip()
             if seed_franchise and len(seed_franchise) >= 3 and row_title_lower_no_art.startswith(seed_franchise):
                 row_genres_str = genres_col[idx_row] if genres_col is not None else ""
-                row_genres = set(g.strip() for g in row_genres_str.split(",") if g.strip())
+                row_genres = {g.strip() for g in row_genres_str.split(",") if g.strip()}
                 if q_genres & row_genres:
                     prefix_franchise_set.add(idx_row)
                     continue

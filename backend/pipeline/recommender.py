@@ -577,14 +577,14 @@ class Recommender:
                         genres_str = str(genres_val).lower()
 
                     has_keyword = (
-                        q_lower in title 
-                        or q_lower in overview 
+                        q_lower in title
+                        or q_lower in overview
                         or q_lower in genres_str
                     )
                     if not has_keyword and q_norm:
                         has_keyword = (
-                            q_norm in title_norm 
-                            or q_norm in re.sub(r"[^a-z0-9]+", " ", overview) 
+                            q_norm in title_norm
+                            or q_norm in re.sub(r"[^a-z0-9]+", " ", overview)
                             or q_norm in re.sub(r"[^a-z0-9]+", " ", genres_str)
                         )
 
@@ -690,7 +690,7 @@ class Recommender:
 
             seed_row = self._movies.iloc[movie_idx]
             seed_genres_str = str(seed_row.get("genres", "") or "")
-            seed_genres = set(g.strip().lower() for g in seed_genres_str.split(",") if g.strip())
+            seed_genres = {g.strip().lower() for g in seed_genres_str.split(",") if g.strip()}
             seed_title = str(seed_row.get("title", "") or "")
             seed_title_lower = seed_title.lower()
             seed_collection = seed_row.get("belongs_to_collection", None)
@@ -742,7 +742,7 @@ class Recommender:
                             mid = int(self._movies.iloc[idx_row]["id"])
                         except (ValueError, TypeError, KeyError):
                             continue
-                        
+
                         meta = {}
                         for col in ["title", "genres", "release_date", "vote_average", "vote_count", "director"]:
                             if col in self._movies.columns:
@@ -752,7 +752,7 @@ class Recommender:
                         # to avoid "Alien Abduction" matching "Alien" just by title
                         if substring_franchise and seed_genres:
                             cand_g_str = str(meta.get("genres", "") or "")
-                            cand_g = set(g.strip().lower() for g in cand_g_str.split(",") if g.strip())
+                            cand_g = {g.strip().lower() for g in cand_g_str.split(",") if g.strip()}
                             if not (seed_genres & cand_g):
                                 continue
 
@@ -821,7 +821,7 @@ class Recommender:
                 for c in candidates:
                     meta = getattr(c, "metadata", {}) or {}
                     cand_genres_str = str(meta.get("genres", "") or "")
-                    cand_genres = set(g.strip().lower() for g in cand_genres_str.split(",") if g.strip())
+                    cand_genres = {g.strip().lower() for g in cand_genres_str.split(",") if g.strip()}
                     cand_title = str(meta.get("title", "") or "").lower()
 
                     if cand_genres and seed_genres:
