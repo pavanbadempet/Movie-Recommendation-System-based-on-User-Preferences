@@ -23,7 +23,6 @@ import {
   X,
   User,
   LogOut,
-  Menu,
   MoreHorizontal,
   Network,
 } from "lucide-react";
@@ -760,6 +759,17 @@ function TrailerFrame({ movie }: { movie: Movie }) {
   const [isCached, setIsCached] = React.useState<boolean | null>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const [isMobile, setIsMobile] = React.useState(() => typeof window !== "undefined" ? window.innerWidth <= 768 : false);
+  const [showFallbackIframe, setShowFallbackIframe] = React.useState(false);
+
+  React.useEffect(() => {
+    setShowFallbackIframe(false);
+    if (trailerKey) {
+      const timer = setTimeout(() => {
+        setShowFallbackIframe(true);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [movie.id, trailerKey]);
 
   React.useEffect(() => {
     setTrailerKey(movie.trailer_key || null);
@@ -831,14 +841,44 @@ function TrailerFrame({ movie }: { movie: Movie }) {
             <Loader2 className="spin" size={24} />
           </div>
         ) : (!isCached || videoError) ? (
-          <iframe
-            src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&loop=1&playlist=${trailerKey}&controls=0&modestbranding=1&rel=0&iv_load_policy=3`}
-            title="Movie Trailer Fallback"
-            frameBorder="0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", border: "none" }}
-          />
+          <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", pointerEvents: "none" }}>
+            <iframe
+              src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&loop=1&playlist=${trailerKey}&controls=0&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&fs=0`}
+              title="Movie Trailer Fallback"
+              frameBorder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              style={{
+                position: "absolute",
+                top: "-15%",
+                left: "-15%",
+                width: "130%",
+                height: "130%",
+                objectFit: "cover",
+                display: "block",
+                border: "none",
+                opacity: showFallbackIframe ? 1 : 0,
+                transition: "opacity 0.8s ease-in-out",
+              }}
+            />
+            <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", zIndex: 10, background: "transparent" }} />
+            <img
+              src={backdropUrl(movie.poster_path)}
+              alt=""
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                zIndex: 5,
+                opacity: showFallbackIframe ? 0 : 1,
+                transition: "opacity 0.8s ease-in-out",
+                pointerEvents: "none",
+              }}
+            />
+          </div>
         ) : (
           <>
             <video
@@ -1237,6 +1277,7 @@ function App() {
   const [isMobileViewport, setIsMobileViewport] = React.useState(() => typeof window !== "undefined" ? window.innerWidth <= 768 : false);
   const [isMobileSimulated, setIsMobileSimulated] = React.useState(false);
   const [showMoreDrawer, setShowMoreDrawer] = React.useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
 
   React.useEffect(() => {
@@ -1339,7 +1380,8 @@ function App() {
     const seeds = [155, 27205, 157336, 680, 238]; // Dark Knight, Inception, Interstellar, Pulp Fiction, Godfather
     const seedId = seeds[Math.floor(Math.random() * seeds.length)];
     try {
-      const response = await getRecommendations(seedId, 8);
+      // Use a short timeout (4.5s) for the initial home showcase load to avoid screen hangs if backend is warming up
+      const response = await getRecommendations(seedId, 8, 4500);
       const movies = dedupeMovies(response.data.recommendations || []).slice(0, 8);
       setBackend(response.baseUrl);
       setHomeMovies(movies);
@@ -1347,7 +1389,22 @@ function App() {
       setCatalogState("ready");
       if (movies.length === 0) setHomeError("No movies available yet.");
     } catch (error) {
-      setHomeError(error instanceof Error ? error.message : "Movies unavailable.");
+      console.warn("Failed to load initial home showcase recommendations (warmup in progress). Falling back to search.", error);
+      try {
+        // Fall back to a simple search query that loads instantly from database, skipping ML model loads
+        const searchResponse = await searchMovies("Batman");
+        if (searchResponse.data && searchResponse.data.length > 0) {
+          const movies = dedupeMovies(searchResponse.data).slice(0, 8);
+          setBackend(searchResponse.baseUrl);
+          setHomeMovies(movies);
+          setHomeHeroIndex(0);
+          setCatalogState("ready");
+        } else {
+          setHomeError("No movies found in catalog.");
+        }
+      } catch {
+        setHomeError(error instanceof Error ? error.message : "Movies unavailable during warmup.");
+      }
     } finally {
       setHomeLoading(false);
     }
@@ -2030,6 +2087,7 @@ function App() {
         {/* Slide-up bottom sheet drawer for "More" options */}
         {showMoreDrawer && (
           <div className="mobile-bottom-sheet-overlay" onClick={() => setShowMoreDrawer(false)} role="presentation">
+            {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/click-events-have-key-events */}
             <div className="mobile-bottom-sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="More navigation options">
               <div className="sheet-handle" />
               <h3 className="sheet-title">More Options</h3>
@@ -2081,7 +2139,7 @@ function App() {
                         setDeferredPrompt(null);
                       }
                     } else {
-                      alert("To install this app on your phone:\n\n1. Tap the Share button in your mobile browser.\n2. Select 'Add to Home Screen'.\n3. Launch Nova directly from your home screen!");
+                      window.alert("To install this app on your phone:\n\n1. Tap the Share button in your mobile browser.\n2. Select 'Add to Home Screen'.\n3. Launch Nova directly from your home screen!");
                     }
                     setShowMoreDrawer(false);
                   }}

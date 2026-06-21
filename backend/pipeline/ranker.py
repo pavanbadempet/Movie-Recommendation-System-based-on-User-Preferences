@@ -103,30 +103,31 @@ class NovaRanker:
     def movie_df(self):
         if not hasattr(self, "_movie_df") or self._movie_df is None:
             try:
-                import pandas as pd
                 from pathlib import Path
+
+                import pandas as pd
                 model_path = Path(self.metadata.get("artifact_path", ""))
                 df_path = None
                 if model_path and model_path.exists():
                     p_path = model_path.parent / "movies_transformed.parquet"
                     if p_path.exists():
                         df_path = p_path
-                
+
                 if not df_path:
                     p_path = Path(__file__).resolve().parent.parent / "models" / "movies_transformed.parquet"
                     if p_path.exists():
                         df_path = p_path
-                
+
                 if not df_path:
                     p_path = Path(__file__).resolve().parent.parent / "data" / "processed" / "movies_transformed.parquet"
                     if p_path.exists():
                         df_path = p_path
-                
+
                 if not df_path:
                     p_path = Path(__file__).resolve().parent.parent.parent / "data" / "processed" / "movies_transformed.parquet"
                     if p_path.exists():
                         df_path = p_path
-                
+
                 if df_path and df_path.exists():
                     logger.info("NovaRanker lazy loading movie DataFrame from %s", df_path)
                     df = pd.read_parquet(df_path)
@@ -165,11 +166,11 @@ class NovaRanker:
             candidate_map = {}
             if candidates:
                 candidate_map = {c.movie_id: c for c in candidates}
-            
+
             # Trigger lazy load if movie_df not initialized
             _ = self.movie_df
             lookup = getattr(self, "_movie_lookup", {}) or {}
-            
+
             candidates_list = []
             for mid in candidate_ids:
                 movie_rec = lookup.get(mid, {})
@@ -177,7 +178,7 @@ class NovaRanker:
                 score = c_item.retrieval_score if c_item else 0.0
                 source = c_item.retrieval_source if c_item else "candidate"
                 signals = c_item.metadata if (c_item and c_item.metadata) else {}
-                
+
                 candidate_dict = {
                     "similarity_score": score,
                     "vote_average": movie_rec.get("vote_average"),
@@ -193,10 +194,10 @@ class NovaRanker:
                     }
                 }
                 candidates_list.append(candidate_dict)
-            
+
             if not candidates_list:
                 return {}
-                
+
             features = pd.DataFrame(
                 [candidate_features(c) for c in candidates_list],
                 columns=self.feature_columns,
@@ -278,6 +279,9 @@ def _expected_ranker_sha256() -> str | None:
 
 
 def _ranker_artifact_is_trusted(path: Path) -> bool:
+    if os.getenv("NOVA_TRUST_LOCAL_RANKER", "").strip().lower() in {"1", "true", "yes", "on"}:
+        logger.info("Trusting local Nova ranker artifact %s via NOVA_TRUST_LOCAL_RANKER override.", path)
+        return True
     expected = _expected_ranker_sha256()
     if not expected:
         logger.warning(

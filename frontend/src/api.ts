@@ -291,11 +291,11 @@ async function fetchTmdbTrailer(movieId: number): Promise<string | null> {
   return null;
 }
 
-export async function getRecommendations(movieId: number, n = 12): Promise<BackendResult<RecommendationResponse>> {
+export async function getRecommendations(movieId: number, n = 12, timeoutMs = 60000): Promise<BackendResult<RecommendationResponse>> {
   try {
-    return await apiGetFirstSuccess<RecommendationResponse>(`/v1/recommendations/id/${movieId}/enriched`, { n, explain: true }, 60000);
+    return await apiGetFirstSuccess<RecommendationResponse>(`/v1/recommendations/id/${movieId}/enriched`, { n, explain: true }, timeoutMs);
   } catch {
-    return apiGetFirstSuccess<RecommendationResponse>(`/v1/recommendations/id/${movieId}`, { n, explain: true }, 60000);
+    return apiGetFirstSuccess<RecommendationResponse>(`/v1/recommendations/id/${movieId}`, { n, explain: true }, timeoutMs);
   }
 }
 
@@ -335,22 +335,27 @@ export async function loginUser(username: string, password: string): Promise<Bac
   body.append("password", password);
 
   for (const baseUrl of candidateBackends()) {
+    const timeout = timeoutSignal(8000);
     try {
       const response = await fetch(`${baseUrl}/v1/auth/token`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: body.toString(),
+        signal: timeout.signal,
       });
       if (!response.ok) {
         errors.push(`${baseUrl}: ${response.status}`);
         continue;
       }
       return { data: await response.json(), baseUrl };
-    } catch {
-      errors.push(`${baseUrl} failed`);
+    } catch (error) {
+      errors.push(`${backendLabel(baseUrl)} ${errorMessage(error)}`);
+    } finally {
+      timeout.cancel();
     }
   }
-  throw new Error(errors.join(" | ") || "Login failed");
+
+  throw new Error(errors.join(" | ") || "No backend available");
 }
 
 export const runAdminTestSuite = async (suite: string) => { const response = await fetch(`${activeBackend}/v1/admin/tests/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ suite }) }); return response.json(); };

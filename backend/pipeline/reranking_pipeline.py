@@ -32,6 +32,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
+from typing import Any
 
 from backend.pipeline.pipeline_types import FinalItem, RankedItem
 
@@ -389,7 +390,7 @@ class RerankingPipeline:
                         title = matches.iloc[0].get("title", "")
                 if not title:
                     title = f"movie_id_{item.movie_id}"
-                
+
                 items_with_info.append({
                     "item": item,
                     "title": title,
@@ -436,11 +437,11 @@ class RerankingPipeline:
                     existing = exact_dedup[norm]
                     if info["item"].ranker_score > existing["item"].ranker_score:
                         exact_dedup[norm] = info
-            
+
             # Reconstruct the list preserving order
             filtered_info = [
-                info for info in items_with_info 
-                if info["norm_title"] in exact_dedup 
+                info for info in items_with_info
+                if info["norm_title"] in exact_dedup
                 and exact_dedup[info["norm_title"]]["item"].movie_id == info["item"].movie_id
             ]
 
@@ -461,10 +462,10 @@ class RerankingPipeline:
                     info_b = filtered_info[j]
                     norm_a = info_a["norm_title"]
                     norm_b = info_b["norm_title"]
-                    
+
                     if not norm_a or not norm_b:
                         continue
-                        
+
                     # If norm_a is a substring of norm_b, check whether the
                     # EXTRA portion (the suffix beyond the base title) contains
                     # documentary keywords.  This prevents sequels like
@@ -574,9 +575,10 @@ class RerankingPipeline:
             if not positive_events:
                 return None
 
+            from datetime import UTC, datetime
             import math
+
             import pandas as pd
-            from datetime import datetime, UTC
 
             # Helper for recency decay matching the Recommender logic
             def get_recency_decay(event_ts: Any, half_life_days: float = 14.0) -> float:

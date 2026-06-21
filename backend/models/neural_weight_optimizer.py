@@ -154,6 +154,9 @@ def train_contextual_weight_network(
     and update the network to minimize binary cross-entropy loss against
     their validation ground-truth items.
     """
+    from collections import defaultdict
+    import random
+
     from backend.events import iter_events
     from backend.models.ensemble_engine import ApexEnsembleEngine
     from scripts.optimize_ensemble_weights import (
@@ -161,8 +164,6 @@ def train_contextual_weight_network(
         _load_interaction_data,
         _precompute_per_model_scores,
     )
-    import random
-    from collections import defaultdict
 
     logger.info("Training ContextualWeightNetwork via gradient-based meta-learning...")
 

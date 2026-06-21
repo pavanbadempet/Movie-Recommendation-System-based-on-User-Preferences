@@ -157,6 +157,7 @@ ignore_errors = true
 # Pytest
 # ---------------------------------------------------------------------------
 [tool.pytest.ini_options]
+addopts = "-n auto"
 filterwarnings = [
     "ignore:builtin type SwigPyPacked has no __module__ attribute:DeprecationWarning",
     "ignore:builtin type SwigPyObject has no __module__ attribute:DeprecationWarning",

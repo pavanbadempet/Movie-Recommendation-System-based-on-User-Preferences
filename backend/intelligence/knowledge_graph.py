@@ -89,11 +89,12 @@ class KnowledgeGraphEngine:
     def rebuild_from_catalog(self, movies_df: Any, twins_path: Any) -> None:
         """Rebuild the knowledge graph from movies DataFrame and semantic twins parquet."""
         import json
+
         import polars as pl
-        
+
         logger.info("Rebuilding Knowledge Graph from movies catalog and semantic twins...")
         self.graph = nx.Graph()
-        
+
         # 1. Load twins parquet
         parsed_metadata = {}
         if twins_path and hasattr(twins_path, "exists") and twins_path.exists():

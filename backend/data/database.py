@@ -16,9 +16,9 @@ import datetime
 import uuid
 
 from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, create_engine
-from sqlalchemy.types import TypeDecorator, CHAR
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
+from sqlalchemy.types import CHAR, TypeDecorator
 
 # PostgreSQL Connection String (Fallback to SQLite if no PGSQL)
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///apex.db")

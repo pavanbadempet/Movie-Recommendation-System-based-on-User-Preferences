@@ -40,8 +40,8 @@ def get_semantic_cache(prompt: str, context: str = "", threshold: float = 0.88) 
     """
     # 1. Try vector-based similarity matching
     try:
-        from sentence_transformers import SentenceTransformer
         import numpy as np
+        from sentence_transformers import SentenceTransformer
 
         if not hasattr(get_semantic_cache, "_model"):
             # Load a very small, fast model (all-MiniLM-L6-v2) for caching
