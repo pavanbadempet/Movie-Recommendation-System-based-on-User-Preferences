@@ -844,14 +844,17 @@ function TrailerFrame({ movie }: { movie: Movie }) {
         ) : (!isCached || videoError) ? (
           <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", pointerEvents: "none" }}>
             <iframe
-              src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&loop=1&playlist=${trailerKey}&controls=0&modestbranding=1&rel=0&iv_load_policy=3`}
+              src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&loop=1&playlist=${trailerKey}&controls=0&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&fs=0`}
               title="Movie Trailer Fallback"
               frameBorder="0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
               style={{
-                width: "100%",
-                height: "100%",
+                position: "absolute",
+                top: "-15%",
+                left: "-15%",
+                width: "130%",
+                height: "130%",
                 objectFit: "cover",
                 display: "block",
                 border: "none",
