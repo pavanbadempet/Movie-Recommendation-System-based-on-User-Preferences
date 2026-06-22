@@ -1058,21 +1058,23 @@ export function MovieDialog({
             </div>
 
             <div className="dialog-sidebar">
-              <div className="sidebar-section">
-                <h3>Details</h3>
-                {director && (
-                  <div className="detail-item">
-                    <span className="detail-label">Director</span>
-                    <span className="detail-value">{director}</span>
-                  </div>
-                )}
-                {cast && (
-                  <div className="detail-item">
-                    <span className="detail-label">Cast</span>
-                    <span className="detail-value">{cast}</span>
-                  </div>
-                )}
-              </div>
+              {(director || cast) && (
+                <div className="sidebar-section">
+                  <h3>Details</h3>
+                  {director && (
+                    <div className="detail-item">
+                      <span className="detail-label">Director</span>
+                      <span className="detail-value">{director}</span>
+                    </div>
+                  )}
+                  {cast && (
+                    <div className="detail-item">
+                      <span className="detail-label">Cast</span>
+                      <span className="detail-value">{cast}</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {onFeedback && (
                 <div className="sidebar-section">

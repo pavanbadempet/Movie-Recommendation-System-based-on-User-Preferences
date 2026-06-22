@@ -1877,8 +1877,8 @@ input:focus-visible {
 }
 .movie-dialog {
   position: relative;
-  width: min(840px, calc(100vw - 32px));
-  height: min(720px, calc(100vh - 48px));
+  width: min(1000px, calc(100vw - 48px));
+  height: min(760px, calc(100vh - 64px));
   border-radius: 24px;
   background: #090a10;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1929,7 +1929,6 @@ input:focus-visible {
 
 .dialog-content {
   flex: 1;
-  padding: 32px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -1953,11 +1952,13 @@ input:focus-visible {
   grid-template-columns: 1.6fr 1fr;
   gap: 32px;
   align-items: start;
+  padding: 32px;
 }
 @media (max-width: 768px) {
   .dialog-grid {
     grid-template-columns: 1fr;
     gap: 24px;
+    padding: 20px;
   }
 }
 
@@ -3248,6 +3249,9 @@ input:focus-visible {
     align-items: flex-end !important;
   }
   .dialog-content {
+    padding: 0 !important;
+  }
+  .dialog-grid {
     padding: 16px !important;
   }
   .dialog-title-row h2 {
