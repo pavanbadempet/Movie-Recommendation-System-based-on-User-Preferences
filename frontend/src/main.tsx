@@ -4,6 +4,7 @@ import {
   Activity,
   AlertTriangle,
   BarChart3,
+  Bookmark,
   Calendar,
   CheckCircle2,
   Clock3,
@@ -15,6 +16,7 @@ import {
   RefreshCw,
   Search,
   Server,
+  Share2,
   Sparkles,
   Star,
   ThumbsDown,
@@ -1004,8 +1006,26 @@ export function MovieDialog({
   const explanation = movie.explanation_text || movieReasons(movie).join(" | ");
   const rating = movieScore(movie);
 
+  // Masterpiece States
+  const [activeTab, setActiveTab] = React.useState<"overview" | "credits" | "insights">("overview");
+  const [userRating, setUserRating] = React.useState(0);
+  const [hoverRating, setHoverRating] = React.useState(0);
+  const [inWatchlist, setInWatchlist] = React.useState(false);
+  const [toast, setToast] = React.useState("");
+
   const dialogRef = React.useRef<HTMLElement>(null);
   const previousFocusRef = React.useRef<HTMLElement | null>(null);
+
+  const showToast = React.useCallback((msg: string) => {
+    setToast(msg);
+  }, []);
+
+  React.useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(""), 2200);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   React.useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -1033,6 +1053,8 @@ export function MovieDialog({
         if (event.target === event.currentTarget) onClose();
       }}
     >
+      <div className="dialog-glow-aura" style={{ '--movie-backdrop': `url(${backdropUrl(movie.poster_path)})` } as React.CSSProperties} />
+
       <section ref={dialogRef} className="movie-dialog" role="dialog" aria-modal="true" aria-label={`${movie.title} details`}>
         <div className="mobile-sheet-handle" style={{ width: "36px", height: "5px", background: "rgba(255, 255, 255, 0.15)", borderRadius: "10px", margin: "12px auto 0 auto", display: "none" }} />
         <button className="dialog-close" type="button" aria-label="Close movie details" onClick={onClose}>
@@ -1044,6 +1066,30 @@ export function MovieDialog({
         </div>
 
         <div className="dialog-content">
+          <div className="dialog-tabs-header">
+            <button
+              type="button"
+              className={`dialog-tab-btn ${activeTab === "overview" ? "active" : ""}`}
+              onClick={() => setActiveTab("overview")}
+            >
+              Overview
+            </button>
+            <button
+              type="button"
+              className={`dialog-tab-btn ${activeTab === "credits" ? "active" : ""}`}
+              onClick={() => setActiveTab("credits")}
+            >
+              Details & Cast
+            </button>
+            <button
+              type="button"
+              className={`dialog-tab-btn ${activeTab === "insights" ? "active" : ""}`}
+              onClick={() => setActiveTab("insights")}
+            >
+              AI & Match
+            </button>
+          </div>
+
           <div className="dialog-grid">
             <div className="dialog-main">
               <div className="dialog-title-row">
@@ -1070,92 +1116,116 @@ export function MovieDialog({
                 ))}
               </div>
 
-              <p className="dialog-overview">{overview}</p>
-
-              {explanation && (
-                <div className="dialog-vibe-card">
-                  <div className="vibe-header">
-                    <div className="vibe-title">
-                      <Sparkles size={14} className="vibe-sparkle" />
-                      <span>CineBot Vibe Check</span>
+              {activeTab === "overview" && (
+                <>
+                  <p className="dialog-overview">{overview}</p>
+                  {explanation && (
+                    <div className="dialog-vibe-card">
+                      <div className="vibe-header">
+                        <div className="vibe-title">
+                          <Sparkles size={14} className="vibe-sparkle" />
+                          <span>CineBot Vibe Check</span>
+                        </div>
+                        <span className="vibe-tag">AI Insights</span>
+                      </div>
+                      <p className="vibe-text">{explanation}</p>
                     </div>
-                    <span className="vibe-tag">AI Insights</span>
-                  </div>
-                  <p className="vibe-text">{explanation}</p>
+                  )}
+                </>
+              )}
+
+              {activeTab === "credits" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                  {(director || cast || movie.release_date || movie.popularity || movie.vote_count) ? (
+                    <div className="credits-tab-grid" style={{ display: "grid", gridTemplateColumns: "1fr", gap: "12px" }}>
+                      {director && (
+                        <div className="detail-item">
+                          <span className="detail-label">Director</span>
+                          <span className="detail-value" style={{ fontSize: "0.9rem", color: "#fff", fontWeight: "600" }}>{director}</span>
+                        </div>
+                      )}
+                      {cast && (
+                        <div className="detail-item">
+                          <span className="detail-label">Cast</span>
+                          <span className="detail-value" style={{ fontSize: "0.9rem", color: "#cbd5e1" }}>{cast}</span>
+                        </div>
+                      )}
+                      {movie.release_date && (
+                        <div className="detail-item">
+                          <span className="detail-label">Released</span>
+                          <span className="detail-value" style={{ fontSize: "0.9rem", color: "#fff" }}>{formatDate(movie.release_date)}</span>
+                        </div>
+                      )}
+                      {movie.popularity !== undefined && movie.popularity !== null && (
+                        <div className="detail-item">
+                          <span className="detail-label">Popularity Score</span>
+                          <span className="detail-value" style={{ fontSize: "0.9rem", color: "#fff" }}>{Number(movie.popularity).toFixed(1)}</span>
+                        </div>
+                      )}
+                      {movie.vote_count !== undefined && movie.vote_count !== null && movie.vote_count > 0 && (
+                        <div className="detail-item">
+                          <span className="detail-label">Vote Count</span>
+                          <span className="detail-value" style={{ fontSize: "0.9rem", color: "#fff" }}>{movie.vote_count.toLocaleString()} votes</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ color: "var(--quiet)", fontSize: "0.85rem" }}>No cast or crew details are available for this catalog item.</div>
+                  )}
                 </div>
               )}
 
-              {movie.similarity_score !== undefined && movie.similarity_score !== null && (
-                <div style={{
-                  marginTop: "20px",
-                  padding: "16px",
-                  background: "rgba(6, 182, 212, 0.04)",
-                  border: "1px solid rgba(6, 182, 212, 0.15)",
-                  borderRadius: "16px",
-                  boxShadow: "0 4px 20px rgba(6, 182, 212, 0.03)"
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.75rem", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.6px", color: "var(--cyan)" }}>
-                      <Activity size={14} />
-                      <span>Algorithm Insights</span>
+              {activeTab === "insights" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                  {(movie.similarity_score !== undefined && movie.similarity_score !== null) ? (
+                    <div style={{
+                      padding: "20px",
+                      background: "rgba(6, 182, 212, 0.04)",
+                      border: "1px solid rgba(6, 182, 212, 0.15)",
+                      borderRadius: "16px",
+                      boxShadow: "0 8px 32px rgba(6, 182, 212, 0.04)"
+                    }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.8rem", fontWeight: "900", textTransform: "uppercase", letterSpacing: "1px", color: "var(--cyan)" }}>
+                          <Activity size={16} />
+                          <span>Algorithm Insights</span>
+                        </div>
+                        <span style={{ fontSize: "0.72rem", background: "rgba(6, 182, 212, 0.1)", color: "#22d3ee", padding: "4px 10px", borderRadius: "20px", fontWeight: "800", border: "1px solid rgba(6, 182, 212, 0.1)" }}>
+                          {(movie.similarity_score * 100).toFixed(0)}% Similarity Match
+                        </span>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", fontSize: "0.84rem", color: "var(--muted)" }}>
+                        {movie.retrieval_stage && (
+                          <div>
+                            Retrieval Stage
+                            <div style={{ color: "#fff", fontWeight: "600", fontSize: "0.9rem", marginTop: "4px" }}>{movie.retrieval_stage}</div>
+                          </div>
+                        )}
+                        {movie.quality_bucket && (
+                          <div>
+                            Quality Bucket
+                            <div style={{ color: "#fff", fontWeight: "600", fontSize: "0.9rem", marginTop: "4px" }}>{movie.quality_bucket}</div>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <span style={{ fontSize: "0.68rem", background: "rgba(6, 182, 212, 0.1)", color: "#22d3ee", padding: "3px 8px", borderRadius: "20px", fontWeight: "800", border: "1px solid rgba(6, 182, 212, 0.1)" }}>
-                      {(movie.similarity_score * 100).toFixed(0)}% Similarity Match
-                    </span>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", fontSize: "0.78rem", color: "var(--muted)" }}>
-                    {movie.retrieval_stage && (
-                      <div>
-                        Retrieval Stage: <strong style={{ color: "#fff", fontWeight: "600" }}>{movie.retrieval_stage}</strong>
-                      </div>
-                    )}
-                    {movie.quality_bucket && (
-                      <div>
-                        Quality Bucket: <strong style={{ color: "#fff", fontWeight: "600" }}>{movie.quality_bucket}</strong>
-                      </div>
-                    )}
-                  </div>
+                  ) : (
+                    <div style={{
+                      padding: "20px",
+                      background: "rgba(255, 255, 255, 0.02)",
+                      border: "1px solid rgba(255, 255, 255, 0.05)",
+                      borderRadius: "16px",
+                      color: "var(--muted)",
+                      fontSize: "0.86rem"
+                    }}>
+                      No recommendations similarity scores or retrieval trace logs are stored for this title.
+                    </div>
+                  )}
                 </div>
               )}
             </div>
 
             <div className="dialog-sidebar">
-              {(director || cast || movie.release_date || movie.popularity || movie.vote_count) && (
-                <div className="sidebar-section">
-                  <h3>Details</h3>
-                  {director && (
-                    <div className="detail-item">
-                      <span className="detail-label">Director</span>
-                      <span className="detail-value">{director}</span>
-                    </div>
-                  )}
-                  {cast && (
-                    <div className="detail-item">
-                      <span className="detail-label">Cast</span>
-                      <span className="detail-value">{cast}</span>
-                    </div>
-                  )}
-                  {movie.release_date && (
-                    <div className="detail-item">
-                      <span className="detail-label">Released</span>
-                      <span className="detail-value">{formatDate(movie.release_date)}</span>
-                    </div>
-                  )}
-                  {movie.popularity !== undefined && movie.popularity !== null && (
-                    <div className="detail-item">
-                      <span className="detail-label">Popularity Score</span>
-                      <span className="detail-value">{Number(movie.popularity).toFixed(1)}</span>
-                    </div>
-                  )}
-                  {movie.vote_count !== undefined && movie.vote_count !== null && movie.vote_count > 0 && (
-                    <div className="detail-item">
-                      <span className="detail-label">Vote Count</span>
-                      <span className="detail-value">{movie.vote_count.toLocaleString()} votes</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
               {onFeedback && (
                 <div className="sidebar-section">
                   <h3>My Vibe</h3>
@@ -1163,7 +1233,10 @@ export function MovieDialog({
                     <button
                       type="button"
                       className={`feedback-btn thumbs-up ${feedback === "positive" ? "active" : ""}`}
-                      onClick={() => onFeedback(movie, "positive")}
+                      onClick={() => {
+                        onFeedback(movie, "positive");
+                        showToast("Marked as Liked!");
+                      }}
                       aria-label="Thumbs up"
                     >
                       <ThumbsUp size={16} />
@@ -1172,7 +1245,10 @@ export function MovieDialog({
                     <button
                       type="button"
                       className={`feedback-btn thumbs-down ${feedback === "negative" ? "active" : ""}`}
-                      onClick={() => onFeedback(movie, "negative")}
+                      onClick={() => {
+                        onFeedback(movie, "negative");
+                        showToast("Marked as Disliked.");
+                      }}
                       aria-label="Thumbs down"
                     >
                       <ThumbsDown size={16} />
@@ -1181,6 +1257,60 @@ export function MovieDialog({
                   </div>
                 </div>
               )}
+
+              <div className="sidebar-section">
+                <h3>My Rating</h3>
+                <div className="star-rating-container">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      className={`star-btn ${star <= (hoverRating || userRating) ? "filled" : ""}`}
+                      onMouseEnter={() => setHoverRating(star)}
+                      onMouseLeave={() => setHoverRating(0)}
+                      onClick={() => {
+                        setUserRating(star);
+                        showToast(`Rated ${star} Star${star > 1 ? "s" : ""}!`);
+                      }}
+                      aria-label={`Rate ${star} stars`}
+                    >
+                      <Star size={20} fill={star <= (hoverRating || userRating) ? "currentColor" : "none"} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="sidebar-section">
+                <h3>Collection</h3>
+                <div className="sidebar-actions-grid">
+                  <button
+                    type="button"
+                    className={`action-pill-btn ${inWatchlist ? "active" : ""}`}
+                    onClick={() => {
+                      setInWatchlist(!inWatchlist);
+                      showToast(inWatchlist ? "Removed from Watchlist" : "Saved to Watchlist!");
+                    }}
+                  >
+                    <Bookmark size={15} fill={inWatchlist ? "currentColor" : "none"} />
+                    <span>{inWatchlist ? "Watchlisted" : "Watchlist"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="action-pill-btn"
+                    onClick={() => {
+                      try {
+                        navigator.clipboard.writeText(window.location.href);
+                        showToast("Copied link to clipboard!");
+                      } catch {
+                        showToast("Failed to copy link.");
+                      }
+                    }}
+                  >
+                    <Share2 size={15} />
+                    <span>Share</span>
+                  </button>
+                </div>
+              </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "100%" }}>
                 {movie.trailer_key && (
@@ -1201,6 +1331,13 @@ export function MovieDialog({
             </div>
           </div>
         </div>
+
+        {toast && (
+          <div className="dialog-toast">
+            <Sparkles size={14} />
+            <span>{toast}</span>
+          </div>
+        )}
       </section>
     </div>
   );

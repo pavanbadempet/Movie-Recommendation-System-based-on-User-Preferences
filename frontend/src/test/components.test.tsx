@@ -405,9 +405,14 @@ describe("MovieDialog", () => {
     cast: "Jane Doe, John Smith",
     director: "Jane Director",
     trailer_key: "abc_test_key",
+    vote_count: 1420,
+    popularity: 98.2,
+    similarity_score: 0.94,
+    retrieval_stage: "vector_recall",
+    quality_bucket: "tier_1",
   };
 
-  it("renders movie title, overview, custom rating, and metadata correctly", () => {
+  it("renders movie title, overview, custom rating, and metadata correctly in Overview tab", () => {
     const onCloseMock = vi.fn();
     render(<MovieDialog movie={mockMovie} onClose={onCloseMock} />);
 
@@ -418,8 +423,37 @@ describe("MovieDialog", () => {
     expect(screen.getByText("124 min")).toBeInTheDocument();
     expect(screen.getByText("Sci-Fi")).toBeInTheDocument();
     expect(screen.getByText("Because you like futuristic space adventures.")).toBeInTheDocument();
+
+    // Credits should NOT render in Overview tab
+    expect(screen.queryByText("Jane Director")).not.toBeInTheDocument();
+  });
+
+  it("renders credits and tech stats in Details & Cast tab", async () => {
+    const onCloseMock = vi.fn();
+    render(<MovieDialog movie={mockMovie} onClose={onCloseMock} />);
+
+    // Click on Details & Cast tab
+    const detailsTab = screen.getByRole("button", { name: /details & cast/i });
+    fireEvent.click(detailsTab);
+
     expect(screen.getByText("Jane Director")).toBeInTheDocument();
     expect(screen.getByText("Jane Doe, John Smith")).toBeInTheDocument();
+    expect(screen.getByText("June 22, 2026")).toBeInTheDocument();
+    expect(screen.getByText("98.2")).toBeInTheDocument();
+    expect(screen.getByText("1,420 votes")).toBeInTheDocument();
+  });
+
+  it("renders algorithm similarity and logs in AI & Match tab", async () => {
+    const onCloseMock = vi.fn();
+    render(<MovieDialog movie={mockMovie} onClose={onCloseMock} />);
+
+    // Click on AI & Match tab
+    const insightsTab = screen.getByRole("button", { name: /ai & match/i });
+    fireEvent.click(insightsTab);
+
+    expect(screen.getByText("94% Similarity Match")).toBeInTheDocument();
+    expect(screen.getByText("vector_recall")).toBeInTheDocument();
+    expect(screen.getByText("tier_1")).toBeInTheDocument();
   });
 
   it("triggers onClose when clicking the close button", () => {
@@ -450,5 +484,22 @@ describe("MovieDialog", () => {
     const dislikeBtn = screen.getByRole("button", { name: /thumbs down/i });
     fireEvent.click(dislikeBtn);
     expect(onFeedbackMock).toHaveBeenCalledWith(mockMovie, "negative");
+  });
+
+  it("allows interactive rating and watchlist actions", () => {
+    render(<MovieDialog movie={mockMovie} onClose={vi.fn()} />);
+
+    // Watchlist toggle
+    const watchlistBtn = screen.getByRole("button", { name: /watchlist/i });
+    expect(watchlistBtn).toHaveTextContent("Watchlist");
+    fireEvent.click(watchlistBtn);
+    expect(watchlistBtn).toHaveTextContent("Watchlisted");
+    fireEvent.click(watchlistBtn);
+    expect(watchlistBtn).toHaveTextContent("Watchlist");
+
+    // Star rating
+    const starBtn = screen.getByRole("button", { name: /rate 4 stars/i });
+    fireEvent.click(starBtn);
+    expect(screen.getByText("Rated 4 Stars!")).toBeInTheDocument();
   });
 });
