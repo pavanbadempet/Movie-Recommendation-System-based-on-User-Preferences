@@ -2453,7 +2453,58 @@ function App() {
 
                   <div className="control-heading">
                     <Search size={44} />
-                    <h1>{mode === "title" ? "Search & Discover" : "AI Semantic Search"}</h1>
+                    <h1>Search & Discover</h1>
+                  </div>
+
+                  <div className="search-mode-tabs" style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
+                    <button
+                      className={`search-mode-tab ${mode === "title" ? "active" : ""}`}
+                      type="button"
+                      onClick={() => {
+                        setMode("title");
+                        userStarted.current = true;
+                      }}
+                      style={{
+                        padding: "10px 20px",
+                        borderRadius: "24px",
+                        border: "1px solid " + (mode === "title" ? "rgba(99, 102, 241, 0.4)" : "rgba(255, 255, 255, 0.08)"),
+                        background: mode === "title" ? "rgba(99, 102, 241, 0.15)" : "rgba(255, 255, 255, 0.02)",
+                        color: mode === "title" ? "#a5b4fc" : "var(--muted)",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)"
+                      }}
+                    >
+                      <Search size={14} />
+                      Title Search
+                    </button>
+                    <button
+                      className={`search-mode-tab ${mode === "semantic" ? "active" : ""}`}
+                      type="button"
+                      onClick={() => {
+                        setMode("semantic");
+                        userStarted.current = true;
+                      }}
+                      style={{
+                        padding: "10px 20px",
+                        borderRadius: "24px",
+                        border: "1px solid " + (mode === "semantic" ? "rgba(167, 139, 250, 0.4)" : "rgba(255, 255, 255, 0.08)"),
+                        background: mode === "semantic" ? "rgba(167, 139, 250, 0.15)" : "rgba(255, 255, 255, 0.02)",
+                        color: mode === "semantic" ? "#c084fc" : "var(--muted)",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)"
+                      }}
+                    >
+                      <Sparkles size={14} />
+                      AI Semantic Search
+                    </button>
                   </div>
 
                   <div
@@ -2465,8 +2516,8 @@ function App() {
                       }
                     }}
                   >
-                    <div className="search-box title-select-box">
-                      {mode === "semantic" ? <Sparkles size={16} className="mode-icon-semantic" /> : <Search size={16} />}
+                    <div className="search-box title-select-box" style={{ display: "flex", alignItems: "center", width: "100%", position: "relative" }}>
+                      {mode === "semantic" ? <Sparkles size={18} className="mode-icon-semantic" style={{ color: "#a78bfa", flexShrink: 0 }} /> : <Search size={18} style={{ color: "var(--quiet)", flexShrink: 0 }} />}
                       <input
                         id="title-search"
                         value={titleQuery}
@@ -2478,10 +2529,6 @@ function App() {
                           if (selectedMovie && event.target.value !== selectedTitleLabel) {
                             setSelectedMovie(null);
                             setResults([]);
-                            setResultsKind("idle");
-                            setRecommendationSource(null);
-                            setDialogMovie(null);
-                            setLastRecommendationRequestId(null);
                           }
                         }}
                         onFocus={() => setTitleSelectOpen(true)}
@@ -2497,19 +2544,8 @@ function App() {
                           }
                         }}
                         placeholder={mode === "title" ? "Search by title, e.g. Inception..." : "Describe a plot, mood, or genre..."}
+                        style={{ marginLeft: "8px", flex: 1 }}
                       />
-                      {/* Mode Toggle Button inside Search Box */}
-                      <button
-                        className={`mode-toggle-btn ${mode === "semantic" ? "semantic-active" : ""}`}
-                        type="button"
-                        title={mode === "title" ? "Switch to AI/Plot search" : "Switch to Title search"}
-                        onClick={() => {
-                          setMode(mode === "title" ? "semantic" : "title");
-                        }}
-                      >
-                        {mode === "semantic" ? <Sparkles size={14} /> : <Search size={14} />}
-                        <span>{mode === "title" ? "Title Search" : "AI Search"}</span>
-                      </button>
                       {hasTitleQuery && (
                         <button
                           className="clear-title"
@@ -2526,17 +2562,34 @@ function App() {
                             setLastRecommendationRequestId(null);
                             setTitleSelectOpen(true);
                           }}
+                          style={{ background: "transparent", border: "none", color: "var(--muted)", cursor: "pointer", display: "grid", placeItems: "center", padding: "4px", marginRight: "8px" }}
                         >
                           <X size={16} />
                         </button>
                       )}
                       <button
-                        className="search-btn"
+                        className="search-btn-primary"
                         type="button"
                         onClick={() => runSearch(mode)}
                         aria-label="Search"
+                        style={{
+                          background: mode === "semantic" ? "linear-gradient(135deg, #a78bfa, #818cf8)" : "linear-gradient(135deg, #6366f1, #4f46e5)",
+                          color: "#fff",
+                          border: "none",
+                          borderRadius: "8px",
+                          padding: "8px 20px",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          boxShadow: "0 4px 12px rgba(99, 102, 241, 0.2)",
+                          transition: "all 0.2s ease",
+                          flexShrink: 0
+                        }}
                       >
-                        <Search size={16} />
+                        {mode === "semantic" ? <Sparkles size={14} /> : <Search size={14} />}
+                        <span>Search</span>
                       </button>
                     </div>
 
