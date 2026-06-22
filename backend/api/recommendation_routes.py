@@ -851,7 +851,7 @@ def create_search_movie_router(deps: RouterDeps):
     # ── /v1/search ───────────────────────────────────────────────────────────
     @router.get("/v1/search", response_model=list[Movie])
     @router.get("/search", response_model=list[Movie])
-    @limiter.limit("30/minute")
+    @limiter.limit("300/minute")
     async def search_movies(
         request: Request,
         q: str = Query(..., min_length=1),
