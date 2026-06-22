@@ -1860,125 +1860,343 @@ input:focus-visible {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(12px);
+  background: rgba(4, 4, 6, 0.8);
+  backdrop-filter: blur(16px);
   display: grid;
   place-items: center;
 }
+@keyframes dialogOpen {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
 .movie-dialog {
   position: relative;
-  width: min(750px, calc(100vw - 32px));
-  height: min(650px, calc(100vh - 48px));
-  border-radius: 16px;
-  background: #09090f;
-  border: 1px solid var(--line);
+  width: min(840px, calc(100vw - 32px));
+  height: min(720px, calc(100vh - 48px));
+  border-radius: 24px;
+  background: #090a10;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.8),
+              0 0 50px rgba(99, 102, 241, 0.15);
+  animation: dialogOpen 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .dialog-close {
   position: absolute;
-  top: 16px;
-  right: 16px;
+  top: 20px;
+  right: 20px;
   z-index: 10;
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  background: rgba(0,0,0,0.6);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   color: #fff;
   display: grid;
   place-items: center;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .dialog-close:hover {
-  background: rgba(255,255,255,0.1);
-  border-color: rgba(255,255,255,0.25);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: rotate(90deg);
 }
 
 .dialog-media {
-  flex: 0 0 45%;
-  height: 45%;
+  flex: 0 0 42%;
+  height: 42%;
   position: relative;
 }
+.dialog-media::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, #090a10 0%, rgba(9, 10, 16, 0.3) 60%, transparent 100%),
+              linear-gradient(to right, rgba(9, 10, 16, 0.4) 0%, transparent 40%);
+  pointer-events: none;
+  z-index: 2;
+}
+
 .dialog-content {
   flex: 1;
   padding: 32px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
 }
+.dialog-content::-webkit-scrollbar {
+  width: 6px;
+}
+.dialog-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+.dialog-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+.dialog-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.dialog-grid {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 32px;
+  align-items: start;
+}
+@media (max-width: 768px) {
+  .dialog-grid {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+}
+
+.dialog-main {
+  display: flex;
+  flex-direction: column;
+}
+
 .dialog-title-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 16px;
 }
 .dialog-title-row h2 {
   font-family: var(--font-headline);
-  font-size: 1.8rem;
-  font-weight: 850;
+  font-size: 2rem;
+  font-weight: 900;
+  line-height: 1.25;
   margin: 0;
   color: #fff;
+  letter-spacing: -0.5px;
 }
-.rating-circle {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  border: 3px solid var(--accent);
+
+/* Modern Rating Badge */
+.modern-rating-badge {
+  position: relative;
+  width: 48px;
+  height: 48px;
   display: grid;
   place-items: center;
-  font-size: 0.85rem;
-  font-weight: 700;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+.rating-svg {
+  width: 100%;
+  height: 100%;
+}
+.rating-value {
+  position: absolute;
+  font-family: var(--font-headline);
+  font-size: 0.95rem;
+  font-weight: 800;
   color: #fff;
 }
-.dialog-meta {
-  font-size: 0.84rem;
+
+/* Meta Badges */
+.dialog-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 20px 0;
+}
+.meta-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
   color: var(--muted);
 }
+.meta-badge.genre {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: rgba(99, 102, 241, 0.2);
+  color: #a5b4fc;
+}
+
 .dialog-overview {
-  font-size: 0.88rem;
-  line-height: 1.5;
-  color: var(--text);
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: #cbd5e1;
   margin: 0;
 }
-.dialog-explanation {
-  background: rgba(var(--accent-rgb), 0.08);
-  border-left: 3px solid var(--accent);
-  padding: 12px 16px;
-  border-radius: 0 8px 8px 0;
-  font-size: 0.84rem;
-  color: var(--text);
+
+/* CineBot Vibe Check Card */
+.dialog-vibe-card {
+  position: relative;
+  margin-top: 24px;
+  padding: 20px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.09) 0%, rgba(236, 72, 153, 0.05) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  box-shadow: 0 8px 32px 0 rgba(99, 102, 241, 0.05);
 }
-.dialog-credits {
-  font-size: 0.78rem;
+.vibe-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.vibe-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  font-size: 0.85rem;
+  color: #c084fc;
+  font-family: var(--font-headline);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+.vibe-sparkle {
+  color: #a78bfa;
+}
+.vibe-tag {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  font-weight: 800;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 3px 8px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.vibe-text {
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: #e2e8f0;
+  margin: 0;
+}
+
+/* Dialog Sidebar */
+.dialog-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 18px;
+}
+.sidebar-section h3 {
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
   color: var(--quiet);
+  margin: 0 0 2px 0;
+  font-family: var(--font-headline);
+}
+
+.detail-item {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
-.dialog-credits strong {
-  color: var(--muted);
+.detail-label {
+  font-size: 0.72rem;
+  color: var(--quiet);
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.3px;
 }
-.dialog-trailer {
-  margin-top: auto;
-  align-self: start;
+.detail-value {
+  font-size: 0.82rem;
+  color: #e2e8f0;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+/* Feedback Row */
+.dialog-feedback-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+}
+.feedback-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.feedback-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+.feedback-btn.thumbs-up.active {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #34d399;
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.06);
+}
+.feedback-btn.thumbs-down.active {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.06);
+}
+
+/* Action Button */
+.dialog-action-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 10px 24px;
-  background: #ffffff;
-  color: #000000;
-  border-radius: 8px;
+  width: 100%;
+  padding: 12px 24px;
+  border-radius: 12px;
   font-size: 0.88rem;
   font-weight: 700;
   text-decoration: none;
+  text-align: center;
+  cursor: pointer;
   transition: all 0.2s ease;
+  border: none;
 }
-.dialog-trailer:hover {
-  background: rgba(255,255,255,0.85);
+.dialog-action-btn.primary {
+  background: #ffffff;
+  color: #000000;
+  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.1);
 }
+.dialog-action-btn.primary:hover {
+  background: rgba(255, 255, 255, 0.88);
+  transform: translateY(-1px);
+}
+
 
 /* ── Auth Modal Overlay ── */
 .auth-modal-overlay {

@@ -4,6 +4,7 @@ import {
   Activity,
   AlertTriangle,
   BarChart3,
+  Calendar,
   CheckCircle2,
   Clock3,
   Database,
@@ -910,20 +911,72 @@ function TrailerFrame({ movie }: { movie: Movie }) {
   );
 }
 
-function MovieDialog({ movie, onClose }: { movie: Movie; onClose: () => void }) {
+function RatingCircle({ score }: { score: string }) {
+  const numScore = score === "NR" ? 0 : Number(score) || 0;
+  const percent = numScore * 10;
+  const radius = 18;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (percent / 100) * circumference;
+
+  let strokeColor = "var(--danger)";
+  if (numScore >= 7) strokeColor = "var(--success)";
+  else if (numScore >= 5) strokeColor = "var(--warn)";
+
+  return (
+    <div className="modern-rating-badge" aria-label={score === "NR" ? "Not Rated" : `Rating ${score} out of 10`}>
+      <svg className="rating-svg" viewBox="0 0 44 44">
+        <circle
+          className="rating-track"
+          cx="22"
+          cy="22"
+          r={radius}
+          fill="transparent"
+          stroke="rgba(255, 255, 255, 0.08)"
+          strokeWidth="3"
+        />
+        {score !== "NR" && (
+          <circle
+            className="rating-fill"
+            cx="22"
+            cy="22"
+            r={radius}
+            fill="transparent"
+            stroke={strokeColor}
+            strokeWidth="3"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            strokeLinecap="round"
+            transform="rotate(-90 22 22)"
+          />
+        )}
+      </svg>
+      <div className="rating-value">
+        <span>{score}</span>
+      </div>
+    </div>
+  );
+}
+
+export function MovieDialog({
+  movie,
+  onClose,
+  feedback,
+  onFeedback,
+}: {
+  movie: Movie;
+  onClose: () => void;
+  feedback?: "positive" | "negative";
+  onFeedback?: (movie: Movie, value: "positive" | "negative") => void;
+}) {
   const director = directorLabel(movie);
   const cast = movie.cast || "";
   const genres = compactGenres(movie.genres);
   const primaryGenre = genres.split("/")[0]?.trim() || "Catalog";
   const runtime = movie.runtime ? `${movie.runtime} min` : "";
-  const meta = [movieYear(movie), runtime, primaryGenre].filter(Boolean).join(" | ");
   const overview = movie.overview || "No overview is available for this title.";
-  const shortOverview = overview.length > 240 ? `${overview.slice(0, 240).replace(/\s+\S*$/, "")}...` : overview;
   const explanation = movie.explanation_text || movieReasons(movie).join(" | ");
   const rating = movieScore(movie);
-  const scorePercent = ratingPercent(movie);
-  const ratingColor = Number(movie.vote_average || 0) >= 7 ? "#21d07a" : Number(movie.vote_average || 0) >= 5 ? "#d2d531" : "#db2360";
-  // Accessibility: ref for focus management
+
   const dialogRef = React.useRef<HTMLElement>(null);
   const previousFocusRef = React.useRef<HTMLElement | null>(null);
 
@@ -931,11 +984,9 @@ function MovieDialog({ movie, onClose }: { movie: Movie; onClose: () => void }) 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
     }
-    // Save the element that had focus before the dialog opened
     previousFocusRef.current = document.activeElement as HTMLElement | null;
     document.body.classList.add("modal-open");
     window.addEventListener("keydown", onKeyDown);
-    // Move focus into the dialog so screen readers announce it
     const firstFocusable = dialogRef.current?.querySelector<HTMLElement>(
       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
     );
@@ -943,7 +994,6 @@ function MovieDialog({ movie, onClose }: { movie: Movie; onClose: () => void }) 
     return () => {
       document.body.classList.remove("modal-open");
       window.removeEventListener("keydown", onKeyDown);
-      // Restore focus to the element that triggered the dialog
       previousFocusRef.current?.focus();
     };
   }, [onClose]);
@@ -959,7 +1009,7 @@ function MovieDialog({ movie, onClose }: { movie: Movie; onClose: () => void }) 
       <section ref={dialogRef} className="movie-dialog" role="dialog" aria-modal="true" aria-label={`${movie.title} details`}>
         <div className="mobile-sheet-handle" style={{ width: "36px", height: "5px", background: "rgba(255, 255, 255, 0.15)", borderRadius: "10px", margin: "12px auto 0 auto", display: "none" }} />
         <button className="dialog-close" type="button" aria-label="Close movie details" onClick={onClose}>
-          <X size={24} />
+          <X size={20} />
         </button>
 
         <div className="dialog-media">
@@ -967,52 +1017,97 @@ function MovieDialog({ movie, onClose }: { movie: Movie; onClose: () => void }) 
         </div>
 
         <div className="dialog-content">
-          <div className="dialog-title-row">
-            <h2>{movie.title}</h2>
-            <div
-              className="rating-circle"
-              style={
-                {
-                  "--rating-percent": scorePercent,
-                  "--rating-color": ratingColor,
-                } as React.CSSProperties
-              }
-              aria-label={`Rating ${rating} out of 10`}
-            >
-              <span>{rating}</span>
+          <div className="dialog-grid">
+            <div className="dialog-main">
+              <div className="dialog-title-row">
+                <h2>{movie.title}</h2>
+                <RatingCircle score={rating} />
+              </div>
+
+              <div className="dialog-meta-row">
+                <span className="meta-badge">
+                  <Calendar size={14} />
+                  <span>{movieYear(movie)}</span>
+                </span>
+                {runtime && (
+                  <span className="meta-badge">
+                    <Clock3 size={14} />
+                    <span>{runtime}</span>
+                  </span>
+                )}
+                <span className="meta-badge genre">
+                  <Film size={14} />
+                  <span>{primaryGenre}</span>
+                </span>
+              </div>
+
+              <p className="dialog-overview">{overview}</p>
+
+              {explanation && (
+                <div className="dialog-vibe-card">
+                  <div className="vibe-header">
+                    <div className="vibe-title">
+                      <Sparkles size={14} className="vibe-sparkle" />
+                      <span>CineBot Vibe Check</span>
+                    </div>
+                    <span className="vibe-tag">AI Insights</span>
+                  </div>
+                  <p className="vibe-text">{explanation}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="dialog-sidebar">
+              <div className="sidebar-section">
+                <h3>Details</h3>
+                {director && (
+                  <div className="detail-item">
+                    <span className="detail-label">Director</span>
+                    <span className="detail-value">{director}</span>
+                  </div>
+                )}
+                {cast && (
+                  <div className="detail-item">
+                    <span className="detail-label">Cast</span>
+                    <span className="detail-value">{cast}</span>
+                  </div>
+                )}
+              </div>
+
+              {onFeedback && (
+                <div className="sidebar-section">
+                  <h3>My Vibe</h3>
+                  <div className="dialog-feedback-actions">
+                    <button
+                      type="button"
+                      className={`feedback-btn thumbs-up ${feedback === "positive" ? "active" : ""}`}
+                      onClick={() => onFeedback(movie, "positive")}
+                      aria-label="Thumbs up"
+                    >
+                      <ThumbsUp size={16} />
+                      <span>Like</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`feedback-btn thumbs-down ${feedback === "negative" ? "active" : ""}`}
+                      onClick={() => onFeedback(movie, "negative")}
+                      aria-label="Thumbs down"
+                    >
+                      <ThumbsDown size={16} />
+                      <span>Dislike</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {movie.trailer_key && (
+                <a className="dialog-action-btn primary" href={`https://www.youtube.com/watch?v=${movie.trailer_key}`} target="_blank" rel="noreferrer">
+                  <Play size={16} fill="currentColor" />
+                  <span>Play Trailer</span>
+                </a>
+              )}
             </div>
           </div>
-
-          <div className="dialog-meta">{meta}</div>
-          <p className="dialog-overview">{shortOverview}</p>
-
-          {explanation && (
-            <div className="dialog-explanation">
-              <strong>CineBot Vibe Check:</strong> {explanation}
-            </div>
-          )}
-
-          {(director || cast) && (
-            <div className="dialog-credits">
-              {director && (
-                <span>
-                  Directed by <strong>{director}</strong>
-                </span>
-              )}
-              {cast && (
-                <span>
-                  Cast: <strong>{cast}</strong>
-                </span>
-              )}
-            </div>
-          )}
-
-          {movie.trailer_key && (
-            <a className="dialog-trailer" href={`https://www.youtube.com/watch?v=${movie.trailer_key}`} target="_blank" rel="noreferrer">
-              <Play size={16} />
-              Open trailer
-            </a>
-          )}
         </div>
       </section>
     </div>
@@ -2193,7 +2288,14 @@ function App() {
           </div>
         )}
 
-        {dialogMovie && <MovieDialog movie={dialogMovie} onClose={() => setDialogMovie(null)} />}
+        {dialogMovie && (
+          <MovieDialog
+            movie={dialogMovie}
+            feedback={feedbackByMovieId[dialogMovie.id]}
+            onFeedback={recordFeedback}
+            onClose={() => setDialogMovie(null)}
+          />
+        )}
         {showAuthModal && (
           <AuthModal
             onLogin={(tok, user) => { setToken(tok); setUsername(user); setShowAuthModal(false); }}
@@ -2848,7 +2950,14 @@ function App() {
           {page === "admin" && <main className="app-shell inner-shell"><ErrorBoundary><AdminPanel token={token} /></ErrorBoundary></main>}
         </div>
 
-        {dialogMovie && <MovieDialog movie={dialogMovie} onClose={() => setDialogMovie(null)} />}
+        {dialogMovie && (
+          <MovieDialog
+            movie={dialogMovie}
+            feedback={feedbackByMovieId[dialogMovie.id]}
+            onFeedback={recordFeedback}
+            onClose={() => setDialogMovie(null)}
+          />
+        )}
         {showAuthModal && (
           <AuthModal
             onLogin={(tok, user) => { setToken(tok); setUsername(user); setShowAuthModal(false); }}
@@ -2862,8 +2971,11 @@ function App() {
   return null;
 }
 
-createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+const rootElement = document.getElementById("root");
+if (rootElement) {
+  createRoot(rootElement).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>,
+  );
+}
