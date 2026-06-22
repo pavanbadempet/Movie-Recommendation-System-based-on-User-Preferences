@@ -957,6 +957,32 @@ function RatingCircle({ score }: { score: string }) {
   );
 }
 
+function formatDate(dateStr?: string | null): string {
+  if (!dateStr) return "";
+  try {
+    const parts = dateStr.split("-");
+    if (parts.length === 3) {
+      const year = parts[0];
+      const monthIndex = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      const months = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+      ];
+      if (monthIndex >= 0 && monthIndex < 12) {
+        return `${months[monthIndex]} ${day}, ${year}`;
+      }
+    }
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      return date.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+  } catch {
+    // fallback
+  }
+  return dateStr;
+}
+
 export function MovieDialog({
   movie,
   onClose,
@@ -970,8 +996,9 @@ export function MovieDialog({
 }) {
   const director = directorLabel(movie);
   const cast = movie.cast || "";
-  const genres = compactGenres(movie.genres);
-  const primaryGenre = genres.split("/")[0]?.trim() || "Catalog";
+  const genreList = movie.genres
+    ? movie.genres.split(/[,|]/).map((g) => g.trim()).filter(Boolean)
+    : [];
   const runtime = movie.runtime ? `${movie.runtime} min` : "";
   const overview = movie.overview || "No overview is available for this title.";
   const explanation = movie.explanation_text || movieReasons(movie).join(" | ");
@@ -1035,10 +1062,12 @@ export function MovieDialog({
                     <span>{runtime}</span>
                   </span>
                 )}
-                <span className="meta-badge genre">
-                  <Film size={14} />
-                  <span>{primaryGenre}</span>
-                </span>
+                {genreList.map((g) => (
+                  <span key={g} className="meta-badge genre">
+                    <Film size={14} />
+                    <span>{g}</span>
+                  </span>
+                ))}
               </div>
 
               <p className="dialog-overview">{overview}</p>
@@ -1055,10 +1084,43 @@ export function MovieDialog({
                   <p className="vibe-text">{explanation}</p>
                 </div>
               )}
+
+              {movie.similarity_score !== undefined && movie.similarity_score !== null && (
+                <div style={{
+                  marginTop: "20px",
+                  padding: "16px",
+                  background: "rgba(6, 182, 212, 0.04)",
+                  border: "1px solid rgba(6, 182, 212, 0.15)",
+                  borderRadius: "16px",
+                  boxShadow: "0 4px 20px rgba(6, 182, 212, 0.03)"
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.75rem", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.6px", color: "var(--cyan)" }}>
+                      <Activity size={14} />
+                      <span>Algorithm Insights</span>
+                    </div>
+                    <span style={{ fontSize: "0.68rem", background: "rgba(6, 182, 212, 0.1)", color: "#22d3ee", padding: "3px 8px", borderRadius: "20px", fontWeight: "800", border: "1px solid rgba(6, 182, 212, 0.1)" }}>
+                      {(movie.similarity_score * 100).toFixed(0)}% Similarity Match
+                    </span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", fontSize: "0.78rem", color: "var(--muted)" }}>
+                    {movie.retrieval_stage && (
+                      <div>
+                        Retrieval Stage: <strong style={{ color: "#fff", fontWeight: "600" }}>{movie.retrieval_stage}</strong>
+                      </div>
+                    )}
+                    {movie.quality_bucket && (
+                      <div>
+                        Quality Bucket: <strong style={{ color: "#fff", fontWeight: "600" }}>{movie.quality_bucket}</strong>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="dialog-sidebar">
-              {(director || cast) && (
+              {(director || cast || movie.release_date || movie.popularity || movie.vote_count) && (
                 <div className="sidebar-section">
                   <h3>Details</h3>
                   {director && (
@@ -1071,6 +1133,24 @@ export function MovieDialog({
                     <div className="detail-item">
                       <span className="detail-label">Cast</span>
                       <span className="detail-value">{cast}</span>
+                    </div>
+                  )}
+                  {movie.release_date && (
+                    <div className="detail-item">
+                      <span className="detail-label">Released</span>
+                      <span className="detail-value">{formatDate(movie.release_date)}</span>
+                    </div>
+                  )}
+                  {movie.popularity !== undefined && movie.popularity !== null && (
+                    <div className="detail-item">
+                      <span className="detail-label">Popularity Score</span>
+                      <span className="detail-value">{Number(movie.popularity).toFixed(1)}</span>
+                    </div>
+                  )}
+                  {movie.vote_count !== undefined && movie.vote_count !== null && movie.vote_count > 0 && (
+                    <div className="detail-item">
+                      <span className="detail-label">Vote Count</span>
+                      <span className="detail-value">{movie.vote_count.toLocaleString()} votes</span>
                     </div>
                   )}
                 </div>
@@ -1102,12 +1182,22 @@ export function MovieDialog({
                 </div>
               )}
 
-              {movie.trailer_key && (
-                <a className="dialog-action-btn primary" href={`https://www.youtube.com/watch?v=${movie.trailer_key}`} target="_blank" rel="noreferrer">
-                  <Play size={16} fill="currentColor" />
-                  <span>Play Trailer</span>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "100%" }}>
+                {movie.trailer_key && (
+                  <a className="dialog-action-btn primary" href={`https://www.youtube.com/watch?v=${movie.trailer_key}`} target="_blank" rel="noreferrer">
+                    <Play size={16} fill="currentColor" />
+                    <span>Play Trailer</span>
+                  </a>
+                )}
+                <a
+                  className="dialog-action-btn secondary"
+                  href={`https://www.google.com/search?q=${encodeURIComponent(movie.title + " " + movieYear(movie) + " movie")}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <span>Search Google</span>
                 </a>
-              )}
+              </div>
             </div>
           </div>
         </div>

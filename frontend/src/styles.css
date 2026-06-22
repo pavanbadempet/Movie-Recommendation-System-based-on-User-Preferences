@@ -2197,6 +2197,16 @@ input:focus-visible {
   background: rgba(255, 255, 255, 0.88);
   transform: translateY(-1px);
 }
+.dialog-action-btn.secondary {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+.dialog-action-btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
+}
 
 
 /* ── Auth Modal Overlay ── */
