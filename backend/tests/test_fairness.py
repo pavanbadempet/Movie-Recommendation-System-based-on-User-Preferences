@@ -43,6 +43,7 @@ def test_telemetry_anonymization():
 def test_gini_popularity_bias(monkeypatch):
     """Ensure the Gini coefficient calculation accurately detects extreme bias."""
     import pandas as pd
+
     monkeypatch.setattr(FairnessAuditor, "load_data", lambda self: pd.DataFrame(columns=["id"]))
     auditor = FairnessAuditor()
 
