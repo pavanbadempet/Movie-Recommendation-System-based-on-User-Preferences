@@ -171,6 +171,7 @@ jobs:
           backend/tests/test_fairness.py \
           backend/tests/test_content_understanding.py \
           backend/tests/test_explanations.py \
+          backend/tests/test_cache.py \
           -v --tb=short -q \
           --cov=backend --cov-report=term-missing --cov-report=xml \
           --cov-fail-under=40 \
