@@ -7,13 +7,15 @@ and enterprise production clusters (EMR / Databricks).
 
 from __future__ import annotations
 
-import os
+from collections.abc import Sequence
 import logging
-from typing import Sequence
+import os
+
 from airflow.models import BaseOperator
 from airflow.operators.bash import BashOperator
 
 logger = logging.getLogger(__name__)
+
 
 class RemoteSparkSubmitOperator(BaseOperator):
     """
@@ -21,6 +23,7 @@ class RemoteSparkSubmitOperator(BaseOperator):
     If SPARK_EXECUTION_MODE is set to 'emr' or 'databricks', routes execution
     via AWS EMR or Databricks APIs. Otherwise, falls back to local execution.
     """
+
     template_fields: Sequence[str] = ("bash_command", "spark_arguments")
 
     def __init__(
@@ -30,7 +33,7 @@ class RemoteSparkSubmitOperator(BaseOperator):
         spark_arguments: list[str] | None = None,
         spark_conn_id: str = "spark_default",
         execution_mode: str | None = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(task_id=task_id, **kwargs)
         self.bash_command = bash_command

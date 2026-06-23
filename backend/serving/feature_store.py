@@ -57,9 +57,7 @@ class FeatureStore:
             self._item_factors = {m_id: np.array(emb, dtype=np.float32) for m_id, emb in zip(movie_ids, item_embs)}
 
             self._item_ids = np.array(movie_ids, dtype=np.int32)
-            self._item_matrix = (
-                np.vstack(item_embs) if movie_ids else np.array([])
-            )
+            self._item_matrix = np.vstack(item_embs) if movie_ids else np.array([])
 
             self._is_loaded = True
             logger.info(f"Feature Store loaded: {len(self._user_factors)} Users, {len(self._item_factors)} Items.")

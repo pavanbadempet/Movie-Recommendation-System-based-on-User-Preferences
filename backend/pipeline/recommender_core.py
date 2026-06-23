@@ -148,12 +148,14 @@ def apply_learned_ranker(
 
     try:
         from backend.serving.serving_tier import get_tier_detector
+
         active_tier, _ = get_tier_detector().resolve()
-        is_tier3 = (active_tier == "tier3")
+        is_tier3 = active_tier == "tier3"
     except Exception:
         is_tier3 = False
 
     from backend.pipeline.recommender import _recommender
+
     heavy_loaded = getattr(_recommender, "_heavy_models_loaded", False)
 
     if is_tier3 or not heavy_loaded:
@@ -455,8 +457,9 @@ def sparse_search_movies(rec, query: str, limit: int = 20) -> list:
 
     if use_vectorized:
         from sklearn.preprocessing import normalize
+
         query_vec = rec._vectorizer.transform([query])
-        query_vec_norm = normalize(query_vec, norm='l2', axis=1)
+        query_vec_norm = normalize(query_vec, norm="l2", axis=1)
         scores = rec._tfidf_matrix.dot(query_vec_norm.T).toarray().flatten()
 
         # Take a candidate pool of limit * 10, capped at catalog length
@@ -491,7 +494,6 @@ def sparse_search_movies(rec, query: str, limit: int = 20) -> list:
         matches["relevance"] = [float(scores[pos]) * 20.0 for pos in combined_positions]
     else:
         matches["relevance"] = 0.0
-
 
     # Run original relevance boosting logic only on the matches subset
     titles = text_column("title", matches_index)
@@ -574,7 +576,6 @@ def sparse_search_movies(rec, query: str, limit: int = 20) -> list:
         for record in matches.to_dict(orient="records"):
             record["similarity_score"] = float(record.get("relevance", 0.0))
             response_records.append(rec._clean_response_record(record))
-
 
     return response_records
 
@@ -670,7 +671,10 @@ def metadata_recommend_by_index(rec, movie_idx: int, n: int = 10) -> list:
         from pathlib import Path as _Path
 
         possible_paths = [
-            _Path(__file__).resolve().parent.parent.parent / "data" / "evaluation" / "recommendation_quality_benchmark.json",
+            _Path(__file__).resolve().parent.parent.parent
+            / "data"
+            / "evaluation"
+            / "recommendation_quality_benchmark.json",
             _Path(__file__).resolve().parent.parent / "data" / "evaluation" / "recommendation_quality_benchmark.json",
             _Path("data/evaluation/recommendation_quality_benchmark.json"),
         ]
@@ -745,8 +749,16 @@ def metadata_recommend_by_index(rec, movie_idx: int, n: int = 10) -> list:
 
     if rec._movies is not None:
         titles_col = rec._movies["title"].fillna("").astype(str).to_numpy() if "title" in rec._movies.columns else None
-        directors_col = rec._movies["director"].fillna("").astype(str).str.strip().str.lower().to_numpy() if "director" in rec._movies.columns else None
-        genres_col = rec._movies["genres"].fillna("").astype(str).str.lower().to_numpy() if "genres" in rec._movies.columns else None
+        directors_col = (
+            rec._movies["director"].fillna("").astype(str).str.strip().str.lower().to_numpy()
+            if "director" in rec._movies.columns
+            else None
+        )
+        genres_col = (
+            rec._movies["genres"].fillna("").astype(str).str.lower().to_numpy()
+            if "genres" in rec._movies.columns
+            else None
+        )
 
         for idx_row in range(len(rec._movies)):
             if idx_row == movie_idx:
@@ -921,20 +933,56 @@ def metadata_recommend_by_index(rec, movie_idx: int, n: int = 10) -> list:
 
     # ── Post-processing: Title-fuzzy deduplication and safety filters ──
     raw_blocked_titles = {
-        "small soldiers", "supergirl", "barbarella", "kids next door: operation z.e.r.o.",
-        "the last airbender", "x-men: apocalypse", "knights of the zodiac", "mystery men",
-        "justice league: the flashpoint paradox"
+        "small soldiers",
+        "supergirl",
+        "barbarella",
+        "kids next door: operation z.e.r.o.",
+        "the last airbender",
+        "x-men: apocalypse",
+        "knights of the zodiac",
+        "mystery men",
+        "justice league: the flashpoint paradox",
     }
     blocked_titles = {
-        "small soldiers", "supergirl", "barbarella", "kids next door operation zero",
-        "last airbender", "the last airbender", "xmen apocalypse", "knights of the zodiac",
-        "knights of zodiac", "mystery men", "justice league the flashpoint paradox"
+        "small soldiers",
+        "supergirl",
+        "barbarella",
+        "kids next door operation zero",
+        "last airbender",
+        "the last airbender",
+        "xmen apocalypse",
+        "knights of the zodiac",
+        "knights of zodiac",
+        "mystery men",
+        "justice league the flashpoint paradox",
     }
     doc_keywords = {
-        "making", "behind", "scenes", "creating", "inside", "live", "stage",
-        "odyssey", "documentary", "special", "retrospective", "bonus", "featurette",
-        "tribute", "collection", "anniversary", "edition", "revisited", "legacy",
-        "journey", "art", "visual", "guide", "companion", "illustrated", "visual journey"
+        "making",
+        "behind",
+        "scenes",
+        "creating",
+        "inside",
+        "live",
+        "stage",
+        "odyssey",
+        "documentary",
+        "special",
+        "retrospective",
+        "bonus",
+        "featurette",
+        "tribute",
+        "collection",
+        "anniversary",
+        "edition",
+        "revisited",
+        "legacy",
+        "journey",
+        "art",
+        "visual",
+        "guide",
+        "companion",
+        "illustrated",
+        "visual journey",
     }
 
     norm_seed_title = _normalize_title_dedup(seed_title)
@@ -1478,6 +1526,7 @@ def load_movie_catalog(rec) -> None:
     if not rec._low_memory:
         essential_cols.append("cast")
     import polars as _pl
+
     try:
         rec._movies = _pl.read_parquet(movies_path, columns=essential_cols).to_pandas()
     except (KeyError, ValueError, Exception):
@@ -1546,11 +1595,18 @@ def load_optional_models(rec) -> None:
         rec.multimodal_index = None
         logger.warning("Failed to load Multi-Modal index: %s", e)
 
-    is_tier3 = getattr(rec, "_low_memory", False) or (hasattr(rec, "_resolve_active_tier") and rec._resolve_active_tier() == "tier3")
+    is_tier3 = getattr(rec, "_low_memory", False) or (
+        hasattr(rec, "_resolve_active_tier") and rec._resolve_active_tier() == "tier3"
+    )
     if not is_tier3:
         try:
             loaded = rec.kg_engine.load()
-            if not loaded or not hasattr(rec.kg_engine, "graph") or rec.kg_engine.graph is None or len(rec.kg_engine.graph) < 100:
+            if (
+                not loaded
+                or not hasattr(rec.kg_engine, "graph")
+                or rec.kg_engine.graph is None
+                or len(rec.kg_engine.graph) < 100
+            ):
                 logger.info("Knowledge Graph is empty or mock. Rebuilding dynamically from catalog in background...")
                 DATA_DIR = (
                     (recommender_module and getattr(recommender_module, "DATA_DIR", None))
@@ -1559,20 +1615,24 @@ def load_optional_models(rec) -> None:
                 )
                 twins_path = DATA_DIR / "semantic_twins.parquet"
                 from threading import Thread
+
                 def bg_rebuild():
                     try:
                         rec.kg_engine.rebuild_from_catalog(rec._movies, twins_path)
                         try:
                             from backend.intelligence.cross_domain_kg import enrich_knowledge_graph_with_cross_domain
+
                             enrich_knowledge_graph_with_cross_domain(rec.kg_engine)
                         except Exception as exc:
                             logger.warning("Cross-domain KG enrichment skipped: %s", exc)
                     except Exception as exc:
                         logger.error("Background Knowledge Graph rebuild failed: %s", exc)
+
                 Thread(target=bg_rebuild, name="kg-rebuild", daemon=True).start()
             else:
                 try:
                     from backend.intelligence.cross_domain_kg import enrich_knowledge_graph_with_cross_domain
+
                     enrich_knowledge_graph_with_cross_domain(rec.kg_engine)
                 except Exception as exc:
                     logger.warning("Cross-domain KG enrichment skipped: %s", exc)
@@ -1646,6 +1706,7 @@ def wire_pipelines(rec, is_tier3: bool) -> None:
         if not is_tier3 and getattr(rec, "_heavy_models_loaded", False):
             try:
                 from backend.models.ensemble_engine import get_apex_engine
+
                 ensemble = get_apex_engine(num_users=610, num_items=9724)
             except Exception as exc:
                 logger.warning("Could not load get_apex_engine: %s", exc)
@@ -1660,7 +1721,7 @@ def wire_pipelines(rec, is_tier3: bool) -> None:
             learned_ranker=rec._learned_ranker,
             config=RankingConfig(
                 use_neural_ensemble=has_ensemble_weights and (not is_tier3 or _serving_profile() == "full"),
-                use_learned_ranker=False, # Disable learned ranker until retraining fix
+                use_learned_ranker=False,  # Disable learned ranker until retraining fix
             ),
         )
         rec._reranking_pipeline = RerankingPipeline(

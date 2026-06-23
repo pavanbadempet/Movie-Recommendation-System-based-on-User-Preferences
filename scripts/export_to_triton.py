@@ -49,15 +49,7 @@ def _triton_tensor_block(kind: str, value_info) -> str:
         type_name = TensorProto.DataType.Name(elem_type)
         raise ValueError(f"Unsupported ONNX tensor type for {value_info.name}: {type_name}") from exc
     dims = ", ".join(str(value) for value in _tensor_dims(value_info))
-    return (
-        f"{kind} [\n"
-        "  {\n"
-        f'    name: "{value_info.name}"\n'
-        f"    data_type: {data_type}\n"
-        f"    dims: [ {dims} ]\n"
-        "  }\n"
-        "]"
-    )
+    return f'{kind} [\n  {{\n    name: "{value_info.name}"\n    data_type: {data_type}\n    dims: [ {dims} ]\n  }}\n]'
 
 
 def _config_for_model(model_name: str, model: onnx.ModelProto) -> str:
@@ -148,7 +140,9 @@ def _parse_args() -> argparse.Namespace:
 def main() -> int:
     args = _parse_args()
     exported = build_triton_repository(args.onnx_dir, args.output_dir)
-    logger.info("Triton repository ready at %s with %d model(s): %s", args.output_dir, len(exported), ", ".join(exported))
+    logger.info(
+        "Triton repository ready at %s with %d model(s): %s", args.output_dir, len(exported), ", ".join(exported)
+    )
     return 0
 
 

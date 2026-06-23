@@ -12,7 +12,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
 
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import (
@@ -61,12 +61,13 @@ class LocalSchemaRegistryClient:
     Validates streaming records against defined JSON schemas to prevent schema drift
     before Delta Lake appends.
     """
+
     def __init__(self, schemas_dir: Path | None = None):
         if schemas_dir is None:
             self.schemas_dir = Path(__file__).resolve().parent.parent / "contracts"
         else:
             self.schemas_dir = schemas_dir
-        self._schemas: Dict[str, Dict[str, Any]] = {}
+        self._schemas: dict[str, dict[str, Any]] = {}
 
     def get_latest_schema(self, subject: str) -> dict:
         """Retrieve the latest schema definition for a subject/topic."""
@@ -74,7 +75,7 @@ class LocalSchemaRegistryClient:
             schema_path = self.schemas_dir / f"{subject}.schema.json"
             if not schema_path.exists():
                 schema_path = self.schemas_dir / "raw_events.schema.json"
-            with open(schema_path, "r", encoding="utf-8") as f:
+            with open(schema_path, encoding="utf-8") as f:
                 self._schemas[subject] = json.load(f)
         return self._schemas[subject]
 
@@ -125,9 +126,7 @@ def validate_event_payload(payload_str: str, subject: str = "raw_events") -> boo
 def parse_kafka_event_stream(raw_stream: DataFrame) -> DataFrame:
     """Parse Kafka JSON values into the canonical tenant-aware event fact schema."""
     # Enforce Schema Registry contract validation filter
-    compliant_stream = raw_stream.filter(
-        validate_event_payload(col("value").cast("string"), lit("raw_events"))
-    )
+    compliant_stream = raw_stream.filter(validate_event_payload(col("value").cast("string"), lit("raw_events")))
 
     parsed = compliant_stream.select(
         from_json(col("value").cast("string"), EVENT_PAYLOAD_SCHEMA).alias("event"),

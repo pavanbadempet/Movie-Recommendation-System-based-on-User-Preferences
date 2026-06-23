@@ -1,14 +1,14 @@
 import os
-import sys
 from pathlib import Path
+import sys
 
 # Add project root to path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-import torch
 import numpy as np
+
 from backend.models.ensemble_engine import ApexEnsembleEngine
 from backend.models.neural_weight_optimizer import get_contextual_weights
 
@@ -28,37 +28,23 @@ def check_new_blend():
     print("\n[2] Extracting Contextual Weights for Different User Profiles...")
 
     # Cold-Start User (0 ratings, 0 clicks, 0 views)
-    profile_cold = {
-        "total_ratings": 0,
-        "avg_rating": 0.0,
-        "click_count": 0,
-        "view_count": 0
-    }
-    
+    profile_cold = {"total_ratings": 0, "avg_rating": 0.0, "click_count": 0, "view_count": 0}
+
     # Active User (50 ratings, 4.2 average, 100 clicks, 150 views)
-    profile_active = {
-        "total_ratings": 50,
-        "avg_rating": 4.2,
-        "click_count": 100,
-        "view_count": 150
-    }
+    profile_active = {"total_ratings": 50, "avg_rating": 4.2, "click_count": 100, "view_count": 150}
 
     dummy_embedding = np.random.randn(16)
 
     model_path = Path("models/contextual_weight_net.pth")
     if not model_path.exists():
-        print(f"WARNING: models/contextual_weight_net.pth not found! Using fallback static weights.")
+        print("WARNING: models/contextual_weight_net.pth not found! Using fallback static weights.")
 
     weights_cold = get_contextual_weights(
-        behavior_profile=profile_cold,
-        als_user_embedding=dummy_embedding,
-        model_path=model_path
+        behavior_profile=profile_cold, als_user_embedding=dummy_embedding, model_path=model_path
     )
-    
+
     weights_active = get_contextual_weights(
-        behavior_profile=profile_active,
-        als_user_embedding=dummy_embedding,
-        model_path=model_path
+        behavior_profile=profile_active, als_user_embedding=dummy_embedding, model_path=model_path
     )
 
     print("\n--- Generated Contextual Weights ---")
@@ -70,7 +56,7 @@ def check_new_blend():
     # 3. Test Prediction Blending Modes
     print("\n[3] Testing Blending Calculations...")
     candidate_ids = [101, 102, 103, 104, 105]
-    
+
     # Run with default linear blend
     print("\nRunning linear blend (APEX_ENSEMBLE_BLEND_MODE=linear)...")
     os.environ["APEX_ENSEMBLE_BLEND_MODE"] = "linear"
@@ -86,6 +72,7 @@ def check_new_blend():
         print(f"  Item {cid} Score: {scores_geom[cid]:.6f}")
 
     print("\nDiagnostics complete! Context-dependent ensemble blending is fully operational.")
+
 
 if __name__ == "__main__":
     check_new_blend()

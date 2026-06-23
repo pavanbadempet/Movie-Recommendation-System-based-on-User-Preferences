@@ -77,9 +77,7 @@ def load_pyspark_embeddings(
     user_tensor = torch.tensor(np.vstack(users["features"]), dtype=torch.float32)
     item_tensor = torch.tensor(np.vstack(items["features"]), dtype=torch.float32)
     if user_tensor.shape[1] != item_tensor.shape[1]:
-        raise ValueError(
-            f"User/item embedding dimensions differ: {user_tensor.shape[1]} != {item_tensor.shape[1]}"
-        )
+        raise ValueError(f"User/item embedding dimensions differ: {user_tensor.shape[1]} != {item_tensor.shape[1]}")
 
     user_ids = [int(value) for value in users["id"].tolist()]
     item_ids = [int(value) for value in items["id"].tolist()]

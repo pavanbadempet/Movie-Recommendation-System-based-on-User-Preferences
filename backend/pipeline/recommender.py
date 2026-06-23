@@ -139,6 +139,7 @@ class Recommender:
             self._artifact_status["vector_artifacts_ready"] = True
 
         if not is_tier3:
+
             def bg_heavy_load():
                 try:
                     logger.info("Loading recommendation engine - Phase 2 (Async Heavy Load) started in background...")
@@ -151,6 +152,7 @@ class Recommender:
                     logger.exception("Failed to load heavy recommender models in background: %s", exc)
 
             import threading
+
             threading.Thread(target=bg_heavy_load, name="recommender-heavy-loader", daemon=True).start()
         else:
             self._load_ranker_and_behavior()
@@ -561,6 +563,7 @@ class Recommender:
                 # Boost exact/prefix matches and format the final sorted search results
                 q_lower = query.lower().strip()
                 import re
+
                 q_norm = re.sub(r"[^a-z0-9]+", " ", q_lower).strip()
 
                 boosted_results = []
@@ -576,11 +579,7 @@ class Recommender:
                     else:
                         genres_str = str(genres_val).lower()
 
-                    has_keyword = (
-                        q_lower in title
-                        or q_lower in overview
-                        or q_lower in genres_str
-                    )
+                    has_keyword = q_lower in title or q_lower in overview or q_lower in genres_str
                     if not has_keyword and q_norm:
                         has_keyword = (
                             q_norm in title_norm
@@ -595,16 +594,20 @@ class Recommender:
                     boost = 0.0
                     if title == q_lower or (q_norm and title_norm == q_norm):
                         boost += 100.0  # Exact match priority
-                    elif title.startswith(q_lower + " ") or title.startswith(q_lower + ":") or title.startswith(q_lower + "-"):
-                        boost += 30.0   # Boundary match
+                    elif (
+                        title.startswith(q_lower + " ")
+                        or title.startswith(q_lower + ":")
+                        or title.startswith(q_lower + "-")
+                    ):
+                        boost += 30.0  # Boundary match
                     elif q_norm and title_norm.startswith(q_norm + " "):
                         boost += 30.0
                     elif title.startswith(q_lower):
-                        boost += 10.0   # Prefix match
+                        boost += 10.0  # Prefix match
                     elif q_norm and title_norm.startswith(q_norm):
                         boost += 10.0
                     elif q_lower in title:
-                        boost += 5.0    # Substring match
+                        boost += 5.0  # Substring match
 
                     popularity = float(item.get("popularity") or 0.0)
                     vote_count = float(item.get("vote_count") or 0.0)
@@ -726,7 +729,7 @@ class Recommender:
                         row_franchise = _extract_franchise(row_title_str)
 
                         # Type A: exact franchise match ("alien" == "alien")
-                        exact_franchise = (row_franchise == seed_franchise and row_title_str != seed_title_lower)
+                        exact_franchise = row_franchise == seed_franchise and row_title_str != seed_title_lower
                         # Type B: substring match ("alien" in "alien abduction")
                         substring_franchise = (
                             not exact_franchise
@@ -769,12 +772,14 @@ class Recommender:
                                     break
                             continue
 
-                        candidates.append(CandidateItem(
-                            movie_id=mid,
-                            retrieval_score=target_score,
-                            retrieval_source="hybrid",
-                            metadata=meta,
-                        ))
+                        candidates.append(
+                            CandidateItem(
+                                movie_id=mid,
+                                retrieval_score=target_score,
+                                retrieval_source="hybrid",
+                                metadata=meta,
+                            )
+                        )
                         existing_ids.add(mid)
                         injected_count += 1
 
@@ -807,12 +812,14 @@ class Recommender:
                                     break
                             continue
 
-                        candidates.append(CandidateItem(
-                            movie_id=mid,
-                            retrieval_score=target_score,
-                            retrieval_source="hybrid",
-                            metadata=meta,
-                        ))
+                        candidates.append(
+                            CandidateItem(
+                                movie_id=mid,
+                                retrieval_score=target_score,
+                                retrieval_source="hybrid",
+                                metadata=meta,
+                            )
+                        )
                         existing_ids.add(mid)
                         injected_count += 1
 
@@ -832,18 +839,44 @@ class Recommender:
                         if overlap == 0:
                             c.retrieval_score *= 0.5
                         else:
-                            c.retrieval_score *= (1.0 + 0.4 * jaccard)
+                            c.retrieval_score *= 1.0 + 0.4 * jaccard
 
                     if cand_title and seed_title_lower and cand_title != seed_title_lower:
-                        seed_words = set(seed_title_lower.split()) - {"the", "a", "an", "of", "in", "and", "or", "to", "is", "at"}
-                        cand_words = set(cand_title.split()) - {"the", "a", "an", "of", "in", "and", "or", "to", "is", "at"}
+                        seed_words = set(seed_title_lower.split()) - {
+                            "the",
+                            "a",
+                            "an",
+                            "of",
+                            "in",
+                            "and",
+                            "or",
+                            "to",
+                            "is",
+                            "at",
+                        }
+                        cand_words = set(cand_title.split()) - {
+                            "the",
+                            "a",
+                            "an",
+                            "of",
+                            "in",
+                            "and",
+                            "or",
+                            "to",
+                            "is",
+                            "at",
+                        }
                         shared_title_words = seed_words & cand_words
                         if shared_title_words and cand_genres and not (seed_genres & cand_genres):
                             c.retrieval_score *= 0.6
 
                     # Director boost (e.g. Ridley Scott matching Prometheus for Blade Runner)
                     cand_director = meta.get("director")
-                    if cand_director and seed_director and str(cand_director).strip().lower() == str(seed_director).strip().lower():
+                    if (
+                        cand_director
+                        and seed_director
+                        and str(cand_director).strip().lower() == str(seed_director).strip().lower()
+                    ):
                         c.retrieval_score *= 1.1
 
                     # Granular popularity/vote-count penalisation for copycats and niche titles
@@ -909,7 +942,9 @@ class Recommender:
                 encoder = self._get_query_encoder()
                 query_embedding = encoder.encode([query], convert_to_numpy=True)
                 query_embedding = query_embedding / np.linalg.norm(query_embedding, axis=1, keepdims=True)
-                candidates = self._retrieval_pipeline.retrieve(query_embedding.astype(np.float32), n=n, query_text=query)
+                candidates = self._retrieval_pipeline.retrieve(
+                    query_embedding.astype(np.float32), n=n, query_text=query
+                )
                 return [self._candidate_to_dict(item) for item in candidates]
             except Exception as exc:
                 logger.warning("ai_search pipeline failed (%s); falling back.", type(exc).__name__)

@@ -118,11 +118,11 @@ Add a genre filter to the search endpoint:
 @router.get("/search")
 async def search_movies(q: str, genre: str = None):
     results = search_service.search(q)
-    
+
     # Add this filter
     if genre:
         results = [m for m in results if genre in m.get("genres", [])]
-    
+
     return {"results": results}
 ```
 
@@ -137,13 +137,13 @@ class RetrievalPipeline:
     def retrieve(self, user_id: str, movie_id: int, limit: int = 100):
         # Step 1: Get similar movies from FAISS index
         faiss_results = self.faiss_index.search(movie_id, limit)
-        
+
         # Step 2: Get TF-IDF matches
         tfidf_results = self.tfidf_index.search(movie_id, limit)
-        
+
         # Step 3: Combine and deduplicate
         combined = self._combine_results(faiss_results, tfidf_results)
-        
+
         return combined[:limit]
 ```
 
@@ -165,23 +165,23 @@ class SASRecModel(nn.Module):
         super().__init__()
         # Item embeddings: convert movie IDs to vectors
         self.item_embeddings = nn.Embedding(num_items, embedding_dim)
-        
+
         # Transformer: learns patterns in user sequences
         self.transformer = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(d_model=embedding_dim, nhead=4),
             num_layers=2
         )
-        
+
     def forward(self, user_sequence):
         # Convert sequence to embeddings
         embeddings = self.item_embeddings(user_sequence)
-        
+
         # Apply transformer to learn patterns
         sequence_representation = self.transformer(embeddings)
-        
+
         # Predict next item
         scores = torch.matmul(sequence_representation, self.item_embeddings.weight.t())
-        
+
         return scores
 ```
 
@@ -215,11 +215,11 @@ Open `backend/pipeline/retrieval_pipeline.py`:
 ```python
 def retrieve(self, user_id: str, movie_id: int, limit: int = 100, min_year: int = None):
     results = self._get_all_candidates(movie_id, limit)
-    
+
     # Add year filter
     if min_year:
         results = [m for m in results if m.get("year", 0) >= min_year]
-    
+
     return results
 ```
 
@@ -230,7 +230,7 @@ Open `backend/api/recommendation_routes.py`:
 ```python
 @router.get("/id/{movie_id}")
 async def get_recommendations(
-    movie_id: int, 
+    movie_id: int,
     limit: int = 10,
     min_year: int = None  # Add this parameter
 ):
@@ -261,16 +261,16 @@ from backend.pipeline.retrieval_pipeline import RetrievalPipeline
 
 def test_year_filter():
     pipeline = RetrievalPipeline()
-    
+
     # Mock data
     movies = [
         {"id": 1, "title": "Old Movie", "year": 1990},
         {"id": 2, "title": "New Movie", "year": 2020},
     ]
-    
+
     # Test filtering
     filtered = [m for m in movies if m["year"] >= 2000]
-    
+
     assert len(filtered) == 1
     assert filtered[0]["title"] == "New Movie"
     print("✓ Year filter works correctly")
@@ -294,7 +294,7 @@ User Request
     ↓
 Stage 1: Retrieval (Get 100 candidates)
     ├─ FAISS: Vector similarity search
-    ├─ TF-IDF: Text-based search  
+    ├─ TF-IDF: Text-based search
     └─ Knowledge Graph: Genre/actor relationships
     ↓
 Stage 2: Ranking (Score candidates)
@@ -414,7 +414,7 @@ NOVA_DISABLE_ONLINE_LEARNING=1   # Disable real-time updates
 NOVA_LOG_LEVEL=DEBUG             # Verbose logging
 ```
 
-## Congratulations! 
+## Congratulations!
 
 You've completed the beginner tutorial. You now understand:
 - How recommendation systems work

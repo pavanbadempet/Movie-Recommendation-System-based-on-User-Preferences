@@ -105,11 +105,6 @@ function movieScore(movie: Movie): string {
   return value > 0 ? value.toFixed(1) : "NR";
 }
 
-function ratingPercent(movie: Movie): number {
-  const value = Number(movie.vote_average || 0);
-  return Math.max(0, Math.min(100, Math.round(value * 10)));
-}
-
 function formatCount(value?: number | null): string {
   const numeric = Number(value || 0);
   return numeric > 0 ? numeric.toLocaleString() : "0";

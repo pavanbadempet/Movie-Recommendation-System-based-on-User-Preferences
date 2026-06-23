@@ -50,9 +50,7 @@ def test_explainable_ai_fallback_template(sample_movie_df, sample_ranked_items):
     profile = {
         "user_id": "test-user",
         "favorite_genres": ["Animation"],
-        "recent_events": [
-            {"movie_id": 2, "weight": 1.0}
-        ]
+        "recent_events": [{"movie_id": 2, "weight": 1.0}],
     }
 
     results = pipeline.rerank(sample_ranked_items, constraints={"profile": profile})

@@ -132,7 +132,9 @@ class ApexEnsembleEngine(nn.Module):
         self.lightgcn = LightGCN(num_users=max(num_users, 1110), num_items=max(num_items, 12966), embedding_dim=emb_dim)
 
         # 7. Clifford Geometric Algebra (Multivectors)
-        self.clifford = CliffordRecommender(num_users=max(num_users, 610), num_items=max(num_items, 9724), emb_dim=emb_dim)
+        self.clifford = CliffordRecommender(
+            num_users=max(num_users, 610), num_items=max(num_items, 9724), emb_dim=emb_dim
+        )
 
         # 7. Contextual Router (MoE)
         self.router = ContextualRouter(emb_dim=emb_dim)
@@ -614,7 +616,7 @@ class ApexEnsembleEngine(nn.Module):
             return {}
 
         # Check for cold start user context
-        is_cold_start = (user_id % self.num_users == 0)
+        is_cold_start = user_id % self.num_users == 0
         if not is_cold_start:
             try:
                 events_list = _get_user_event_index().get(str(user_id), [])
@@ -635,7 +637,9 @@ class ApexEnsembleEngine(nn.Module):
 
                 onnx = get_onnx_engine()
                 if onnx.has_any_onnx_models():
-                    return self._predict_ensemble_onnx(user_id, candidate_item_ids, onnx, session_sequence, is_cold_start=is_cold_start)
+                    return self._predict_ensemble_onnx(
+                        user_id, candidate_item_ids, onnx, session_sequence, is_cold_start=is_cold_start
+                    )
             except Exception as exc:
                 logger.debug("ONNX ensemble path unavailable; falling back to PyTorch: %s", exc)
 
@@ -650,7 +654,12 @@ class ApexEnsembleEngine(nn.Module):
         )
 
     def _predict_ensemble_onnx(
-        self, user_id: int, candidate_item_ids: list[int], onnx, session_sequence: list[int] | None = None, is_cold_start: bool = False
+        self,
+        user_id: int,
+        candidate_item_ids: list[int],
+        onnx,
+        session_sequence: list[int] | None = None,
+        is_cold_start: bool = False,
     ) -> dict[int, float]:
         """ONNX Runtime inference path — bypasses Python GIL for 2-5x speedup."""
         import numpy as _np

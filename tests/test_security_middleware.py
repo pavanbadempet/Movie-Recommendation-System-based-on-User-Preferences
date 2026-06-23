@@ -16,8 +16,7 @@ def _request(path="/v1/recommendations/id/100", headers=None, client=("203.0.113
             "server": ("testserver", 80),
             "client": client,
             "headers": [
-                (name.lower().encode("latin-1"), value.encode("latin-1"))
-                for name, value in (headers or {}).items()
+                (name.lower().encode("latin-1"), value.encode("latin-1")) for name, value in (headers or {}).items()
             ],
             "query_string": b"",
         }

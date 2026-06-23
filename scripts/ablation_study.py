@@ -148,13 +148,14 @@ def _build_synthetic_eval_data(sample_size: int, num_items: int = 10_000) -> lis
         test_item = rng.randint(1, num_items)
         while test_item == seed_item:
             test_item = rng.randint(1, num_items)
-        eval_data.append({
-            "user_id": i,
-            "seed_item_id": seed_item,
-            "test_item_id": test_item,
-        })
+        eval_data.append(
+            {
+                "user_id": i,
+                "seed_item_id": seed_item,
+                "test_item_id": test_item,
+            }
+        )
     return eval_data
-
 
 
 # ---------------------------------------------------------------------------
@@ -225,17 +226,21 @@ def _sample_eval_data_from_events(sample_size: int) -> list[dict[str, Any]]:
         seed_item_id = interactions[-2][1]
         test_item_id = interactions[-1][1]
         try:
-            eval_data.append({
-                "user_id": int(uid_str),
-                "seed_item_id": seed_item_id,
-                "test_item_id": test_item_id,
-            })
+            eval_data.append(
+                {
+                    "user_id": int(uid_str),
+                    "seed_item_id": seed_item_id,
+                    "test_item_id": test_item_id,
+                }
+            )
         except ValueError:
-            eval_data.append({
-                "user_id": uid_str,
-                "seed_item_id": seed_item_id,
-                "test_item_id": test_item_id,
-            })
+            eval_data.append(
+                {
+                    "user_id": uid_str,
+                    "seed_item_id": seed_item_id,
+                    "test_item_id": test_item_id,
+                }
+            )
 
     # Shuffle deterministically and cap at sample_size
     rng = random.Random(42)
@@ -668,11 +673,14 @@ def main() -> None:
 
         # Monkey-patch get_contextual_weights to prevent weights from being overridden during leave-one-out runs
         try:
-            import backend.models.neural_weight_optimizer
             from backend.models.ensemble_engine import get_apex_engine
+            import backend.models.neural_weight_optimizer
+
             engine = get_apex_engine()
             if engine is not None:
-                backend.models.neural_weight_optimizer.get_contextual_weights = lambda behavior_profile, als_user_embedding=None: engine._weights
+                backend.models.neural_weight_optimizer.get_contextual_weights = (
+                    lambda behavior_profile, als_user_embedding=None: engine._weights
+                )
                 logger.info("Successfully monkey-patched get_contextual_weights to respect in-memory weight changes.")
         except Exception as e:
             logger.warning("Could not monkey-patch get_contextual_weights: %s", e)

@@ -115,7 +115,8 @@ def test_model_pruning_execution():
     mock_health = None
     if engine.health_monitor is not None:
         mock_health = patch.object(
-            engine.health_monitor, "get_active_models",
+            engine.health_monitor,
+            "get_active_models",
             return_value=["quantum", "hyperbolic", "kan", "diffusion", "sasrec", "lightgcn"],
         )
 
@@ -131,7 +132,9 @@ def test_model_pruning_execution():
         if mock_health is not None:
             mock_health.start()
         try:
-            scores = engine.predict_ensemble(user_id=1, candidate_item_ids=candidate_ids, use_router=True, router_k=2, session_sequence=[1, 2, 3])
+            scores = engine.predict_ensemble(
+                user_id=1, candidate_item_ids=candidate_ids, use_router=True, router_k=2, session_sequence=[1, 2, 3]
+            )
 
             # Assert selected models were called
             assert mock_quantum.called, "Quantum model should be called by router selection"
@@ -181,4 +184,6 @@ def test_router_latency_speedup():
     print(f"Speedup Factor:                  {speedup:.2f}x")
 
     # Verify routed is not dramatically slower than full (allow 2x tolerance for CI variability)
-    assert duration_routed < duration_full * 2.0, f"Routed ({duration_routed:.4f}s) should not be >2x slower than full ({duration_full:.4f}s)"
+    assert duration_routed < duration_full * 2.0, (
+        f"Routed ({duration_routed:.4f}s) should not be >2x slower than full ({duration_full:.4f}s)"
+    )

@@ -99,10 +99,10 @@ def get_recommendations(movie_id: int):
 def get_recommendations(movie_id: int):
     """
     Get movie recommendations for a given movie.
-    
+
     Args:
         movie_id: The ID of the movie to get recommendations for.
-        
+
     Returns:
         List of recommended movie dictionaries.
     """
@@ -191,7 +191,7 @@ footer
 ```
 feat(api): add genre filter to search endpoint
 
-Users can now filter search results by genre using the 
+Users can now filter search results by genre using the
 ?genre= parameter.
 
 Closes #123
@@ -256,7 +256,7 @@ logger = logging.getLogger(__name__)
 
 class RecommendationService:
     """Service for generating movie recommendations."""
-    
+
     def __init__(
         self,
         model: SASRecModel,
@@ -264,14 +264,14 @@ class RecommendationService:
     ):
         """
         Initialize the recommendation service.
-        
+
         Args:
             model: The SASRec model for scoring.
             retrieval_pipeline: Pipeline for candidate retrieval.
         """
         self.model = model
         self.retrieval_pipeline = retrieval_pipeline
-        
+
     def get_recommendations(
         self,
         movie_id: int,
@@ -279,11 +279,11 @@ class RecommendationService:
     ) -> List[dict]:
         """
         Get recommendations for a movie.
-        
+
         Args:
             movie_id: The movie ID to get recommendations for.
             limit: Maximum number of recommendations to return.
-            
+
         Returns:
             List of recommended movie dictionaries.
         """
@@ -306,27 +306,27 @@ from backend.pipeline.retrieval_pipeline import RetrievalPipeline
 
 class TestRetrievalPipeline:
     """Test suite for RetrievalPipeline."""
-    
+
     def test_retrieve_returns_candidates(self):
         """Test that retrieve returns candidate movies."""
         pipeline = RetrievalPipeline()
         candidates = pipeline.retrieve(movie_id=1, limit=10)
-        
+
         assert len(candidates) > 0
         assert all("id" in c for c in candidates)
-        
+
     def test_retrieve_with_limit(self):
         """Test that limit parameter works correctly."""
         pipeline = RetrievalPipeline()
         candidates = pipeline.retrieve(movie_id=1, limit=5)
-        
+
         assert len(candidates) <= 5
-        
+
     def test_retrieve_empty_movie_id(self):
         """Test behavior with invalid movie ID."""
         pipeline = RetrievalPipeline()
         candidates = pipeline.retrieve(movie_id=999999, limit=10)
-        
+
         # Should return empty list or handle gracefully
         assert isinstance(candidates, list)
 ```
@@ -358,10 +358,10 @@ pytest tests/ -m "not slow"
 async def get_popular_movies(limit: int = 10):
     """
     Get most popular movies.
-    
+
     Args:
         limit: Number of movies to return.
-        
+
     Returns:
         List of popular movies.
     """

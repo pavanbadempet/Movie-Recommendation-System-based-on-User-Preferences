@@ -275,6 +275,7 @@ def run_dirichlet_grid_search(
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s — %(message)s")
 
     import os
+
     if dirichlet_alpha is None:
         try:
             dirichlet_alpha = float(os.getenv("APEX_DIRICHLET_ALPHA", "1.0"))

@@ -102,7 +102,11 @@ async def test_optimizer_agent_with_data(db_session):
     db_session.commit()
 
     # Seed User
-    user = User(user_sk="22222222-2222-2222-2222-222222222222", tenant_id="11111111-1111-1111-1111-111111111111", external_user_id="ext-123")
+    user = User(
+        user_sk="22222222-2222-2222-2222-222222222222",
+        tenant_id="11111111-1111-1111-1111-111111111111",
+        external_user_id="ext-123",
+    )
     db_session.add(user)
     db_session.commit()
 

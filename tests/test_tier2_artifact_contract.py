@@ -5,11 +5,7 @@ import yaml
 
 def test_clean_deployment_configs_default_to_tier3():
     render = yaml.safe_load(Path("render.yaml").read_text(encoding="utf-8"))
-    env = {
-        item["key"]: item.get("value")
-        for item in render["services"][0]["envVars"]
-        if "value" in item
-    }
+    env = {item["key"]: item.get("value") for item in render["services"][0]["envVars"] if "value" in item}
     values = yaml.safe_load(Path("k8s/helm/apex/values.yaml").read_text(encoding="utf-8"))
 
     assert env["NOVA_SERVING_TIER"] == "tier3"

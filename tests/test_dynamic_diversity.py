@@ -16,16 +16,16 @@ def sample_movie_df():
             "id": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
             "title": [f"Movie {i}" for i in range(1, 11)],
             "genres": [
-                "Action",                  # 1: Action
-                "Action",                  # 2: Action
-                "Action",                  # 3: Action
-                "Action",                  # 4: Action
-                "Comedy",                  # 5: Comedy
-                "Drama",                   # 6: Drama
-                "Sci-Fi",                  # 7: Sci-Fi
-                "Romance",                 # 8: Romance
-                "Action, Comedy",          # 9: Action & Comedy
-                "Drama, Thriller",         # 10: Drama & Thriller
+                "Action",  # 1: Action
+                "Action",  # 2: Action
+                "Action",  # 3: Action
+                "Action",  # 4: Action
+                "Comedy",  # 5: Comedy
+                "Drama",  # 6: Drama
+                "Sci-Fi",  # 7: Sci-Fi
+                "Romance",  # 8: Romance
+                "Action, Comedy",  # 9: Action & Comedy
+                "Drama, Thriller",  # 10: Drama & Thriller
             ],
         }
     )
@@ -59,7 +59,7 @@ def test_calculate_genre_entropy_low(sample_movie_df):
             {"movie_id": 2, "weight": 1.0, "event_ts": "2026-06-20T12:00:00Z"},
         ]
     }
-    
+
     entropy = pipeline._calculate_genre_entropy(profile)
     # Since only 1 genre ("action") was consumed, entropy should be 0.0
     assert entropy is not None
@@ -83,7 +83,7 @@ def test_calculate_genre_entropy_high(sample_movie_df):
             {"movie_id": 7, "weight": 1.0, "event_ts": "2026-06-20T12:00:00Z"},  # Sci-Fi
         ]
     }
-    
+
     entropy = pipeline._calculate_genre_entropy(profile)
     assert entropy is not None
     # 4 distinct genres of equal weight: -4 * (0.25 * log2(0.25)) = -4 * (0.25 * -2) = 2.0

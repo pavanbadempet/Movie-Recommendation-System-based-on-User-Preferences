@@ -360,6 +360,7 @@ def select_weights_doubly_robust(
         return dr_total / max(n_users, 1)
 
     import os
+
     if dirichlet_alpha is None:
         try:
             dirichlet_alpha = float(os.getenv("APEX_DIRICHLET_ALPHA", "1.0"))

@@ -1,8 +1,7 @@
-import os
-import zipfile
-import urllib.request
 import logging
 from pathlib import Path
+import urllib.request
+import zipfile
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -12,6 +11,7 @@ DATA_DIR = PROJECT_ROOT / "data" / "raw"
 ML25_DIR = DATA_DIR / "ml-25m"
 ZIP_URL = "https://files.grouplens.org/datasets/movielens/ml-25m.zip"
 ZIP_PATH = DATA_DIR / "ml-25m.zip"
+
 
 def download_and_extract():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -28,7 +28,10 @@ def download_and_extract():
         def progress_hook(count, block_size, total_size):
             percent = int(count * block_size * 100 / total_size)
             if count % 1000 == 0 or percent == 100:
-                print(f"  Downloaded: {percent}% ({count * block_size / (1024*1024):.1f} MB / {total_size / (1024*1024):.1f} MB)", end="\r")
+                print(
+                    f"  Downloaded: {percent}% ({count * block_size / (1024 * 1024):.1f} MB / {total_size / (1024 * 1024):.1f} MB)",
+                    end="\r",
+                )
 
         urllib.request.urlretrieve(ZIP_URL, ZIP_PATH, reporthook=progress_hook)
         print()  # Newline after progress
@@ -45,7 +48,7 @@ def download_and_extract():
             # MovieLens zip contains files inside ml-25m/ directory
             # We want to extract ml-25m/ratings.csv
             target_file = "ml-25m/ratings.csv"
-            
+
             # Extract to DATA_DIR so it goes to DATA_DIR / ml-25m / ratings.csv
             zip_ref.extract(target_file, DATA_DIR)
             logger.info("ratings.csv extracted successfully ✓")
@@ -56,6 +59,7 @@ def download_and_extract():
             logger.info("Cleaning up temporary zip file...")
             ZIP_PATH.unlink()
             logger.info("Cleanup complete.")
+
 
 if __name__ == "__main__":
     download_and_extract()

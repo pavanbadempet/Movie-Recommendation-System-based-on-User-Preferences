@@ -106,6 +106,7 @@ class NovaRanker:
                 from pathlib import Path
 
                 import pandas as pd
+
                 model_path = Path(self.metadata.get("artifact_path", ""))
                 df_path = None
                 if model_path and model_path.exists():
@@ -119,12 +120,19 @@ class NovaRanker:
                         df_path = p_path
 
                 if not df_path:
-                    p_path = Path(__file__).resolve().parent.parent / "data" / "processed" / "movies_transformed.parquet"
+                    p_path = (
+                        Path(__file__).resolve().parent.parent / "data" / "processed" / "movies_transformed.parquet"
+                    )
                     if p_path.exists():
                         df_path = p_path
 
                 if not df_path:
-                    p_path = Path(__file__).resolve().parent.parent.parent / "data" / "processed" / "movies_transformed.parquet"
+                    p_path = (
+                        Path(__file__).resolve().parent.parent.parent
+                        / "data"
+                        / "processed"
+                        / "movies_transformed.parquet"
+                    )
                     if p_path.exists():
                         df_path = p_path
 
@@ -146,11 +154,10 @@ class NovaRanker:
     def movie_df(self, df):
         self._movie_df = df
         if df is not None:
-            required_cols = {'id', 'title', 'vote_average', 'vote_count', 'popularity', 'release_date'}
+            required_cols = {"id", "title", "vote_average", "vote_count", "popularity", "release_date"}
             cols = [c for c in df.columns if c in required_cols]
             self._movie_lookup = {
-                int(row['id']): row for row in df[cols].to_dict(orient='records')
-                if 'id' in row and pd.notna(row['id'])
+                int(row["id"]): row for row in df[cols].to_dict(orient="records") if "id" in row and pd.notna(row["id"])
             }
         else:
             self._movie_lookup = {}
@@ -191,7 +198,7 @@ class NovaRanker:
                         "metadata": signals.get("metadata_score", score if source == "knowledge_graph" else 0.0),
                         "behavior": signals.get("behavior_score", score if source == "behavior" else 0.0),
                         "cross_encoder": signals.get("cross_encoder_score", 0.0),
-                    }
+                    },
                 }
                 candidates_list.append(candidate_dict)
 

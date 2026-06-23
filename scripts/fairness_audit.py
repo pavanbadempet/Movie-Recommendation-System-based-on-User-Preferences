@@ -31,8 +31,7 @@ class FairnessAuditor:
         movies_path = self.data_dir / "movies_transformed.parquet"
         if not movies_path.is_file():
             raise FileNotFoundError(
-                f"Required catalog evidence not found: {movies_path}. "
-                "Run the production data pipeline before auditing."
+                f"Required catalog evidence not found: {movies_path}. Run the production data pipeline before auditing."
             )
         movies = pd.read_parquet(movies_path)
         if "id" not in movies.columns:

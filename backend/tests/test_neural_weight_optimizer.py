@@ -1,4 +1,3 @@
-
 import numpy as np
 import torch
 
@@ -71,7 +70,9 @@ def test_train_contextual_weight_network_runs(monkeypatch, tmp_path):
 
     monkeypatch.setattr("scripts.optimize_ensemble_weights._load_interaction_data", mock_load_interaction_data)
     monkeypatch.setattr("scripts.optimize_ensemble_weights._build_validation_split", mock_build_validation_split)
-    monkeypatch.setattr("scripts.optimize_ensemble_weights._precompute_per_model_scores", mock_precompute_per_model_scores)
+    monkeypatch.setattr(
+        "scripts.optimize_ensemble_weights._precompute_per_model_scores", mock_precompute_per_model_scores
+    )
     monkeypatch.setattr("backend.events.iter_events", mock_iter_events)
 
     # Train for a small number of epochs

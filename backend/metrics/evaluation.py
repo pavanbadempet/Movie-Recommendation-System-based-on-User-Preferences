@@ -104,7 +104,9 @@ def evaluate_recommendation_quality(recommender: Any, sample_size: int = 25, k: 
     self_match_hits = 0
 
     # Pre-extract genres column as a raw array for O(1) indexing in the loop
-    genres_array = movies["genres"].fillna("").astype(str).values if "genres" in movies.columns else np.array([""] * len(movies))
+    genres_array = (
+        movies["genres"].fillna("").astype(str).values if "genres" in movies.columns else np.array([""] * len(movies))
+    )
 
     for movie_idx in sample_indices:
         query_vector = np.asarray(vectors[movie_idx], dtype=np.float32).reshape(1, -1)

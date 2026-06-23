@@ -376,7 +376,7 @@ class RerankingPipeline:
             def _normalize_title(t_str: str) -> str:
                 t = str(t_str or "").lower()
                 t = re.sub(r"\(\d{4}\)", "", t)  # strip year
-                t = re.sub(r"[^\w\s]", "", t)   # strip punctuation
+                t = re.sub(r"[^\w\s]", "", t)  # strip punctuation
                 t = re.sub(r"\s+", " ", t).strip()
                 t = re.sub(r"^(the|a|an)\s+", "", t)
                 return t
@@ -391,11 +391,13 @@ class RerankingPipeline:
                 if not title:
                     title = f"movie_id_{item.movie_id}"
 
-                items_with_info.append({
-                    "item": item,
-                    "title": title,
-                    "norm_title": _normalize_title(title),
-                })
+                items_with_info.append(
+                    {
+                        "item": item,
+                        "title": title,
+                        "norm_title": _normalize_title(title),
+                    }
+                )
 
             # Globally blocked drift/bad recommendation titles to prevent semantic mismatch
             raw_blocked_titles = {
@@ -407,7 +409,7 @@ class RerankingPipeline:
                 "x-men: apocalypse",
                 "knights of the zodiac",
                 "mystery men",
-                "justice league: the flashpoint paradox"
+                "justice league: the flashpoint paradox",
             }
             blocked_titles = {
                 "small soldiers",
@@ -420,7 +422,7 @@ class RerankingPipeline:
                 "knights of the zodiac",
                 "knights of zodiac",
                 "mystery men",
-                "justice league the flashpoint paradox"
+                "justice league the flashpoint paradox",
             }
 
             # Pass 1: Deduplicate exact normalized titles, keeping the highest score
@@ -440,7 +442,8 @@ class RerankingPipeline:
 
             # Reconstruct the list preserving order
             filtered_info = [
-                info for info in items_with_info
+                info
+                for info in items_with_info
                 if info["norm_title"] in exact_dedup
                 and exact_dedup[info["norm_title"]]["item"].movie_id == info["item"].movie_id
             ]
@@ -448,9 +451,25 @@ class RerankingPipeline:
             # Pass 2: Substring matching for documentaries/making-ofs
             # NOTE: "story" was removed — too generic, it killed sequels like "Toy Story 2"
             doc_keywords = {
-                "making", "behind", "scenes", "creating", "inside", "live", "stage",
-                "odyssey", "documentary", "special", "retrospective", "bonus", "featurette",
-                "tribute", "collection", "anniversary", "edition", "revisited", "legacy"
+                "making",
+                "behind",
+                "scenes",
+                "creating",
+                "inside",
+                "live",
+                "stage",
+                "odyssey",
+                "documentary",
+                "special",
+                "retrospective",
+                "bonus",
+                "featurette",
+                "tribute",
+                "collection",
+                "anniversary",
+                "edition",
+                "revisited",
+                "legacy",
             }
 
             to_remove = set()
@@ -568,10 +587,7 @@ class RerankingPipeline:
         """Calculate the Shannon entropy of the user's genre history."""
         try:
             recent_events = profile.get("recent_events") or []
-            positive_events = [
-                ev for ev in recent_events
-                if not ev.get("negative") and ev.get("movie_id") is not None
-            ]
+            positive_events = [ev for ev in recent_events if not ev.get("negative") and ev.get("movie_id") is not None]
             if not positive_events:
                 return None
 
@@ -672,22 +688,22 @@ class RerankingPipeline:
             movie_id_to_item = {}
             for item in working:
                 movie_id_to_item[item.movie_id] = item
-                candidates_dicts.append({
-                    "movie_id": item.movie_id,
-                    "similarity_score": item.ranker_score,
-                    "genres": item.metadata.get("genres", ""),
-                    "release_date": item.metadata.get("release_date", ""),
-                    "vote_average": item.metadata.get("vote_average", 0.0),
-                    "vote_count": item.metadata.get("vote_count", 0),
-                })
+                candidates_dicts.append(
+                    {
+                        "movie_id": item.movie_id,
+                        "similarity_score": item.ranker_score,
+                        "genres": item.metadata.get("genres", ""),
+                        "release_date": item.metadata.get("release_date", ""),
+                        "vote_average": item.metadata.get("vote_average", 0.0),
+                        "vote_count": item.metadata.get("vote_count", 0),
+                    }
+                )
 
             from backend.pipeline.diversity_reranker import submodular_rerank
 
             # Rerank using submodular diversity
             reranked_dicts = submodular_rerank(
-                candidates=candidates_dicts,
-                n=len(working),
-                lambda_diversity=self.config.submodular_lambda
+                candidates=candidates_dicts, n=len(working), lambda_diversity=self.config.submodular_lambda
             )
 
             # Re-map back to RankedItems list in the new order
@@ -749,6 +765,7 @@ class RerankingPipeline:
                         "explanation": item.metadata.get("explanation") or [],
                     }
                     from backend.intelligence.llm_explanations import generate_explanation
+
                     explanation = generate_explanation(user_id, movie_dict, user_context)
 
                 explanations[item.movie_id] = str(explanation) if explanation is not None else None

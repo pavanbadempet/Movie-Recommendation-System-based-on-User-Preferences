@@ -10,9 +10,7 @@ def test_streamlit_html_helpers_escape_text_and_reject_unsafe_attributes():
     assert spec.loader is not None
     spec.loader.exec_module(module)
 
-    assert module.escape_html('<img src=x onerror="alert(1)">') == (
-        "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;"
-    )
+    assert module.escape_html('<img src=x onerror="alert(1)">') == ("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;")
     assert module.valid_youtube_id("dQw4w9WgXcQ") == "dQw4w9WgXcQ"
     assert module.valid_youtube_id('bad"><script') is None
     assert module.safe_https_url("javascript:alert(1)") == ""

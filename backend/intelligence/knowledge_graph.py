@@ -147,7 +147,7 @@ class KnowledgeGraphEngine:
 
             # Add Themes & Moods
             try:
-                m_id_raw = int(movie['id'])
+                m_id_raw = int(movie["id"])
             except (ValueError, TypeError):
                 continue
             meta = parsed_metadata.get(m_id_raw, {})
@@ -172,7 +172,6 @@ class KnowledgeGraphEngine:
             self.save()
         except Exception as e:
             logger.warning(f"Could not persist rebuilt Knowledge Graph to disk: {e}")
-
 
     def find_thematically_similar(self, movie_id: int, top_k: int = 10) -> list[tuple[int, float]]:
         """
@@ -204,6 +203,7 @@ class KnowledgeGraphEngine:
         # 2-hop: Find all other movies connected to those themes/moods
         movie_scores = {}
         import math
+
         for attr in shared_attributes:
             df = self.graph.degree(attr)
             # Ignore extremely common attributes (acting like stopwords)

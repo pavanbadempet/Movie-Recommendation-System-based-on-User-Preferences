@@ -145,10 +145,10 @@ Remove reranking for simplicity:
 def simplified_pipeline(user_id: str, movie_id: int):
     # Stage 1: Retrieval
     candidates = retrieval_pipeline.retrieve(user_id, movie_id)
-    
+
     # Stage 2: Ranking (skip reranking)
     ranked = ranking_pipeline.rank(candidates, user_id)
-    
+
     return ranked[:10]  # Return top 10
 ```
 

@@ -148,7 +148,9 @@ class RetrievalPipeline:
         self.movie_df = movie_df
         self.config = config
         # Fast lookup mapping to bypass slow DataFrame iloc operations on retrieval hot path
-        self._movie_id_map = movie_df["id"].values if (movie_df is not None and "id" in movie_df.columns) else np.array([])
+        self._movie_id_map = (
+            movie_df["id"].values if (movie_df is not None and "id" in movie_df.columns) else np.array([])
+        )
 
         # Build metadata cache for fast retrieval lookup
         self._metadata_cache = {}
@@ -350,7 +352,6 @@ class RetrievalPipeline:
                 exc,
             )
             return []
-
 
     def _retrieve_tfidf(self, query_embedding: np.ndarray, query_text: str | None = None) -> list[CandidateItem]:
         """Query the TF-IDF sparse index and return up to ``tfidf_k`` candidates.

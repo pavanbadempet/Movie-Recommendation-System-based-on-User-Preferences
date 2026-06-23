@@ -358,4 +358,3 @@ def build_slo_report(
         "window_seconds": window_seconds,
         "routes": routes_dict,
     }
-

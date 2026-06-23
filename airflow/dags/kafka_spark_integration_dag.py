@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
+
 from airflow import DAG
 
 # Import decoupled remote Spark operator
@@ -18,8 +19,9 @@ except ImportError:
     try:
         from dags.operators.remote_spark import RemoteSparkSubmitOperator
     except ImportError:
-        import sys
         from pathlib import Path
+        import sys
+
         sys.path.append(str(Path(__file__).parent))
         from operators.remote_spark import RemoteSparkSubmitOperator
 

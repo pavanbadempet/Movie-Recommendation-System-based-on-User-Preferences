@@ -186,7 +186,7 @@ The `.cursorignore` file in this repo excludes unnecessary files from AI context
 
 Following these practices typically reduces token usage by:
 - **Direct prompts**: 40-60% reduction
-- **File references**: 50-70% reduction  
+- **File references**: 50-70% reduction
 - **Focused sessions**: 60-80% reduction
 - **Plugin optimization**: 70-90% reduction
 - **Combined**: 70-85% total reduction
@@ -202,7 +202,7 @@ Following these practices typically reduces token usage by:
 
 This repository includes:
 - `.cursorrules` - Cursor-specific optimization rules
-- `.windsurfrules` - Windsurf-specific optimization rules  
+- `.windsurfrules` - Windsurf-specific optimization rules
 - `.claudecoderules` - Claude Code-specific optimization rules
 - `.cursorignore` - Files to exclude from AI context
 - `TOKEN_OPTIMIZATION_GUIDE.md` - This guide

@@ -1001,6 +1001,7 @@ def create_search_movie_router(deps: RouterDeps):
         db_tenant_id = context.tenant_id
         try:
             import uuid
+
             uuid.UUID(db_tenant_id)
         except (ValueError, TypeError):
             db_tenant_id = "00000000-0000-0000-0000-000000000001"

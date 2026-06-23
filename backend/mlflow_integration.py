@@ -286,9 +286,7 @@ class ModelRegistry:
 
 
 # Convenience functions for quick usage
-def get_tracker(
-    experiment_name: str = "apex-recommendation-engine", tracking_uri: str | None = None
-) -> MLflowTracker:
+def get_tracker(experiment_name: str = "apex-recommendation-engine", tracking_uri: str | None = None) -> MLflowTracker:
     """Get an MLflow tracker instance."""
     return MLflowTracker(experiment_name=experiment_name, tracking_uri=tracking_uri)
 

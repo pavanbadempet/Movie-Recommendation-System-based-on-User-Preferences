@@ -64,7 +64,7 @@ export const AdminDashboard: React.FC<DashboardProps> = ({ apiEndpoint }) => {
         <Legend />
         <Line type="monotone" dataKey="latency_ms" stroke="#8884d8" />
       </LineChart>
-      
+
       <h3>Model Performance</h3>
       <BarChart width={600} height={300} data={metrics.model_metrics}>
         <CartesianGrid strokeDasharray="3 3" />
@@ -130,17 +130,17 @@ frontend/
 // frontend/src/services/websocket.ts
 class RecommendationWebSocket {
   private ws: WebSocket | null = null;
-  
+
   connect(userId: string) {
     this.ws = new WebSocket(`ws://localhost:8000/ws/${userId}`);
-    
+
     this.ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
       // Update recommendations in real-time
       this.handleRecommendationUpdate(data);
     };
   }
-  
+
   disconnect() {
     this.ws?.close();
   }
@@ -163,7 +163,7 @@ export const useRecommendations = (movieId: number) => {
 
 export const useRateMovie = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: (rating: { movieId: number; rating: number }) =>
       fetch('/api/v1/events', {
@@ -249,7 +249,7 @@ describe('MovieCard', () => {
     render(<MovieCard movie={movie} />);
     expect(screen.getByText('Test Movie')).toBeInTheDocument();
   });
-  
+
   it('displays genres correctly', () => {
     const movie = { id: 1, title: 'Test', genres: ['Action', 'Drama'], poster: 'url' };
     render(<MovieCard movie={movie} />);

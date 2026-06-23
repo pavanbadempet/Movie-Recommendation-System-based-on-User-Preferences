@@ -218,7 +218,11 @@ def train_contextual_weight_network(
         # 1. Build Behavior Profile
         events = user_raw_events.get(str(user_id), [])
         total_ratings = sum(1 for e in events if str(e.get("event_type")).lower() == "rating")
-        ratings_list = [float(e["rating"]) for e in events if str(e.get("event_type")).lower() == "rating" and e.get("rating") is not None]
+        ratings_list = [
+            float(e["rating"])
+            for e in events
+            if str(e.get("event_type")).lower() == "rating" and e.get("rating") is not None
+        ]
         avg_rating = sum(ratings_list) / len(ratings_list) if ratings_list else 3.5
         click_count = sum(1 for e in events if str(e.get("event_type")).lower() == "click")
         view_count = sum(1 for e in events if str(e.get("event_type")).lower() == "view")

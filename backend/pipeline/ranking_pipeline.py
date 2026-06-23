@@ -205,7 +205,9 @@ class RankingPipeline:
             ranker_scores = dict(ensemble_scores)
             effective_ranker_weight = 0.0
         else:
-            ranker_scores, effective_ranker_weight = self._get_ranker_scores(user_id, candidate_ids, ensemble_scores, candidates=candidates)
+            ranker_scores, effective_ranker_weight = self._get_ranker_scores(
+                user_id, candidate_ids, ensemble_scores, candidates=candidates
+            )
 
         # ----------------------------------------------------------------
         # Step 3: Blend scores

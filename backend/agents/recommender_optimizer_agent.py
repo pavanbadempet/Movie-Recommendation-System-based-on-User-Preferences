@@ -79,7 +79,9 @@ class RecommenderOptimizerAgent(BaseAgent):
         drift_detected = ctr < (baseline_ctr * 0.85) if ctr is not None else None
         ctr_display = f"{ctr:.2%}" if ctr is not None else "Unavailable"
         drift_display = (
-            "🚨 DRIFT DETECTED" if drift_detected is True else ("🟢 STABLE" if drift_detected is False else "⚪ UNKNOWN")
+            "🚨 DRIFT DETECTED"
+            if drift_detected is True
+            else ("🟢 STABLE" if drift_detected is False else "⚪ UNKNOWN")
         )
 
         self.log_step(
@@ -144,10 +146,7 @@ class RecommenderOptimizerAgent(BaseAgent):
         models = configured_models("OPENROUTER_MODELS")
 
         if drift_detected is None:
-            ai_response = (
-                "**[TELEMETRY INCOMPLETE — NO TUNING GENERATED]**\n"
-                f"Diagnosis: {heuristic_diagnosis}"
-            )
+            ai_response = f"**[TELEMETRY INCOMPLETE — NO TUNING GENERATED]**\nDiagnosis: {heuristic_diagnosis}"
             self.log_step("Call OpenRouter Optimizer", "Skipped tuning because CTR telemetry is incomplete.")
         elif dry_run or not api_key:
             ai_response = (
@@ -195,7 +194,9 @@ class RecommenderOptimizerAgent(BaseAgent):
         report_md.append("| Metric | Value | Baseline / Target | Status |")
         report_md.append("|---|---|---|---|")
         status_str = (
-            "🚨 Drift Warning" if drift_detected is True else ("🟢 Healthy" if drift_detected is False else "⚪ Insufficient telemetry")
+            "🚨 Drift Warning"
+            if drift_detected is True
+            else ("🟢 Healthy" if drift_detected is False else "⚪ Insufficient telemetry")
         )
         report_md.append(f"| **Click-Through Rate (CTR)** | {ctr_display} | {baseline_ctr:.2%} | {status_str} |")
         report_md.append(
