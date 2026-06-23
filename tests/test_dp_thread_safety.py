@@ -107,11 +107,11 @@ class TestUserEmbOverride:
         user_id = 3
         items = [10, 20, 30]
 
-        scores_raw = engine.predict_ensemble(user_id, items)
+        scores_raw = engine.predict_ensemble(user_id, items, use_router=False)
 
         # Build a deliberately different (zero) embedding as override
         zero_emb = torch.zeros(engine.emb_dim)
-        scores_override = engine.predict_ensemble(user_id, items, user_emb_override=zero_emb)
+        scores_override = engine.predict_ensemble(user_id, items, user_emb_override=zero_emb, use_router=False)
 
         # Scores should differ (zero emb gives different dot products)
         raw_vals = [scores_raw[i] for i in items]

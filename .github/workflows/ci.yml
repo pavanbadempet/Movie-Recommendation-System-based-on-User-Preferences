@@ -219,7 +219,7 @@ jobs:
           tests/test_artifact_health.py \
           tests/test_catalogs.py \
           tests/test_database.py \
-          -v --tb=short -q -x
+          -v --tb=short -q -x -n 0
 
   # ---------------------------------------------------------------------------
   # 3. PySpark & data pipeline tests
