@@ -40,8 +40,10 @@ def test_telemetry_anonymization():
     assert safe_event["timestamp"] % 3600 == 0  # Must be floored to nearest hour
 
 
-def test_gini_popularity_bias():
+def test_gini_popularity_bias(monkeypatch):
     """Ensure the Gini coefficient calculation accurately detects extreme bias."""
+    import pandas as pd
+    monkeypatch.setattr(FairnessAuditor, "load_data", lambda self: pd.DataFrame(columns=["id"]))
     auditor = FairnessAuditor()
 
     # Perfect equality: every item recommended exactly once
