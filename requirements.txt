@@ -53,7 +53,7 @@ psutil==7.2.2                          # Hardware detection (RAM, CPU cores)
 orjson==3.11.8  # Fast JSON serialization; falls back to stdlib json if absent
 
 # Development & testing
-pytest==9.0.3
+pytest==8.4.2
 hypothesis==6.152.4  # Property-based testing
 
 # ML experiment tracking
