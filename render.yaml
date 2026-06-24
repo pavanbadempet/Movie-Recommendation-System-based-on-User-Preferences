@@ -1,24 +1,34 @@
 services:
   - type: web
-    name: apex-backend
-    env: docker
-    dockerContext: .
-    dockerfilePath: ./Dockerfile
-    # ---------------------------------------------------------------------------
-    # Tier 3 — reproducible source deployment using tracked/downloaded FAISS artifacts.
-    # Select Tier 2 only after publishing the required ONNX model set.
-    # ---------------------------------------------------------------------------
+    name: movie-recs-api
+    runtime: python
     plan: free
+    region: singapore
+    buildCommand: >-
+      python -c "import os, pathlib; sha=os.getenv('RENDER_GIT_COMMIT') or os.getenv('SOURCE_VERSION') or ''; pathlib.Path('REVISION').write_text(sha, encoding='utf-8') if sha else None"
+      && pip install --upgrade pip
+      && pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
+    autoDeploy: false
+    buildFilter:
+      paths:
+        - backend/**
+        - requirements.txt
+        - render.yaml
+      ignoredPaths:
+        - streamlit_app.py
+        - docs/**
+        - legacy/**
+        - .github/**
+        - README.md
     envVars:
       - key: ENVIRONMENT
         value: production
-      # Clean source deployments do not contain ONNX binaries.
       - key: NOVA_SERVING_PROFILE
         value: lite
       - key: NOVA_SERVING_TIER
         value: tier3
-      # Background warmup enabled — model artifacts loaded before first request
       - key: NOVA_HEALTH_LOAD_RECOMMENDER
         value: "true"
       - key: NOVA_BACKGROUND_RECOMMENDER_WARMUP
@@ -41,16 +51,3 @@ services:
       # Optional: Sentry for error monitoring (set in Render dashboard)
       - key: SENTRY_DSN
         sync: false
-
-  # ---------------------------------------------------------------------------
-  # Tier 1 example — uncomment and switch plan to "pro" for GPU inference
-  # ---------------------------------------------------------------------------
-  # - type: web
-  #   name: apex-backend-gpu
-  #   env: docker
-  #   plan: pro
-  #   envVars:
-  #     - key: NOVA_SERVING_PROFILE
-  #       value: full
-  #     - key: NOVA_SERVING_TIER
-  #       value: tier1
