@@ -1877,8 +1877,8 @@ input:focus-visible {
 }
 .movie-dialog {
   position: relative;
-  width: min(1000px, calc(100vw - 48px));
-  height: min(760px, calc(100vh - 64px));
+  width: min(1600px, 95vw);
+  height: min(900px, calc(100vh - 48px));
   border-radius: 24px;
   background: #090a10;
   border: 1px solid rgba(255, 255, 255, 0.08);

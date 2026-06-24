@@ -1186,7 +1186,7 @@ export function MovieDialog({
                           <span>Algorithm Insights</span>
                         </div>
                         <span style={{ fontSize: "0.72rem", background: "rgba(6, 182, 212, 0.1)", color: "#22d3ee", padding: "4px 10px", borderRadius: "20px", fontWeight: "800", border: "1px solid rgba(6, 182, 212, 0.1)" }}>
-                          {(movie.similarity_score * 100).toFixed(0)}% Similarity Match
+                          {Math.max(1, Math.min(99, Math.round(Number(movie.similarity_score) <= 1 ? Number(movie.similarity_score) * 100 : Number(movie.similarity_score))))}% Similarity Match
                         </span>
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", fontSize: "0.84rem", color: "var(--muted)" }}>
