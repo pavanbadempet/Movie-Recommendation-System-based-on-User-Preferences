@@ -20,10 +20,14 @@ import pytest
 import torch
 
 from backend.models.ensemble_engine import ApexEnsembleEngine
+import backend.models.neural_weight_optimizer
 from backend.privacy.privacy_preserving_ml import (
     add_gaussian_noise,
     privatize_user_embedding,
 )
+
+backend.models.neural_weight_optimizer.get_contextual_weights = lambda *args, **kwargs: None
+
 
 # ---------------------------------------------------------------------------
 # privatize_user_embedding — unit tests
@@ -100,18 +104,32 @@ class TestUserEmbOverride:
 
     @pytest.fixture(scope="class")
     def engine(self):
-        return ApexEnsembleEngine(num_users=50, num_items=100, emb_dim=8)
+        eng = ApexEnsembleEngine(num_users=50, num_items=100, emb_dim=8)
+        with eng._weights_lock:
+            eng._weights = {
+                "lightgcn": 1.0,
+                "quantum": 0.0,
+                "sasrec": 0.0,
+                "kan": 0.0,
+                "hyperbolic": 0.0,
+                "diffusion": 0.0,
+                "clifford": 0.0,
+            }
+        return eng
 
     def test_override_produces_different_scores_than_raw_embedding(self, engine):
         """Passing a DP-noised override should produce different scores than default."""
         user_id = 3
         items = [10, 20, 30]
+        session = [1, 2, 3]
 
-        scores_raw = engine.predict_ensemble(user_id, items, use_router=False)
+        scores_raw = engine.predict_ensemble(user_id, items, session_sequence=session, use_router=False)
 
         # Build a deliberately different (zero) embedding as override
         zero_emb = torch.zeros(engine.emb_dim)
-        scores_override = engine.predict_ensemble(user_id, items, user_emb_override=zero_emb, use_router=False)
+        scores_override = engine.predict_ensemble(
+            user_id, items, session_sequence=session, user_emb_override=zero_emb, use_router=False
+        )
 
         # Scores should differ (zero emb gives different dot products)
         raw_vals = [scores_raw[i] for i in items]
