@@ -43,16 +43,27 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y k6
 
-    - name: Warm up Render gateway
+    - name: Warm up Render gateway and Remote Recommender
       env:
         BASE_URL: ${{ github.event.inputs.base_url || 'https://movie-recs-api-5qvy.onrender.com' }}
       run: |
-        echo "Warming up Render gateway at $BASE_URL..."
+        echo "Warming up Render gateway health endpoint at $BASE_URL..."
         for i in {1..30}; do
           status_code=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/health" || echo "failed")
-          echo "Warmup attempt $i: HTTP $status_code"
+          echo "Gateway health warmup attempt $i: HTTP $status_code"
           if [ "$status_code" = "200" ]; then
             echo "Render gateway is warm!"
+            break
+          fi
+          sleep 10
+        done
+
+        echo "Warming up Remote Recommender via recommendations endpoint..."
+        for i in {1..30}; do
+          status_code=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/v1/recommendations/id/550?top_k=1" || echo "failed")
+          echo "Remote recommender warmup attempt $i: HTTP $status_code"
+          if [ "$status_code" = "200" ]; then
+            echo "Remote recommender is warm and ready!"
             break
           fi
           sleep 10
