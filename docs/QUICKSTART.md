@@ -92,7 +92,7 @@ curl "https://your-apex-api.onrender.com/v1/recommendations/id/550?explain=true"
 
 ```bash
 # Handles typos, abstract concepts, and mood-based queries
-curl "https://your-apex-api.onrender.com/v1/search/semantic?q=mind+bending+heist+film&limit=5" \
+curl "https://your-apex-api.onrender.com/v1/search/ai?q=mind+bending+heist+film&limit=5" \
   -H "X-Nova-API-Key: YOUR_KEY"
 ```
 
@@ -134,8 +134,8 @@ resp = httpx.get(f"{BASE}/v1/recommendations/id/550", headers=HEADERS, params={"
 recs = resp.json()["recommendations"]
 
 # Semantic search
-resp = httpx.get(f"{BASE}/v1/search/semantic", headers=HEADERS, params={"q": "dark thriller"})
-results = resp.json()["results"]
+resp = httpx.get(f"{BASE}/v1/search/ai", headers=HEADERS, params={"q": "dark thriller"})
+results = resp.json()
 ```
 
 ### JavaScript / TypeScript

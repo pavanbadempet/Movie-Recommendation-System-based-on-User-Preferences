@@ -15,7 +15,7 @@ import datetime
 # Use generic String for UUID to support SQLite fallback
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, create_engine
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, create_engine, event
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from sqlalchemy.types import CHAR, TypeDecorator
@@ -25,6 +25,19 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///apex.db")
 
 if "sqlite" in DATABASE_URL:
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+
+    @event.listens_for(engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.execute("PRAGMA cache_size=-64000")
+            cursor.execute("PRAGMA temp_store=MEMORY")
+        except Exception:
+            pass
+        finally:
+            cursor.close()
 else:
     engine = create_engine(
         DATABASE_URL,

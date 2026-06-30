@@ -1,8 +1,8 @@
-# Nova Product Data Platform Blueprint
+# APEX Product Data Platform Blueprint
 
 ## Product Thesis
 
-Nova is a recommendation intelligence platform for companies with content catalogs. The product should be sold as infrastructure, not as an end-user streaming application.
+APEX is a recommendation intelligence platform for companies with content catalogs. The product should be sold as infrastructure, not as an end-user streaming application.
 
 The first version proves the vertical with movies. The durable product model is broader:
 
@@ -15,7 +15,7 @@ The first version proves the vertical with movies. The durable product model is 
 
 ## Customer-Facing Capability
 
-Nova should eventually let a customer do four things:
+APEX should eventually let a customer do four things:
 
 1. Upload or sync a catalog.
 2. Search the catalog semantically.
@@ -31,13 +31,13 @@ storage and a warehouse catalog without changing the customer-facing flow.
 
 ## Free-Tier Product Strategy
 
-Nova is designed to be credible before it has capital:
+APEX is designed to be credible before it has capital:
 
 - GitHub Actions triggers orchestration.
 - Kaggle handles heavier scheduled notebook execution.
 - Hugging Face Hub stores model and search artifacts.
 - Render or Hugging Face Spaces serves the FastAPI backend.
-- Streamlit Community Cloud serves the Nova Console.
+- Streamlit Community Cloud serves the APEX Console.
 - JSONL usage and event logs keep the demo self-contained.
 - API-key auth is environment-variable based until a paid auth/database layer is justified.
 
@@ -172,7 +172,7 @@ Batch refresh must be deterministic and auditable:
 
 Streaming is only used for live product behavior.
 
-Nova should not pretend the Kaggle/TMDB catalog is streaming data. That is a batch source. Kafka belongs behind the product event API, where events arrive continuously from real users.
+APEX should not pretend the Kaggle/TMDB catalog is streaming data. That is a batch source. Kafka belongs behind the product event API, where events arrive continuously from real users.
 
 The streaming path is:
 
@@ -219,7 +219,7 @@ Batch is correct for catalog refresh because source metadata changes on a schedu
 - tenant-aware model
 - content-generic contract
 - optional API-key tenant isolation
-- Nova Console for product operations
+- APEX Console for product operations
 - CSV catalog onboarding with column mapping and quality gates
 - AI quality checks for vectors and recommendations
 - hybrid sparse/dense AI search with optional cross-encoder reranking

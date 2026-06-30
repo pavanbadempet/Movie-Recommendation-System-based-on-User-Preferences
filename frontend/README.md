@@ -1,4 +1,4 @@
-# Nova React Frontend
+# APEX React Frontend
 
 ![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)
@@ -106,8 +106,8 @@ The repository includes `.github/workflows/frontend-pages.yml` for zero-cost sta
 ### Docker
 
 ```bash
-docker build -t nova-frontend ./frontend
-docker run -p 5173:5173 nova-frontend
+docker build -t apex-frontend ./frontend
+docker run -p 5173:5173 apex-frontend
 ```
 
 ---

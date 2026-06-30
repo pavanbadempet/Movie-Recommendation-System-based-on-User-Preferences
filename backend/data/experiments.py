@@ -1,5 +1,5 @@
 """
-Deterministic experiment assignment and metrics for Nova.
+Deterministic experiment assignment and metrics for APEX.
 
 This stays intentionally lightweight: variants are assigned by stable hashing,
 and outcome metrics are derived from the same behavior events customers send to

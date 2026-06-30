@@ -50,7 +50,7 @@ OUTPUT_DIR = Path("/kaggle/working/artifacts")
 def get_spark() -> SparkSession:
     """Initialize ephemeral PySpark cluster on Kaggle node."""
     return (
-        SparkSession.builder.appName("Nova-Hybrid-Engine-Trainer")
+        SparkSession.builder.appName("APEX-Hybrid-Engine-Trainer")
         .master("local[*]")
         .config("spark.driver.memory", "16g")
         .getOrCreate()

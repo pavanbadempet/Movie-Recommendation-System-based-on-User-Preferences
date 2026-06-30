@@ -1,6 +1,6 @@
-# Nova AI Recommendation Architecture
+# APEX AI Recommendation Architecture
 
-Nova should not depend on one magic model. The strongest free-tier AI pattern is a staged ranking system where every stage has a clear job and can be switched on or off based on hosting limits.
+APEX should not depend on one magic model. The strongest free-tier AI pattern is a staged ranking system where every stage has a clear job and can be switched on or off based on hosting limits.
 
 ## Current Serving Stack
 

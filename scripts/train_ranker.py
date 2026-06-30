@@ -1,5 +1,5 @@
 """
-Train Nova's learned recommendation ranker.
+Train APEX's learned recommendation ranker.
 
 Usage:
     python scripts/train_ranker.py
@@ -66,7 +66,7 @@ def upload_ranker_to_hf(output_path: Path, repo_id: str, repo_type: str, token: 
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Train Nova's learned recommendation ranker.")
+    parser = argparse.ArgumentParser(description="Train APEX's learned recommendation ranker.")
     parser.add_argument("--movies", default=str(DATA_DIR / "movies_transformed.parquet"))
     parser.add_argument("--events", default=None, help="JSONL behavior event log. Defaults to EVENT_LOG_PATH.")
     parser.add_argument(

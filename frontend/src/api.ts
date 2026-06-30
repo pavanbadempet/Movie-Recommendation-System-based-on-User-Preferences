@@ -11,6 +11,7 @@ import type {
   RecommendationResponse,
   SemanticBenchmark,
 } from "./types";
+import { getClientRecommendations, getClientTextSearch } from "./webgpuEngine";
 
 function normalizeBackend(url: string | undefined): string | undefined {
   const value = url?.trim().replace(/\/+$/, "");
@@ -243,6 +244,17 @@ export async function searchMovies(query: string): Promise<BackendResult<Movie[]
 }
 
 export async function aiSearch(query: string): Promise<BackendResult<Movie[]>> {
+  try {
+    const clientResults = await getClientTextSearch(query, 40);
+    if (clientResults && clientResults.length > 0) {
+      return {
+        data: clientResults,
+        baseUrl: "client"
+      };
+    }
+  } catch (e) {
+    console.warn("[APEX] Client semantic search failed, falling back to server:", e);
+  }
   return apiGetFirstSuccess<Movie[]>("/v1/search/ai", { q: query, limit: 40 }, 25000);
 }
 
@@ -292,6 +304,37 @@ async function fetchTmdbTrailer(movieId: number): Promise<string | null> {
 }
 
 export async function getRecommendations(movieId: number, n = 12, timeoutMs = 60000): Promise<BackendResult<RecommendationResponse>> {
+  try {
+    const clientRecs = await getClientRecommendations(movieId, n);
+    if (clientRecs) {
+      const titlesResult = await loadTitles();
+      let queryMovie: Movie = { id: movieId, title: "Query Movie", genres: "", overview: "", release_date: "", popularity: 1.0 };
+      if (titlesResult && titlesResult.data) {
+        const found = titlesResult.data.find(m => m.id === movieId) as any;
+        if (found) {
+          queryMovie = {
+            id: found.id,
+            title: found.title,
+            genres: Array.isArray(found.genres) ? found.genres.join("|") : found.genres || "",
+            overview: "Query movie matching client cache.",
+            release_date: found.release_date || "",
+            popularity: found.popularity || 1.0
+          };
+        }
+      }
+      return {
+        data: {
+          request_id: "client_gpu_vector_search",
+          query_movie: queryMovie,
+          recommendations: clientRecs
+        },
+        baseUrl: "client"
+      };
+    }
+  } catch (e) {
+    console.warn("[APEX] Client recommendations failed, falling back to server:", e);
+  }
+
   try {
     return await apiGetFirstSuccess<RecommendationResponse>(`/v1/recommendations/id/${movieId}/enriched`, { n, explain: true }, timeoutMs);
   } catch {

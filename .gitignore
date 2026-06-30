@@ -72,6 +72,7 @@ models/*.joblib.metadata.json
 models/*.pth
 models/*.gpickle
 models/*.tq
+models/*.onnx
 models/onnx/
 models/pipeline_manifest.json
 
@@ -83,6 +84,7 @@ backend/models/*.joblib.metadata.json
 backend/models/*.pth
 backend/models/*.gpickle
 backend/models/*.tq
+backend/models/*.onnx
 backend/models/pipeline_manifest.json
 backend/artifacts/*.pt
 backend/artifacts/*.pth

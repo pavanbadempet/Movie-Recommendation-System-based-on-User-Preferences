@@ -1,4 +1,4 @@
-# Installation Guide - Nova
+# Installation Guide - APEX
 
 ## Quick Start
 
@@ -131,8 +131,8 @@ git push origin main  # Auto-deploys
 
 ### HuggingFace Spaces
 ```bash
-# Docker deployment
-hf_hub_upload_to_spaces nova/
+# Upload application to Hugging Face Spaces
+python scripts/hf_upload.py
 ```
 
 ### AWS

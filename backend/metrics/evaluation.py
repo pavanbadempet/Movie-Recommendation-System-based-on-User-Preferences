@@ -1,5 +1,5 @@
 """
-Recommendation quality evaluation for the Nova demo/product console.
+Recommendation quality evaluation for the APEX demo/product console.
 
 These metrics are label-free and cheap enough for free-tier hosting. They do not
 replace a real A/B test, but they make the AI layer measurable: vector health,

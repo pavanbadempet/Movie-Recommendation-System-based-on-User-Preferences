@@ -89,7 +89,7 @@ describe("LandingPage", () => {
     render(<LandingPage onNavigate={onNavigate} />);
     expect(screen.getByText(/GDPR-compliant/)).toBeInTheDocument();
     expect(screen.getByText(/Delta Lake/)).toBeInTheDocument();
-    expect(screen.getByText("APEX")).toBeInTheDocument();
+    expect(screen.getAllByText("APEX").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/MIT License/)).toBeInTheDocument();
   });
 
@@ -108,7 +108,7 @@ describe("LandingPage", () => {
   it("defaults to mobile tab and shows phone preview", () => {
     render(<LandingPage onNavigate={onNavigate} />);
     expect(screen.getByLabelText("Interactive mobile app preview")).toBeInTheDocument();
-    expect(screen.getByText("NOVA")).toBeInTheDocument();
+    expect(screen.getAllByText("APEX").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Se7en (1995)")).toBeInTheDocument();
   });
 

@@ -1,6 +1,6 @@
 # Architecture
 
-This document is the definitive technical reference for the Nova Movie Recommendation System.
+This document is the definitive technical reference for the APEX Movie Recommendation System.
 It describes the actual running system — not a prototype or aspirational design.
 
 ---
@@ -501,8 +501,8 @@ Multi-stage `backend/Dockerfile`:
 
 | # | Service | Image / Build | Port(s) |
 |---|---------|--------------|---------|
-| 1 | `nova-backend` | `backend/Dockerfile` | 8000 |
-| 2 | `nova-frontend` | `frontend/Dockerfile` | 5173 |
+| 1 | `apex-backend` | `backend/Dockerfile` | 8000 |
+| 2 | `apex-frontend` | `frontend/Dockerfile` | 5173 |
 | 3 | `zookeeper` | `confluentinc/cp-zookeeper:7.3.0` | 2181 |
 | 4 | `kafka` | `confluentinc/cp-kafka:7.3.0` | 9092, 29092 |
 | 5 | `redis` | `redis:7-alpine` | 6379 |
@@ -515,7 +515,7 @@ Multi-stage `backend/Dockerfile`:
 *(Grafana is the 10th container but the compose file groups it with Prometheus
 under the observability section.)*
 
-All services share the `nova-net` bridge network.
+All services share the `apex-net` bridge network.
 
 ### Live Environments
 
@@ -589,8 +589,8 @@ custom metrics instrumented via middleware on every HTTP request:
 
 | Metric | Type | Labels |
 |--------|------|--------|
-| `nova_http_requests_total` | Counter | `method`, `endpoint`, `http_status` |
-| `nova_http_request_duration_seconds` | Histogram | `method`, `endpoint` |
+| `apex_http_requests_total` | Counter | `method`, `endpoint`, `http_status` |
+| `apex_http_request_duration_seconds` | Histogram | `method`, `endpoint` |
 
 These implement the **RED method** (Rate, Errors, Duration) for service-level
 monitoring.

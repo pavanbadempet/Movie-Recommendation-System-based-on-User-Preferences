@@ -43,6 +43,17 @@ def create_browse_router(deps: RouterDeps) -> APIRouter:
         rec = get_rec()
         return rec.get_all_titles(limit=limit)
 
+    @router.get("/movies/vectors")
+    async def get_all_vectors():
+        from fastapi.responses import Response
+        import numpy as np
+
+        rec = get_rec()
+        if rec._vectors is None:
+            raise HTTPException(status_code=404, detail="Vectors not loaded")
+        vecs = np.ascontiguousarray(rec._vectors, dtype=np.float32)
+        return Response(content=vecs.tobytes(), media_type="application/octet-stream")
+
     @router.get("/v1/semantic-twins/id/{movie_id}")
     async def semantic_twin_by_id(
         movie_id: int,

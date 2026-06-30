@@ -49,7 +49,7 @@ The full stack — backend, frontend, Kafka, Spark, Redis, PostgreSQL, Prometheu
 docker compose up --build
 
 # Start only the backend + Redis (faster for API development)
-docker compose up nova-backend redis --build
+docker compose up apex-backend redis --build
 
 # Stop everything
 docker compose down
@@ -75,10 +75,10 @@ docker compose down -v
 
 ```bash
 # Build FAISS index and serving artifacts from scratch
-docker compose run --rm nova-backend python scripts/rebuild_serving_artifacts.py
+docker compose run --rm apex-backend python scripts/rebuild_serving_artifacts.py
 
 # Or run the full medallion ETL pipeline
-docker compose run --rm nova-backend python scripts/etl_pipeline.py
+docker compose run --rm apex-backend python scripts/etl_pipeline.py
 ```
 
 ---
@@ -90,7 +90,7 @@ docker compose run --rm nova-backend python scripts/etl_pipeline.py
 1. Push this repository to GitHub.
 2. Go to [Render Dashboard](https://dashboard.render.com) → **New** → **Blueprint**.
 3. Connect your repository. Render reads `render.yaml` automatically.
-4. The blueprint deploys the backend on the free plan with `NOVA_SERVING_PROFILE=lite` (Tier 3).
+4. The blueprint deploys the backend as a Python web service `movie-recs-api` on the free plan (Tier 3).
 5. Add secret environment variables in the Render dashboard (never commit these):
    - `JWT_SECRET_KEY`
    - `NOVA_ADMIN_TOKEN`
@@ -125,9 +125,9 @@ envVars:
 ### Manual deploy (without Blueprint)
 
 1. **New** → **Web Service** → Connect repository.
-2. Environment: **Docker**.
-3. Docker context: `.` (root).
-4. Dockerfile path: `./Dockerfile`.
+2. Runtime: **Python**.
+3. Build Command: `pip install --upgrade pip && pip install -r requirements.txt`.
+4. Start Command: `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`.
 5. Health check path: `/health`.
 6. Add environment variables as above.
 
@@ -155,11 +155,12 @@ The React frontend has built-in request-level API failover — if the primary ba
 
 ## Production: GitHub Pages (Frontend)
 
-Zero-cost static hosting via GitHub Actions.
+Zero-cost static hosting deployed automatically via GitHub Actions.
 
-1. In your repository settings, go to **Pages** → set source to **GitHub Actions**.
-2. The workflow `.github/workflows/frontend-pages.yml` runs automatically on pushes to `main` that touch `frontend/**`.
-3. To trigger manually: **Actions** → **Frontend GitHub Pages** → **Run workflow**.
+1. The workflow `.github/workflows/frontend-pages.yml` runs automatically on pushes to `main` that touch `frontend/**` (or when run manually). It builds the frontend and pushes the built assets to the `gh-pages` branch.
+2. In your repository settings on GitHub, go to **Pages**.
+3. Under **Build and deployment** → **Source**, select **Deploy from a branch**.
+4. Set the branch to `gh-pages` and folder to `/ (root)`, then click **Save**.
 
 ---
 
@@ -205,7 +206,7 @@ After deploying, verify the service is healthy:
 curl https://your-api.onrender.com/health
 
 # Platform readiness (detailed component status)
-curl https://your-api.onrender.com/v1/platform/ready
+curl https://your-api.onrender.com/v1/platform/readiness
 
 # Semantic benchmark (17 curated intent cases)
 curl https://your-api.onrender.com/v1/evaluation/semantic-benchmark
@@ -225,7 +226,7 @@ Expected `/health` response:
 }
 ```
 
-Expected `/v1/platform/ready` response includes component statuses for: `catalog`, `artifact_health`, `vector_serving`, `search_smoke`, `recommendation_smoke`.
+Expected `/v1/platform/readiness` response includes component statuses for: `catalog`, `artifact_health`, `vector_serving`, `search_smoke`, `recommendation_smoke`.
 
 ---
 

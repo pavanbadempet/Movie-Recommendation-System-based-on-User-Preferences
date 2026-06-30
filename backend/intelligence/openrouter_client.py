@@ -80,7 +80,7 @@ def chat_completion(
     headers = {
         "Authorization": f"Bearer {api_key}",
         "HTTP-Referer": "https://github.com/pavanbadempet/Movie-Recommendation-System",
-        "X-Title": "Nova Recommendation Intelligence",
+        "X-Title": "APEX Recommendation Intelligence",
     }
 
     # Model routing: use fast models for simple tasks

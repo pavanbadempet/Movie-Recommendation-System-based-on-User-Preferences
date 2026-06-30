@@ -1,5 +1,5 @@
 """
-Training and offline evaluation for Nova's learned ranker.
+Training and offline evaluation for APEX's learned ranker.
 
 The first model is intentionally small and cheap: it learns from implicit
 feedback when events exist, otherwise it can bootstrap from catalog quality

@@ -58,6 +58,8 @@ import type {
   SemanticBenchmark,
 } from "./types";
 import "./styles.css";
+import { VectorSpace } from "./VectorSpace";
+import { initClientVectorEngine } from "./webgpuEngine";
 import "./apex-product.css";
 import { AuthPage } from "./AuthPage";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -77,7 +79,7 @@ const RECENT_STORAGE_KEY = "nova_recent_movies_v2";
 const SESSION_STORAGE_KEY = "nova_session_id_v1";
 const TITLE_CATALOG_LIMIT = 5000;
 
-type AppPage = "home" | "search" | "profile" | "dashboard" | "knowledge-graph" | "evaluation" | "admin" | "landing" | "signup" | "pricing" | "getting-started" | "status";
+type AppPage = "home" | "search" | "profile" | "dashboard" | "knowledge-graph" | "vector-space" | "evaluation" | "admin" | "landing" | "signup" | "pricing" | "getting-started" | "status";
 type SearchMode = "title" | "semantic";
 type CatalogState = "booting" | "warming" | "ready" | "error";
 type ResultsKind = "idle" | "search" | "recommendations";
@@ -1845,6 +1847,9 @@ function App() {
       setRetryCount(0);
       setLastUpdated(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
       setNotice(`${result.data.length.toLocaleString()} searchable titles loaded`);
+
+      // Preload local GPU/CPU vector similarity engine
+      initClientVectorEngine().catch((e) => console.error("Failed to preload vectors:", e));
     } catch (error) {
       setCatalogState("warming");
       setRetryCount((count) => count + 1);
@@ -2091,7 +2096,7 @@ function App() {
 
   const catalogValue = platform?.movie_count || titles.length;
   const rankerValue = platform?.ranker?.available ? "Learned" : "Hybrid";
-  const innerPages: AppPage[] = ["dashboard", "knowledge-graph", "evaluation", "profile", "admin"];
+  const innerPages: AppPage[] = ["dashboard", "knowledge-graph", "vector-space", "evaluation", "profile", "admin"];
   const isAppPage = ["home", "search", ...innerPages].includes(page);
 
   // ── Full-screen marketing pages (no app shell) ───────────────────────────
@@ -2124,7 +2129,7 @@ function App() {
 
         {/* Simplified Sticky Header */}
         <header className="topbar" style={{ position: "sticky", top: 0, width: "100%", zIndex: 100 }}>
-          <button className="brand-logo" type="button" onClick={openHome} style={{ fontSize: "1.3rem" }}>NOVA</button>
+          <button className="brand-logo" type="button" onClick={openHome} style={{ fontSize: "1.3rem" }}>APEX</button>
           <div className="topbar-right" style={{ gap: "12px" }}>
             <StatusBadge state={catalogState} backend={backend} />
             {username ? (
@@ -2343,6 +2348,7 @@ function App() {
 
           {page === "dashboard" && <main className="app-shell inner-shell"><ErrorBoundary><Dashboard /></ErrorBoundary></main>}
           {page === "knowledge-graph" && <main className="app-shell inner-shell"><ErrorBoundary><KnowledgeGraphPage titles={titles} /></ErrorBoundary></main>}
+          {page === "vector-space" && <main className="app-shell inner-shell"><ErrorBoundary><VectorSpace /></ErrorBoundary></main>}
           {page === "evaluation" && <main className="app-shell inner-shell"><ErrorBoundary><EvaluationPage /></ErrorBoundary></main>}
           {page === "profile" && (
             <main className="app-shell inner-shell">
@@ -2458,7 +2464,7 @@ function App() {
                         setDeferredPrompt(null);
                       }
                     } else {
-                      window.alert("To install this app on your phone:\n\n1. Tap the Share button in your mobile browser.\n2. Select 'Add to Home Screen'.\n3. Launch Nova directly from your home screen!");
+                      window.alert("To install this app on your phone:\n\n1. Tap the Share button in your mobile browser.\n2. Select 'Add to Home Screen'.\n3. Launch APEX directly from your home screen!");
                     }
                     setShowMoreDrawer(false);
                   }}
@@ -2566,6 +2572,7 @@ function App() {
       { id: "search", label: "Search" },
       { id: "dashboard", label: "Dashboard" },
       { id: "knowledge-graph", label: "Knowledge Graph" },
+      { id: "vector-space", label: "Vector Space" },
       { id: "evaluation", label: "Evaluation" },
       { id: "profile", label: "Profile" },
       { id: "admin", label: "Admin" },
@@ -2578,7 +2585,7 @@ function App() {
         {/* Unified Sticky top navigation header */}
         <header className="topbar">
           <div className="topbar-left">
-            <button className="brand-logo" type="button" onClick={openHome} aria-label="NOVA Home">NOVA</button>
+            <button className="brand-logo" type="button" onClick={openHome} aria-label="APEX Home">APEX</button>
             <nav className="topbar-links" aria-label="Main navigation">
               {navLinks.map((link) => (
                 <button
@@ -3158,6 +3165,7 @@ function App() {
 
           {page === "dashboard" && <main className="app-shell inner-shell"><ErrorBoundary><Dashboard /></ErrorBoundary></main>}
           {page === "knowledge-graph" && <main className="app-shell inner-shell"><ErrorBoundary><KnowledgeGraphPage titles={titles} /></ErrorBoundary></main>}
+          {page === "vector-space" && <main className="app-shell inner-shell"><ErrorBoundary><VectorSpace /></ErrorBoundary></main>}
           {page === "evaluation" && <main className="app-shell inner-shell"><ErrorBoundary><EvaluationPage /></ErrorBoundary></main>}
           {page === "profile" && (
             <main className="app-shell inner-shell">

@@ -1,42 +1,55 @@
 :root {
   color-scheme: dark;
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #050508;
-  color: #f1f5f9;
+  background: #09090b;
+  color: #fafafa;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  /* ── Premium Obsidian Dark Design Palette ── */
-  --bg: #050508;
-  --bg-rgb: 5, 5, 8;
-  --panel: rgba(255, 255, 255, 0.02);
-  --panel-hover: rgba(255, 255, 255, 0.05);
-  --panel-active: rgba(255, 255, 255, 0.08);
-  --line: rgba(255, 255, 255, 0.06);
-  --line-strong: rgba(255, 255, 255, 0.12);
+  /* ── Shadcn UI Dark Theme Palette ── */
+  --bg: #09090b;
+  --bg-rgb: 9, 9, 11;
+  --panel: #09090b;
+  --panel-hover: #18181b;
+  --panel-active: #27272a;
+  --line: #27272a;
+  --line-strong: #3f3f46;
 
   /* Text values */
-  --text: #f8fafc;
-  --muted: #94a3b8;
-  --quiet: #64748b;
+  --text: #fafafa;
+  --muted: #a1a1aa;
+  --quiet: #71717a;
 
-  /* Modern Accents */
-  --accent: #6366f1; /* Premium Violet Indigo */
-  --accent-rgb: 99, 102, 241;
-  --accent-glow: rgba(99, 102, 241, 0.25);
-  --secondary: #ec4899; /* Electric Rose */
-  --secondary-glow: rgba(236, 72, 153, 0.2);
-  --cyan: #06b6d4; /* Tech Cyan */
+  /* Accents & Highlights */
+  --accent: #a5b4fc;
+  --accent-rgb: 165, 180, 252;
+  --accent-glow: rgba(165, 180, 252, 0.15);
+  --accent-hover: #c7d2fe;
+  --secondary: #27272a;
+  --secondary-glow: rgba(39, 39, 42, 0.2);
+  --cyan: #38bdf8;
 
   /* Alert/Status states */
-  --success: #10b981;
-  --warn: #f59e0b;
-  --danger: #ef4444;
+  --success: #4ade80;
+  --warn: #fbbf24;
+  --danger: #f87171;
+
+  /* Shadcn Corners */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 9999px;
+
+  /* Shadcn Elevation */
+  --elevation-1: 0px 1px 3px 0px rgba(0, 0, 0, 0.1), 0px 1px 2px -1px rgba(0, 0, 0, 0.1);
+  --elevation-2: 0px 4px 6px -1px rgba(0, 0, 0, 0.1), 0px 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --elevation-3: 0px 10px 15px -3px rgba(0, 0, 0, 0.1), 0px 4px 6px -4px rgba(0, 0, 0, 0.1);
 
   /* Typography fonts */
-  --font-headline: 'Outfit', 'Inter', sans-serif;
+  --font-headline: 'Inter', system-ui, sans-serif;
   --font-body: 'Inter', system-ui, sans-serif;
 }
 
@@ -3527,5 +3540,92 @@ input:focus-visible {
     opacity: 1;
     transform: translate(-50%, 0);
   }
+}
+
+/* ── Shadcn UI-Inspired Override Layer ── */
+
+/* Cards, Panels, and Containers */
+.panel, .glass-panel, .info-card, .metric-card, .status-badge, .log-container, .benchmark-card, .settings-panel, .auth-card {
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--elevation-1) !important;
+  border: 1px solid var(--line) !important;
+  background-color: #09090b !important;
+}
+
+/* Hover effects for interactive cards */
+.metric-card:hover, .info-card:hover, .benchmark-card:hover, .settings-panel:hover {
+  box-shadow: var(--elevation-2) !important;
+  background-color: var(--panel-hover) !important;
+  border-color: var(--line-strong) !important;
+}
+
+/* Movie Cards */
+.movie-card {
+  border-radius: var(--radius-lg) !important;
+  overflow: hidden;
+  border: 1px solid var(--line) !important;
+  background-color: #09090b !important;
+  box-shadow: var(--elevation-1) !important;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+.movie-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--line-strong) !important;
+  box-shadow: var(--elevation-2) !important;
+}
+
+/* Buttons */
+button, .btn, .sheet-link-btn, .topbar-link, .nav-btn, .auth-btn, .tab-btn {
+  border-radius: var(--radius-md) !important;
+  padding: 8px 16px !important;
+  font-weight: 500 !important;
+  font-size: 14px !important;
+  letter-spacing: normal !important;
+  background-color: var(--secondary) !important;
+  border: 1px solid var(--line) !important;
+  color: var(--text) !important;
+  transition: background-color 0.1s ease, border-color 0.1s ease !important;
+}
+button:hover, .btn:hover, .sheet-link-btn:hover, .topbar-link:hover, .nav-btn:hover, .auth-btn:hover, .tab-btn:hover {
+  background-color: var(--panel-hover) !important;
+  border-color: var(--line-strong) !important;
+}
+
+/* Inputs & Search Bar */
+input, select, textarea, .search-input {
+  border-radius: var(--radius-md) !important;
+  padding: 8px 12px !important;
+  border: 1px solid var(--line) !important;
+  background-color: #09090b !important;
+  color: var(--text) !important;
+  font-size: 14px !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+input:focus, select:focus, textarea:focus, .search-input:focus {
+  border-color: var(--muted) !important;
+  box-shadow: 0 0 0 1px var(--muted) !important;
+  outline: none !important;
+}
+
+/* Dialogs & Modals */
+.dialog-overlay, .modal-overlay {
+  background-color: rgba(9, 9, 11, 0.8) !important;
+  backdrop-filter: blur(4px) !important;
+}
+.dialog-content, .modal-content, .dialog-box {
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--elevation-3) !important;
+  border: 1px solid var(--line) !important;
+  background-color: #09090b !important;
+}
+
+/* Badges & Pills */
+.genre-badge, .tag-badge {
+  border-radius: var(--radius-full) !important;
+  font-size: 12px !important;
+  padding: 2px 10px !important;
+  border: 1px solid var(--line) !important;
+  background-color: var(--panel-hover) !important;
+  color: var(--muted) !important;
 }
 

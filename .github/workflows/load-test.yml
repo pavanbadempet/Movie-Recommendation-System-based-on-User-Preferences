@@ -3,7 +3,7 @@ name: Load Test (SLO Smoke)
 on:
   # Run after a successful CI build on main
   workflow_run:
-    workflows: ["Nova Universal Recommendation Engine CI/CD"]
+    workflows: ["APEX Universal Recommendation Engine CI/CD"]
     branches: [ "main" ]
     types: [ completed ]
   # Allow manual full-load runs

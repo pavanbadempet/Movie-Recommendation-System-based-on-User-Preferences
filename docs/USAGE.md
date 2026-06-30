@@ -1,4 +1,4 @@
-# Usage Guide - Nova
+# Usage Guide - APEX
 
 ## API Endpoints
 

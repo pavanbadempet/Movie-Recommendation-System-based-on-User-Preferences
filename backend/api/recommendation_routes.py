@@ -133,6 +133,10 @@ def configure(
 
 
 # ---------------------------------------------------------------------------
+# TTL cache for user recommendations
+_USER_REC_CACHE: dict = {}
+
+
 # Async LRU cache for TMDB calls
 # ---------------------------------------------------------------------------
 
@@ -1496,6 +1500,32 @@ def create_rec_engine_router(deps: RouterDeps):
                 authenticated=context.authenticated,
             )
             return remote_payload
+        import time as _time
+
+        # Check cache
+        cache_key = (user_id, result_limit, context.tenant_id)
+        cached = _USER_REC_CACHE.get(cache_key)
+        if cached is not None and _time.time() - cached[0] < 30:  # 30-second TTL
+            background_tasks.add_task(
+                record_recommendation_events,
+                endpoint="recommendations.user.cached",
+                context=context,
+                query_movie={"id": None, "title": f"user:{user_id}"},
+                recommendations=cached[1],
+                rec=None,
+                request_id=resolved_request_id,
+                user_id=user_id,
+                session_id=session_id,
+            )
+            record_usage(
+                "recommendations.user.cached",
+                context.tenant_id,
+                context.catalog_id,
+                plan=context.plan,
+                authenticated=context.authenticated,
+            )
+            return cached[1]
+
         rec = get_rec()
         profile = await run_in_threadpool(
             lambda: build_user_behavior_profile(
@@ -1510,6 +1540,13 @@ def create_rec_engine_router(deps: RouterDeps):
         assignment = assign_experiment(subject_id=user_id)
         results = await run_in_threadpool(lambda: rec.recommend_for_user_profile(profile, n=result_limit))
         results = attach_experiment(results, assignment)
+
+        # Save to cache
+        import contextlib
+        if len(_USER_REC_CACHE) >= 1000:
+            with contextlib.suppress(StopIteration):
+                _USER_REC_CACHE.pop(next(iter(_USER_REC_CACHE)))
+        _USER_REC_CACHE[cache_key] = (_time.time(), results)
         background_tasks.add_task(
             record_recommendation_events,
             endpoint="recommendations.user",

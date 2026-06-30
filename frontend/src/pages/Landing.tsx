@@ -138,7 +138,7 @@ curl "/v1/recommendations/id/550?explain=true" \\
     python: `# Fetch ensemble recommendations in Python
 import requests
 
-url = "https://api.nova.ai/v1/recommendations/id/550"
+url = "https://api.apex.ai/v1/recommendations/id/550"
 headers = {
     "X-Nova-API-Key": "YOUR_KEY"
 }
@@ -148,7 +148,7 @@ response = requests.get(url, headers=headers, params=params)
 recommendations = response.json()["recommendations"]
 print(f"Top recommendation: {recommendations[0]['title']}")`,
     js: `// Fetch recommendations in Node.js
-const url = 'https://api.nova.ai/v1/recommendations/id/550?explain=true';
+const url = 'https://api.apex.ai/v1/recommendations/id/550?explain=true';
 const response = await fetch(url, {
   headers: { 'X-Nova-API-Key': 'YOUR_KEY' }
 });
@@ -253,7 +253,7 @@ console.log(\`Top recommendation: \${recommendations[0].title}\`);`
               <div className="dynamic-island" />
               <div className="landing-phone-screen">
                 <div className="phone-preview-header">
-                  <span className="phone-preview-title">NOVA</span>
+                  <span className="phone-preview-title">APEX</span>
                   <span style={{ fontSize: "0.6rem", color: "var(--success)", display: "flex", alignItems: "center", gap: "4px" }}>
                     <span style={{ width: "6px", height: "6px", background: "var(--success)", borderRadius: "50%" }}></span> Live Server
                   </span>

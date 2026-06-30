@@ -163,7 +163,7 @@ jobs:
             --min-ndcg 0.25 \
             --fail-on-threshold
 
-      - name: Train and upload Nova ranker
+      - name: Train and upload APEX ranker
         if: success()
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}

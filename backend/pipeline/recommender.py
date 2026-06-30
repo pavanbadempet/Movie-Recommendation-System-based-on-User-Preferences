@@ -40,6 +40,48 @@ def _env_truthy(name: str) -> bool:
     return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+class ONNXSBERTEncoder:
+    """Wrapper class that mimics SentenceTransformer interface but runs on ONNX Runtime for speed."""
+
+    def __init__(self, onnx_path: str, model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
+        import onnxruntime as ort
+        from transformers import AutoTokenizer
+
+        # Set thread constraints for CPU inference optimization
+        opts = ort.SessionOptions()
+        opts.intra_op_num_threads = max(1, os.cpu_count() // 2)
+        opts.inter_op_num_threads = 1
+        opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+
+        self.session = ort.InferenceSession(onnx_path, sess_options=opts)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+    def encode(self, sentences: list[str] | str, convert_to_numpy: bool = True) -> np.ndarray:
+        if isinstance(sentences, str):
+            sentences = [sentences]
+
+        inputs = self.tokenizer(sentences, padding=True, truncation=True, return_tensors="np")
+
+        inputs_onnx = {
+            "input_ids": inputs["input_ids"].astype(np.int64),
+            "attention_mask": inputs["attention_mask"].astype(np.int64),
+        }
+        if "token_type_ids" in inputs:
+            inputs_onnx["token_type_ids"] = inputs["token_type_ids"].astype(np.int64)
+
+        outputs = self.session.run(["last_hidden_state"], inputs_onnx)
+        last_hidden = outputs[0]
+
+        attention_mask = inputs_onnx["attention_mask"]
+        input_mask_expanded = np.expand_dims(attention_mask, -1).astype(float)
+        sum_embeddings = np.sum(last_hidden * input_mask_expanded, 1)
+        sum_mask = np.sum(input_mask_expanded, 1)
+        sum_mask = np.clip(sum_mask, a_min=1e-9, a_max=None)
+        embedding = sum_embeddings / sum_mask
+
+        return embedding
+
+
 def _render_like_environment() -> bool:
     """Detect constrained PaaS runtimes where the full vector stack can exceed memory."""
     from backend.pipeline.recommender_core import render_like_environment
@@ -373,11 +415,17 @@ class Recommender:
     def _get_query_encoder(self):
         """Load the query bi-encoder lazily when the deployment opts in."""
         if self._query_encoder is None:
-            from sentence_transformers import SentenceTransformer
+            onnx_path = MODELS_DIR / "sbert_encoder.quant.onnx"
+            if onnx_path.exists():
+                model_name = os.getenv("NOVA_QUERY_ENCODER_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+                self._query_encoder = ONNXSBERTEncoder(str(onnx_path), model_name)
+                logger.info("Loaded ONNX query SBERT encoder from %s", onnx_path)
+            else:
+                from sentence_transformers import SentenceTransformer
 
-            model_name = os.getenv("NOVA_QUERY_ENCODER_MODEL", "all-mpnet-base-v2")
-            self._query_encoder = SentenceTransformer(model_name)
-            logger.info("Loaded query encoder: %s", model_name)
+                model_name = os.getenv("NOVA_QUERY_ENCODER_MODEL", "all-mpnet-base-v2")
+                self._query_encoder = SentenceTransformer(model_name)
+                logger.info("Loaded PyTorch query SBERT encoder: %s", model_name)
         return self._query_encoder
 
     def _get_cross_encoder(self):
@@ -934,9 +982,26 @@ class Recommender:
         return self.recommend_by_index(matches[0], n)
 
     def ai_search(self, query: str, n: int = 10, fetch_k: int = 80) -> list[dict]:
-        """Multi-stage AI search. Delegates to pipeline or legacy SBERT+TurboVec+MMR fallback."""
+        """Multi-stage AI search. Delegates to pipeline or legacy SBERT+TurboVec+MMR fallback (with 5-min TTL cache)."""
         if not query or self._movies is None:
             return []
+        import time as _time
+
+        if not hasattr(self, "_ai_search_cache"):
+            self._ai_search_cache = {}
+        cached = self._ai_search_cache.get((query, n, fetch_k))
+        if cached is not None and _time.time() - cached[0] < 300:
+            return cached[1]
+
+        result = self._ai_search_uncached(query, n, fetch_k)
+        if len(self._ai_search_cache) >= 500:
+            import contextlib
+            with contextlib.suppress(StopIteration):
+                self._ai_search_cache.pop(next(iter(self._ai_search_cache)))
+        self._ai_search_cache[(query, n, fetch_k)] = (_time.time(), result)
+        return result
+
+    def _ai_search_uncached(self, query: str, n: int = 10, fetch_k: int = 80) -> list[dict]:
         if self._retrieval_pipeline is not None and self._dense_query_enabled():
             try:
                 encoder = self._get_query_encoder()

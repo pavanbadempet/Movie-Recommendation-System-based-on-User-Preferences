@@ -40,6 +40,14 @@ MODEL_FILES = {
         ),
         "dest": "sbert_embeddings.npy",
     },
+    "sbert_encoder.quant.onnx": {
+        "url": os.getenv(
+            "SBERT_ENCODER_ONNX_URL",
+            "https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main/onnx/model_quantized.onnx",
+        ),
+        "dest": "sbert_encoder.quant.onnx",
+        "required": False,
+    },
     "turbovec.tq": {
         "url": os.getenv(
             "TURBOVEC_INDEX_URL", "https://huggingface.co/pavanbadempet/movie-recs-models/resolve/main/turbovec.tq"

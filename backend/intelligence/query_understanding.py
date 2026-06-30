@@ -1,5 +1,5 @@
 """
-Free-tier query understanding for Nova search.
+Free-tier query understanding for APEX search.
 
 This is not pretending to be an LLM. It extracts high-signal intent from a
 short natural language query so the hybrid retriever can make better ranking

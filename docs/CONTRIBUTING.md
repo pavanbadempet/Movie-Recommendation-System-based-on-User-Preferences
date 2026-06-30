@@ -1,4 +1,4 @@
-# Contributing Guide - Nova
+# Contributing Guide - APEX
 
 ## Getting Started
 

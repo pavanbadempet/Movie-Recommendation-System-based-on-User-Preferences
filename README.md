@@ -21,6 +21,15 @@ pinned: false
   <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/ci.yml"><img src="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/ci.yml/badge.svg" alt="CI build status badge" /></a>
   <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/secrets-scan.yml"><img src="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/secrets-scan.yml/badge.svg" alt="Secrets Scan status badge" /></a>
   <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/serving-quality.yml"><img src="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/serving-quality.yml/badge.svg" alt="Serving Quality status badge" /></a>
+  <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/data-refresh.yml"><img src="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/data-refresh.yml/badge.svg" alt="Daily Data Refresh status badge" /></a>
+  <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/load-test.yml"><img src="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/load-test.yml/badge.svg" alt="SLO Load Test status badge" /></a>
+  <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/frontend-pages.yml"><img src="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/frontend-pages.yml/badge.svg" alt="Frontend Pages status badge" /></a>
+</p>
+
+<p align="center">
+  <a href="https://pavanbadempet.github.io/Movie-Recommendation-System/"><strong>🌐 Live Demo Portal</strong></a> &middot;
+  <a href="https://movie-recs-api-5qvy.onrender.com/health"><strong>📡 Production API Status</strong></a> &middot;
+  <a href="https://movie-recs-api-5qvy.onrender.com/docs"><strong>📖 Swagger API Interactive Docs</strong></a>
 </p>
 
 <!-- Tech Stack Badges Row (for-the-badge) -->
@@ -238,6 +247,46 @@ graph TB
     Retrieval --> Serving
 ```
 
+### 🔀 Recommendation Request Lifecycle
+
+When a client queries the system for movie recommendations, the request executes through the following multi-stage pipelines:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as User / Browser
+    participant API as FastAPI Router
+    participant Coordinator as Recommender Coordinator
+    participant Cache as In-Memory Cache
+    participant Retrieval as RetrievalPipeline
+    participant Ranker as RankingPipeline (6-Model Ensemble)
+    participant Reranker as RerankingPipeline (MMR & Fairness)
+
+    Client->>API: GET /v1/recommendations/id/{movie_id}
+    API->>Coordinator: recommend_by_id(movie_id, n)
+    Coordinator->>Cache: Query cached recommendations
+    alt Cache Hit
+        Cache-->>Coordinator: Return cached results (5-min TTL)
+        Coordinator-->>API: Return results
+        API-->>Client: 200 OK Response
+    else Cache Miss
+        Coordinator->>Retrieval: retrieve(query_vector)
+        Retrieval-->>Coordinator: Return list of Candidates (FAISS/TF-IDF/KG)
+        Note over Coordinator: Apply Franchise, Sequel, Genre, & Director Boosts
+        Coordinator->>Ranker: rank(candidates, user_context)
+        Note over Ranker: Score via SASRec, KAN, LightGCN, ODE, Hyperbolic, Diffusion
+        Note over Ranker: Blend scores using Doubly Robust (DR) weights
+        Ranker-->>Coordinator: Return ranked items
+        Coordinator->>Reranker: rerank(ranked, constraints)
+        Note over Reranker: Apply Maximal Marginal Relevance (MMR) Diversity
+        Note over Reranker: Audit bias using Gini Coefficient & Demographic Fairness
+        Reranker-->>Coordinator: Return diversified items
+        Coordinator->>Cache: Cache results
+        Coordinator-->>API: Return top-n results
+        API-->>Client: 200 OK Response
+    end
+```
+
 ### 🌐 Scalable Production Cloud Topology
 
 The production setup runs asynchronously across distinct scaling layers:
@@ -427,7 +476,7 @@ The following environment variables configure the runtime services. Create a `.e
 | `JWT_SECRET_KEY` | string | — | JWT token verification key. Generate via `openssl rand -hex 32`. |
 | `OPENROUTER_API_KEY` | string | — | API key for LLM explanations (OpenRouter). |
 | `REDIS_URL` | string | `redis://localhost:6379/0` | Cache connection string for session clickstreams. |
-| `DATABASE_URL` | string | `sqlite:///./nova_db.sqlite3` | SQLite/Postgres connection string. |
+| `DATABASE_URL` | string | `sqlite:///apex.db` | SQLite/Postgres connection string. |
 | `NOVA_SERVING_TIER` | string | — | Override serving tier. Valid values: `tier1`, `tier2`, `tier3`. |
 
 <img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
@@ -472,9 +521,9 @@ npm run dev
 
 | Service | Access URL |
 | :--- | :--- |
-| **Cinema Portal** | [http://127.0.0.1:3000](http://127.0.0.1:3000) |
-| **REST API Server** | [http://127.0.0.1:8000](http://127.0.0.1:8000) |
-| **Interactive API Documentation** | [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) |
+| **Cinema Portal** | [http://localhost:5173](http://localhost:5173) |
+| **REST API Server** | [http://localhost:8000](http://localhost:8000) |
+| **Interactive API Documentation** | [http://localhost:8000/docs](http://localhost:8000/docs) |
 
 <img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
 
@@ -590,12 +639,12 @@ npm --prefix frontend run test
 ## 📖 Research Bibliography & Credits
 
 The model designs, estimators, and algorithms in this repository leverage research papers:
-- **SASRec Transformer**: *Self-Attentive Sequential Recommendation* (Kang & McAuley, ICDM 2018).
-- **LightGCN**: *LightGCN: Simplifying and Powering Graph Convolution Network for Recommendation* (He et al., SIGIR 2020).
-- **Kolmogorov-Arnold Networks**: *KAN: Kolmogorov-Arnold Networks* (Liu et al., 2024).
-- **Doubly Robust Estimation**: *Doubly Robust Policy Evaluation and Optimization* (Dudík et al., Statistical Science 2014).
-- **Maximal Marginal Relevance (MMR)**: *The Use of MMR in Summarization and Information Retrieval* (Carbonell & Goldstein, SIGIR 1998).
-- **Neural ODEs**: *Neural Ordinary Differential Equations* (Chen et al., NeurIPS 2018).
+- **SASRec Transformer**: *Self-Attentive Sequential Recommendation* (Kang & McAuley, ICDM 2018) &mdash; [arXiv:1808.09781](https://arxiv.org/abs/1808.09781)
+- **LightGCN**: *LightGCN: Simplifying and Powering Graph Convolution Network for Recommendation* (He et al., SIGIR 2020) &mdash; [arXiv:2002.02126](https://arxiv.org/abs/2002.02126)
+- **Kolmogorov-Arnold Networks**: *KAN: Kolmogorov-Arnold Networks* (Liu et al., 2024) &mdash; [arXiv:2404.19756](https://arxiv.org/abs/2404.19756)
+- **Doubly Robust Estimation**: *Doubly Robust Policy Evaluation and Optimization* (Dudík et al., Statistical Science 2014) &mdash; [PDF Link](https://arxiv.org/abs/1103.4601)
+- **Maximal Marginal Relevance (MMR)**: *The Use of MMR in Summarization and Information Retrieval* (Carbonell & Goldstein, SIGIR 1998) &mdash; [ACM Link](https://dl.acm.org/doi/10.1145/290941.291025)
+- **Neural ODEs**: *Neural Ordinary Differential Equations* (Chen et al., NeurIPS 2018) &mdash; [arXiv:1806.07366](https://arxiv.org/abs/1806.07366)
 
 <img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
 

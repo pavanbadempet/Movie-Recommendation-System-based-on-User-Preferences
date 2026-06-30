@@ -1,4 +1,4 @@
-# Changelog - Nova
+# Changelog - APEX
 
 ## [Unreleased]
 

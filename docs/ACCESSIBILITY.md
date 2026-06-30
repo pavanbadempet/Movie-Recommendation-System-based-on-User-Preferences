@@ -1,6 +1,6 @@
 # Accessibility (WCAG 2.1 AA)
 
-This document records the accessibility implementation decisions and known status of the Nova React frontend.
+This document records the accessibility implementation decisions and known status of the APEX React frontend.
 
 ---
 

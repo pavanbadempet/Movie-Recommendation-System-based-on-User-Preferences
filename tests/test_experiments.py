@@ -1,5 +1,5 @@
 """
-Tests for Nova experiment assignment and metrics.
+Tests for APEX experiment assignment and metrics.
 """
 
 from backend.data.experiments import assign_experiment, attach_experiment, summarize_experiment_metrics

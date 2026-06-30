@@ -1,6 +1,6 @@
 # Data Engineering System Design and Tradeoffs
 
-This document explains the "why" behind the main data engineering choices in Nova. The goal is not to use every tool. The goal is to choose the smallest architecture that satisfies the product requirement, then know when to evolve it.
+This document explains the "why" behind the main data engineering choices in APEX. The goal is not to use every tool. The goal is to choose the smallest architecture that satisfies the product requirement, then know when to evolve it.
 
 ## Decision Principle
 
@@ -26,7 +26,7 @@ If a component cannot answer those questions, it does not belong in the core arc
 
 ## Target System
 
-Nova can be explained in four planes. Not every plane needs every enterprise component in the local MVP:
+APEX can be explained in four planes. Not every plane needs every enterprise component in the local MVP:
 
 - Data plane: raw catalog data, curated metadata, optional user events and search logs.
 - Processing plane: PySpark for canonical batch/lakehouse runs, with Pandas only for small local fallback and deterministic tests.
@@ -41,7 +41,7 @@ Nova can be explained in four planes. Not every plane needs every enterprise com
 | Kafka streaming | User views, ratings, clicks, search events | Captures behavior as it happens | Requires brokers, consumer offsets, replay handling |
 | Hybrid | Catalog in batch, user behavior in stream | Common real-world design | More moving parts |
 
-Recommended Nova design:
+Recommended APEX design:
 
 - Catalog metadata is batch because TMDB/Kaggle-style catalog updates do not need millisecond freshness.
 - User events should be streaming only if the product uses views, ratings, clicks, or searches for personalization or analytics.
@@ -55,7 +55,7 @@ Recommended Nova design:
 | Pandas | Small local fallback, unit tests, artifact inspection | Fast developer loop, simple debugging | Single-machine memory limit; not the main DE story |
 | Databricks Spark | Managed production lakehouse | Jobs, clusters, Delta, governance | Cloud cost and platform dependency |
 
-Recommended Nova design:
+Recommended APEX design:
 
 - Treat `etl/pyspark_etl.py` and `etl/delta_lakehouse.py` as the canonical DE implementation.
 - Keep Pandas helpers for deterministic local fallback, tests, and lightweight artifact inspection.
@@ -69,7 +69,7 @@ Recommended Nova design:
 | Delta Lake | Bronze/Silver/Gold tables, backfills, SCD, incremental merges | ACID, schema evolution, MERGE, time travel | Requires Delta runtime/JARs |
 | Iceberg/Hudi | Large open lakehouse alternatives | Strong table formats | More catalog setup |
 
-Recommended Nova design:
+Recommended APEX design:
 
 - Use Parquet for local serving artifacts and CI fixtures.
 - Use Delta for cloud/lakehouse tables only where MERGE, time travel, concurrent writes, and schema evolution matter.
@@ -95,7 +95,7 @@ Product/system-design explanation:
 | SCD Type 1 | Correcting attributes where history does not matter | Simple overwrite | Loses history |
 | SCD Type 2 | Tracking changes to catalog attributes over time | Preserves history for analytics and audits | More storage and query complexity |
 
-Nova does not need SCD Type 2 for the online recommendation API. It is useful for the analytical warehouse path if stakeholders need to answer historical questions such as "what genre/director/cast metadata was current when this recommendation was served?"
+APEX does not need SCD Type 2 for the online recommendation API. It is useful for the analytical warehouse path if stakeholders need to answer historical questions such as "what genre/director/cast metadata was current when this recommendation was served?"
 
 Implementation in repo:
 
@@ -114,7 +114,7 @@ Implementation in repo:
 | NoSQL/key-value | API cache, session state, hot recommendations | Very low-latency lookups | Harder ad hoc analytics |
 | Vector index | Semantic nearest-neighbor retrieval | Fast similarity search | Not a replacement for warehouse truth |
 
-Recommended Nova design:
+Recommended APEX design:
 
 - Use SQL/lakehouse for source of truth and analytics.
 - Use FAISS/vector DB for semantic retrieval.
@@ -128,7 +128,7 @@ Recommended Nova design:
 | FAISS | Local demo, batch-built vector index, low cost | Fast, mature, offline, simple deployment | Single-node unless custom sharding |
 | Pinecone/Milvus/Weaviate/OpenSearch | Distributed vector serving | Scaling, metadata filters, managed operations | Cost, vendor/platform dependency |
 
-Recommended Nova design:
+Recommended APEX design:
 
 - Use FAISS for portfolio MVP and cost-efficient deployment.
 - Explain that at 10M+ items or multi-tenant workloads, you would evaluate a distributed vector DB.
@@ -142,7 +142,7 @@ Recommended Nova design:
 | Step Functions | Serverless AWS workflows | Managed, visual, integrates with Lambda/Glue/EMR | AWS-specific |
 | Databricks Jobs | Lakehouse-native jobs | Strong Spark integration | Databricks-specific |
 
-Recommended Nova design:
+Recommended APEX design:
 
 - Use a CLI/manual run for local development.
 - Use Airflow when refresh has multiple dependent steps, retries, backfills, and operational ownership.
@@ -155,7 +155,7 @@ Recommended Nova design:
 | Direct API write | Simple logging to database/object storage | Easy for MVP | Tight coupling and weaker replay |
 | Kafka | User event streams and replayable ingestion | Durable event log, consumer groups, backpressure | More infra and operational complexity |
 
-Recommended Nova design:
+Recommended APEX design:
 
 - Use Kafka for user behavior events, not for static catalog ingestion.
 - Do not add Kafka to the core recommender unless there is a product requirement for event replay, near-real-time engagement features, or downstream consumers.
@@ -206,7 +206,7 @@ Use:
 
 ## Serving Tradeoff
 
-Online recommendation calls should not compute embeddings from scratch for every movie. Nova precomputes:
+Online recommendation calls should not compute embeddings from scratch for every movie. APEX precomputes:
 
 - Movie metadata.
 - Dense embeddings.

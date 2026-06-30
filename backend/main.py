@@ -19,10 +19,12 @@ from typing import Optional
 # =====================================================================
 try:
     import orjson as _json_lib
+    from fastapi.responses import ORJSONResponse
 
     _ORJSON_AVAILABLE = True
 except ImportError:
     import json as _json_lib  # type: ignore[no-redef]
+    from fastapi.responses import JSONResponse as ORJSONResponse  # type: ignore[assignment,misc]
 
     _ORJSON_AVAILABLE = False
 
@@ -308,6 +310,7 @@ async def lifespan(app: FastAPI):
 # =====================================================================
 app = FastAPI(
     title="APEX Recommendation API",
+    default_response_class=ORJSONResponse,
     description=(
         "Production-grade AI recommendation engine with a 6-model ensemble "
         "(SASRec, KAN, LightGCN, Diffusion, Quantum-Fluid, Hyperbolic). "

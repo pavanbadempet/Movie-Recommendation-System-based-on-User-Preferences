@@ -1,4 +1,4 @@
-# Troubleshooting - Nova
+# Troubleshooting - APEX
 
 ## Common Issues
 

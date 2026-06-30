@@ -1,5 +1,5 @@
 """
-Tests for Nova's learned ranking layer.
+Tests for APEX's learned ranking layer.
 """
 
 import hashlib
@@ -73,6 +73,7 @@ def test_load_ranker_rejects_artifact_without_trusted_checksum(tmp_path, monkeyp
     artifact_path = tmp_path / "nova_ranker.joblib"
     joblib.dump({"model": object(), "feature_columns": [], "metadata": {}}, artifact_path)
     monkeypatch.delenv("NOVA_RANKER_SHA256", raising=False)
+    monkeypatch.delenv("NOVA_TRUST_LOCAL_RANKER", raising=False)
 
     assert load_ranker(artifact_path) is None
 

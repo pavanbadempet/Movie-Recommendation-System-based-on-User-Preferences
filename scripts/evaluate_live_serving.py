@@ -1,4 +1,4 @@
-"""Evaluate the deployed Nova serving API.
+"""Evaluate the deployed APEX serving API.
 
 This is a production smoke gate: it checks live service health, artifact
 alignment, and human-labeled search/recommendation/semantic benchmark metrics.
@@ -32,7 +32,7 @@ def _canonical_title(value: Any) -> str:
 
 def _get_json(base_url: str, path: str, timeout: int) -> Any:
     url = urllib.parse.urljoin(base_url.rstrip("/") + "/", path.lstrip("/"))
-    request = urllib.request.Request(url, headers={"User-Agent": "nova-serving-quality-gate"})
+    request = urllib.request.Request(url, headers={"User-Agent": "apex-serving-quality-gate"})
     with urllib.request.urlopen(request, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
 

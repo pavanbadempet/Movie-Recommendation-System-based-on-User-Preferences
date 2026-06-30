@@ -67,7 +67,7 @@ Lightweight health check. Does not load the recommender (fast cold-start probe).
 }
 ```
 
-#### `GET /v1/platform/ready`
+#### `GET /v1/platform/readiness`
 
 Detailed readiness probe. Runs smoke tests on search, recommendations, and benchmarks.
 
@@ -156,7 +156,7 @@ Personalized recommendations based on the user's interaction history.
 
 ### Search
 
-#### `GET /v1/search/semantic`
+#### `GET /v1/search/ai`
 
 Dense vector semantic search. Handles misspellings, abstract concepts, and mood-based queries.
 
@@ -164,15 +164,20 @@ Dense vector semantic search. Handles misspellings, abstract concepts, and mood-
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `q` | string | Yes | Search query (e.g., "mind-bending thriller", "movies like Inception") |
-| `limit` | int | No (default: 10) | Number of results (1–50) |
+| `limit` | int | No (default: 20) | Number of results (1–100) |
+| `top_k` | int | No | Override for limit parameter |
 
-**Response:** List of movies with `similarity_score` and `retrieval_stage`.
+**Response:** List of movies matching the query.
 
 #### `GET /v1/search`
 
 Hybrid search (dense + sparse). Combines FAISS semantic search with TF-IDF keyword matching.
 
-Same parameters as `/v1/search/semantic`.
+**Query parameters:**
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `q` | string | Yes | Search query |
+| `limit` | int | No (default: 20) | Number of results (1–100) |
 
 #### `GET /v1/movies/titles`
 

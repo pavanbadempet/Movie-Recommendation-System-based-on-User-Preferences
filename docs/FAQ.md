@@ -1,15 +1,15 @@
-# Frequently Asked Questions - Nova
+# Frequently Asked Questions - APEX
 
 ## General
 
-**Q: What is Nova?**
-A: Nova is a B2B recommendation and semantic discovery platform for content businesses. It's not a streaming app clone—it's the infrastructure layer for media companies, OTT platforms, and education providers.
+**Q: What is APEX?**
+A: APEX is a B2B recommendation and semantic discovery platform for content businesses. It's not a streaming app clone—it's the infrastructure layer for media companies, OTT platforms, and education providers.
 
-**Q: Who should use Nova?**
+**Q: Who should use APEX?**
 A: Regional OTT platforms, education libraries, creator marketplaces, digital publishers, and anyone needing advanced recommendation infrastructure.
 
 **Q: Is this production-ready?**
-A: Yes! Nova is designed for production use with proper deployment configuration.
+A: Yes! APEX is designed for production use with proper deployment configuration.
 
 ## Technical
 
@@ -42,7 +42,7 @@ A: Docker Compose for local, or Render/HuggingFace for free hosting.
 A: Yes, but infrastructure configuration is your responsibility.
 
 **Q: Do you provide hosting?**
-A: No, Nova is self-hosted. Use free tiers (Render, HuggingFace) or your infrastructure.
+A: No, APEX is self-hosted. Use free tiers (Render, HuggingFace) or your infrastructure.
 
 ## Features
 
@@ -53,7 +53,7 @@ A: Hybrid search (sparse + dense), optional learned ranker, and behavior persona
 A: Yes, implement the embedding interface in `backend/recommender.py`.
 
 **Q: How accurate are recommendations?**
-A: Depends on your data quality. Nova includes benchmarking tools to measure performance.
+A: Depends on your data quality. APEX includes benchmarking tools to measure performance.
 
 ---
 

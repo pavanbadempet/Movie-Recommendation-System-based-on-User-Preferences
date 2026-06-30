@@ -1,4 +1,4 @@
-name: Nova Universal Recommendation Engine CI/CD
+name: APEX Universal Recommendation Engine CI/CD
 
 on:
   push:

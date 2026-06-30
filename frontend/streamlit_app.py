@@ -19,7 +19,7 @@ from frontend.monitoring import build_monitoring_snapshot
 
 logger = logging.getLogger(__name__)
 
-st.set_page_config(page_title="Nova Recommendation Console", page_icon="N", layout="wide")
+st.set_page_config(page_title="APEX Recommendation Console", page_icon="A", layout="wide")
 
 # New Streamlit 1.54.0 Feature: Native Logo Support
 st.logo("https://upload.wikimedia.org/wikipedia/commons/e/e4/Movie-icon.svg", icon_image=":material/movie:")
@@ -136,7 +136,7 @@ if not TMDB_KEY:
 
 
 def api_headers(extra_headers=None):
-    """Return optional Nova product headers without requiring paid auth infra."""
+    """Return optional APEX product headers without requiring paid auth infra."""
     headers = dict(extra_headers or {})
     if NOVA_API_KEY:
         headers["X-Nova-API-Key"] = NOVA_API_KEY
@@ -1309,7 +1309,7 @@ if st.session_state.page == "home":
         )
 
         # Product Console Card
-        if st.button("NOVA CONSOLE", key="nav_console", use_container_width=True):
+        if st.button("APEX CONSOLE", key="nav_console", use_container_width=True):
             go_console()
             st.rerun()
 
@@ -1516,7 +1516,7 @@ if st.session_state.page == "home":
             st.info("Loading trends...")
 
 
-# ===== PAGE 1B: NOVA PRODUCT CONSOLE =====
+# ===== PAGE 1B: APEX PRODUCT CONSOLE =====
 elif st.session_state.page == "console":
     c1, c2 = st.columns([1, 8])
     with c1:
@@ -1524,7 +1524,7 @@ elif st.session_state.page == "console":
             go_home()
             st.rerun()
 
-    st.title("Nova Console")
+    st.title("APEX Console")
     st.caption("B2B recommendation intelligence control plane")
 
     context = api_get("/v1/platform/context") or {}

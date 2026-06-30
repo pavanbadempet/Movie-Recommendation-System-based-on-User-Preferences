@@ -1,5 +1,5 @@
 """
-Learned ranking layer for Nova recommendations.
+Learned ranking layer for APEX recommendations.
 
 This module is deliberately free-tier friendly: a small scikit-learn model is
 loaded from a joblib artifact when available. If no artifact exists, the

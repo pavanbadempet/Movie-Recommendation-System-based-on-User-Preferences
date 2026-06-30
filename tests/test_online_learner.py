@@ -232,6 +232,16 @@ class TestCheckpoint:
 # ---------------------------------------------------------------------------
 
 
+def _wait_and_stop_learner(learner, target_events=0, timeout=5.0):
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        if learner._queue.empty():
+            if target_events == 0 or learner._events_processed >= target_events:
+                break
+        time.sleep(0.05)
+    learner.stop()
+
+
 class TestRun:
     def test_run_processes_enqueued_events(self):
         """_run should drain the queue and update embeddings."""
@@ -242,10 +252,9 @@ class TestRun:
         for i in range(4):
             learner._queue.put(positive_event(user_id=i, movie_id=i))
 
-        # Run for a short time then stop
+        # Run, wait for processing, then stop
         learner.start()
-        time.sleep(0.5)
-        learner.stop()
+        _wait_and_stop_learner(learner, target_events=4)
 
         assert not torch.equal(learner.lightgcn.user_embedding.weight, user_emb_before)
 
@@ -257,8 +266,7 @@ class TestRun:
             learner._queue.put(positive_event(user_id=i, movie_id=i))
 
         learner.start()
-        time.sleep(0.5)
-        learner.stop()
+        _wait_and_stop_learner(learner, target_events=8)
 
         assert learner._events_processed >= 8
 
@@ -271,8 +279,7 @@ class TestRun:
             learner._queue.put(positive_event(user_id=i, movie_id=i))
 
         learner.start()
-        time.sleep(1.0)
-        learner.stop()
+        _wait_and_stop_learner(learner, target_events=10)
 
         assert ckpt.exists(), "Checkpoint should have been written after 10 events"
 
@@ -295,8 +302,7 @@ class TestRun:
             learner._queue.put(positive_event(user_id=i, movie_id=i))
 
         learner.start()
-        time.sleep(0.8)
-        learner.stop()
+        _wait_and_stop_learner(learner, target_events=4)
 
         # The second batch should have been processed despite the first failing
         assert call_count["n"] >= 2
@@ -412,8 +418,7 @@ def test_events_processed_counter_is_monotonically_increasing(num_events: int):
         learner._queue.put(positive_event(user_id=i % NUM_USERS, movie_id=i % NUM_ITEMS))
 
     learner.start()
-    time.sleep(0.5)
-    learner.stop()
+    _wait_and_stop_learner(learner, target_events=num_events)
 
     assert learner._events_processed >= num_events
 
