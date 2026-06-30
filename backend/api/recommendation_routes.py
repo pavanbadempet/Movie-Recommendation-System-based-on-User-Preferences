@@ -1543,6 +1543,7 @@ def create_rec_engine_router(deps: RouterDeps):
 
         # Save to cache
         import contextlib
+
         if len(_USER_REC_CACHE) >= 1000:
             with contextlib.suppress(StopIteration):
                 _USER_REC_CACHE.pop(next(iter(_USER_REC_CACHE)))

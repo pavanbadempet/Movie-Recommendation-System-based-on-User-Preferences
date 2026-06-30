@@ -18,12 +18,13 @@ from typing import Optional
 # 2. FAST JSON — use orjson when available, fall back to stdlib json
 # =====================================================================
 try:
-    import orjson as _json_lib
     from fastapi.responses import ORJSONResponse
+    import orjson as _json_lib
 
     _ORJSON_AVAILABLE = True
 except ImportError:
     import json as _json_lib  # type: ignore[no-redef]
+
     from fastapi.responses import JSONResponse as ORJSONResponse  # type: ignore[assignment,misc]
 
     _ORJSON_AVAILABLE = False

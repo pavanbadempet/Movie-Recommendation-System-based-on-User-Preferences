@@ -310,6 +310,7 @@ export async function getRecommendations(movieId: number, n = 12, timeoutMs = 60
       const titlesResult = await loadTitles();
       let queryMovie: Movie = { id: movieId, title: "Query Movie", genres: "", overview: "", release_date: "", popularity: 1.0 };
       if (titlesResult && titlesResult.data) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const found = titlesResult.data.find(m => m.id === movieId) as any;
         if (found) {
           queryMovie = {

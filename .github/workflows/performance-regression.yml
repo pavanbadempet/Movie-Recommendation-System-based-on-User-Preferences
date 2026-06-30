@@ -36,6 +36,7 @@ jobs:
       - name: Benchmark production ranking and metrics code
         run: |
           python -m pytest tests/test_performance_regression.py \
+            -n 0 \
             --benchmark-only \
             --benchmark-json=benchmark-results.json \
             -q

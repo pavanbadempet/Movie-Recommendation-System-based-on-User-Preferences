@@ -1,3 +1,4 @@
+/* eslint-disable no-console, @typescript-eslint/no-explicit-any */
 import * as ort from "onnxruntime-web";
 import { loadTitles } from "./api";
 import { WordPieceTokenizer } from "./tokenizer";

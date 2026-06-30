@@ -996,6 +996,7 @@ class Recommender:
         result = self._ai_search_uncached(query, n, fetch_k)
         if len(self._ai_search_cache) >= 500:
             import contextlib
+
             with contextlib.suppress(StopIteration):
                 self._ai_search_cache.pop(next(iter(self._ai_search_cache)))
         self._ai_search_cache[(query, n, fetch_k)] = (_time.time(), result)

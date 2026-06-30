@@ -85,12 +85,9 @@ export function VectorSpace() {
       const z = clusterZ + (Math.random() - 0.5) * 80;
 
       // Assign a real movie title if it matches sample index, otherwise generate dummy
-      let title = "";
-      if (i < SAMPLE_MOVIES.length) {
-        title = SAMPLE_MOVIES[i].title;
-      } else {
-        title = `${genre} Recommendation #${i - SAMPLE_MOVIES.length + 1}`;
-      }
+      const title = i < SAMPLE_MOVIES.length
+        ? SAMPLE_MOVIES[i].title
+        : `${genre} Recommendation #${i - SAMPLE_MOVIES.length + 1}`;
 
       generatedNodes.push({
         id: i,

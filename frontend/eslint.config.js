@@ -65,6 +65,7 @@ const browserGlobals = {
   PopStateEvent: "readonly",
   Node: "readonly",
   Element: "readonly",
+  HTMLCanvasElement: "readonly",
 };
 
 export default [
@@ -92,6 +93,7 @@ export default [
     rules: {
       // TypeScript
       ...tsPlugin.configs.recommended.rules,
+      "no-undef": "off",
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
 
