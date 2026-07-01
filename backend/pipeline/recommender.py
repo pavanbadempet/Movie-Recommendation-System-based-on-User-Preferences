@@ -423,8 +423,11 @@ class Recommender:
 
     def _dense_query_enabled(self) -> bool:
         """Return whether online dense query encoding should be attempted."""
-        value = os.getenv("NOVA_ENABLE_DENSE_QUERY", "false").strip().lower()
-        return value in {"1", "true", "yes", "on"}
+        if "NOVA_ENABLE_DENSE_QUERY" in os.environ:
+            value = os.environ["NOVA_ENABLE_DENSE_QUERY"].strip().lower()
+            return value in {"1", "true", "yes", "on"}
+        onnx_path = MODELS_DIR / "sbert_encoder.quant.onnx"
+        return onnx_path.exists()
 
     def _cross_encoder_enabled(self) -> bool:
         """Return whether optional cross-encoder reranking should be attempted."""
