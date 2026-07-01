@@ -4,17 +4,19 @@ import {
   Activity,
   AlertTriangle,
   BarChart3,
+  Bookmark,
+  Calendar,
   CheckCircle2,
   Clock3,
   Database,
   Film,
   Gauge,
-  House,
   Loader2,
   Play,
   RefreshCw,
   Search,
   Server,
+  Share2,
   Sparkles,
   Star,
   ThumbsDown,
@@ -24,6 +26,8 @@ import {
   X,
   User,
   LogOut,
+  MoreHorizontal,
+  Network,
 } from "lucide-react";
 import {
   apiGet,
@@ -42,6 +46,7 @@ import {
   recordEvent,
   searchMovies,
   semanticBenchmark,
+  checkVideoCacheStatus,
 } from "./api";
 import type {
   ArtifactHealth,
@@ -72,13 +77,6 @@ const RECENT_STORAGE_KEY = "nova_recent_movies_v2";
 const SESSION_STORAGE_KEY = "nova_session_id_v1";
 const TITLE_CATALOG_LIMIT = 5000;
 
-const isEmbedded = typeof window !== "undefined" && (
-  window.self !== window.top ||
-  window.location.hostname.includes("hf.space") ||
-  window.location.hostname.includes("huggingface.co") ||
-  window.location.search.includes("embed=true")
-);
-
 type AppPage = "home" | "search" | "profile" | "dashboard" | "knowledge-graph" | "evaluation" | "admin" | "landing" | "signup" | "pricing" | "getting-started" | "status";
 type SearchMode = "title" | "semantic";
 type CatalogState = "booting" | "warming" | "ready" | "error";
@@ -105,11 +103,6 @@ function movieYear(movie: Movie): string {
 function movieScore(movie: Movie): string {
   const value = Number(movie.vote_average || 0);
   return value > 0 ? value.toFixed(1) : "NR";
-}
-
-function ratingPercent(movie: Movie): number {
-  const value = Number(movie.vote_average || 0);
-  return Math.max(0, Math.min(100, Math.round(value * 10)));
 }
 
 function formatCount(value?: number | null): string {
@@ -760,7 +753,21 @@ function MovieSpotlight({
 function TrailerFrame({ movie }: { movie: Movie }) {
   const [playing, setPlaying] = React.useState(true);
   const [trailerKey, setTrailerKey] = React.useState<string | null>(movie.trailer_key || null);
+  const [videoError, setVideoError] = React.useState(false);
+  const [isCached, setIsCached] = React.useState<boolean | null>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
+  const [isMobile, setIsMobile] = React.useState(() => typeof window !== "undefined" ? window.innerWidth <= 768 : false);
+  const [showFallbackIframe, setShowFallbackIframe] = React.useState(false);
+
+  React.useEffect(() => {
+    setShowFallbackIframe(false);
+    if (trailerKey) {
+      const timer = setTimeout(() => {
+        setShowFallbackIframe(true);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [movie.id, trailerKey]);
 
   React.useEffect(() => {
     setTrailerKey(movie.trailer_key || null);
@@ -773,14 +780,41 @@ function TrailerFrame({ movie }: { movie: Movie }) {
     }
   }, [movie.id, movie.trailer_key]);
 
-  // Restart playback and reload video when movie or trailerKey changes
+  // Check if trailer is cached when trailerKey changes
+  React.useEffect(() => {
+    if (!trailerKey) {
+      setIsCached(null);
+      return;
+    }
+    setIsCached(null); // Reset when key changes
+    checkVideoCacheStatus(trailerKey)
+      .then((res) => {
+        setIsCached(res.data.cached);
+      })
+      .catch(() => {
+        setIsCached(false); // Default to false (immediate iframe) if endpoint fails
+      });
+  }, [trailerKey]);
+
+  // Handle window resizing to toggle video playback on mobile
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Restart playback and reload video when movie, trailerKey, or isCached changes
   React.useEffect(() => {
     setPlaying(true);
-    if (videoRef.current) {
+    setVideoError(false); // Reset error state when movie changes
+    if (isCached && videoRef.current && !isMobile) {
       videoRef.current.load();
       videoRef.current.play().catch(() => {});
     }
-  }, [movie.id, trailerKey]);
+  }, [movie.id, trailerKey, isCached, isMobile]);
 
   function togglePlayback() {
     const nextPlaying = !playing;
@@ -799,24 +833,73 @@ function TrailerFrame({ movie }: { movie: Movie }) {
 
   return (
     <div className="trailer-frame">
-      {trailerKey ? (
+      {trailerKey && !isMobile ? (
+        isCached === null ? (
+          <div className="trailer-loading" style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#94a3b8" }}>
+            <Loader2 className="spin" size={24} />
+          </div>
+        ) : (!isCached || videoError) ? (
+          <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", pointerEvents: "none" }}>
+            <iframe
+              src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&loop=1&playlist=${trailerKey}&controls=0&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&fs=0`}
+              title="Movie Trailer Fallback"
+              frameBorder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              style={{
+                position: "absolute",
+                top: "-15%",
+                left: "-15%",
+                width: "130%",
+                height: "130%",
+                objectFit: "cover",
+                display: "block",
+                border: "none",
+                opacity: showFallbackIframe ? 1 : 0,
+                transition: "opacity 0.8s ease-in-out",
+              }}
+            />
+            <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", zIndex: 10, background: "transparent" }} />
+            <img
+              src={backdropUrl(movie.poster_path)}
+              alt=""
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                zIndex: 5,
+                opacity: showFallbackIframe ? 0 : 1,
+                transition: "opacity 0.8s ease-in-out",
+                pointerEvents: "none",
+              }}
+            />
+          </div>
+        ) : (
+          <>
+            <video
+              ref={videoRef}
+              src={videoSrc}
+              autoPlay
+              muted
+              loop
+              playsInline
+              poster={backdropUrl(movie.poster_path)}
+              onError={() => setVideoError(true)}
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+            />
+            <div className="trailer-overlay" />
+          </>
+        )
+      ) : (
         <>
-          <video
-            ref={videoRef}
-            src={videoSrc}
-            autoPlay
-            muted
-            loop
-            playsInline
-            poster={backdropUrl(movie.poster_path)}
-            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-          />
+          <img src={backdropUrl(movie.poster_path)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
           <div className="trailer-overlay" />
         </>
-      ) : (
-        <img src={backdropUrl(movie.poster_path)} alt="" />
       )}
-      {trailerKey && (
+      {trailerKey && isCached && !videoError && !isMobile && (
         <button className="video-toggle" type="button" onClick={togglePlayback} aria-label={playing ? "Pause trailer" : "Play trailer"}>
           <span className="visually-hidden">{playing ? "Pause trailer" : "Play trailer"}</span>
         </button>
@@ -825,32 +908,127 @@ function TrailerFrame({ movie }: { movie: Movie }) {
   );
 }
 
-function MovieDialog({ movie, onClose }: { movie: Movie; onClose: () => void }) {
+function RatingCircle({ score }: { score: string }) {
+  const numScore = score === "NR" ? 0 : Number(score) || 0;
+  const percent = numScore * 10;
+  const radius = 18;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (percent / 100) * circumference;
+
+  let strokeColor = "var(--danger)";
+  if (numScore >= 7) strokeColor = "var(--success)";
+  else if (numScore >= 5) strokeColor = "var(--warn)";
+
+  return (
+    <div className="modern-rating-badge" aria-label={score === "NR" ? "Not Rated" : `Rating ${score} out of 10`}>
+      <svg className="rating-svg" viewBox="0 0 44 44">
+        <circle
+          className="rating-track"
+          cx="22"
+          cy="22"
+          r={radius}
+          fill="transparent"
+          stroke="rgba(255, 255, 255, 0.08)"
+          strokeWidth="3"
+        />
+        {score !== "NR" && (
+          <circle
+            className="rating-fill"
+            cx="22"
+            cy="22"
+            r={radius}
+            fill="transparent"
+            stroke={strokeColor}
+            strokeWidth="3"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            strokeLinecap="round"
+            transform="rotate(-90 22 22)"
+          />
+        )}
+      </svg>
+      <div className="rating-value">
+        <span>{score}</span>
+      </div>
+    </div>
+  );
+}
+
+function formatDate(dateStr?: string | null): string {
+  if (!dateStr) return "";
+  try {
+    const parts = dateStr.split("-");
+    if (parts.length === 3) {
+      const year = parts[0];
+      const monthIndex = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      const months = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+      ];
+      if (monthIndex >= 0 && monthIndex < 12) {
+        return `${months[monthIndex]} ${day}, ${year}`;
+      }
+    }
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      return date.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+  } catch {
+    // fallback
+  }
+  return dateStr;
+}
+
+export function MovieDialog({
+  movie,
+  onClose,
+  feedback,
+  onFeedback,
+}: {
+  movie: Movie;
+  onClose: () => void;
+  feedback?: "positive" | "negative";
+  onFeedback?: (movie: Movie, value: "positive" | "negative") => void;
+}) {
   const director = directorLabel(movie);
   const cast = movie.cast || "";
-  const genres = compactGenres(movie.genres);
-  const primaryGenre = genres.split("/")[0]?.trim() || "Catalog";
+  const genreList = movie.genres
+    ? movie.genres.split(/[,|]/).map((g) => g.trim()).filter(Boolean)
+    : [];
   const runtime = movie.runtime ? `${movie.runtime} min` : "";
-  const meta = [movieYear(movie), runtime, primaryGenre].filter(Boolean).join(" | ");
   const overview = movie.overview || "No overview is available for this title.";
-  const shortOverview = overview.length > 240 ? `${overview.slice(0, 240).replace(/\s+\S*$/, "")}...` : overview;
   const explanation = movie.explanation_text || movieReasons(movie).join(" | ");
   const rating = movieScore(movie);
-  const scorePercent = ratingPercent(movie);
-  const ratingColor = Number(movie.vote_average || 0) >= 7 ? "#21d07a" : Number(movie.vote_average || 0) >= 5 ? "#d2d531" : "#db2360";
-  // Accessibility: ref for focus management
+
+  // Masterpiece States
+  const [activeTab, setActiveTab] = React.useState<"overview" | "credits" | "insights">("overview");
+  const [userRating, setUserRating] = React.useState(0);
+  const [hoverRating, setHoverRating] = React.useState(0);
+  const [inWatchlist, setInWatchlist] = React.useState(false);
+  const [toast, setToast] = React.useState("");
+
   const dialogRef = React.useRef<HTMLElement>(null);
   const previousFocusRef = React.useRef<HTMLElement | null>(null);
+
+  const showToast = React.useCallback((msg: string) => {
+    setToast(msg);
+  }, []);
+
+  React.useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(""), 2200);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   React.useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
     }
-    // Save the element that had focus before the dialog opened
     previousFocusRef.current = document.activeElement as HTMLElement | null;
     document.body.classList.add("modal-open");
     window.addEventListener("keydown", onKeyDown);
-    // Move focus into the dialog so screen readers announce it
     const firstFocusable = dialogRef.current?.querySelector<HTMLElement>(
       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
     );
@@ -858,7 +1036,6 @@ function MovieDialog({ movie, onClose }: { movie: Movie; onClose: () => void }) 
     return () => {
       document.body.classList.remove("modal-open");
       window.removeEventListener("keydown", onKeyDown);
-      // Restore focus to the element that triggered the dialog
       previousFocusRef.current?.focus();
     };
   }, [onClose]);
@@ -871,9 +1048,12 @@ function MovieDialog({ movie, onClose }: { movie: Movie; onClose: () => void }) 
         if (event.target === event.currentTarget) onClose();
       }}
     >
+      <div className="dialog-glow-aura" style={{ '--movie-backdrop': `url(${backdropUrl(movie.poster_path)})` } as React.CSSProperties} />
+
       <section ref={dialogRef} className="movie-dialog" role="dialog" aria-modal="true" aria-label={`${movie.title} details`}>
+        <div className="mobile-sheet-handle" style={{ width: "36px", height: "5px", background: "rgba(255, 255, 255, 0.15)", borderRadius: "10px", margin: "12px auto 0 auto", display: "none" }} />
         <button className="dialog-close" type="button" aria-label="Close movie details" onClick={onClose}>
-          <X size={24} />
+          <X size={20} />
         </button>
 
         <div className="dialog-media">
@@ -881,53 +1061,278 @@ function MovieDialog({ movie, onClose }: { movie: Movie; onClose: () => void }) 
         </div>
 
         <div className="dialog-content">
-          <div className="dialog-title-row">
-            <h2>{movie.title}</h2>
-            <div
-              className="rating-circle"
-              style={
-                {
-                  "--rating-percent": scorePercent,
-                  "--rating-color": ratingColor,
-                } as React.CSSProperties
-              }
-              aria-label={`Rating ${rating} out of 10`}
+          <div className="dialog-tabs-header">
+            <button
+              type="button"
+              className={`dialog-tab-btn ${activeTab === "overview" ? "active" : ""}`}
+              onClick={() => setActiveTab("overview")}
             >
-              <span>{rating}</span>
-            </div>
+              Overview
+            </button>
+            <button
+              type="button"
+              className={`dialog-tab-btn ${activeTab === "credits" ? "active" : ""}`}
+              onClick={() => setActiveTab("credits")}
+            >
+              Details & Cast
+            </button>
+            <button
+              type="button"
+              className={`dialog-tab-btn ${activeTab === "insights" ? "active" : ""}`}
+              onClick={() => setActiveTab("insights")}
+            >
+              AI & Match
+            </button>
           </div>
 
-          <div className="dialog-meta">{meta}</div>
-          <p className="dialog-overview">{shortOverview}</p>
+          <div className="dialog-grid">
+            <div className="dialog-main">
+              <div className="dialog-title-row">
+                <h2>{movie.title}</h2>
+                <RatingCircle score={rating} />
+              </div>
 
-          {explanation && (
-            <div className="dialog-explanation">
-              <strong>CineBot Vibe Check:</strong> {explanation}
-            </div>
-          )}
-
-          {(director || cast) && (
-            <div className="dialog-credits">
-              {director && (
-                <span>
-                  Directed by <strong>{director}</strong>
+              <div className="dialog-meta-row">
+                <span className="meta-badge">
+                  <Calendar size={14} />
+                  <span>{movieYear(movie)}</span>
                 </span>
+                {runtime && (
+                  <span className="meta-badge">
+                    <Clock3 size={14} />
+                    <span>{runtime}</span>
+                  </span>
+                )}
+                {genreList.map((g) => (
+                  <span key={g} className="meta-badge genre">
+                    <Film size={14} />
+                    <span>{g}</span>
+                  </span>
+                ))}
+              </div>
+
+              {activeTab === "overview" && (
+                <>
+                  <p className="dialog-overview">{overview}</p>
+                  {explanation && (
+                    <div className="dialog-vibe-card">
+                      <div className="vibe-header">
+                        <div className="vibe-title">
+                          <Sparkles size={14} className="vibe-sparkle" />
+                          <span>CineBot Vibe Check</span>
+                        </div>
+                        <span className="vibe-tag">AI Insights</span>
+                      </div>
+                      <p className="vibe-text">{explanation}</p>
+                    </div>
+                  )}
+                </>
               )}
-              {cast && (
-                <span>
-                  Cast: <strong>{cast}</strong>
-                </span>
+
+              {activeTab === "credits" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                  {(director || cast || movie.release_date || movie.popularity || movie.vote_count) ? (
+                    <div className="credits-tab-grid" style={{ display: "grid", gridTemplateColumns: "1fr", gap: "12px" }}>
+                      {director && (
+                        <div className="detail-item">
+                          <span className="detail-label">Director</span>
+                          <span className="detail-value" style={{ fontSize: "0.9rem", color: "#fff", fontWeight: "600" }}>{director}</span>
+                        </div>
+                      )}
+                      {cast && (
+                        <div className="detail-item">
+                          <span className="detail-label">Cast</span>
+                          <span className="detail-value" style={{ fontSize: "0.9rem", color: "#cbd5e1" }}>{cast}</span>
+                        </div>
+                      )}
+                      {movie.release_date && (
+                        <div className="detail-item">
+                          <span className="detail-label">Released</span>
+                          <span className="detail-value" style={{ fontSize: "0.9rem", color: "#fff" }}>{formatDate(movie.release_date)}</span>
+                        </div>
+                      )}
+                      {movie.popularity !== undefined && movie.popularity !== null && (
+                        <div className="detail-item">
+                          <span className="detail-label">Popularity Score</span>
+                          <span className="detail-value" style={{ fontSize: "0.9rem", color: "#fff" }}>{Number(movie.popularity).toFixed(1)}</span>
+                        </div>
+                      )}
+                      {movie.vote_count !== undefined && movie.vote_count !== null && movie.vote_count > 0 && (
+                        <div className="detail-item">
+                          <span className="detail-label">Vote Count</span>
+                          <span className="detail-value" style={{ fontSize: "0.9rem", color: "#fff" }}>{movie.vote_count.toLocaleString()} votes</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ color: "var(--quiet)", fontSize: "0.85rem" }}>No cast or crew details are available for this catalog item.</div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === "insights" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                  {(movie.similarity_score !== undefined && movie.similarity_score !== null) ? (
+                    <div style={{
+                      padding: "20px",
+                      background: "rgba(6, 182, 212, 0.04)",
+                      border: "1px solid rgba(6, 182, 212, 0.15)",
+                      borderRadius: "16px",
+                      boxShadow: "0 8px 32px rgba(6, 182, 212, 0.04)"
+                    }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.8rem", fontWeight: "900", textTransform: "uppercase", letterSpacing: "1px", color: "var(--cyan)" }}>
+                          <Activity size={16} />
+                          <span>Algorithm Insights</span>
+                        </div>
+                        <span style={{ fontSize: "0.72rem", background: "rgba(6, 182, 212, 0.1)", color: "#22d3ee", padding: "4px 10px", borderRadius: "20px", fontWeight: "800", border: "1px solid rgba(6, 182, 212, 0.1)" }}>
+                          {Math.max(1, Math.min(99, Math.round(Number(movie.similarity_score) <= 1 ? Number(movie.similarity_score) * 100 : Number(movie.similarity_score))))}% Similarity Match
+                        </span>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", fontSize: "0.84rem", color: "var(--muted)" }}>
+                        {movie.retrieval_stage && (
+                          <div>
+                            Retrieval Stage
+                            <div style={{ color: "#fff", fontWeight: "600", fontSize: "0.9rem", marginTop: "4px" }}>{movie.retrieval_stage}</div>
+                          </div>
+                        )}
+                        {movie.quality_bucket && (
+                          <div>
+                            Quality Bucket
+                            <div style={{ color: "#fff", fontWeight: "600", fontSize: "0.9rem", marginTop: "4px" }}>{movie.quality_bucket}</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{
+                      padding: "20px",
+                      background: "rgba(255, 255, 255, 0.02)",
+                      border: "1px solid rgba(255, 255, 255, 0.05)",
+                      borderRadius: "16px",
+                      color: "var(--muted)",
+                      fontSize: "0.86rem"
+                    }}>
+                      No recommendations similarity scores or retrieval trace logs are stored for this title.
+                    </div>
+                  )}
+                </div>
               )}
             </div>
-          )}
 
-          {movie.trailer_key && (
-            <a className="dialog-trailer" href={`https://www.youtube.com/watch?v=${movie.trailer_key}`} target="_blank" rel="noreferrer">
-              <Play size={16} />
-              Open trailer
-            </a>
-          )}
+            <div className="dialog-sidebar">
+              {onFeedback && (
+                <div className="sidebar-section">
+                  <h3>My Vibe</h3>
+                  <div className="dialog-feedback-actions">
+                    <button
+                      type="button"
+                      className={`feedback-btn thumbs-up ${feedback === "positive" ? "active" : ""}`}
+                      onClick={() => {
+                        onFeedback(movie, "positive");
+                        showToast("Marked as Liked!");
+                      }}
+                      aria-label="Thumbs up"
+                    >
+                      <ThumbsUp size={16} />
+                      <span>Like</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`feedback-btn thumbs-down ${feedback === "negative" ? "active" : ""}`}
+                      onClick={() => {
+                        onFeedback(movie, "negative");
+                        showToast("Marked as Disliked.");
+                      }}
+                      aria-label="Thumbs down"
+                    >
+                      <ThumbsDown size={16} />
+                      <span>Dislike</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="sidebar-section">
+                <h3>My Rating</h3>
+                <div className="star-rating-container">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      className={`star-btn ${star <= (hoverRating || userRating) ? "filled" : ""}`}
+                      onMouseEnter={() => setHoverRating(star)}
+                      onMouseLeave={() => setHoverRating(0)}
+                      onClick={() => {
+                        setUserRating(star);
+                        showToast(`Rated ${star} Star${star > 1 ? "s" : ""}!`);
+                      }}
+                      aria-label={`Rate ${star} stars`}
+                    >
+                      <Star size={20} fill={star <= (hoverRating || userRating) ? "currentColor" : "none"} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="sidebar-section">
+                <h3>Collection</h3>
+                <div className="sidebar-actions-grid">
+                  <button
+                    type="button"
+                    className={`action-pill-btn ${inWatchlist ? "active" : ""}`}
+                    onClick={() => {
+                      setInWatchlist(!inWatchlist);
+                      showToast(inWatchlist ? "Removed from Watchlist" : "Saved to Watchlist!");
+                    }}
+                  >
+                    <Bookmark size={15} fill={inWatchlist ? "currentColor" : "none"} />
+                    <span>{inWatchlist ? "Watchlisted" : "Watchlist"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="action-pill-btn"
+                    onClick={() => {
+                      try {
+                        navigator.clipboard.writeText(window.location.href);
+                        showToast("Copied link to clipboard!");
+                      } catch {
+                        showToast("Failed to copy link.");
+                      }
+                    }}
+                  >
+                    <Share2 size={15} />
+                    <span>Share</span>
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "100%" }}>
+                {movie.trailer_key && (
+                  <a className="dialog-action-btn primary" href={`https://www.youtube.com/watch?v=${movie.trailer_key}`} target="_blank" rel="noreferrer">
+                    <Play size={16} fill="currentColor" />
+                    <span>Play Trailer</span>
+                  </a>
+                )}
+                <a
+                  className="dialog-action-btn secondary"
+                  href={`https://www.google.com/search?q=${encodeURIComponent(movie.title + " " + movieYear(movie) + " movie")}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <span>Search Google</span>
+                </a>
+              </div>
+            </div>
+          </div>
         </div>
+
+        {toast && (
+          <div className="dialog-toast">
+            <Sparkles size={14} />
+            <span>{toast}</span>
+          </div>
+        )}
       </section>
     </div>
   );
@@ -1188,6 +1593,30 @@ function App() {
   const [latestLoading, setLatestLoading] = React.useState(false);
   const [homeMode, setHomeMode] = React.useState<"foryou" | "latest" | "trending">(() => loadRecentMovies().length > 0 ? "foryou" : "trending");
   const [sessionId] = React.useState(() => getSessionId());
+  const [isMobileViewport, setIsMobileViewport] = React.useState(() => typeof window !== "undefined" ? window.innerWidth <= 768 : false);
+  const [isMobileSimulated, setIsMobileSimulated] = React.useState(false);
+  const [showMoreDrawer, setShowMoreDrawer] = React.useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
+
+  React.useEffect(() => {
+    function handleInstallPrompt(e: Event) {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    }
+    window.addEventListener("beforeinstallprompt", handleInstallPrompt);
+    return () => window.removeEventListener("beforeinstallprompt", handleInstallPrompt);
+  }, []);
+
+  React.useEffect(() => {
+    function handleResize() {
+      setIsMobileViewport(window.innerWidth <= 768);
+    }
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const isMobileMode = isMobileViewport || isMobileSimulated;
   const titleSelectRef = React.useRef<HTMLDivElement>(null);
   const bootstrapped = React.useRef(false);
   const loadedPlatform = React.useRef(false);
@@ -1270,14 +1699,31 @@ function App() {
     const seeds = [155, 27205, 157336, 680, 238]; // Dark Knight, Inception, Interstellar, Pulp Fiction, Godfather
     const seedId = seeds[Math.floor(Math.random() * seeds.length)];
     try {
-      const response = await getRecommendations(seedId, 8);
+      // Use a short timeout (4.5s) for the initial home showcase load to avoid screen hangs if backend is warming up
+      const response = await getRecommendations(seedId, 8, 4500);
       const movies = dedupeMovies(response.data.recommendations || []).slice(0, 8);
       setBackend(response.baseUrl);
       setHomeMovies(movies);
       setHomeHeroIndex(0);
+      setCatalogState("ready");
       if (movies.length === 0) setHomeError("No movies available yet.");
     } catch (error) {
-      setHomeError(error instanceof Error ? error.message : "Movies unavailable.");
+      console.warn("Failed to load initial home showcase recommendations (warmup in progress). Falling back to search.", error);
+      try {
+        // Fall back to a simple search query that loads instantly from database, skipping ML model loads
+        const searchResponse = await searchMovies("Batman");
+        if (searchResponse.data && searchResponse.data.length > 0) {
+          const movies = dedupeMovies(searchResponse.data).slice(0, 8);
+          setBackend(searchResponse.baseUrl);
+          setHomeMovies(movies);
+          setHomeHeroIndex(0);
+          setCatalogState("ready");
+        } else {
+          setHomeError("No movies found in catalog.");
+        }
+      } catch {
+        setHomeError(error instanceof Error ? error.message : "Movies unavailable during warmup.");
+      }
     } finally {
       setHomeLoading(false);
     }
@@ -1320,6 +1766,7 @@ function App() {
         setLatestMovies(dedupeMovies(movies).slice(0, 8));
         setHomeHeroIndex(0);
       }
+      setCatalogState("ready");
     } catch { /* silent fallback */ }
     finally { setLatestLoading(false); }
   }
@@ -1475,7 +1922,6 @@ function App() {
   }, [catalogState]);
 
   React.useEffect(() => {
-    if (mode !== "title") return;
     const query = titleQuery.trim();
     if (!query) {
       setResults([]);
@@ -1486,9 +1932,10 @@ function App() {
       return;
     }
 
+    const delay = mode === "semantic" ? 1000 : 300;
     const timer = window.setTimeout(() => {
-      void runSearch("title");
-    }, 300);
+      void runSearch(mode);
+    }, delay);
 
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1513,6 +1960,7 @@ function App() {
       setTitleQuery(selectTitleLabel(result.data));
       setTitleSelectOpen(false);
       selectMovie(result.data, "title_search", options.track ?? true);
+      setCatalogState("ready");
       setNotice("Title ready");
       if (options.autoRecommend) {
         void recommend(result.data);
@@ -1557,6 +2005,7 @@ function App() {
       } else {
         setSelectedMovie(null);
       }
+      setCatalogState("ready");
       setNotice(`${movies.length} matches`);
     } catch (error) {
       setCatalogState("error");
@@ -1581,6 +2030,7 @@ function App() {
       setFeedbackByMovieId({});
       setFeedbackNotice("");
       setLastRecommendationRequestId(response.data.request_id || null);
+      setCatalogState("ready");
       setNotice(`${recommendations.length} recommendations ranked`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Recommendations unavailable");
@@ -1664,6 +2114,449 @@ function App() {
   }
   if (page === "status") {
     return <StatusPage />;
+  }
+
+  // ── App Shell Pages (Browse, Search, Dashboard, KG, Eval, Profile, Admin) ─
+  if (isAppPage && isMobileMode) {
+    const mobileContent = (
+      <div className="iphone-screen">
+        <div className="mobile-screen-orb" />
+
+        {/* Simplified Sticky Header */}
+        <header className="topbar" style={{ position: "sticky", top: 0, width: "100%", zIndex: 100 }}>
+          <button className="brand-logo" type="button" onClick={openHome} style={{ fontSize: "1.3rem" }}>NOVA</button>
+          <div className="topbar-right" style={{ gap: "12px" }}>
+            <StatusBadge state={catalogState} backend={backend} />
+            {username ? (
+              <button className="profile-btn" type="button" onClick={() => setPage("profile")} style={{ padding: "6px 12px" }}>
+                <strong>{username}</strong>
+              </button>
+            ) : (
+              <button className="signin-nav-btn" type="button" onClick={() => setShowAuthModal(true)}>
+                Sign In
+              </button>
+            )}
+          </div>
+        </header>
+
+        {/* Content Area */}
+        <div className="mobile-shell-content">
+          {page === "home" && (
+            <HomePage
+              movies={homeMovies}
+              heroIndex={homeHeroIndex}
+              loading={homeLoading}
+              error={homeError}
+              onHeroIndex={setHomeHeroIndex}
+              onOpenMovie={setDialogMovie}
+              recentMovies={recentMovies}
+              forYouMovies={forYouMovies}
+              forYouLoading={forYouLoading}
+              latestMovies={latestMovies}
+              latestLoading={latestLoading}
+              homeMode={homeMode}
+              onToggleMode={setHomeMode}
+            />
+          )}
+
+          {page === "search" && (
+            <main className="search-page-layout">
+              {/* Metrics strip in 2x2 grid */}
+              <section className="metrics-strip" aria-label="Platform snapshot" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", marginBottom: "16px" }}>
+                <MetricTile icon={<Database size={14} />} label="Catalog" value={catalogValue ? catalogValue.toLocaleString() : "Loading"} />
+                <MetricTile icon={<Server size={14} />} label="Readiness" value={readinessLabel(readinessReport)} />
+                <MetricTile icon={<Gauge size={14} />} label="Quality" value={qualityLabel(qualityReport)} />
+                <MetricTile icon={<Activity size={14} />} label="Artifacts" value={healthLabel(artifactReport)} />
+              </section>
+
+              <section className="workspace" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div className="control-panel" style={{ padding: "16px", borderRadius: "16px" }}>
+                  <div className="title-select" ref={titleSelectRef}>
+                    <div className="search-box title-select-box" style={{ padding: "4px 8px" }}>
+                      {mode === "semantic" ? <Sparkles size={16} className="mode-icon-semantic" /> : <Search size={16} />}
+                      <input
+                        id="title-search"
+                        value={titleQuery}
+                        onChange={(event) => {
+                          userStarted.current = true;
+                          setMode(mode);
+                          setTitleQuery(event.target.value);
+                          setTitleSelectOpen(true);
+                          if (selectedMovie && event.target.value !== selectedTitleLabel) {
+                            setSelectedMovie(null);
+                            setResults([]);
+                            setResultsKind("idle");
+                            setRecommendationSource(null);
+                            setDialogMovie(null);
+                            setLastRecommendationRequestId(null);
+                          }
+                        }}
+                        onFocus={() => setTitleSelectOpen(true)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") {
+                            setTitleSelectOpen(false);
+                            return;
+                          }
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            setTitleSelectOpen(false);
+                            void runSearch(mode);
+                          }
+                        }}
+                        placeholder={mode === "title" ? "Movie title..." : "Plot, mood..."}
+                        style={{ fontSize: "0.82rem" }}
+                      />
+                      <button
+                        className={`mode-toggle-btn ${mode === "semantic" ? "semantic-active" : ""}`}
+                        type="button"
+                        onClick={() => setMode(mode === "title" ? "semantic" : "title")}
+                        style={{ padding: "4px 8px", fontSize: "0.75rem" }}
+                      >
+                        {mode === "semantic" ? <Sparkles size={12} /> : <Search size={12} />}
+                      </button>
+                    </div>
+
+                    {showTitleSuggestions && mode === "title" && (
+                      <div className="title-list" style={{ maxHeight: "200px" }}>
+                        {filteredTitles.slice(0, 8).map((item) => (
+                          <button
+                            type="button"
+                            key={`${item.id}-${item.title}`}
+                            onClick={() => void chooseTitle(item, { autoRecommend: true })}
+                            style={{ fontSize: "0.82rem", padding: "8px 12px" }}
+                          >
+                            {item.title}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="result-panel">
+                  {selectedMovie && !isEditingTitle ? (
+                    <MovieSpotlight
+                      movie={selectedMovie}
+                      loading={loadingRecs}
+                      onRecommend={() => void recommend()}
+                      userId={username}
+                      sessionId={sessionId}
+                    />
+                  ) : null}
+
+                  {isSearching || loadingRecs ? (
+                    <div style={{ display: "flex", justifyContent: "center", padding: "40px" }}>
+                      <Loader2 className="spin" size={28} style={{ color: "var(--accent)" }} />
+                    </div>
+                  ) : results.length > 0 ? (
+                    <section className="results-section">
+                      <div className="section-title" style={{ fontSize: "0.95rem", margin: "12px 0 6px" }}>
+                        <h2>{resultsKind === "recommendations" ? "Similar Movies" : "Search Results"}</h2>
+                      </div>
+                      <div className="poster-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "10px" }}>
+                        {results.map((movie, index) => (
+                          <RecommendationCard
+                            key={`${movie.id}-${movie.title}`}
+                            movie={movie}
+                            rank={index + 1}
+                            onSelect={selectResultMovie}
+                            feedback={feedbackByMovieId[movie.id]}
+                            onFeedback={recordFeedback}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  ) : (
+                    /* Show trending keywords and popular searches on mobile search if empty */
+                    !selectedMovie && (
+                      <div className="search-suggestions" style={{ marginTop: "16px" }}>
+                        <div style={{ marginBottom: "20px" }}>
+                          <span style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Intent filter</span>
+                          <h3 style={{ fontSize: "0.95rem", color: "#fff", fontWeight: 700, margin: "2px 0 10px", fontFamily: "var(--font-headline)" }}>Trending Searches</h3>
+                          <div className="search-tags" style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                            {["Batman", "Godfather", "Inception", "Sci-Fi", "Action", "Thriller"].map((tag) => (
+                              <button
+                                key={tag}
+                                className="suggestion-tag-btn"
+                                type="button"
+                                onClick={() => {
+                                  setTitleQuery(tag);
+                                  void runSearch("title", tag);
+                                }}
+                              >
+                                {tag}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {latestMovies.length > 0 && (
+                          <div>
+                            <div className="section-title" style={{ fontSize: "0.95rem", margin: "16px 0 10px" }}>
+                              <h2>Popular Searches</h2>
+                            </div>
+                            <div className="poster-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "12px" }}>
+                              {latestMovies.slice(0, 4).map((movie) => (
+                                <button
+                                  type="button"
+                                  key={`mobile-popular-${movie.id}`}
+                                  className="popular-search-card"
+                                  onClick={() => {
+                                    setTitleQuery(selectTitleLabel(movie));
+                                    selectMovie(movie, "title_search");
+                                    void recommend(movie);
+                                  }}
+                                  style={{
+                                    background: "rgba(255,255,255,0.02)",
+                                    border: "1px solid rgba(255,255,255,0.05)",
+                                    borderRadius: "16px",
+                                    padding: "10px",
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: "8px",
+                                    textAlign: "left",
+                                    transition: "all 0.2s ease"
+                                  }}
+                                >
+                                  <img
+                                    src={posterUrl(movie.poster_path)}
+                                    alt={movie.title}
+                                    style={{ width: "100%", aspectRatio: "2/3", objectFit: "cover", borderRadius: "10px" }}
+                                  />
+                                  <div style={{ display: "flex", flexDirection: "column", gap: "2px", overflow: "hidden" }}>
+                                    <strong style={{ fontSize: "0.8rem", color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{movie.title}</strong>
+                                    <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>{movieYear(movie)}</span>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  )}
+                </div>
+              </section>
+            </main>
+          )}
+
+          {page === "dashboard" && <main className="app-shell inner-shell"><ErrorBoundary><Dashboard /></ErrorBoundary></main>}
+          {page === "knowledge-graph" && <main className="app-shell inner-shell"><ErrorBoundary><KnowledgeGraphPage titles={titles} /></ErrorBoundary></main>}
+          {page === "evaluation" && <main className="app-shell inner-shell"><ErrorBoundary><EvaluationPage /></ErrorBoundary></main>}
+          {page === "profile" && (
+            <main className="app-shell inner-shell">
+              <ErrorBoundary>
+                <UserProfilePage
+                  token={token}
+                  username={username}
+                  onRequestLogin={() => setShowAuthModal(true)}
+                  onSelectMovie={(movie) => { setDialogMovie(movie); }}
+                />
+              </ErrorBoundary>
+            </main>
+          )}
+          {page === "admin" && <main className="app-shell inner-shell"><ErrorBoundary><AdminPanel token={token} /></ErrorBoundary></main>}
+        </div>
+
+        {/* Bottom Navigation Bar */}
+        <nav className="mobile-nav-bar" aria-label="Mobile navigation">
+          <button
+            className={`mobile-nav-tab ${page === "home" ? "active" : ""}`}
+            type="button"
+            onClick={() => { openHome(); setShowMoreDrawer(false); }}
+          >
+            <Film size={20} />
+            <span>Browse</span>
+          </button>
+          <button
+            className={`mobile-nav-tab ${page === "search" ? "active" : ""}`}
+            type="button"
+            onClick={() => { openSearch(); setShowMoreDrawer(false); }}
+          >
+            <Search size={20} />
+            <span>Search</span>
+          </button>
+          <button
+            className={`mobile-nav-tab ${page === "knowledge-graph" ? "active" : ""}`}
+            type="button"
+            onClick={() => { setPage("knowledge-graph"); setShowMoreDrawer(false); }}
+          >
+            <Network size={20} />
+            <span>Graph</span>
+          </button>
+          <button
+            className={`mobile-nav-tab ${page === "evaluation" ? "active" : ""}`}
+            type="button"
+            onClick={() => { setPage("evaluation"); setShowMoreDrawer(false); }}
+          >
+            <BarChart3 size={20} />
+            <span>Eval</span>
+          </button>
+          <button
+            className={`mobile-nav-tab ${["dashboard", "profile", "admin"].includes(page) ? "active" : ""}`}
+            type="button"
+            onClick={() => setShowMoreDrawer(true)}
+          >
+            <MoreHorizontal size={20} />
+            <span>More</span>
+          </button>
+        </nav>
+
+        {/* Slide-up bottom sheet drawer for "More" options */}
+        {showMoreDrawer && (
+          <div className="mobile-bottom-sheet-overlay" onClick={() => setShowMoreDrawer(false)} role="presentation">
+            {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/click-events-have-key-events */}
+            <div className="mobile-bottom-sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="More navigation options">
+              <div className="sheet-handle" />
+              <h3 className="sheet-title">More Options</h3>
+              <div className="sheet-links">
+                {username && (
+                  <button
+                    className="sheet-link-btn"
+                    type="button"
+                    onClick={() => { setPage("profile"); setShowMoreDrawer(false); }}
+                  >
+                    <User size={18} />
+                    <span>My Profile</span>
+                  </button>
+                )}
+                <button
+                  className="sheet-link-btn"
+                  type="button"
+                  onClick={() => { setPage("dashboard"); setShowMoreDrawer(false); }}
+                >
+                  <Activity size={18} />
+                  <span>System Dashboard</span>
+                </button>
+                {username === "admin" && (
+                  <button
+                    className="sheet-link-btn"
+                    type="button"
+                    onClick={() => { setPage("admin"); setShowMoreDrawer(false); }}
+                  >
+                    <Server size={18} />
+                    <span>Admin Panel</span>
+                  </button>
+                )}
+                <button
+                  className="sheet-link-btn"
+                  type="button"
+                  onClick={() => { setPage("status"); setShowMoreDrawer(false); }}
+                >
+                  <Database size={18} />
+                  <span>System Status</span>
+                </button>
+                <button
+                  className="sheet-link-btn"
+                  type="button"
+                  onClick={async () => {
+                    if (deferredPrompt) {
+                      deferredPrompt.prompt();
+                      const { outcome } = await deferredPrompt.userChoice;
+                      if (outcome === "accepted") {
+                        setDeferredPrompt(null);
+                      }
+                    } else {
+                      window.alert("To install this app on your phone:\n\n1. Tap the Share button in your mobile browser.\n2. Select 'Add to Home Screen'.\n3. Launch Nova directly from your home screen!");
+                    }
+                    setShowMoreDrawer(false);
+                  }}
+                  style={{ background: "rgba(16, 185, 129, 0.08)", borderColor: "rgba(16, 185, 129, 0.2)", color: "#34d399" }}
+                >
+                  <Sparkles size={18} />
+                  <span>Download / Install App</span>
+                </button>
+
+                {isMobileSimulated && !isMobileViewport && (
+                  <button
+                    className="sheet-link-btn"
+                    type="button"
+                    onClick={() => { setIsMobileSimulated(false); setShowMoreDrawer(false); }}
+                    style={{ border: "1px dashed rgba(167, 139, 250, 0.4)", color: "#a78bfa" }}
+                  >
+                    <Play size={18} />
+                    <span>Exit Mobile Simulator</span>
+                  </button>
+                )}
+
+                {username ? (
+                  <button
+                    className="sheet-link-btn logout"
+                    type="button"
+                    onClick={() => {
+                      window.localStorage.removeItem("nova_jwt_token");
+                      window.localStorage.removeItem("nova_username");
+                      setToken(null);
+                      setUsername(null);
+                      setShowMoreDrawer(false);
+                      openHome();
+                    }}
+                  >
+                    <LogOut size={18} />
+                    <span>Sign Out</span>
+                  </button>
+                ) : (
+                  <button
+                    className="sheet-link-btn"
+                    type="button"
+                    onClick={() => { setShowAuthModal(true); setShowMoreDrawer(false); }}
+                    style={{ background: "var(--accent)" }}
+                  >
+                    <User size={18} />
+                    <span>Sign In</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {dialogMovie && (
+          <MovieDialog
+            movie={dialogMovie}
+            feedback={feedbackByMovieId[dialogMovie.id]}
+            onFeedback={recordFeedback}
+            onClose={() => setDialogMovie(null)}
+          />
+        )}
+        {showAuthModal && (
+          <AuthModal
+            onLogin={(tok, user) => { setToken(tok); setUsername(user); setShowAuthModal(false); }}
+            onClose={() => setShowAuthModal(false)}
+          />
+        )}
+      </div>
+    );
+
+    if (isMobileSimulated && !isMobileViewport) {
+      return (
+        <div className="phone-simulator-container">
+          <div className="simulator-controls">
+            <span className="simulator-badge">Simulator Mode</span>
+            <button className="simulator-toggle-btn" type="button" onClick={() => setIsMobileSimulated(false)}>
+              <Play size={14} style={{ transform: "rotate(180deg)" }} />
+              Back to Widescreen
+            </button>
+          </div>
+          <div className="iphone-mockup">
+            <div className="dynamic-island" />
+            <div className="simulator-status-bar">
+              <span>9:41</span>
+              <div className="status-bar-right" style={{ display: "flex", gap: "4px" }}>
+                <Server size={10} />
+                <Activity size={10} />
+                <Database size={10} />
+              </div>
+            </div>
+            {mobileContent}
+            <div className="home-indicator" />
+          </div>
+        </div>
+      );
+    }
+
+    return mobileContent;
   }
 
   // ── App Shell Pages (Browse, Search, Dashboard, KG, Eval, Profile, Admin) ─
@@ -1808,10 +2701,25 @@ function App() {
             >
               <RefreshCw size={16} />
             </button>
+            {!isMobileViewport && (
+              <button
+                className="icon-button"
+                type="button"
+                onClick={() => setIsMobileSimulated(!isMobileSimulated)}
+                title={isMobileSimulated ? "Switch to Widescreen Dashboard" : "Simulate Mobile App UI"}
+                style={{
+                  borderColor: isMobileSimulated ? "var(--secondary)" : "var(--line)",
+                  color: isMobileSimulated ? "var(--secondary)" : "var(--muted)",
+                  background: isMobileSimulated ? "rgba(236, 72, 153, 0.08)" : "var(--panel)"
+                }}
+              >
+                <Activity size={16} />
+              </button>
+            )}
             {username ? (
               <div className="user-profile-menu">
                 <button className="profile-btn" type="button" onClick={() => setPage("profile")}>
-                  <User size={14} aria-hidden="true" /> Hi, <strong>{username}</strong>
+                  <User size={14} aria-hidden="true" /> <span className="profile-greet">Hi, </span><strong>{username}</strong>
                 </button>
                 <button
                   className="logout-btn"
@@ -1868,33 +2776,61 @@ function App() {
 
               <section className="workspace">
                 <div className="control-panel">
-                  {isEmbedded && (
-                    <button
-                      type="button"
-                      className="back-button"
-                      onClick={openHome}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        padding: "8px 16px",
-                        background: "rgba(255, 255, 255, 0.05)",
-                        border: "1px solid rgba(255, 255, 255, 0.1)",
-                        borderRadius: "20px",
-                        color: "#e3e0f8",
-                        cursor: "pointer",
-                        marginBottom: "16px",
-                        fontFamily: "var(--font-label, sans-serif)",
-                        fontSize: "0.85rem",
-                        transition: "all 0.2s ease"
-                      }}
-                    >
-                      <House size={14} /> Back to Home
-                    </button>
-                  )}
+
                   <div className="control-heading">
                     <Search size={44} />
-                    <h1>{mode === "title" ? "Search & Discover" : "AI Semantic Search"}</h1>
+                    <h1>Search & Discover</h1>
+                  </div>
+
+                  <div className="search-mode-tabs" style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
+                    <button
+                      className={`search-mode-tab ${mode === "title" ? "active" : ""}`}
+                      type="button"
+                      onClick={() => {
+                        setMode("title");
+                        userStarted.current = true;
+                      }}
+                      style={{
+                        padding: "10px 20px",
+                        borderRadius: "24px",
+                        border: "1px solid " + (mode === "title" ? "rgba(99, 102, 241, 0.4)" : "rgba(255, 255, 255, 0.08)"),
+                        background: mode === "title" ? "rgba(99, 102, 241, 0.15)" : "rgba(255, 255, 255, 0.02)",
+                        color: mode === "title" ? "#a5b4fc" : "var(--muted)",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)"
+                      }}
+                    >
+                      <Search size={14} />
+                      Title Search
+                    </button>
+                    <button
+                      className={`search-mode-tab ${mode === "semantic" ? "active" : ""}`}
+                      type="button"
+                      onClick={() => {
+                        setMode("semantic");
+                        userStarted.current = true;
+                      }}
+                      style={{
+                        padding: "10px 20px",
+                        borderRadius: "24px",
+                        border: "1px solid " + (mode === "semantic" ? "rgba(167, 139, 250, 0.4)" : "rgba(255, 255, 255, 0.08)"),
+                        background: mode === "semantic" ? "rgba(167, 139, 250, 0.15)" : "rgba(255, 255, 255, 0.02)",
+                        color: mode === "semantic" ? "#c084fc" : "var(--muted)",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)"
+                      }}
+                    >
+                      <Sparkles size={14} />
+                      AI Semantic Search
+                    </button>
                   </div>
 
                   <div
@@ -1906,8 +2842,8 @@ function App() {
                       }
                     }}
                   >
-                    <div className="search-box title-select-box">
-                      {mode === "semantic" ? <Sparkles size={16} className="mode-icon-semantic" /> : <Search size={16} />}
+                    <div className="search-box title-select-box" style={{ display: "flex", alignItems: "center", width: "100%", position: "relative" }}>
+                      {mode === "semantic" ? <Sparkles size={18} className="mode-icon-semantic" style={{ color: "#a78bfa", flexShrink: 0 }} /> : <Search size={18} style={{ color: "var(--quiet)", flexShrink: 0 }} />}
                       <input
                         id="title-search"
                         value={titleQuery}
@@ -1919,10 +2855,6 @@ function App() {
                           if (selectedMovie && event.target.value !== selectedTitleLabel) {
                             setSelectedMovie(null);
                             setResults([]);
-                            setResultsKind("idle");
-                            setRecommendationSource(null);
-                            setDialogMovie(null);
-                            setLastRecommendationRequestId(null);
                           }
                         }}
                         onFocus={() => setTitleSelectOpen(true)}
@@ -1938,19 +2870,8 @@ function App() {
                           }
                         }}
                         placeholder={mode === "title" ? "Search by title, e.g. Inception..." : "Describe a plot, mood, or genre..."}
+                        style={{ marginLeft: "8px", flex: 1 }}
                       />
-                      {/* Mode Toggle Button inside Search Box */}
-                      <button
-                        className={`mode-toggle-btn ${mode === "semantic" ? "semantic-active" : ""}`}
-                        type="button"
-                        title={mode === "title" ? "Switch to AI/Plot search" : "Switch to Title search"}
-                        onClick={() => {
-                          setMode(mode === "title" ? "semantic" : "title");
-                        }}
-                      >
-                        {mode === "semantic" ? <Sparkles size={14} /> : <Search size={14} />}
-                        <span>{mode === "title" ? "Title Search" : "AI Search"}</span>
-                      </button>
                       {hasTitleQuery && (
                         <button
                           className="clear-title"
@@ -1967,17 +2888,34 @@ function App() {
                             setLastRecommendationRequestId(null);
                             setTitleSelectOpen(true);
                           }}
+                          style={{ background: "transparent", border: "none", color: "var(--muted)", cursor: "pointer", display: "grid", placeItems: "center", padding: "4px", marginRight: "8px" }}
                         >
                           <X size={16} />
                         </button>
                       )}
                       <button
-                        className="search-btn"
+                        className="search-btn-primary"
                         type="button"
                         onClick={() => runSearch(mode)}
                         aria-label="Search"
+                        style={{
+                          background: mode === "semantic" ? "linear-gradient(135deg, #a78bfa, #818cf8)" : "linear-gradient(135deg, #6366f1, #4f46e5)",
+                          color: "#fff",
+                          border: "none",
+                          borderRadius: "8px",
+                          padding: "8px 20px",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          boxShadow: "0 4px 12px rgba(99, 102, 241, 0.2)",
+                          transition: "all 0.2s ease",
+                          flexShrink: 0
+                        }}
                       >
-                        <Search size={16} />
+                        {mode === "semantic" ? <Sparkles size={14} /> : <Search size={14} />}
+                        <span>Search</span>
                       </button>
                     </div>
 
@@ -2032,7 +2970,30 @@ function App() {
                     />
                   ) : null}
 
-                  {loadingRecs ? (
+                  {isSearching ? (
+                    <section className="results-section">
+                      <div className="section-title">
+                        <div>
+                          <span>{mode === "semantic" ? "AI Semantic Search" : "Catalog Search"}</span>
+                          <h2>{mode === "semantic" ? "Searching catalog by intent..." : "Searching movie database..."}</h2>
+                        </div>
+                      </div>
+                      <div className="poster-grid">
+                        {Array.from({ length: 6 }).map((_, index) => (
+                          <div key={index} className="recommendation-card skeleton-card" style={{ height: "380px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "16px", padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                            <div className="skeleton" style={{ height: "180px", borderRadius: "12px" }}></div>
+                            <div className="skeleton" style={{ height: "24px", width: "80%", borderRadius: "6px" }}></div>
+                            <div className="skeleton" style={{ height: "16px", width: "40%", borderRadius: "4px" }}></div>
+                            <div className="skeleton" style={{ height: "48px", width: "100%", borderRadius: "8px" }}></div>
+                            <div style={{ display: "flex", gap: "8px", marginTop: "auto" }}>
+                              <div className="skeleton" style={{ height: "28px", width: "70px", borderRadius: "20px" }}></div>
+                              <div className="skeleton" style={{ height: "28px", width: "70px", borderRadius: "20px" }}></div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  ) : loadingRecs ? (
                     <section className="results-section">
                       <div className="section-title">
                         <div>
@@ -2085,12 +3046,20 @@ function App() {
                         ))}
                       </div>
                     </section>
-                  ) : results.length === 0 && titleQuery.trim() && !isSearching && !isSelecting ? (
+                  ) : results.length === 0 && resultsKind === "search" && titleQuery.trim() && !isSearching && !isSelecting ? (
                     <section className="results-section no-results">
                       <div style={{ textAlign: "center", padding: "48px 24px", color: "var(--muted)" }}>
                         <Film size={48} style={{ marginBottom: "16px", opacity: 0.5 }} />
                         <h3>No matches found for &quot;{titleQuery}&quot;</h3>
                         <p style={{ fontSize: "0.9rem" }}>Try checking your spelling or describe a plot using our AI Search mode!</p>
+                      </div>
+                    </section>
+                  ) : resultsKind === "idle" && titleQuery.trim() && !isSearching && !isSelecting ? (
+                    <section className="results-section no-results">
+                      <div style={{ textAlign: "center", padding: "48px 24px", color: "var(--muted)" }}>
+                        <Sparkles size={48} className="mode-icon-semantic" style={{ marginBottom: "16px", opacity: 0.5, color: "var(--accent)" }} />
+                        <h3>Press Enter to search by intent</h3>
+                        <p style={{ fontSize: "0.9rem" }}>Type your query and press Enter, or wait a moment for AI Search to automatically run.</p>
                       </div>
                     </section>
                   ) : !titleQuery.trim() ? (
@@ -2205,7 +3174,14 @@ function App() {
           {page === "admin" && <main className="app-shell inner-shell"><ErrorBoundary><AdminPanel token={token} /></ErrorBoundary></main>}
         </div>
 
-        {dialogMovie && <MovieDialog movie={dialogMovie} onClose={() => setDialogMovie(null)} />}
+        {dialogMovie && (
+          <MovieDialog
+            movie={dialogMovie}
+            feedback={feedbackByMovieId[dialogMovie.id]}
+            onFeedback={recordFeedback}
+            onClose={() => setDialogMovie(null)}
+          />
+        )}
         {showAuthModal && (
           <AuthModal
             onLogin={(tok, user) => { setToken(tok); setUsername(user); setShowAuthModal(false); }}
@@ -2219,8 +3195,11 @@ function App() {
   return null;
 }
 
-createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+const rootElement = document.getElementById("root");
+if (rootElement) {
+  createRoot(rootElement).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>,
+  );
+}

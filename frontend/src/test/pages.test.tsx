@@ -6,7 +6,7 @@
  */
 
 import React from "react";
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom";
 
@@ -75,7 +75,7 @@ describe("Dashboard", () => {
 
   it("renders the Tier 1 badge", () => {
     render(<Dashboard />);
-    expect(screen.getByText(/tier 1/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Serving tier: Tier 1 — Enterprise")).toBeInTheDocument();
   });
 
   it("renders GPU available chip", () => {
@@ -85,7 +85,8 @@ describe("Dashboard", () => {
 
   it("renders RAM value", () => {
     render(<Dashboard />);
-    expect(screen.getByText(/32\.0 GB/i)).toBeInTheDocument();
+    const hardwareProfile = screen.getByLabelText("Hardware profile");
+    expect(within(hardwareProfile).getByText(/^32\.0 GB$/i)).toBeInTheDocument();
   });
 
   it("renders CPU cores", () => {

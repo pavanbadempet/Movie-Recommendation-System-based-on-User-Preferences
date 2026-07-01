@@ -146,6 +146,11 @@ export function StatusPage() {
             {health?.movie_count != null && (
               <p className="status-detail">{health.movie_count.toLocaleString()} items in catalog</p>
             )}
+            <div className="status-desc">
+              <span>Shows if the recommendation engine service is currently online, active, and successfully passing health probes.</span>
+              <span><strong>Technical:</strong> Periodically issues HTTP health check requests to the <code>/health</code> endpoint to verify service uptime, catalog database connectivity, and system sanity.</span>
+              <span><strong>Example:</strong> Returns &apos;online&apos; when uvicorn is running and SQLite/Postgres connections are healthy.</span>
+            </div>
           </article>
 
           {/* Serving tier */}
@@ -163,6 +168,11 @@ export function StatusPage() {
             {health?.tier_selection_reason && (
               <p className="status-detail">{health.tier_selection_reason}</p>
             )}
+            <div className="status-desc">
+              <span>The active model serving profile running in production to handle recommendation and search queries.</span>
+              <span><strong>Technical:</strong> Dynamically routed server configurations (Tier 1 GPU Ensemble, Tier 2 ONNX CPU Ensemble, or Tier 3 FAISS Lite) optimized according to host system hardware detection.</span>
+              <span><strong>Example:</strong> Automatically loads ONNX weights for neural ranking if no GPU acceleration is found, falling back to CPU.</span>
+            </div>
           </article>
 
           {/* p95 latency */}
@@ -180,6 +190,11 @@ export function StatusPage() {
               {loading ? "—" : formatMs(slo?.p95_latency_ms)}
             </div>
             <p className="status-detail">SLO: &lt;25 s</p>
+            <div className="status-desc">
+              <span>The response time threshold experienced by 95% of users, serving as our primary performance benchmark.</span>
+              <span><strong>Technical:</strong> Computes the 95th percentile response time in milliseconds for all search and recommendation API transactions over a rolling 1-hour window.</span>
+              <span><strong>Example:</strong> A p95 of 150 ms indicates that 95% of requests are processed within 150 ms, while the slowest 5% exceed it.</span>
+            </div>
           </article>
 
           {/* Error rate */}
@@ -197,6 +212,11 @@ export function StatusPage() {
               {loading ? "—" : formatPercent(slo?.error_rate)}
             </div>
             <p className="status-detail">SLO: &lt;3%</p>
+            <div className="status-desc">
+              <span>The percentage of API calls that failed or encountered server-side errors within the rolling monitoring window.</span>
+              <span><strong>Technical:</strong> Calculated as the total number of HTTP 5xx responses divided by total requests logged over a rolling 1-hour monitoring window.</span>
+              <span><strong>Example:</strong> An error rate of 0.00% means that zero requests failed to execute properly, passing the &lt;3% SLO target.</span>
+            </div>
           </article>
 
           {/* Request volume */}
@@ -214,6 +234,11 @@ export function StatusPage() {
             {slo?.window_seconds && (
               <p className="status-detail">Last {Math.round(slo.window_seconds / 60)} min</p>
             )}
+            <div className="status-desc">
+              <span>The total volume of incoming requests processed by the recommendation engine during the current active metrics window.</span>
+              <span><strong>Technical:</strong> Cumulative count of recommendation, search, and details requests captured by FastAPI middleware within a 15-minute rolling window.</span>
+              <span><strong>Example:</strong> Displays 1,245 requests when the service experiences a sustained moderate traffic flow of ~83 requests per minute.</span>
+            </div>
           </article>
 
           {/* Hardware */}
@@ -244,6 +269,11 @@ export function StatusPage() {
                 {loading ? "—" : "N/A"}
               </div>
             )}
+            <div className="status-desc">
+              <span>The physical system resources allocated to run our deep learning retrieval and ranking models.</span>
+              <span><strong>Technical:</strong> System specifications queried directly from the host OS, showing active CPU threads, RAM capacity in GB, and NVIDIA CUDA driver availability.</span>
+              <span><strong>Example:</strong> Identifies 4 CPU cores, 16.0 GB RAM, and CUDA support to determine optimal thread count and batch size.</span>
+            </div>
           </article>
         </div>
       </section>
