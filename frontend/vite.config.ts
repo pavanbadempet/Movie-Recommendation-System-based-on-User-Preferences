@@ -30,6 +30,8 @@ export default defineConfig({
         "src/vite-env.d.ts",
         "src/jest-axe.d.ts",
         "src/pages/KnowledgeGraph.tsx",
+        "src/VectorSpace.tsx",
+        "src/webgpuEngine.ts",
         "src/test/**",
         "node_modules/**",
         "dist/**",
