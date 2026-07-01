@@ -1805,6 +1805,7 @@ function App() {
       setDialogMovie(movie);
       return;
     }
+    setDialogMovie(movie);
     selectMovie(movie, "search_result");
   }
 

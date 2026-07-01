@@ -3533,3 +3533,145 @@ input:focus-visible {
   }
 }
 
+/* ── Platform operational panels ── */
+.ops-stack {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.diagnostics-panel,
+.quality-panel,
+.readiness-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.diagnostics-panel.ready,
+.quality-panel.ok,
+.readiness-panel.ready {
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.diagnostics-panel.degraded,
+.quality-panel.needs_attention,
+.readiness-panel.degraded,
+.readiness-panel.warming {
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.readiness-panel.not_ready,
+.readiness-panel.failed,
+.readiness-panel.unavailable {
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.readiness-headline {
+  display: grid;
+  gap: 2px;
+}
+
+.readiness-headline strong {
+  color: var(--text);
+  font-size: 1.08rem;
+}
+
+.readiness-headline span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.readiness-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.readiness-metrics div {
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.readiness-metrics span {
+  display: block;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.readiness-metrics strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--text);
+  font-size: 0.98rem;
+}
+
+.component-list {
+  display: grid;
+  gap: 6px;
+}
+
+.component-row {
+  min-height: 30px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.component-row span,
+.component-row strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.component-row span {
+  color: #cfd6e3;
+  text-transform: capitalize;
+}
+
+.diagnostic-rows {
+  display: grid;
+  gap: 6px;
+}
+
+.diagnostic-row {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #cfd6e3;
+  font-size: 0.8rem;
+}
+
+.diagnostic-row strong {
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.quiet-line {
+  display: block;
+  padding: 8px 0 2px;
+  color: var(--quiet);
+  font-size: 0.82rem;
+}
+
