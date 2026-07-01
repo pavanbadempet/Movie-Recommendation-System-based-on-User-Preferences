@@ -39,33 +39,15 @@ function NodeSidePanel({ movie, onClose }: { movie: Movie; onClose: () => void }
   return (
     <aside ref={panelRef} className="kg-side-panel" aria-label={`Details for ${movie.title}`}>
       <button className="kg-panel-close" type="button" aria-label="Close details panel" onClick={onClose}>
-        <X size={16} aria-hidden="true" />
+        <X size={18} aria-hidden="true" />
       </button>
-      <div className="kg-panel-poster-container">
-        <img src={fullPosterUrl(movie.poster_path)} alt={`Poster for ${movie.title}`} className="kg-panel-poster" />
-      </div>
+      <img src={fullPosterUrl(movie.poster_path)} alt={`Poster for ${movie.title}`} className="kg-panel-poster" />
       <h3 className="kg-panel-title">{movie.title}</h3>
-      
-      <div className="kg-panel-meta-row">
-        {movie.release_date && (
-          <span className="kg-meta-badge year">{movie.release_date.slice(0, 4)}</span>
-        )}
-        {movie.vote_average != null && movie.vote_average > 0 && (
-          <span className="kg-meta-badge rating">⭐ {Number(movie.vote_average).toFixed(1)}</span>
-        )}
-      </div>
-
-      {movie.genres && (
-        <div className="kg-panel-genres">
-          {movie.genres.split(",").map((genre) => {
-            const trimmed = genre.trim();
-            return trimmed ? (
-              <span key={trimmed} className="kg-genre-badge">{trimmed}</span>
-            ) : null;
-          })}
-        </div>
+      {movie.release_date && <p className="kg-panel-meta">{movie.release_date.slice(0, 4)}</p>}
+      {movie.genres && <p className="kg-panel-meta">{movie.genres}</p>}
+      {movie.vote_average != null && movie.vote_average > 0 && (
+        <p className="kg-panel-meta">⭐ {Number(movie.vote_average).toFixed(1)}</p>
       )}
-
       {movie.overview && <p className="kg-panel-overview">{movie.overview}</p>}
     </aside>
   );
@@ -473,36 +455,7 @@ export function KnowledgeGraphPage({ titles }: { titles: MovieTitle[] }) {
             <span>Building knowledge graph…</span>
           </div>
         )}
-        {selectedId && error && (
-          <div className="kg-empty" role="alert">
-            <X size={40} aria-hidden="true" style={{ color: "var(--danger)" }} />
-            <p style={{ color: "var(--text)", fontWeight: 600, marginBottom: 4 }}>
-              Knowledge Graph Unavailable
-            </p>
-            <p style={{ color: "var(--muted)", fontSize: "0.85rem", maxWidth: 420, textAlign: "center", lineHeight: 1.5 }}>
-              {error.includes("503") || error.includes("disabled")
-                ? "The Knowledge Graph requires precomputed graph artifacts that aren't loaded in this environment. This feature is available when running with the full data pipeline."
-                : error}
-            </p>
-            <button
-              type="button"
-              style={{
-                marginTop: 12,
-                padding: "8px 20px",
-                background: "var(--panel-hover)",
-                border: "1px solid var(--line)",
-                borderRadius: 8,
-                color: "var(--text)",
-                fontSize: "0.82rem",
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-              onClick={() => { setSelectedId(null); setQuery(""); }}
-            >
-              Try another movie
-            </button>
-          </div>
-        )}
+        {selectedId && error && <p className="dashboard-error" role="alert">{error}</p>}
         {selectedId && !loading && !error && graphData && graphData.nodes.length === 0 && (
           <p role="status">No knowledge graph connections found for this movie.</p>
         )}

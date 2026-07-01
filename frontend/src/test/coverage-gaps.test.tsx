@@ -68,7 +68,7 @@ describe("Dashboard — PlatformInfoCard", () => {
     render(<Dashboard />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText("45,000 movies")).toBeInTheDocument();
+      expect(screen.getByText(/45,000 movies/i)).toBeInTheDocument();
     });
     expect(screen.getByText("2.0.0")).toBeInTheDocument();
     expect(screen.getByText("abc1234")).toBeInTheDocument();

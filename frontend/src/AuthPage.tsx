@@ -58,7 +58,7 @@ export function AuthPage({
         )}
         <div className="auth-header">
           <Sparkles size={32} className="auth-logo" />
-          <h1>{isLogin ? "Welcome Back" : "Join APEX"}</h1>
+          <h1>{isLogin ? "Welcome Back" : "Join Nova"}</h1>
           <p>{isLogin ? "Sign in to continue your personalized session" : "Create an account for this browser session"}</p>
         </div>
 

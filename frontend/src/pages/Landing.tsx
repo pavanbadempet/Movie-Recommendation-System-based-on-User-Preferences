@@ -116,7 +116,6 @@ const BENCHMARKS = [
 // ---------------------------------------------------------------------------
 export function LandingPage({ onNavigate }: LandingProps) {
   const [activeLang, setActiveLang] = React.useState<"curl" | "python" | "js">("curl");
-  const [heroTab, setHeroTab] = React.useState<"code" | "mobile">("mobile");
 
   const codeSnippets = {
     curl: `# Get recommendations with LLM explanation
@@ -138,7 +137,7 @@ curl "/v1/recommendations/id/550?explain=true" \\
     python: `# Fetch ensemble recommendations in Python
 import requests
 
-url = "https://api.apex.ai/v1/recommendations/id/550"
+url = "https://api.nova.ai/v1/recommendations/id/550"
 headers = {
     "X-Nova-API-Key": "YOUR_KEY"
 }
@@ -148,7 +147,7 @@ response = requests.get(url, headers=headers, params=params)
 recommendations = response.json()["recommendations"]
 print(f"Top recommendation: {recommendations[0]['title']}")`,
     js: `// Fetch recommendations in Node.js
-const url = 'https://api.apex.ai/v1/recommendations/id/550?explain=true';
+const url = 'https://api.nova.ai/v1/recommendations/id/550?explain=true';
 const response = await fetch(url, {
   headers: { 'X-Nova-API-Key': 'YOUR_KEY' }
 });
@@ -207,173 +206,71 @@ console.log(\`Top recommendation: \${recommendations[0].title}\`);`
           </p>
         </div>
 
-        {/* Dynamic Mobile Preview vs API Code Container */}
-        <div className="hero-visual-wrapper" style={{ display: "flex", flexDirection: "column", gap: "12px", alignItems: "stretch", width: "100%" }}>
-          <div className="hero-tab-selector" style={{ display: "flex", gap: "8px", margin: "0 auto 8px auto" }}>
-            <button
-              type="button"
-              className={`hero-tab-btn ${heroTab === "mobile" ? "active" : ""}`}
-              onClick={() => setHeroTab("mobile")}
-              style={{
-                background: heroTab === "mobile" ? "rgba(167, 139, 250, 0.12)" : "rgba(255, 255, 255, 0.02)",
-                border: "1px solid " + (heroTab === "mobile" ? "rgba(167, 139, 250, 0.3)" : "rgba(255,255,255,0.06)"),
-                borderRadius: "20px",
-                padding: "6px 14px",
-                fontSize: "0.8rem",
-                color: heroTab === "mobile" ? "#c084fc" : "var(--muted)",
-                fontWeight: "600",
-                cursor: "pointer",
-                transition: "all 0.2s ease"
-              }}
-            >
-              📱 Mobile App UI
-            </button>
-            <button
-              type="button"
-              className={`hero-tab-btn ${heroTab === "code" ? "active" : ""}`}
-              onClick={() => setHeroTab("code")}
-              style={{
-                background: heroTab === "code" ? "rgba(255, 255, 255, 0.08)" : "rgba(255, 255, 255, 0.02)",
-                border: "1px solid " + (heroTab === "code" ? "rgba(255, 255, 255, 0.15)" : "rgba(255,255,255,0.06)"),
-                borderRadius: "20px",
-                padding: "6px 14px",
-                fontSize: "0.8rem",
-                color: heroTab === "code" ? "#fff" : "var(--muted)",
-                fontWeight: "600",
-                cursor: "pointer",
-                transition: "all 0.2s ease"
-              }}
-            >
-              💻 Developer API
-            </button>
+        {/* Code preview */}
+        <div className="hero-code" aria-label="API example code">
+          <div className="code-window-chrome" aria-hidden="true">
+            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+              <span className="dot red" />
+              <span className="dot yellow" />
+              <span className="dot green" />
+            </div>
+            <div className="code-tabs" style={{ display: "flex", gap: "2px", marginLeft: "16px" }}>
+              <button
+                type="button"
+                className={`code-tab-btn ${activeLang === "curl" ? "active" : ""}`}
+                style={{
+                  background: activeLang === "curl" ? "rgba(255,255,255,0.06)" : "transparent",
+                  border: "none",
+                  color: activeLang === "curl" ? "#e3e0f8" : "#958da1",
+                  padding: "4px 10px",
+                  borderRadius: "6px",
+                  fontSize: "0.75rem",
+                  fontWeight: "600",
+                  cursor: "pointer"
+                }}
+                onClick={() => setActiveLang("curl")}
+              >
+                cURL
+              </button>
+              <button
+                type="button"
+                className={`code-tab-btn ${activeLang === "python" ? "active" : ""}`}
+                style={{
+                  background: activeLang === "python" ? "rgba(255,255,255,0.06)" : "transparent",
+                  border: "none",
+                  color: activeLang === "python" ? "#e3e0f8" : "#958da1",
+                  padding: "4px 10px",
+                  borderRadius: "6px",
+                  fontSize: "0.75rem",
+                  fontWeight: "600",
+                  cursor: "pointer"
+                }}
+                onClick={() => setActiveLang("python")}
+              >
+                Python
+              </button>
+              <button
+                type="button"
+                className={`code-tab-btn ${activeLang === "js" ? "active" : ""}`}
+                style={{
+                  background: activeLang === "js" ? "rgba(255,255,255,0.06)" : "transparent",
+                  border: "none",
+                  color: activeLang === "js" ? "#e3e0f8" : "#958da1",
+                  padding: "4px 10px",
+                  borderRadius: "6px",
+                  fontSize: "0.75rem",
+                  fontWeight: "600",
+                  cursor: "pointer"
+                }}
+                onClick={() => setActiveLang("js")}
+              >
+                Node.js
+              </button>
+            </div>
           </div>
-
-          {heroTab === "mobile" ? (
-            <div className="landing-phone-preview" aria-label="Interactive mobile app preview">
-              <div className="dynamic-island" />
-              <div className="landing-phone-screen">
-                <div className="phone-preview-header">
-                  <span className="phone-preview-title">APEX</span>
-                  <span style={{ fontSize: "0.6rem", color: "var(--success)", display: "flex", alignItems: "center", gap: "4px" }}>
-                    <span style={{ width: "6px", height: "6px", background: "var(--success)", borderRadius: "50%" }}></span> Live Server
-                  </span>
-                </div>
-
-                <div className="phone-preview-search">
-                  <Sparkles size={12} style={{ color: "#a78bfa", flexShrink: 0 }} />
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>David Fincher thrillers...</span>
-                </div>
-
-                <div style={{ display: "flex", gap: "6px", overflowX: "hidden", paddingBottom: "4px" }}>
-                  <span style={{ fontSize: "0.65rem", padding: "4px 8px", background: "rgba(167, 139, 250, 0.15)", borderRadius: "20px", border: "1px solid rgba(167, 139, 250, 0.3)", color: "#c084fc", whiteSpace: "nowrap" }}>Mindbend</span>
-                  <span style={{ fontSize: "0.65rem", padding: "4px 8px", background: "rgba(255,255,255,0.04)", borderRadius: "20px", border: "1px solid rgba(255,255,255,0.08)", color: "var(--muted)", whiteSpace: "nowrap" }}>Noir</span>
-                  <span style={{ fontSize: "0.65rem", padding: "4px 8px", background: "rgba(255,255,255,0.04)", borderRadius: "20px", border: "1px solid rgba(255,255,255,0.08)", color: "var(--muted)", whiteSpace: "nowrap" }}>Crime</span>
-                </div>
-
-                <div className="phone-preview-card">
-                  <img
-                    className="phone-preview-poster"
-                    src="https://image.tmdb.org/t/p/w500/rPdtOFS5hgg2JMRIvGJA2IZ49aU.jpg"
-                    alt="Se7en"
-                  />
-                  <div className="phone-preview-info">
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span className="phone-preview-name">Se7en (1995)</span>
-                      <span className="phone-preview-score" style={{ whiteSpace: "nowrap" }}>8.6 ★</span>
-                    </div>
-                    <span className="phone-preview-meta">Crime, Thriller</span>
-                    <span style={{ fontSize: "0.65rem", padding: "2px 6px", background: "rgba(99, 102, 241, 0.12)", color: "#818cf8", borderRadius: "4px", width: "fit-content", fontWeight: "700" }}>
-                      Vector recall (94% match)
-                    </span>
-                  </div>
-                </div>
-
-                <div style={{ background: "rgba(167, 139, 250, 0.08)", border: "1px solid rgba(167, 139, 250, 0.15)", borderRadius: "14px", padding: "10px", display: "flex", flexDirection: "column", gap: "4px" }}>
-                  <span style={{ fontSize: "0.7rem", fontWeight: "700", color: "#c084fc", display: "flex", alignItems: "center", gap: "4px" }}>
-                    <Sparkles size={10} /> CineBot Vibe Check
-                  </span>
-                  <p className="phone-preview-exp" style={{ margin: 0, lineHeight: "1.3" }}>
-                    Both are David Fincher psychological thrillers with morally ambiguous protagonists and twist endings.
-                  </p>
-                </div>
-
-                <div style={{ marginTop: "auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                  <button type="button" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "10px", padding: "8px", fontSize: "0.7rem", color: "#fff", cursor: "pointer" }}>
-                    👍 Feedback
-                  </button>
-                  <button type="button" style={{ background: "var(--accent)", border: "none", borderRadius: "10px", padding: "8px", fontSize: "0.7rem", color: "#fff", fontWeight: "600", cursor: "pointer" }}>
-                    ✨ Recommend
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="hero-code" aria-label="API example code" style={{ margin: 0 }}>
-              <div className="code-window-chrome" aria-hidden="true">
-                <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                  <span className="dot red" />
-                  <span className="dot yellow" />
-                  <span className="dot green" />
-                </div>
-                <div className="code-tabs" style={{ display: "flex", gap: "2px", marginLeft: "16px" }}>
-                  <button
-                    type="button"
-                    className={`code-tab-btn ${activeLang === "curl" ? "active" : ""}`}
-                    style={{
-                      background: activeLang === "curl" ? "rgba(255,255,255,0.06)" : "transparent",
-                      border: "none",
-                      color: activeLang === "curl" ? "#e3e0f8" : "#958da1",
-                      padding: "4px 10px",
-                      borderRadius: "6px",
-                      fontSize: "0.75rem",
-                      fontWeight: "600",
-                      cursor: "pointer"
-                    }}
-                    onClick={() => setActiveLang("curl")}
-                  >
-                    cURL
-                  </button>
-                  <button
-                    type="button"
-                    className={`code-tab-btn ${activeLang === "python" ? "active" : ""}`}
-                    style={{
-                      background: activeLang === "python" ? "rgba(255,255,255,0.06)" : "transparent",
-                      border: "none",
-                      color: activeLang === "python" ? "#e3e0f8" : "#958da1",
-                      padding: "4px 10px",
-                      borderRadius: "6px",
-                      fontSize: "0.75rem",
-                      fontWeight: "600",
-                      cursor: "pointer"
-                    }}
-                    onClick={() => setActiveLang("python")}
-                  >
-                    Python
-                  </button>
-                  <button
-                    type="button"
-                    className={`code-tab-btn ${activeLang === "js" ? "active" : ""}`}
-                    style={{
-                      background: activeLang === "js" ? "rgba(255,255,255,0.06)" : "transparent",
-                      border: "none",
-                      color: activeLang === "js" ? "#e3e0f8" : "#958da1",
-                      padding: "4px 10px",
-                      borderRadius: "6px",
-                      fontSize: "0.75rem",
-                      fontWeight: "600",
-                      cursor: "pointer"
-                    }}
-                    onClick={() => setActiveLang("js")}
-                  >
-                    Node.js
-                  </button>
-                </div>
-              </div>
-              <pre className="code-block" style={{ minHeight: "260px" }}>
-                <code key={activeLang} className="fade-in-content">{codeSnippets[activeLang]}</code>
-              </pre>
-            </div>
-          )}
+          <pre className="code-block" style={{ minHeight: "260px" }}>
+            <code key={activeLang} className="fade-in-content">{codeSnippets[activeLang]}</code>
+          </pre>
         </div>
       </section>
 

@@ -137,14 +137,8 @@ function HardwareCard({
           </div>
         </div>
       </div>
-      <div className="status-desc" style={{ marginTop: "12px" }}>
-        <span>Hardware specifications detected on the hosting environment executing models.</span>
-        <span><strong>Technical:</strong> Direct OS-level queries checking RAM capacity, CPU cores, and NVIDIA CUDA compute availability.</span>
-        <span><strong>Example:</strong> {ramGb.toFixed(1)} GB RAM Allocation indicates the hosting space has been provisioned with large memory capacity.</span>
-      </div>
     </div>
   );
-
 }
 
 // ─── SLO Metrics ─────────────────────────────────────────────────────────────
@@ -202,11 +196,6 @@ function SloMetrics({
           <dd style={{ margin: 0, color: "var(--text)", fontSize: "0.9rem", fontWeight: "700" }} aria-label={`Uptime ${fmtUptime(uptimeSeconds)}`}>{fmtUptime(uptimeSeconds)}</dd>
         </div>
       </dl>
-      <div className="status-desc" style={{ marginTop: "12px" }}>
-        <span>Live service-level objective (SLO) metrics measuring latency, error rates, and traffic throughput.</span>
-        <span><strong>Technical:</strong> Calculated over a rolling 1-hour window from memory-buffered request metrics in FastAPI middleware.</span>
-        <span><strong>Example:</strong> A P95 latency of {p95 != null ? `${p95.toFixed(0)}ms` : "30ms"} means 95% of recommendation queries are completed within that duration.</span>
-      </div>
     </div>
   );
 }
@@ -263,11 +252,6 @@ function PlatformInfoCard({ info }: { info: PlatformInfo }) {
           </div>
         )}
       </dl>
-      <div className="status-desc" style={{ marginTop: "12px" }}>
-        <span>Static information about the current API deployment version, code commit, and database catalog.</span>
-        <span><strong>Technical:</strong> Exposes the system environment variable metadata, active git SHA commit hash, and item count in the SQLite database.</span>
-        <span><strong>Example:</strong> Catalog Size of {info.movie_count != null ? info.movie_count.toLocaleString() : "75,253"} movies represents the total number of indexable items currently in the recommendation corpus.</span>
-      </div>
     </div>
   );
 }
@@ -392,11 +376,6 @@ function DashboardInner() {
             )}
           </div>
         )}
-        <div className="status-desc" style={{ marginTop: "12px" }}>
-          <span>The current active performance tier selected for servicing recommendations.</span>
-          <span><strong>Technical:</strong> Automatically selected based on available system hardware (e.g. CPU threads, CUDA devices) and configured routing rules.</span>
-          <span><strong>Example:</strong> {health.data?.serving_tier === "tier1" ? "Tier 1 — Enterprise" : health.data?.serving_tier === "tier2" ? "Tier 2 — Professional" : "Tier 3 — Starter"} selection indicating active model-serving optimization is configured.</span>
-        </div>
       </div>
 
       {/* Hardware card */}

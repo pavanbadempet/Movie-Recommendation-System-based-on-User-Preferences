@@ -23,14 +23,11 @@ vi.mock("../api", () => ({
   backendLabel: vi.fn((url: string) => url),
   currentBackend: vi.fn(() => "http://localhost:8000"),
   recordEvent: vi.fn(),
-  API_BASES: ["http://localhost:8000"],
-  checkVideoCacheStatus: vi.fn(() => Promise.resolve({ data: { cached: true } })),
 }));
 
 import { loginUser, registerUser } from "../api";
 import { AuthPage } from "../AuthPage";
 import type { Movie } from "../types";
-import { MovieDialog } from "../main";
 
 // ─── AuthPage ─────────────────────────────────────────────────────────────────
 
@@ -68,7 +65,7 @@ describe("AuthPage", () => {
     await userEvent.click(
       screen.getByRole("button", { name: /don't have an account/i }),
     );
-    expect(screen.getByText(/join apex/i)).toBeInTheDocument();
+    expect(screen.getByText(/join nova/i)).toBeInTheDocument();
   });
 
   it("renders 'Create Account' submit button in register mode", async () => {
@@ -389,117 +386,5 @@ describe("LoadingSpinner", () => {
   it("renders nothing when loading is false", () => {
     const { container } = render(<LoadingSpinner loading={false} />);
     expect(container).toBeEmptyDOMElement();
-  });
-});
-
-describe("MovieDialog", () => {
-  const mockMovie: Movie = {
-    id: 999,
-    title: "Test Movie Spectacular",
-    overview: "This is a spectacular test movie overview designed for unit testing.",
-    genres: "Sci-Fi, Adventure",
-    release_date: "2026-06-22",
-    runtime: 124,
-    vote_average: 8.5,
-    explanation_text: "Because you like futuristic space adventures.",
-    cast: "Jane Doe, John Smith",
-    director: "Jane Director",
-    trailer_key: "abc_test_key",
-    vote_count: 1420,
-    popularity: 98.2,
-    similarity_score: 0.94,
-    retrieval_stage: "vector_recall",
-    quality_bucket: "tier_1",
-  };
-
-  it("renders movie title, overview, custom rating, and metadata correctly in Overview tab", () => {
-    const onCloseMock = vi.fn();
-    render(<MovieDialog movie={mockMovie} onClose={onCloseMock} />);
-
-    expect(screen.getByText("Test Movie Spectacular")).toBeInTheDocument();
-    expect(screen.getByText("This is a spectacular test movie overview designed for unit testing.")).toBeInTheDocument();
-    expect(screen.getByText("8.5")).toBeInTheDocument();
-    expect(screen.getByText("2026")).toBeInTheDocument();
-    expect(screen.getByText("124 min")).toBeInTheDocument();
-    expect(screen.getByText("Sci-Fi")).toBeInTheDocument();
-    expect(screen.getByText("Because you like futuristic space adventures.")).toBeInTheDocument();
-
-    // Credits should NOT render in Overview tab
-    expect(screen.queryByText("Jane Director")).not.toBeInTheDocument();
-  });
-
-  it("renders credits and tech stats in Details & Cast tab", async () => {
-    const onCloseMock = vi.fn();
-    render(<MovieDialog movie={mockMovie} onClose={onCloseMock} />);
-
-    // Click on Details & Cast tab
-    const detailsTab = screen.getByRole("button", { name: /details & cast/i });
-    fireEvent.click(detailsTab);
-
-    expect(screen.getByText("Jane Director")).toBeInTheDocument();
-    expect(screen.getByText("Jane Doe, John Smith")).toBeInTheDocument();
-    expect(screen.getByText("June 22, 2026")).toBeInTheDocument();
-    expect(screen.getByText("98.2")).toBeInTheDocument();
-    expect(screen.getByText("1,420 votes")).toBeInTheDocument();
-  });
-
-  it("renders algorithm similarity and logs in AI & Match tab", async () => {
-    const onCloseMock = vi.fn();
-    render(<MovieDialog movie={mockMovie} onClose={onCloseMock} />);
-
-    // Click on AI & Match tab
-    const insightsTab = screen.getByRole("button", { name: /ai & match/i });
-    fireEvent.click(insightsTab);
-
-    expect(screen.getByText("94% Similarity Match")).toBeInTheDocument();
-    expect(screen.getByText("vector_recall")).toBeInTheDocument();
-    expect(screen.getByText("tier_1")).toBeInTheDocument();
-  });
-
-  it("triggers onClose when clicking the close button", () => {
-    const onCloseMock = vi.fn();
-    render(<MovieDialog movie={mockMovie} onClose={onCloseMock} />);
-
-    const closeBtn = screen.getByRole("button", { name: /close movie details/i });
-    fireEvent.click(closeBtn);
-    expect(onCloseMock).toHaveBeenCalledOnce();
-  });
-
-  it("triggers onFeedback callback with positive and negative sentiment", () => {
-    const onCloseMock = vi.fn();
-    const onFeedbackMock = vi.fn();
-
-    render(
-      <MovieDialog
-        movie={mockMovie}
-        onClose={onCloseMock}
-        onFeedback={onFeedbackMock}
-      />
-    );
-
-    const likeBtn = screen.getByRole("button", { name: /thumbs up/i });
-    fireEvent.click(likeBtn);
-    expect(onFeedbackMock).toHaveBeenCalledWith(mockMovie, "positive");
-
-    const dislikeBtn = screen.getByRole("button", { name: /thumbs down/i });
-    fireEvent.click(dislikeBtn);
-    expect(onFeedbackMock).toHaveBeenCalledWith(mockMovie, "negative");
-  });
-
-  it("allows interactive rating and watchlist actions", () => {
-    render(<MovieDialog movie={mockMovie} onClose={vi.fn()} />);
-
-    // Watchlist toggle
-    const watchlistBtn = screen.getByRole("button", { name: /watchlist/i });
-    expect(watchlistBtn).toHaveTextContent("Watchlist");
-    fireEvent.click(watchlistBtn);
-    expect(watchlistBtn).toHaveTextContent("Watchlisted");
-    fireEvent.click(watchlistBtn);
-    expect(watchlistBtn).toHaveTextContent("Watchlist");
-
-    // Star rating
-    const starBtn = screen.getByRole("button", { name: /rate 4 stars/i });
-    fireEvent.click(starBtn);
-    expect(screen.getByText("Rated 4 Stars!")).toBeInTheDocument();
   });
 });
