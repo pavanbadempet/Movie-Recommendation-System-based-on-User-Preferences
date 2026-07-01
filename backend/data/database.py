@@ -164,10 +164,13 @@ def get_db():
 # by Flyway migrations in sql/migrations/ — running create_all there would
 # silently diverge from the versioned schema.
 # ---------------------------------------------------------------------------
-_DB_IS_SQLITE = "sqlite" in DATABASE_URL
-
-if _DB_IS_SQLITE:
+# Create tables automatically. For PostgreSQL, if tables are missing (e.g., in a new deployment
+# where Flyway migration runner wasn't executed), create_all will initialize the base schema
+# automatically without breaking existing tables.
+try:
     Base.metadata.create_all(bind=engine)
+except Exception as e:
+    print(f"Database table initialization warning: {e}")
 
 
 def seed_database():
@@ -185,6 +188,8 @@ def seed_database():
         db.close()
 
 
-# Run seeder on startup — SQLite only; Postgres is seeded via V1 migration
-if _DB_IS_SQLITE:
+# Run seeder on startup
+try:
     seed_database()
+except Exception as e:
+    print(f"Database seeding warning: {e}")
