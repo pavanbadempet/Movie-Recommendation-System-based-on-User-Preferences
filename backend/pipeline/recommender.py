@@ -277,6 +277,8 @@ class Recommender:
         """Build row-position lookup maps for hot recommendation paths."""
         self._movie_id_to_index = {}
         self._movie_records = []
+        self._franchise_to_indices = {}
+        self._collection_to_indices = {}
         if self._movies is None or "id" not in self._movies.columns:
             return
         self._movie_records = self._movies.to_dict(orient="records")
@@ -284,6 +286,32 @@ class Recommender:
         for pos, mid in enumerate(ids):
             if not pd.isna(mid):
                 self._movie_id_to_index.setdefault(int(mid), pos)
+
+        # Precompute franchise map
+        import re
+
+        def _extract_franchise(title: str) -> str:
+            t = title.lower().strip()
+            t = re.sub(r"\(\d{4}\)", "", t).strip()
+            t = re.sub(r"\s*:\s+.*$", "", t)
+            t = re.sub(r"\s+(part|chapter|vol\.?|volume|episode)\s+\S+$", "", t, flags=re.IGNORECASE)
+            t = re.sub(r"\s+(i{1,3}|iv|v|vi{0,3}|[2-9]|10|11|12)$", "", t, flags=re.IGNORECASE)
+            return t.strip()
+
+        title_col = self._movies["title"] if "title" in self._movies.columns else []
+        for pos, title in enumerate(title_col):
+            if title:
+                franchise = _extract_franchise(str(title))
+                if franchise and len(franchise) >= 3:
+                    self._franchise_to_indices.setdefault(franchise, []).append(pos)
+
+        # Precompute collection map
+        if "belongs_to_collection" in self._movies.columns:
+            coll_col = self._movies["belongs_to_collection"]
+            for pos, coll in enumerate(coll_col):
+                if coll and isinstance(coll, str) and coll.strip():
+                    coll_name = coll.strip().lower()
+                    self._collection_to_indices.setdefault(coll_name, []).append(pos)
 
     def _index_for_movie_id(self, movie_id: Any) -> int | None:
         try:
@@ -753,6 +781,10 @@ class Recommender:
             existing_ids = {c.movie_id for c in candidates}
             existing_ids.add(query_movie_id)
 
+            # Fallback initialization if lookup maps are missing or empty
+            if not hasattr(self, "_franchise_to_indices") or not self._franchise_to_indices:
+                self._rebuild_lookup_maps()
+
             def _extract_franchise(title: str) -> str:
                 t = title.lower().strip()
                 t = re.sub(r"\(\d{4}\)", "", t).strip()
@@ -766,110 +798,121 @@ class Recommender:
 
             injected_count = 0
             if seed_franchise and len(seed_franchise) >= 3 and self._movies is not None:
-                title_col = self._movies["title"] if "title" in self._movies.columns else None
-                if title_col is not None:
-                    for idx_row, row_title in enumerate(title_col):
-                        if injected_count >= 15:
-                            break
-                        row_title_str = str(row_title or "").lower()
-                        if not row_title_str:
-                            continue
-                        row_franchise = _extract_franchise(row_title_str)
+                # 1. Exact franchise match positions from precomputed dict
+                exact_positions = (
+                    self._franchise_to_indices.get(seed_franchise, []) if hasattr(self, "_franchise_to_indices") else []
+                )
 
-                        # Type A: exact franchise match ("alien" == "alien")
-                        exact_franchise = row_franchise == seed_franchise and row_title_str != seed_title_lower
-                        # Type B: substring match ("alien" in "alien abduction")
-                        substring_franchise = (
-                            not exact_franchise
-                            and seed_franchise in row_title_str
-                            and row_title_str != seed_title_lower
-                            and len(seed_franchise) >= 4
-                        )
+                # 2. Vectorized substring match positions
+                substring_positions = []
+                if len(seed_franchise) >= 4:
+                    mask = self._movies["title"].str.lower().str.contains(seed_franchise, na=False)
+                    substring_positions = self._movies[mask].index.tolist()
 
-                        if not (exact_franchise or substring_franchise):
-                            continue
+                # Combine: exact matches first
+                matching_candidates = []
+                seen_positions = set()
+                for pos in exact_positions:
+                    if pos != movie_idx:
+                        matching_candidates.append((pos, True))
+                        seen_positions.add(pos)
 
+                for pos in substring_positions:
+                    if pos != movie_idx and pos not in seen_positions:
+                        matching_candidates.append((pos, False))
+
+                for idx_row, exact_franchise in matching_candidates:
+                    if injected_count >= 15:
+                        break
+
+                    try:
+                        row_title_str = str(self._movies.iloc[idx_row]["title"] or "").lower()
+                    except Exception:
+                        continue
+
+                    # For substring matches, require at least one shared genre
+                    substring_franchise = not exact_franchise
+                    if substring_franchise and seed_genres:
                         try:
-                            mid = int(self._movies.iloc[idx_row]["id"])
-                        except (ValueError, TypeError, KeyError):
-                            continue
-
-                        meta = {}
-                        for col in ["title", "genres", "release_date", "vote_average", "vote_count", "director"]:
-                            if col in self._movies.columns:
-                                meta[col] = self._movies.iloc[idx_row].get(col)
-
-                        # For substring matches, require at least one shared genre
-                        # to avoid "Alien Abduction" matching "Alien" just by title
-                        if substring_franchise and seed_genres:
-                            cand_g_str = str(meta.get("genres", "") or "")
+                            cand_g_str = str(self._movies.iloc[idx_row].get("genres", "") or "")
                             cand_g = {g.strip().lower() for g in cand_g_str.split(",") if g.strip()}
                             if not (seed_genres & cand_g):
                                 continue
-
-                        # Exact franchise gets higher boost than substring match
-                        boost = 1.1 if exact_franchise else 0.95
-                        target_score = max_retrieval_score * boost
-
-                        if mid in existing_ids:
-                            # Boost the already retrieved candidate's score if the franchise boost is higher
-                            for c in candidates:
-                                if c.movie_id == mid:
-                                    if target_score > c.retrieval_score:
-                                        c.retrieval_score = target_score
-                                    break
+                        except Exception:
                             continue
 
-                        candidates.append(
-                            CandidateItem(
-                                movie_id=mid,
-                                retrieval_score=target_score,
-                                retrieval_source="hybrid",
-                                metadata=meta,
-                            )
+                    try:
+                        mid = int(self._movies.iloc[idx_row]["id"])
+                    except (ValueError, TypeError, KeyError):
+                        continue
+
+                    meta = {}
+                    for col in ["title", "genres", "release_date", "vote_average", "vote_count", "director"]:
+                        if col in self._movies.columns:
+                            meta[col] = self._movies.iloc[idx_row].get(col)
+
+                    boost = 1.1 if exact_franchise else 0.95
+                    target_score = max_retrieval_score * boost
+
+                    if mid in existing_ids:
+                        for c in candidates:
+                            if c.movie_id == mid:
+                                if target_score > c.retrieval_score:
+                                    c.retrieval_score = target_score
+                                break
+                        continue
+
+                    candidates.append(
+                        CandidateItem(
+                            movie_id=mid,
+                            retrieval_score=target_score,
+                            retrieval_source="hybrid",
+                            metadata=meta,
                         )
-                        existing_ids.add(mid)
-                        injected_count += 1
+                    )
+                    existing_ids.add(mid)
+                    injected_count += 1
 
             if seed_collection and isinstance(seed_collection, str) and seed_collection.strip():
                 collection_name = seed_collection.strip().lower()
-                if "belongs_to_collection" in self._movies.columns:
-                    for idx_row in range(len(self._movies)):
-                        if injected_count >= 25:
-                            break
-                        row_coll = self._movies.iloc[idx_row].get("belongs_to_collection", "")
-                        if not row_coll or str(row_coll).strip().lower() != collection_name:
-                            continue
-                        try:
-                            mid = int(self._movies.iloc[idx_row]["id"])
-                        except (ValueError, TypeError, KeyError):
-                            continue
+                coll_positions = (
+                    self._collection_to_indices.get(collection_name, [])
+                    if hasattr(self, "_collection_to_indices")
+                    else []
+                )
 
-                        meta = {}
-                        for col in ["title", "genres", "release_date", "vote_average", "vote_count", "director"]:
-                            if col in self._movies.columns:
-                                meta[col] = self._movies.iloc[idx_row].get(col)
+                for idx_row in coll_positions:
+                    if injected_count >= 25:
+                        break
+                    try:
+                        mid = int(self._movies.iloc[idx_row]["id"])
+                    except (ValueError, TypeError, KeyError):
+                        continue
 
-                        target_score = max_retrieval_score * 1.15
-                        if mid in existing_ids:
-                            # Boost already retrieved collection sequel
-                            for c in candidates:
-                                if c.movie_id == mid:
-                                    if target_score > c.retrieval_score:
-                                        c.retrieval_score = target_score
-                                    break
-                            continue
+                    meta = {}
+                    for col in ["title", "genres", "release_date", "vote_average", "vote_count", "director"]:
+                        if col in self._movies.columns:
+                            meta[col] = self._movies.iloc[idx_row].get(col)
 
-                        candidates.append(
-                            CandidateItem(
-                                movie_id=mid,
-                                retrieval_score=target_score,
-                                retrieval_source="hybrid",
-                                metadata=meta,
-                            )
+                    target_score = max_retrieval_score * 1.15
+                    if mid in existing_ids:
+                        for c in candidates:
+                            if c.movie_id == mid:
+                                if target_score > c.retrieval_score:
+                                    c.retrieval_score = target_score
+                                break
+                        continue
+
+                    candidates.append(
+                        CandidateItem(
+                            movie_id=mid,
+                            retrieval_score=target_score,
+                            retrieval_source="hybrid",
+                            metadata=meta,
                         )
-                        existing_ids.add(mid)
-                        injected_count += 1
+                    )
+                    existing_ids.add(mid)
+                    injected_count += 1
 
             # ── Genre-aware score boosting ──────────────────────────────
             if seed_genres:
