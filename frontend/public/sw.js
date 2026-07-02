@@ -1,4 +1,4 @@
-const CACHE_NAME = "nova-cache-v1";
+const CACHE_NAME = "nova-cache-v2";
 const STATIC_ASSETS = [
   "/",
   "/index.html",
@@ -41,6 +41,31 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  const isCodeAsset =
+    url.pathname.endsWith(".js") ||
+    url.pathname.endsWith(".css") ||
+    url.pathname === "/" ||
+    url.pathname.endsWith(".html");
+
+  if (isCodeAsset) {
+    // Network-First strategy for code assets to ensure users always run the latest version online
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.status === 200) {
+            const responseClone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseClone);
+            });
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Cache-First strategy for static assets (onnx, wasm, images, etc.)
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
@@ -49,9 +74,7 @@ self.addEventListener("fetch", (event) => {
       return fetch(event.request).then((response) => {
         const isStatic =
           response.status === 200 &&
-          (url.pathname.endsWith(".js") ||
-            url.pathname.endsWith(".css") ||
-            url.pathname.endsWith(".wasm") ||
+          (url.pathname.endsWith(".wasm") ||
             url.pathname.endsWith(".onnx") ||
             url.pathname.endsWith(".png") ||
             url.pathname.endsWith(".jpg") ||
