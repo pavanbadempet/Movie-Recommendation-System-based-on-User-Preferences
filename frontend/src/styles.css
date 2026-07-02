@@ -3387,23 +3387,37 @@ input:focus-visible {
   }
 
   /* Mobile dialogue layout */
+  .movie-dialog-backdrop {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 9999 !important;
+    align-items: flex-end !important;
+    display: flex !important;
+  }
   .movie-dialog {
     width: 100% !important;
+    max-width: 100vw !important;
     max-height: 92vh !important;
     height: auto !important;
     border-radius: 20px 20px 0 0 !important;
-    margin-top: auto;
+    margin-top: auto !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
   }
   .mobile-sheet-handle {
     display: block !important;
   }
-  .movie-dialog-backdrop {
-    align-items: flex-end !important;
-  }
   .dialog-media {
     flex: 0 0 auto !important;
-    height: 220px !important;
-    min-height: 220px !important;
+    height: 200px !important;
+    min-height: 200px !important;
+    width: 100% !important;
+  }
+  .dialog-media .trailer-frame,
+  .dialog-media .trailer-frame img,
+  .dialog-media .trailer-frame iframe {
+    width: 100% !important;
+    height: 100% !important;
   }
   .dialog-media .trailer-frame img {
     object-fit: cover !important;
@@ -3412,12 +3426,52 @@ input:focus-visible {
   }
   .dialog-content {
     padding: 0 !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    box-sizing: border-box !important;
+    max-width: 100% !important;
   }
   .dialog-grid {
     padding: 16px !important;
+    box-sizing: border-box !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+  }
+  .dialog-main {
+    max-width: 100% !important;
+    overflow: hidden !important;
+    word-break: break-word !important;
+  }
+  .dialog-overview {
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+  }
+  .dialog-title-row {
+    max-width: 100% !important;
   }
   .dialog-title-row h2 {
     font-size: 1.3rem !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+  .dialog-vibe-card {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+  }
+  .dialog-meta-row {
+    max-width: 100% !important;
+    overflow: hidden !important;
+  }
+  .feedback-row {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .dialog-sidebar {
+    max-width: 100% !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
   }
 
   /* Knowledge Graph Mobile overrides */
