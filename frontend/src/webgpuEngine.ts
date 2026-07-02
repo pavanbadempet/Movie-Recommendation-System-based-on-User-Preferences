@@ -25,6 +25,12 @@ let isLoaded = false;
  * Caches SBERT ONNX session and vocabulary in memory.
  */
 export async function initClientVectorEngine(): Promise<boolean> {
+  // Remote deployment bypass to avoid downloading massive vector files (230MB+) over the internet.
+  if (typeof window !== "undefined" && !["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)) {
+    console.log("[APEX] Remote deployment detected; bypassing client-side vector engine.");
+    return false;
+  }
+
   if (isLoaded) return true;
   if (isLoading) {
     while (isLoading) {
