@@ -3159,30 +3159,62 @@ input:focus-visible {
 
 /* Mobile-adapted detailed page elements */
 @media (max-width: 768px) {
-  /* Prevent double padding / alignment issues in mobile shells */
-  .mobile-shell-content {
-    padding: 0 !important;
+  /* Lock viewport so body never scrolls — all scroll lives in .mobile-shell-content */
+  html, body {
+    height: 100% !important;
+    overflow: hidden !important;
+    position: fixed !important;
+    width: 100% !important;
   }
 
-  .home-shell.full-width-layout {
-    padding: 0 0 80px 0 !important;
-  }
-
-  .home-showcase.full-width {
-    gap: 32px !important;
+  #root {
+    height: 100% !important;
+    overflow: hidden !important;
   }
 
   .iphone-screen {
-    height: 100vh !important;
-    height: -webkit-fill-available !important;
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 100% !important;
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
   }
 
-  /* Premium Hotstar-style card with proper side alignment */
+  /* Middle content area scrolls, everything else stays pinned */
+  .mobile-shell-content {
+    flex: 1 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding: 0 !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Pin the nav bar at the bottom of the flex column */
+  .mobile-nav-bar {
+    position: relative !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Page shell padding — no double-padding */
+  .home-shell.full-width-layout {
+    padding: 0 0 24px 0 !important;
+  }
+
+  .home-showcase.full-width {
+    gap: 28px !important;
+  }
+
+  /* Hero billboard */
   .billboard-container {
     height: 380px !important;
     aspect-ratio: auto !important;
-    border-radius: 20px !important;
-    margin: 12px 16px 20px !important;
+    border-radius: 16px !important;
+    margin: 8px 16px 16px !important;
     position: relative !important;
     overflow: hidden !important;
   }
@@ -3219,12 +3251,12 @@ input:focus-visible {
     font-size: 0.82rem !important;
   }
 
-  /* Alignment for titles and items */
+  /* Category row titles aligned at 16px */
   .category-row {
     padding: 0 16px !important;
   }
 
-  /* Fluid edge-to-edge mobile carousel strip */
+  /* Carousel scrolls edge-to-edge but starts aligned with titles */
   .trending-strip {
     padding: 4px 16px 16px !important;
     margin-left: -16px !important;
@@ -3233,25 +3265,27 @@ input:focus-visible {
     max-width: none !important;
   }
 
-  /* Search Discovery Page mobile override */
+  /* Search page */
   .search-page-layout {
-    padding: 16px 16px 80px !important;
+    padding: 16px 16px 24px !important;
     gap: 20px !important;
   }
 
-  /* Dashboard, Eval, Profile, Admin shells mobile override */
+  /* Dashboard, Eval, Profile, Admin, KG shells */
   .dashboard-shell, .eval-shell, .profile-shell, .admin-shell, .kg-shell {
-    padding: 16px 16px 80px !important;
+    padding: 16px 16px 24px !important;
     gap: 20px !important;
   }
 
+  /* Header bar */
   .topbar {
     flex-direction: row !important;
     align-items: center !important;
     justify-content: space-between !important;
     padding: 10px 16px !important;
     height: 56px !important;
-    min-height: auto !important;
+    min-height: 56px !important;
+    flex-shrink: 0 !important;
     gap: 12px !important;
   }
 
@@ -3259,12 +3293,13 @@ input:focus-visible {
     width: auto !important;
     justify-content: flex-start !important;
     align-items: center !important;
-    gap: 12px !important;
+    gap: 10px !important;
   }
 
   .status-badge {
-    padding: 6px 10px !important;
-    font-size: 0.75rem !important;
+    padding: 5px 8px !important;
+    font-size: 0.72rem !important;
+    gap: 5px !important;
   }
 
   .signin-nav-btn {
@@ -3278,9 +3313,10 @@ input:focus-visible {
   }
 
   .brand-logo {
-    font-size: 1.35rem;
+    font-size: 1.3rem !important;
   }
 
+  /* Desktop app-container gets bottom clearance */
   .app-container {
     padding-bottom: 64px;
   }
