@@ -2911,16 +2911,18 @@ input:focus-visible {
 }
 
 .mobile-nav-tab.active {
-  color: var(--accent);
+  color: #fff;
+  font-weight: 700;
 }
 
 .mobile-nav-tab svg {
-  transition: transform 0.2s ease;
+  transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275), filter 0.25s ease, color 0.25s ease;
 }
 
 .mobile-nav-tab.active svg {
-  transform: translateY(-2px);
-  filter: drop-shadow(0 0 6px var(--accent-glow));
+  transform: translateY(-4px) scale(1.1);
+  color: var(--accent) !important;
+  filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.85)) drop-shadow(0 0 16px rgba(99, 102, 241, 0.45)) !important;
 }
 
 /* Mobile shell pages wrapper */

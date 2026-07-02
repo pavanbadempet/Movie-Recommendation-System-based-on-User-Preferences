@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Database, Film, Loader2, Star, User } from "lucide-react";
+import { Database, Film, Loader2, Star, User, Activity, Network, Settings, BarChart3 } from "lucide-react";
 import { getUserRecommendations, apiGet } from "../api";
 import type { Movie } from "../types";
 
@@ -163,11 +163,13 @@ export function UserProfilePage({
   username,
   onRequestLogin,
   onSelectMovie,
+  onNavigate,
 }: {
   token: string | null;
   username: string | null;
   onRequestLogin: () => void;
   onSelectMovie: (movie: Movie) => void;
+  onNavigate?: (page: string) => void;
 }) {
   const [features, setFeatures] = useState<BehaviorFeatures | null>(null);
   const [featuresLoading, setFeaturesLoading] = useState(false);
@@ -263,6 +265,102 @@ export function UserProfilePage({
         </h3>
         <WatchHistorySection onSelectMovie={onSelectMovie} />
       </div>
+
+      {/* Developer and platform analytics options inside My Space */}
+      {onNavigate && (
+        <div className="dashboard-card" aria-label="Platform and Analytics Tools">
+          <h3 className="dashboard-card-title">
+            <Activity size={16} aria-hidden="true" />
+            Developer & Platform Tools
+          </h3>
+          <div className="profile-tools-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "12px", marginTop: "12px" }}>
+            <button
+              type="button"
+              className="tool-btn"
+              onClick={() => onNavigate("dashboard")}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "8px",
+                padding: "16px",
+                background: "rgba(255, 255, 255, 0.02)",
+                border: "1px solid rgba(255, 255, 255, 0.06)",
+                borderRadius: "12px",
+                color: "#fff",
+                cursor: "pointer",
+                transition: "all 0.2s"
+              }}
+            >
+              <BarChart3 size={20} style={{ color: "var(--accent)" }} />
+              <span style={{ fontSize: "0.8rem", fontWeight: 600 }}>Analytics</span>
+            </button>
+            <button
+              type="button"
+              className="tool-btn"
+              onClick={() => onNavigate("knowledge-graph")}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "8px",
+                padding: "16px",
+                background: "rgba(255, 255, 255, 0.02)",
+                border: "1px solid rgba(255, 255, 255, 0.06)",
+                borderRadius: "12px",
+                color: "#fff",
+                cursor: "pointer",
+                transition: "all 0.2s"
+              }}
+            >
+              <Network size={20} style={{ color: "#a78bfa" }} />
+              <span style={{ fontSize: "0.8rem", fontWeight: 600 }}>Knowledge Graph</span>
+            </button>
+            <button
+              type="button"
+              className="tool-btn"
+              onClick={() => onNavigate("evaluation")}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "8px",
+                padding: "16px",
+                background: "rgba(255, 255, 255, 0.02)",
+                border: "1px solid rgba(255, 255, 255, 0.06)",
+                borderRadius: "12px",
+                color: "#fff",
+                cursor: "pointer",
+                transition: "all 0.2s"
+              }}
+            >
+              <Activity size={20} style={{ color: "#f43f5e" }} />
+              <span style={{ fontSize: "0.8rem", fontWeight: 600 }}>Evaluation</span>
+            </button>
+            <button
+              type="button"
+              className="tool-btn"
+              onClick={() => onNavigate("admin")}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "8px",
+                padding: "16px",
+                background: "rgba(255, 255, 255, 0.02)",
+                border: "1px solid rgba(255, 255, 255, 0.06)",
+                borderRadius: "12px",
+                color: "#fff",
+                cursor: "pointer",
+                transition: "all 0.2s"
+              }}
+            >
+              <Settings size={20} style={{ color: "#e2e8f0" }} />
+              <span style={{ fontSize: "0.8rem", fontWeight: 600 }}>Admin Panel</span>
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

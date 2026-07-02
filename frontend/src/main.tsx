@@ -26,8 +26,6 @@ import {
   X,
   User,
   LogOut,
-  MoreHorizontal,
-  Network,
 } from "lucide-react";
 import {
   apiGet,
@@ -2353,6 +2351,7 @@ function App() {
                   username={username}
                   onRequestLogin={() => setShowAuthModal(true)}
                   onSelectMovie={(movie) => { setDialogMovie(movie); }}
+                  onNavigate={(p) => setPage(p as AppPage)}
                 />
               </ErrorBoundary>
             </main>
@@ -2363,44 +2362,28 @@ function App() {
         {/* Bottom Navigation Bar */}
         <nav className="mobile-nav-bar" aria-label="Mobile navigation">
           <button
-            className={`mobile-nav-tab ${page === "home" ? "active" : ""}`}
-            type="button"
-            onClick={() => { openHome(); setShowMoreDrawer(false); }}
-          >
-            <Film size={20} />
-            <span>Browse</span>
-          </button>
-          <button
             className={`mobile-nav-tab ${page === "search" ? "active" : ""}`}
             type="button"
-            onClick={() => { openSearch(); setShowMoreDrawer(false); }}
+            onClick={() => { openSearch(); }}
           >
-            <Search size={20} />
+            <Search size={22} />
             <span>Search</span>
           </button>
           <button
-            className={`mobile-nav-tab ${page === "knowledge-graph" ? "active" : ""}`}
+            className={`mobile-nav-tab ${page === "home" ? "active" : ""}`}
             type="button"
-            onClick={() => { setPage("knowledge-graph"); setShowMoreDrawer(false); }}
+            onClick={() => { openHome(); }}
           >
-            <Network size={20} />
-            <span>Graph</span>
+            <Sparkles size={24} className="home-glow-icon" />
+            <span>Home</span>
           </button>
           <button
-            className={`mobile-nav-tab ${page === "evaluation" ? "active" : ""}`}
+            className={`mobile-nav-tab ${["profile", "dashboard", "knowledge-graph", "evaluation", "admin"].includes(page) ? "active" : ""}`}
             type="button"
-            onClick={() => { setPage("evaluation"); setShowMoreDrawer(false); }}
+            onClick={() => { setPage("profile"); }}
           >
-            <BarChart3 size={20} />
-            <span>Eval</span>
-          </button>
-          <button
-            className={`mobile-nav-tab ${["dashboard", "profile", "admin"].includes(page) ? "active" : ""}`}
-            type="button"
-            onClick={() => setShowMoreDrawer(true)}
-          >
-            <MoreHorizontal size={20} />
-            <span>More</span>
+            <User size={22} />
+            <span>My Space</span>
           </button>
         </nav>
 
@@ -3168,6 +3151,7 @@ function App() {
                   username={username}
                   onRequestLogin={() => setShowAuthModal(true)}
                   onSelectMovie={(movie) => { setDialogMovie(movie); }}
+                  onNavigate={(p) => setPage(p as AppPage)}
                 />
               </ErrorBoundary>
             </main>
