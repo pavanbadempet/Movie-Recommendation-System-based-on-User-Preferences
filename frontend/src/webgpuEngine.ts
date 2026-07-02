@@ -51,6 +51,23 @@ export async function initClientVectorEngine(): Promise<boolean> {
     const buffer = await response.arrayBuffer();
     cachedVectors = new Float32Array(buffer);
     
+    // Pre-normalize all movie vectors for high-performance dot product similarity
+    const numVectors = Math.floor(cachedVectors.length / 384);
+    for (let i = 0; i < numVectors; i++) {
+      const offset = i * 384;
+      let sumSq = 0;
+      for (let j = 0; j < 384; j++) {
+        const val = cachedVectors[offset + j];
+        sumSq += val * val;
+      }
+      const mag = Math.sqrt(sumSq);
+      if (mag > 1e-9) {
+        for (let j = 0; j < 384; j++) {
+          cachedVectors[offset + j] /= mag;
+        }
+      }
+    }
+    
     // 3. Fetch SBERT vocabulary
     const vocabResponse = await fetch("https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/vocab.txt");
     if (!vocabResponse.ok) {
@@ -167,17 +184,12 @@ export async function getClientTextSearch(query: string, limit = 10): Promise<Mo
   for (let i = 0; i < numMovies; i++) {
     const movieOffset = i * 384;
     let dot = 0;
-    let movieMag = 0;
 
     for (let j = 0; j < 384; j++) {
-      const targetVal = queryVector[j];
-      const movieVal = cachedVectors[movieOffset + j];
-      dot += targetVal * movieVal;
-      movieMag += movieVal * movieVal;
+      dot += queryVector[j] * cachedVectors[movieOffset + j];
     }
 
-    const similarity = dot / Math.sqrt(movieMag); // queryVector has magnitude 1.0
-    scores[i] = { index: i, score: similarity };
+    scores[i] = { index: i, score: dot };
   }
 
   // Sort by score
@@ -227,27 +239,15 @@ export async function getClientRecommendations(movieId: number, limit = 10): Pro
   const numMovies = cachedTitles.length;
   const scores: { index: number; score: number }[] = new Array(numMovies);
 
-  let targetMag = 0;
-  for (let i = 0; i < 384; i++) {
-    targetMag += targetVector[i] * targetVector[i];
-  }
-  targetMag = Math.sqrt(targetMag);
-  if (targetMag === 0) return [];
-
   for (let i = 0; i < numMovies; i++) {
     const movieOffset = i * 384;
     let dot = 0;
-    let movieMag = 0;
 
     for (let j = 0; j < 384; j++) {
-      const targetVal = targetVector[j];
-      const movieVal = cachedVectors[movieOffset + j];
-      dot += targetVal * movieVal;
-      movieMag += movieVal * movieVal;
+      dot += targetVector[j] * cachedVectors[movieOffset + j];
     }
 
-    const similarity = dot / (targetMag * Math.sqrt(movieMag));
-    scores[i] = { index: i, score: similarity };
+    scores[i] = { index: i, score: dot };
   }
 
   scores.sort((a, b) => b.score - a.score);
