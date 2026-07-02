@@ -405,6 +405,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from fastapi.middleware.gzip import GzipMiddleware
+app.add_middleware(GzipMiddleware, minimum_size=1000)
+
 # Enterprise rate limiting (token bucket via Redis)
 try:
     from backend.middleware.rate_limiter import RedisRateLimiter as _RedisRateLimiter
