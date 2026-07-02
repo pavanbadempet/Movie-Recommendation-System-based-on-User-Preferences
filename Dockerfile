@@ -22,6 +22,7 @@ WORKDIR /app
 # hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    cargo \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy uv binary for lightning-fast dependency installation
@@ -36,6 +37,11 @@ COPY etl/ ./etl/
 COPY backend/ ./backend/
 COPY frontend/streamlit_app.py ./frontend/streamlit_app.py
 COPY REVISION* ./
+
+# Build and install the Rust core extension module
+RUN uv pip install --system maturin && \
+    maturin build --manifest-path backend/rust_core/Cargo.toml --release --interpreter python3.11 --out dist && \
+    uv pip install --system --no-cache dist/*.whl
 
 # Fail image builds early if synced Python source has a syntax error.
 RUN python -m compileall backend etl frontend/streamlit_app.py
