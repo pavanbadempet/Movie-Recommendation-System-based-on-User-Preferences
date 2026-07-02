@@ -51,6 +51,8 @@ psutil==7.2.2                          # Hardware detection (RAM, CPU cores)
 
 # Optional performance dependencies
 orjson==3.11.8  # Fast JSON serialization; falls back to stdlib json if absent
+rustworkx==0.16.0  # Fast Rust-backed graph library for knowledge graph traversals
+
 
 # Development & testing
 pytest==8.4.2

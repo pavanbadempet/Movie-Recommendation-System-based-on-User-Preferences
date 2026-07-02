@@ -141,7 +141,9 @@ def test_latest_movies_endpoint(monkeypatch):
         def get_movie_by_id(self, movie_id):
             return None
 
+    import backend.main as main
     monkeypatch.setattr(rec, "_recommender", MockRecommender())
+    monkeypatch.setattr(main, "_recommender", MockRecommender())
     monkeypatch.setattr(rr, "_TMDB_KEY", None)  # Force fallback path
 
     from fastapi.testclient import TestClient

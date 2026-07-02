@@ -60,16 +60,25 @@ import "./styles.css";
 import "./apex-product.css";
 import { AuthPage } from "./AuthPage";
 import { ErrorBoundary } from "./ErrorBoundary";
-import { Dashboard } from "./pages/Dashboard";
-import { KnowledgeGraphPage } from "./pages/KnowledgeGraph";
-import { EvaluationPage } from "./pages/Evaluation";
-import { UserProfilePage } from "./pages/UserProfile";
-import { AdminPanel } from "./pages/AdminPanel";
-import { LandingPage } from "./pages/Landing";
-import { SignupPage } from "./pages/Signup";
-import { PricingPage } from "./pages/Pricing";
-import { GettingStartedPage } from "./pages/GettingStarted";
-import { StatusPage } from "./pages/Status";
+const Dashboard = React.lazy(() => import("./pages/Dashboard").then(m => ({ default: m.Dashboard })));
+const KnowledgeGraphPage = React.lazy(() => import("./pages/KnowledgeGraph").then(m => ({ default: m.KnowledgeGraphPage })));
+const EvaluationPage = React.lazy(() => import("./pages/Evaluation").then(m => ({ default: m.EvaluationPage })));
+const UserProfilePage = React.lazy(() => import("./pages/UserProfile").then(m => ({ default: m.UserProfilePage })));
+const AdminPanel = React.lazy(() => import("./pages/AdminPanel").then(m => ({ default: m.AdminPanel })));
+const LandingPage = React.lazy(() => import("./pages/Landing").then(m => ({ default: m.LandingPage })));
+const SignupPage = React.lazy(() => import("./pages/Signup").then(m => ({ default: m.SignupPage })));
+const PricingPage = React.lazy(() => import("./pages/Pricing").then(m => ({ default: m.PricingPage })));
+const GettingStartedPage = React.lazy(() => import("./pages/GettingStarted").then(m => ({ default: m.GettingStartedPage })));
+const StatusPage = React.lazy(() => import("./pages/Status").then(m => ({ default: m.StatusPage })));
+
+function SuspenseFallback() {
+  return (
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "200px", width: "100%", height: "100%" }}>
+      <Loader2 className="spin" size={28} style={{ color: "var(--accent)" }} />
+    </div>
+  );
+}
+
 
 const imageBase = import.meta.env.VITE_TMDB_IMAGE_BASE || "https://image.tmdb.org/t/p/w500";
 const RECENT_STORAGE_KEY = "nova_recent_movies_v2";
@@ -2141,24 +2150,42 @@ function App() {
 
   // ── Full-screen marketing pages (no app shell) ───────────────────────────
   if (page === "landing") {
-    return <LandingPage onNavigate={(p) => setPage(p as AppPage)} />;
+    return (
+      <React.Suspense fallback={<SuspenseFallback />}>
+        <LandingPage onNavigate={(p) => setPage(p as AppPage)} />
+      </React.Suspense>
+    );
   }
   if (page === "signup") {
     return (
-      <SignupPage
-        onNavigate={(p) => setPage(p as AppPage)}
-        onLoginSuccess={(tok, user) => { setToken(tok); setUsername(user); }}
-      />
+      <React.Suspense fallback={<SuspenseFallback />}>
+        <SignupPage
+          onNavigate={(p) => setPage(p as AppPage)}
+          onLoginSuccess={(tok, user) => { setToken(tok); setUsername(user); }}
+        />
+      </React.Suspense>
     );
   }
   if (page === "pricing") {
-    return <PricingPage onNavigate={(p) => setPage(p as AppPage)} />;
+    return (
+      <React.Suspense fallback={<SuspenseFallback />}>
+        <PricingPage onNavigate={(p) => setPage(p as AppPage)} />
+      </React.Suspense>
+    );
   }
   if (page === "getting-started") {
-    return <GettingStartedPage onNavigate={(p) => setPage(p as AppPage)} />;
+    return (
+      <React.Suspense fallback={<SuspenseFallback />}>
+        <GettingStartedPage onNavigate={(p) => setPage(p as AppPage)} />
+      </React.Suspense>
+    );
   }
   if (page === "status") {
-    return <StatusPage />;
+    return (
+      <React.Suspense fallback={<SuspenseFallback />}>
+        <StatusPage />
+      </React.Suspense>
+    );
   }
 
   // ── App Shell Pages (Browse, Search, Dashboard, KG, Eval, Profile, Admin) ─

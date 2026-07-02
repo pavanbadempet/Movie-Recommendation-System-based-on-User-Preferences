@@ -3,11 +3,104 @@ from pathlib import Path
 import pickle
 from typing import Any
 
-import networkx as nx
+import rustworkx as rx
 
 logger = logging.getLogger(__name__)
 
 MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
+
+
+class RustworkxGraphWrapper:
+    """
+    Compatibility wrapper for rustworkx to match NetworkX's API.
+    Since rustworkx uses integer indices rather than arbitrary hashables,
+    this class maintains mapping dictionaries.
+    """
+
+    def __init__(self):
+        self._graph = rx.PyGraph(multigraph=False)
+        self._id_to_idx = {}
+        self._idx_to_id = {}
+
+    def add_node(self, node_id, **kwargs):
+        if node_id not in self._id_to_idx:
+            node_data = {"id": node_id, **kwargs}
+            idx = self._graph.add_node(node_data)
+            self._id_to_idx[node_id] = idx
+            self._idx_to_id[idx] = node_id
+        else:
+            idx = self._id_to_idx[node_id]
+            data = self._graph.get_node_data(idx)
+            if isinstance(data, dict):
+                data.update(kwargs)
+
+    def add_edge(self, u, v, **kwargs):
+        u_idx = self._id_to_idx.get(u)
+        v_idx = self._id_to_idx.get(v)
+        if u_idx is not None and v_idx is not None:
+            if not self._graph.has_edge(u_idx, v_idx):
+                self._graph.add_edge(u_idx, v_idx, kwargs)
+
+    def __contains__(self, node_id):
+        return node_id in self._id_to_idx
+
+    def __len__(self):
+        return len(self._graph)
+
+    def neighbors(self, node_id):
+        idx = self._id_to_idx.get(node_id)
+        if idx is None:
+            return []
+        return [self._idx_to_id[n] for n in self._graph.neighbors(idx)]
+
+    def get_edge_data(self, u, v):
+        u_idx = self._id_to_idx.get(u)
+        v_idx = self._id_to_idx.get(v)
+        if u_idx is None or v_idx is None:
+            return None
+        return self._graph.get_edge_data(u_idx, v_idx)
+
+    def degree(self, node_id):
+        idx = self._id_to_idx.get(node_id)
+        if idx is None:
+            return 0
+        return self._graph.degree(idx)
+
+    def number_of_nodes(self):
+        return len(self._graph)
+
+    def number_of_edges(self):
+        return len(self._graph.edges())
+
+    def get_node_data(self, node_id):
+        idx = self._id_to_idx.get(node_id)
+        if idx is None:
+            return None
+        return self._graph.get_node_data(idx)
+
+    @property
+    def nodes(self):
+        class NodesView:
+            def __init__(self, wrapper):
+                self.wrapper = wrapper
+
+            def __getitem__(self, node_id):
+                data = self.wrapper.get_node_data(node_id)
+                if data is None:
+                    raise KeyError(node_id)
+                return data
+
+            def __call__(self, data=False):
+                return self.wrapper.get_nodes_view(data=data)
+
+            def __iter__(self):
+                return iter(self.wrapper.get_nodes_view(data=False))
+        return NodesView(self)
+
+    def get_nodes_view(self, data=False):
+        if data:
+            return [(node["id"], node) for node in self._graph.nodes() if isinstance(node, dict) and "id" in node]
+        return [node["id"] for node in self._graph.nodes() if isinstance(node, dict) and "id" in node]
 
 
 class KnowledgeGraphEngine:
@@ -19,7 +112,7 @@ class KnowledgeGraphEngine:
     """
 
     def __init__(self):
-        self.graph = nx.Graph()
+        self.graph = RustworkxGraphWrapper()
         self.graph_path = MODELS_DIR / "knowledge_graph.gpickle"
 
     def build_graph(self, movies_data: list[dict[str, Any]], parsed_metadata: dict[int, dict[str, Any]]):
@@ -80,7 +173,12 @@ class KnowledgeGraphEngine:
             return False
         try:
             with open(self.graph_path, "rb") as f:
-                self.graph = pickle.load(f)
+                loaded_obj = pickle.load(f)
+            # If the loaded object is a NetworkX graph, we force rebuild using rustworkx
+            if "networkx" in str(type(loaded_obj)):
+                logger.warning("Legacy NetworkX graph detected. Invalidating and forcing rebuild as rustworkx.")
+                return False
+            self.graph = loaded_obj
             return True
         except Exception as e:
             logger.error(f"Failed to load Knowledge Graph: {e}")
@@ -93,7 +191,7 @@ class KnowledgeGraphEngine:
         import polars as pl
 
         logger.info("Rebuilding Knowledge Graph from movies catalog and semantic twins...")
-        self.graph = nx.Graph()
+        self.graph = RustworkxGraphWrapper()
 
         # 1. Load twins parquet
         parsed_metadata = {}
