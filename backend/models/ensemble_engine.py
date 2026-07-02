@@ -701,61 +701,87 @@ class ApexEnsembleEngine(nn.Module):
             except Exception as exc:
                 logger.debug("Contextual weights unavailable; using static ensemble weights: %s", exc)
 
-        # LightGCN via ONNX
-        try:
-            lgcn_s = onnx.predict_lightgcn(u_arr, i_arr)
-            scores_list.append(("lightgcn", _norm(lgcn_s.flatten())))
-        except Exception:
-            scores_list.append(("lightgcn", _np.full(len(safe_item_ids), 0.5)))
+        # Define parallel worker functions for active ONNX models
+        def run_lgcn():
+            try:
+                lgcn_s = onnx.predict_lightgcn(u_arr, i_arr)
+                return "lightgcn", _norm(lgcn_s.flatten())
+            except Exception:
+                return "lightgcn", _np.full(len(safe_item_ids), 0.5)
 
-        # Quantum via ONNX
-        try:
-            q_s = onnx.predict_quantum(u_arr, i_arr)
-            scores_list.append(("quantum", _norm(q_s.flatten())))
-        except Exception:
-            scores_list.append(("quantum", _np.full(len(safe_item_ids), 0.5)))
+        def run_quantum():
+            try:
+                q_s = onnx.predict_quantum(u_arr, i_arr)
+                return "quantum", _norm(q_s.flatten())
+            except Exception:
+                return "quantum", _np.full(len(safe_item_ids), 0.5)
 
-        # Hyperbolic via ONNX
-        try:
-            h_s = onnx.predict_hyperbolic(u_arr, i_arr)
-            scores_list.append(("hyperbolic", _norm(h_s.flatten())))
-        except Exception:
-            scores_list.append(("hyperbolic", _np.full(len(safe_item_ids), 0.5)))
+        def run_hyperbolic():
+            try:
+                h_s = onnx.predict_hyperbolic(u_arr, i_arr)
+                return "hyperbolic", _norm(h_s.flatten())
+            except Exception:
+                return "hyperbolic", _np.full(len(safe_item_ids), 0.5)
 
-        # SASRec via ONNX
-        try:
-            seq = self._get_session_sequence(user_id, override=session_sequence).numpy()
-            cand = _np.array([safe_item_ids], dtype=_np.int64)
-            sar_s = onnx.predict_sasrec(seq, cand)
-            scores_list.append(("sasrec", _norm(sar_s.flatten())))
-        except Exception:
-            scores_list.append(("sasrec", _np.full(len(safe_item_ids), 0.5)))
+        def run_sasrec():
+            try:
+                seq = self._get_session_sequence(user_id, override=session_sequence).numpy()
+                cand = _np.array([safe_item_ids], dtype=_np.int64)
+                sar_s = onnx.predict_sasrec(seq, cand)
+                return "sasrec", _norm(sar_s.flatten())
+            except Exception:
+                return "sasrec", _np.full(len(safe_item_ids), 0.5)
 
-        # KAN via ONNX (needs embeddings — use LightGCN embeddings as proxy)
-        try:
-            with torch.no_grad():
-                u_emb = (
-                    self.lightgcn.user_embedding(torch.tensor([safe_user_id])).expand(len(safe_item_ids), -1).numpy()
-                )
-                i_emb = self.lightgcn.item_embedding(torch.tensor(safe_item_ids)).numpy()
-            k_s = onnx.predict_kan(u_emb, i_emb)
-            scores_list.append(("kan", _norm(k_s.flatten())))
-        except Exception:
-            scores_list.append(("kan", _np.full(len(safe_item_ids), 0.5)))
+        def run_kan():
+            try:
+                with torch.no_grad():
+                    u_emb = (
+                        self.lightgcn.user_embedding(torch.tensor([safe_user_id])).expand(len(safe_item_ids), -1).numpy()
+                    )
+                    i_emb = self.lightgcn.item_embedding(torch.tensor(safe_item_ids)).numpy()
+                k_s = onnx.predict_kan(u_emb, i_emb)
+                return "kan", _norm(k_s.flatten())
+            except Exception:
+                return "kan", _np.full(len(safe_item_ids), 0.5)
 
-        # Diffusion via ONNX
-        try:
-            with torch.no_grad():
-                u_emb_d = (
-                    self.lightgcn.user_embedding(torch.tensor([safe_user_id])).expand(len(safe_item_ids), -1).numpy()
-                )
-                i_emb_d = self.lightgcn.item_embedding(torch.tensor(safe_item_ids)).numpy()
-            t_arr = _np.full((len(safe_item_ids), 1), 0.5, dtype=_np.float32)
-            d_noise = onnx.predict_diffusion(i_emb_d, t_arr, u_emb_d)
-            d_s = 1.0 / (1.0 + _np.linalg.norm(d_noise, axis=1))
-            scores_list.append(("diffusion", _norm(d_s)))
-        except Exception:
-            scores_list.append(("diffusion", _np.full(len(safe_item_ids), 0.5)))
+        def run_diffusion():
+            try:
+                with torch.no_grad():
+                    u_emb_d = (
+                        self.lightgcn.user_embedding(torch.tensor([safe_user_id])).expand(len(safe_item_ids), -1).numpy()
+                    )
+                    i_emb_d = self.lightgcn.item_embedding(torch.tensor(safe_item_ids)).numpy()
+                t_arr = _np.full((len(safe_item_ids), 1), 0.5, dtype=_np.float32)
+                d_noise = onnx.predict_diffusion(i_emb_d, t_arr, u_emb_d)
+                d_s = 1.0 / (1.0 + _np.linalg.norm(d_noise, axis=1))
+                return "diffusion", _norm(d_s)
+            except Exception:
+                return "diffusion", _np.full(len(safe_item_ids), 0.5)
+
+        # Build active execution functions list
+        onnx_fns = {
+            "lightgcn": run_lgcn,
+            "quantum": run_quantum,
+            "hyperbolic": run_hyperbolic,
+            "sasrec": run_sasrec,
+            "kan": run_kan,
+            "diffusion": run_diffusion,
+        }
+
+        # Run active models in parallel using the module-level thread pool
+        executor = _get_model_thread_pool()
+        active_fns = {name: fn for name, fn in onnx_fns.items() if w.get(name, 0.0) > 0.0}
+
+        from concurrent.futures import as_completed
+        futures = {executor.submit(fn): name for name, fn in active_fns.items()}
+        for future in as_completed(futures):
+            name = futures[future]
+            try:
+                _, res_scores = future.result()
+                scores_list.append((name, res_scores))
+            except Exception as exc:
+                logger.warning("ONNX model %s parallel run failed: %s", name, exc)
+                scores_list.append((name, _np.full(len(safe_item_ids), 0.5)))
 
         # Clifford via ONNX (fallback since ONNX isn't exported yet)
         scores_list.append(("clifford", _np.full(len(safe_item_ids), 0.5)))
