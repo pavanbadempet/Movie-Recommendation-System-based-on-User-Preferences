@@ -138,3 +138,6 @@ verify_implementation.py
 resume*.tex
 docs/INTERVIEW_GUIDE.md
 docs/INTERVIEW_AND_PRODUCT_PLAYBOOK.md
+
+# Rust builds
+/backend/rust_core/target/

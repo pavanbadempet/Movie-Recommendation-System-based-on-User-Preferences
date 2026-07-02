@@ -786,21 +786,10 @@ class ApexEnsembleEngine(nn.Module):
         # Clifford via ONNX (fallback since ONNX isn't exported yet)
         scores_list.append(("clifford", _np.full(len(safe_item_ids), 0.5)))
 
-        # Blend
-        key_map = {
-            "lightgcn": "lightgcn",
-            "quantum": "quantum",
-            "sasrec": "sasrec",
-            "kan": "kan",
-            "hyperbolic": "hyperbolic",
-            "diffusion": "diffusion",
-            "clifford": "clifford",
-        }
-        final = _np.zeros(len(safe_item_ids), dtype=_np.float32)
-        for name, s in scores_list:
-            final += s * w.get(key_map.get(name, name), 0.0)
-
-        return {orig_id: float(final[idx]) for idx, orig_id in enumerate(candidate_item_ids)}
+        # Blend using native compiled Rust module for zero Python iteration overhead
+        import rust_core
+        w_mapped = {name: float(w.get(key_map.get(name, name), 0.0)) for name, _ in scores_list}
+        return rust_core.blend_scores_rust(scores_list, w_mapped, candidate_item_ids)
 
     def _predict_ensemble_pytorch(
         self,
