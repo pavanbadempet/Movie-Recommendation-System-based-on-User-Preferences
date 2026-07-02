@@ -45,8 +45,8 @@ class MultiModalFusionIndex:
             logger.error("Text embeddings not found. Run rebuild_serving_artifacts.py first.")
             return False
 
-        text_vectors = np.load(text_emb_path)
-        text_ids = np.load(text_ids_path)
+        text_vectors = np.load(text_emb_path, mmap_mode="r")
+        text_ids = np.load(text_ids_path, mmap_mode="r")
 
         # Load Vision Embeddings
         vision_emb_path = MODELS_DIR / "poster_embeddings.npy"
@@ -56,8 +56,8 @@ class MultiModalFusionIndex:
             logger.error("Vision embeddings not found. Run generate_vision_embeddings.py first.")
             return False
 
-        vision_vectors = np.load(vision_emb_path)
-        vision_ids = np.load(vision_ids_path)
+        vision_vectors = np.load(vision_emb_path, mmap_mode="r")
+        vision_ids = np.load(vision_ids_path, mmap_mode="r")
 
         logger.info(f"Loaded Text vectors: {text_vectors.shape}")
         logger.info(f"Loaded Vision vectors: {vision_vectors.shape}")
@@ -119,7 +119,7 @@ class MultiModalFusionIndex:
             return False
 
         self.index = TurboQuantIndex.load(str(index_path))
-        self.movie_ids = np.load(ids_path)
+        self.movie_ids = np.load(ids_path, mmap_mode="r")
         return True
 
     def search(self, query_text_vector: np.ndarray, query_vision_vector: np.ndarray, top_k: int = 10):

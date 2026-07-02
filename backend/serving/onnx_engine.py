@@ -50,6 +50,11 @@ class ONNXEngine:
                 # Set SessionOptions to enable graph optimizations
                 sess_options = ort.SessionOptions()
                 sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+                sess_options.enable_mem_pattern = True
+                sess_options.enable_cpu_mem_arena = True
+                sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+                sess_options.inter_op_num_threads = 1
+                sess_options.add_session_config_entry("session.intra_op.allow_spinning", "0")
                 # Use detected CPU core count; 0 = let ORT decide
                 sess_options.intra_op_num_threads = self._cpu_cores
 

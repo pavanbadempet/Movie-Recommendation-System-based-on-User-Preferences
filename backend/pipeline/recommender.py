@@ -52,6 +52,10 @@ class ONNXSBERTEncoder:
         opts.intra_op_num_threads = max(1, os.cpu_count() // 2)
         opts.inter_op_num_threads = 1
         opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+        opts.enable_mem_pattern = True
+        opts.enable_cpu_mem_arena = True
+        opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        opts.add_session_config_entry("session.intra_op.allow_spinning", "0")
 
         self.session = ort.InferenceSession(onnx_path, sess_options=opts)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
