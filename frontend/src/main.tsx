@@ -44,6 +44,7 @@ import {
   platformStatus,
   recordEvent,
   searchMovies,
+  getShowcaseMovies,
   semanticBenchmark,
   checkVideoCacheStatus,
 } from "./api";
@@ -1748,35 +1749,50 @@ function App() {
   async function loadHomeShowcase() {
     setHomeLoading(true);
     setHomeError("");
-    // Popular seed movies for diverse recommendations with trailers
-    const seeds = [155, 27205, 157336, 680, 238]; // Dark Knight, Inception, Interstellar, Pulp Fiction, Godfather
-    const seedId = seeds[Math.floor(Math.random() * seeds.length)];
+
+    // Phase 1: Instant showcase from in-memory catalog (no TMDB, no ML — sub-200ms)
     try {
-      // Use a short timeout (4.5s) for the initial home showcase load to avoid screen hangs if backend is warming up
-      const response = await getRecommendations(seedId, 8, 4500);
-      const movies = dedupeMovies(response.data.recommendations || []).slice(0, 8);
-      setBackend(response.baseUrl);
-      setHomeMovies(movies);
-      setHomeHeroIndex(0);
-      setCatalogState("ready");
-      if (movies.length === 0) setHomeError("No movies available yet.");
-    } catch (error) {
-      console.warn("Failed to load initial home showcase recommendations (warmup in progress). Falling back to search.", error);
-      try {
-        // Fall back to a simple search query that loads instantly from database, skipping ML model loads
-        const searchResponse = await searchMovies("Batman");
-        if (searchResponse.data && searchResponse.data.length > 0) {
-          const movies = dedupeMovies(searchResponse.data).slice(0, 8);
-          setBackend(searchResponse.baseUrl);
-          setHomeMovies(movies);
-          setHomeHeroIndex(0);
-          setCatalogState("ready");
-        } else {
-          setHomeError("No movies found in catalog.");
-        }
-      } catch {
-        setHomeError(error instanceof Error ? error.message : "Movies unavailable during warmup.");
+      const showcaseResponse = await getShowcaseMovies(8);
+      if (showcaseResponse.data && showcaseResponse.data.length > 0) {
+        const movies = dedupeMovies(showcaseResponse.data).slice(0, 8);
+        setBackend(showcaseResponse.baseUrl);
+        setHomeMovies(movies);
+        setHomeHeroIndex(0);
+        setCatalogState("ready");
+        setHomeLoading(false);
+
+        // Phase 2: Lazy-upgrade to real ML recommendations in background
+        const seeds = [155, 27205, 157336, 680, 238];
+        const seedId = seeds[Math.floor(Math.random() * seeds.length)];
+        getRecommendations(seedId, 8, 8000)
+          .then((recResponse) => {
+            const recMovies = dedupeMovies(recResponse.data.recommendations || []).slice(0, 8);
+            if (recMovies.length > 0) {
+              setHomeMovies(recMovies);
+              setHomeHeroIndex(0);
+            }
+          })
+          .catch(() => { /* Showcase already visible, ML upgrade is optional */ });
+        return;
       }
+    } catch (e) {
+      console.warn("[SHOWCASE] Fast showcase unavailable, falling back:", e);
+    }
+
+    // Phase 1b fallback: search query (still fast, just reads DB)
+    try {
+      const searchResponse = await searchMovies("Batman");
+      if (searchResponse.data && searchResponse.data.length > 0) {
+        const movies = dedupeMovies(searchResponse.data).slice(0, 8);
+        setBackend(searchResponse.baseUrl);
+        setHomeMovies(movies);
+        setHomeHeroIndex(0);
+        setCatalogState("ready");
+      } else {
+        setHomeError("No movies found in catalog.");
+      }
+    } catch (error) {
+      setHomeError(error instanceof Error ? error.message : "Movies unavailable during warmup.");
     } finally {
       setHomeLoading(false);
     }

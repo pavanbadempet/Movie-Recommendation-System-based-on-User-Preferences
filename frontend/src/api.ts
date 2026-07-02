@@ -243,6 +243,10 @@ export async function searchMovies(query: string): Promise<BackendResult<Movie[]
   return apiGetFirstSuccess<Movie[]>("/v1/search", { q: query, limit: 40 }, 18000);
 }
 
+export async function getShowcaseMovies(limit = 8): Promise<BackendResult<Movie[]>> {
+  return apiGetFirstSuccess<Movie[]>("/movies/showcase", { limit }, 3000);
+}
+
 export async function aiSearch(query: string): Promise<BackendResult<Movie[]>> {
   try {
     const clientResults = await getClientTextSearch(query, 40);

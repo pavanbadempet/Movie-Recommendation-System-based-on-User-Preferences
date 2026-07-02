@@ -631,6 +631,36 @@ class Recommender:
 
         return get_all_titles(self, limit)
 
+    def get_showcase_movies(self, limit: int = 8) -> list[dict]:
+        """Return top-rated popular movies from the in-memory catalog instantly (no TMDB / no ML).
+
+        Used for the initial page showcase to avoid cold-start delays. Movies are
+        sorted by a composite score of vote_average and popularity so the hero
+        section renders in < 200ms on cold-start.
+        """
+        if self._movies is None:
+            return []
+        records = self._movie_records or self._movies.to_dict(orient="records")
+
+        # Filter to movies that have a poster and reasonable vote counts
+        viable = [
+            r
+            for r in records
+            if r.get("poster_path")
+            and float(r.get("vote_count") or 0) >= 50
+            and float(r.get("vote_average") or 0) >= 6.0
+        ]
+        # Sort by composite score: weighted average × log(popularity)
+        import math
+
+        def _score(m: dict) -> float:
+            avg = float(m.get("vote_average") or 0)
+            pop = float(m.get("popularity") or 1)
+            return avg * math.log1p(pop)
+
+        viable.sort(key=_score, reverse=True)
+        return [self._clean_response_record(m) for m in viable[:limit]]
+
     def search_movies(self, query: str, limit: int = 20) -> list[dict]:
         """Search movies by title, overview, and genres. Delegates to pipeline or sparse fallback."""
         if not query or self._movies is None:

@@ -1,0 +1,21 @@
+{
+  "short_name": "Nova",
+  "name": "Nova Movie Recommender",
+  "icons": [
+    {
+      "src": "https://placehold.co/192x192/141418/a78bfa?text=Nova",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://placehold.co/512x512/141418/a78bfa?text=Nova",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#050508",
+  "theme_color": "#0a0a1a",
+  "display": "standalone",
+  "orientation": "portrait"
+}

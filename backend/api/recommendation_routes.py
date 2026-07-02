@@ -321,6 +321,20 @@ def create_recommendation_router(deps: RouterDeps):
     _inject_pydantic_models_into_globals()
     router = APIRouter()
 
+    # ── /movies/showcase (instant, no TMDB / no ML) ──────────────────────
+    @router.get("/movies/showcase")
+    @cached_endpoint(ttl=300.0)
+    async def get_showcase_movies(
+        limit: int = Query(default=8, le=20),
+    ):
+        """Return top-rated popular movies from the in-memory catalog instantly.
+
+        This endpoint avoids TMDB API calls and ML pipeline loads, making it
+        ideal for the initial page render on cold-start. Responds in < 200ms.
+        """
+        rec = get_rec()
+        return rec.get_showcase_movies(limit=limit)
+
     # ── /movies/latest ──────────────────────────────────────────────────────
     @router.get("/movies/latest")
     @cached_endpoint(ttl=120.0)
