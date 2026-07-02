@@ -59,6 +59,10 @@ COPY data/evaluation/ ./data/evaluation/
 # hadolint ignore=DL3059
 RUN mkdir -p data/raw logs
 
+# Pre-download serving model files to make container startup instant
+# hadolint ignore=DL3059
+RUN python -c "from backend.models.model_loader import ensure_model_files, default_artifacts_for_serving_profile; from pathlib import Path; ensure_model_files(Path('models'), default_artifacts_for_serving_profile())"
+
 # -------------------------------------------
 # Stage 2: Runtime image
 FROM python:3.11-slim AS runtime
