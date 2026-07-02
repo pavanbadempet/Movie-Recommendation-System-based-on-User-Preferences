@@ -185,8 +185,15 @@ export async function getClientTextSearch(query: string, limit = 10): Promise<Mo
     const movieOffset = i * 384;
     let dot = 0;
 
-    for (let j = 0; j < 384; j++) {
-      dot += queryVector[j] * cachedVectors[movieOffset + j];
+    for (let j = 0; j < 384; j += 8) {
+      dot += queryVector[j] * cachedVectors[movieOffset + j] +
+             queryVector[j + 1] * cachedVectors[movieOffset + j + 1] +
+             queryVector[j + 2] * cachedVectors[movieOffset + j + 2] +
+             queryVector[j + 3] * cachedVectors[movieOffset + j + 3] +
+             queryVector[j + 4] * cachedVectors[movieOffset + j + 4] +
+             queryVector[j + 5] * cachedVectors[movieOffset + j + 5] +
+             queryVector[j + 6] * cachedVectors[movieOffset + j + 6] +
+             queryVector[j + 7] * cachedVectors[movieOffset + j + 7];
     }
 
     scores[i] = { index: i, score: dot };
@@ -243,8 +250,15 @@ export async function getClientRecommendations(movieId: number, limit = 10): Pro
     const movieOffset = i * 384;
     let dot = 0;
 
-    for (let j = 0; j < 384; j++) {
-      dot += targetVector[j] * cachedVectors[movieOffset + j];
+    for (let j = 0; j < 384; j += 8) {
+      dot += targetVector[j] * cachedVectors[movieOffset + j] +
+             targetVector[j + 1] * cachedVectors[movieOffset + j + 1] +
+             targetVector[j + 2] * cachedVectors[movieOffset + j + 2] +
+             targetVector[j + 3] * cachedVectors[movieOffset + j + 3] +
+             targetVector[j + 4] * cachedVectors[movieOffset + j + 4] +
+             targetVector[j + 5] * cachedVectors[movieOffset + j + 5] +
+             targetVector[j + 6] * cachedVectors[movieOffset + j + 6] +
+             targetVector[j + 7] * cachedVectors[movieOffset + j + 7];
     }
 
     scores[i] = { index: i, score: dot };

@@ -606,5 +606,23 @@ _register_routes()
 # =====================================================================
 if __name__ == "__main__":
     import uvicorn
+    import os
+    import sys
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)  # noqa: S104
+    # Add repo root and backend directory to sys.path to ensure uvicorn worker string imports work
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(current_dir)
+    if current_dir not in sys.path:
+        sys.path.insert(0, current_dir)
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
+
+    # Use CPU cores for worker clustering (max out at 4 workers)
+    workers = max(1, min(4, os.cpu_count() or 1))
+
+    try:
+        # String import format is required for multi-worker process clustering in uvicorn
+        uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, workers=workers)
+    except Exception:
+        # Fallback to single worker app object format if path resolution fails
+        uvicorn.run(app, host="0.0.0.0", port=8000)
