@@ -596,9 +596,6 @@ def create_core_router(deps: RouterDeps):
     # ── /health ───────────────────────────────────────────────────────────────
     @router.get("/health", response_model=HealthResponse)
     async def health_check():
-        for k, v in os.environ.items():
-            if k.startswith("NOVA_") or "OPENROUTER" in k:
-                logger.info("DIAGNOSTIC ENV: %s = %s", k, v)
         metadata = _app_metadata_fn()
         td = _tier_detector_getter() if _tier_detector_getter else None
         if td is not None and td._detected:
