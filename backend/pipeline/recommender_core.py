@@ -1598,48 +1598,46 @@ def load_optional_models(rec) -> None:
     is_tier3 = getattr(rec, "_low_memory", False) or (
         hasattr(rec, "_resolve_active_tier") and rec._resolve_active_tier() == "tier3"
     )
-    if not is_tier3:
-        try:
-            loaded = rec.kg_engine.load()
-            if (
-                not loaded
-                or not hasattr(rec.kg_engine, "graph")
-                or rec.kg_engine.graph is None
-                or len(rec.kg_engine.graph) < 100
-            ):
-                logger.info("Knowledge Graph is empty or mock. Rebuilding dynamically from catalog in background...")
-                DATA_DIR = (
-                    (recommender_module and getattr(recommender_module, "DATA_DIR", None))
-                    or getattr(rec, "DATA_DIR", None)
-                    or _pathlib.Path(__file__).parent.parent / "data" / "processed"
-                )
-                twins_path = DATA_DIR / "semantic_twins.parquet"
-                from threading import Thread
+    # Enable Knowledge Graph in Tier3/low-memory mode as well, as it only uses ~2MB of RAM
+    try:
+        loaded = rec.kg_engine.load()
+        if (
+            not loaded
+            or not hasattr(rec.kg_engine, "graph")
+            or rec.kg_engine.graph is None
+            or len(rec.kg_engine.graph) < 100
+        ):
+            logger.info("Knowledge Graph is empty or mock. Rebuilding dynamically from catalog in background...")
+            DATA_DIR = (
+                (recommender_module and getattr(recommender_module, "DATA_DIR", None))
+                or getattr(rec, "DATA_DIR", None)
+                or _pathlib.Path(__file__).parent.parent / "data" / "processed"
+            )
+            twins_path = DATA_DIR / "semantic_twins.parquet"
+            from threading import Thread
 
-                def bg_rebuild():
-                    try:
-                        rec.kg_engine.rebuild_from_catalog(rec._movies, twins_path)
-                        try:
-                            from backend.intelligence.cross_domain_kg import enrich_knowledge_graph_with_cross_domain
-
-                            enrich_knowledge_graph_with_cross_domain(rec.kg_engine)
-                        except Exception as exc:
-                            logger.warning("Cross-domain KG enrichment skipped: %s", exc)
-                    except Exception as exc:
-                        logger.error("Background Knowledge Graph rebuild failed: %s", exc)
-
-                Thread(target=bg_rebuild, name="kg-rebuild", daemon=True).start()
-            else:
+            def bg_rebuild():
                 try:
-                    from backend.intelligence.cross_domain_kg import enrich_knowledge_graph_with_cross_domain
+                    rec.kg_engine.rebuild_from_catalog(rec._movies, twins_path)
+                    try:
+                        from backend.intelligence.cross_domain_kg import enrich_knowledge_graph_with_cross_domain
 
-                    enrich_knowledge_graph_with_cross_domain(rec.kg_engine)
+                        enrich_knowledge_graph_with_cross_domain(rec.kg_engine)
+                    except Exception as exc:
+                        logger.warning("Cross-domain KG enrichment skipped: %s", exc)
                 except Exception as exc:
-                    logger.warning("Cross-domain KG enrichment skipped: %s", exc)
-        except Exception as e:
-            logger.warning("Failed to load/rebuild Knowledge Graph: %s", e)
-    else:
-        logger.info("Tier3 / low-memory serving profile active: skipping Knowledge Graph load and rebuild.")
+                    logger.error("Background Knowledge Graph rebuild failed: %s", exc)
+
+            Thread(target=bg_rebuild, name="kg-rebuild", daemon=True).start()
+        else:
+            try:
+                from backend.intelligence.cross_domain_kg import enrich_knowledge_graph_with_cross_domain
+
+                enrich_knowledge_graph_with_cross_domain(rec.kg_engine)
+            except Exception as exc:
+                logger.warning("Cross-domain KG enrichment skipped: %s", exc)
+    except Exception as e:
+        logger.warning("Failed to load/rebuild Knowledge Graph: %s", e)
 
     if not is_tier3:
         try:
@@ -1699,7 +1697,7 @@ def wire_pipelines(rec, is_tier3: bool) -> None:
             tfidf_index=tfidf_idx,
             kg_engine=kg,
             movie_df=rec._movies,
-            config=RetrievalConfig(low_memory=rec._low_memory, enable_kg=not is_tier3),
+            config=RetrievalConfig(low_memory=rec._low_memory, enable_kg=True),
         )
         # Wire the pre-trained neural ensemble engine (ApexEnsembleEngine)
         ensemble = None
