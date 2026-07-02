@@ -221,6 +221,7 @@ def generate_explanation(user_id: str, movie: dict[str, Any], user_context: str 
     signals_str = _format_signals(movie)
 
     import os
+
     disable_llm = os.getenv("NOVA_DISABLE_LLM_EXPLANATIONS", "").strip().lower()
     is_tier3 = os.getenv("NOVA_SERVING_TIER", "").strip().lower() == "tier3"
     is_low_mem = os.getenv("NOVA_LOW_MEMORY", "").strip().lower() in {"1", "true", "yes", "on"}

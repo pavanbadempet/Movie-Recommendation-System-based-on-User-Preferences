@@ -33,14 +33,14 @@ from backend.response_models import (
 from backend.router_deps import RouterDeps
 
 logger = logging.getLogger(__name__)
-from backend.api.fast_cache import cached_endpoint
-
 # ---------------------------------------------------------------------------
 # Module-level Pydantic models for chat endpoint
 # These must be at module level (not inside factory functions) so that
 # FastAPI's TypeAdapter can resolve them for OpenAPI schema generation.
 # ---------------------------------------------------------------------------
 from pydantic import BaseModel as _BaseModel
+
+from backend.api.fast_cache import cached_endpoint
 
 
 class ChatMessage(_BaseModel):
@@ -596,7 +596,6 @@ def create_core_router(deps: RouterDeps):
     # ── /health ───────────────────────────────────────────────────────────────
     @router.get("/health", response_model=HealthResponse)
     async def health_check():
-        import os
         for k, v in os.environ.items():
             if k.startswith("NOVA_") or "OPENROUTER" in k:
                 logger.info("DIAGNOSTIC ENV: %s = %s", k, v)
@@ -1000,7 +999,9 @@ def create_search_movie_router(deps: RouterDeps):
                 raise HTTPException(status_code=400, detail="rating must be between 1 and 5")
 
         import uuid
+
         from backend.events.events import utc_now
+
         event_id = str(uuid.uuid4())
         event_ts = str(utc_now())
 
@@ -1028,6 +1029,7 @@ def create_search_movie_router(deps: RouterDeps):
             # 2. Database insert transaction
             try:
                 from backend.data.database import UserEvent
+
                 pg_event = UserEvent(
                     tenant_id=tenant_uuid,
                     event_type=payload_dict["event_type"],
@@ -1058,12 +1060,17 @@ def create_search_movie_router(deps: RouterDeps):
             # 4. Real-time user index updates
             try:
                 from backend.serving.realtime_feature_updater import update_user_index
+
                 update_user_index(payload_dict)
             except Exception as exc:
                 logger.warning("Real-time index update failed in background: %s", exc)
 
             # 5. Active inference trigger
-            if payload_dict["event_type"] == "rating" and payload_dict.get("movie_id") and payload_dict.get("rating") is not None:
+            if (
+                payload_dict["event_type"] == "rating"
+                and payload_dict.get("movie_id")
+                and payload_dict.get("rating") is not None
+            ):
                 try:
                     if payload_dict["rating"] >= 4.0:
                         _trigger_active_inference_fn(payload_dict["movie_id"], 1.0)
@@ -1076,6 +1083,7 @@ def create_search_movie_router(deps: RouterDeps):
             if payload_dict.get("movie_id") and payload_dict["event_type"] in ["click", "rating"]:
                 try:
                     from backend.intelligence.contextual_bandit import get_bandit_engine
+
                     bandit = get_bandit_engine()
                     is_success = payload_dict["event_type"] == "click" or (
                         payload_dict["event_type"] == "rating" and payload_dict.get("rating", 0.0) >= 4.0
