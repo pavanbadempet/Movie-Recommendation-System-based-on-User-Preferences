@@ -57,7 +57,7 @@ class FeatureStore:
             self._item_factors = {m_id: np.array(emb, dtype=np.float32) for m_id, emb in zip(movie_ids, item_embs)}
 
             self._item_ids = np.array(movie_ids, dtype=np.int32)
-            self._item_matrix = np.vstack(item_embs) if movie_ids else np.array([])
+            self._item_matrix = np.vstack(item_embs).astype(np.float32) if movie_ids else np.array([], dtype=np.float32)
 
             self._is_loaded = True
             logger.info(f"Feature Store loaded: {len(self._user_factors)} Users, {len(self._item_factors)} Items.")
@@ -85,23 +85,34 @@ class FeatureStore:
         if user_vec is None:
             return []
 
-        # Fast vectorized dot product
-        scores = np.dot(self._item_matrix, user_vec)
+        try:
+            import rust_core
+            # Call PyO3 accelerated Rayon-parallel dot product
+            return rust_core.collaborative_candidates_rust(
+                self._item_matrix,
+                user_vec,
+                self._item_ids,
+                top_k
+            )
+        except Exception as e:
+            logger.warning(f"Rust acceleration for collaborative candidates failed: {e}. Falling back to NumPy.")
+            # Fast vectorized dot product
+            scores = np.dot(self._item_matrix, user_vec)
 
-        # Get top K indices
-        # argpartition is O(N) instead of O(N log N) for sorting
-        if len(scores) <= top_k:
-            top_indices = np.argsort(scores)[::-1]
-        else:
-            top_indices = np.argpartition(scores, -top_k)[-top_k:]
-            # Sort the top k
-            top_indices = top_indices[np.argsort(scores[top_indices])[::-1]]
+            # Get top K indices
+            # argpartition is O(N) instead of O(N log N) for sorting
+            if len(scores) <= top_k:
+                top_indices = np.argsort(scores)[::-1]
+            else:
+                top_indices = np.argpartition(scores, -top_k)[-top_k:]
+                # Sort the top k
+                top_indices = top_indices[np.argsort(scores[top_indices])[::-1]]
 
-        candidates = []
-        for idx in top_indices:
-            candidates.append((int(self._item_ids[idx]), float(scores[idx])))
+            candidates = []
+            for idx in top_indices:
+                candidates.append((int(self._item_ids[idx]), float(scores[idx])))
 
-        return candidates
+            return candidates
 
 
 # Global singleton

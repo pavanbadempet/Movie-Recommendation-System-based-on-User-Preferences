@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
 use numpy::{PyArray1, PyArray2};
+use rayon::prelude::*;
 
 #[pyfunction]
 fn blend_scores_rust<'py>(
@@ -131,9 +132,86 @@ fn mmr_diversify_rust(
     Ok(selected)
 }
 
+#[pyfunction]
+fn collaborative_candidates_rust(
+    _py: Python<'_>,
+    item_matrix: &PyArray2<f32>,
+    user_vec: &PyArray1<f32>,
+    item_ids: &PyArray1<i32>,
+    top_k: usize,
+) -> PyResult<Vec<(i32, f32)>> {
+    let item_matrix_readonly = item_matrix.readonly();
+    let item_matrix_view = item_matrix_readonly.as_array();
+
+    let user_vec_readonly = user_vec.readonly();
+    let user_vec_slice = match user_vec_readonly.as_slice() {
+        Ok(s) => s,
+        Err(e) => return Err(pyo3::exceptions::PyValueError::new_err(format!("User vector is not contiguous: {}", e))),
+    };
+
+    let item_ids_readonly = item_ids.readonly();
+    let item_ids_slice = match item_ids_readonly.as_slice() {
+        Ok(s) => s,
+        Err(e) => return Err(pyo3::exceptions::PyValueError::new_err(format!("Item IDs array is not contiguous: {}", e))),
+    };
+
+    let num_items = item_matrix_view.shape()[0];
+    let dim = item_matrix_view.shape()[1];
+
+    if num_items != item_ids_slice.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err("item_matrix row count does not match item_ids length"));
+    }
+
+    if dim != user_vec_slice.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err("item_matrix column count does not match user_vec length"));
+    }
+
+    let mut scores: Vec<(usize, f32)> = (0..num_items)
+        .into_par_iter()
+        .map(|idx| {
+            let row = item_matrix_view.row(idx);
+            let dot = match row.as_slice() {
+                Some(slice) => {
+                    let mut sum = 0.0f32;
+                    for i in 0..dim {
+                        sum += slice[i] * user_vec_slice[i];
+                    }
+                    sum
+                }
+                None => {
+                    let mut sum = 0.0f32;
+                    for i in 0..dim {
+                        sum += row[i] * user_vec_slice[i];
+                    }
+                    sum
+                }
+            };
+            (idx, dot)
+        })
+        .collect();
+
+    if scores.len() <= top_k {
+        scores.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    } else {
+        let (_, _mid, _) = scores.select_nth_unstable_by(top_k, |a, b| {
+            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        scores[0..top_k].sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scores.truncate(top_k);
+    }
+
+    let candidates: Vec<(i32, f32)> = scores
+        .into_iter()
+        .map(|(idx, score)| (item_ids_slice[idx], score))
+        .collect();
+
+    Ok(candidates)
+}
+
 #[pymodule]
 fn rust_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(blend_scores_rust, m)?)?;
     m.add_function(wrap_pyfunction!(mmr_diversify_rust, m)?)?;
+    m.add_function(wrap_pyfunction!(collaborative_candidates_rust, m)?)?;
     Ok(())
 }
