@@ -997,8 +997,8 @@ def create_search_movie_router(deps: RouterDeps):
 
         import uuid
         from backend.events.events import utc_now
-        event_id = str(payload.event_id or uuid.uuid4())
-        event_ts = str(payload.event_ts or utc_now())
+        event_id = str(uuid.uuid4())
+        event_ts = str(utc_now())
 
         event_payload = payload.model_dump(exclude_none=True)
         event_payload["event_id"] = event_id
