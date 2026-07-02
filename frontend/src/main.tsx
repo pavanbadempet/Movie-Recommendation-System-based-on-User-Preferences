@@ -832,16 +832,13 @@ function TrailerFrame({ movie }: { movie: Movie }) {
 
   return (
     <div className="trailer-frame">
-      {trailerKey && !isMobile ? (
-        isCached === null ? (
-          <div className="trailer-loading" style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#94a3b8" }}>
-            <Loader2 className="spin" size={24} />
-          </div>
-        ) : (!isCached || videoError) ? (
+      {trailerKey ? (
+        isMobile ? (
+          /* Mobile: YouTube iframe embed with muted autoplay */
           <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", pointerEvents: "none" }}>
             <iframe
-              src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&loop=1&playlist=${trailerKey}&controls=0&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&fs=0`}
-              title="Movie Trailer Fallback"
+              src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&loop=1&playlist=${trailerKey}&controls=0&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&fs=0&playsinline=1`}
+              title="Movie Trailer"
               frameBorder="0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
@@ -875,24 +872,72 @@ function TrailerFrame({ movie }: { movie: Movie }) {
                 pointerEvents: "none",
               }}
             />
+            <div className="trailer-overlay" />
           </div>
         ) : (
-          <>
-            <video
-              ref={videoRef}
-              src={videoSrc}
-              autoPlay
-              muted
-              loop
-              playsInline
-              poster={backdropUrl(movie.poster_path)}
-              onError={() => setVideoError(true)}
-              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-            />
-            <div className="trailer-overlay" />
-          </>
+          /* Desktop: cached video first, YouTube iframe fallback */
+          isCached === null ? (
+            <div className="trailer-loading" style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#94a3b8" }}>
+              <Loader2 className="spin" size={24} />
+            </div>
+          ) : (!isCached || videoError) ? (
+            <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", pointerEvents: "none" }}>
+              <iframe
+                src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&loop=1&playlist=${trailerKey}&controls=0&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&fs=0`}
+                title="Movie Trailer Fallback"
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                style={{
+                  position: "absolute",
+                  top: "-15%",
+                  left: "-15%",
+                  width: "130%",
+                  height: "130%",
+                  objectFit: "cover",
+                  display: "block",
+                  border: "none",
+                  opacity: showFallbackIframe ? 1 : 0,
+                  transition: "opacity 0.8s ease-in-out",
+                }}
+              />
+              <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", zIndex: 10, background: "transparent" }} />
+              <img
+                src={backdropUrl(movie.poster_path)}
+                alt=""
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  zIndex: 5,
+                  opacity: showFallbackIframe ? 0 : 1,
+                  transition: "opacity 0.8s ease-in-out",
+                  pointerEvents: "none",
+                }}
+              />
+            </div>
+          ) : (
+            <>
+              <video
+                ref={videoRef}
+                src={videoSrc}
+                autoPlay
+                muted
+                loop
+                playsInline
+                poster={backdropUrl(movie.poster_path)}
+                onError={() => setVideoError(true)}
+                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+              />
+              <div className="trailer-overlay" />
+            </>
+          )
         )
       ) : (
+        /* No trailer key — static poster */
         <>
           <img src={backdropUrl(movie.poster_path)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
           <div className="trailer-overlay" />
