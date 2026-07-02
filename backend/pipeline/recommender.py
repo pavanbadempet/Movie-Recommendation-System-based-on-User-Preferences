@@ -450,15 +450,19 @@ class Recommender:
     def _get_query_encoder(self):
         """Load the query bi-encoder lazily when the deployment opts in."""
         if self._query_encoder is None:
+            expected_model = "all-mpnet-base-v2"
+            if hasattr(self, "manifest") and self.manifest:
+                expected_model = self.manifest.get("model_name", "all-mpnet-base-v2")
+
             onnx_path = MODELS_DIR / "sbert_encoder.quant.onnx"
-            if onnx_path.exists():
+            if onnx_path.exists() and "minilm" in expected_model.lower():
                 model_name = os.getenv("NOVA_QUERY_ENCODER_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
                 self._query_encoder = ONNXSBERTEncoder(str(onnx_path), model_name)
                 logger.info("Loaded ONNX query SBERT encoder from %s", onnx_path)
             else:
                 from sentence_transformers import SentenceTransformer
 
-                model_name = os.getenv("NOVA_QUERY_ENCODER_MODEL", "all-mpnet-base-v2")
+                model_name = os.getenv("NOVA_QUERY_ENCODER_MODEL", expected_model)
                 self._query_encoder = SentenceTransformer(model_name)
                 logger.info("Loaded PyTorch query SBERT encoder: %s", model_name)
         return self._query_encoder

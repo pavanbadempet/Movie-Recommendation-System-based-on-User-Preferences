@@ -219,6 +219,15 @@ def generate_explanation(user_id: str, movie: dict[str, Any], user_context: str 
     # Hash the signals so the cache invalidates if the recommendation rationale changes
     # usedforsecurity=False makes this safe on FIPS-enabled systems
     signals_str = _format_signals(movie)
+
+    import os
+    disable_llm = os.getenv("NOVA_DISABLE_LLM_EXPLANATIONS", "").strip().lower()
+    is_tier3 = os.getenv("NOVA_SERVING_TIER", "").strip().lower() == "tier3"
+    is_low_mem = os.getenv("NOVA_LOW_MEMORY", "").strip().lower() in {"1", "true", "yes", "on"}
+
+    if disable_llm in {"1", "true", "yes", "on"} or (disable_llm == "" and (is_tier3 or is_low_mem)):
+        return f"Recommended for you because: {signals_str}"
+
     signals_hash = hashlib.md5(signals_str.encode(), usedforsecurity=False).hexdigest()[:8]
 
     # Try exact cache first
