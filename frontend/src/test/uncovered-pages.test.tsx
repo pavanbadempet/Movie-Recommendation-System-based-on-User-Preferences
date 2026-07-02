@@ -426,7 +426,7 @@ describe("SignupPage", () => {
     vi.mocked(apiPost).mockResolvedValueOnce({
       data: {
         username: "test@example.com",
-        api_key: "nova_key_abc123def456",
+        api_key: "nova_key_abc123def456", // gitleaks:allow
         access_token: "jwt-token-xyz",
       },
       baseUrl: "https://test-api.example.com",
@@ -447,7 +447,7 @@ describe("SignupPage", () => {
       expect(screen.getByText("Your API key is ready")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("nova_key_abc123def456")).toBeInTheDocument();
+    expect(screen.getByText("nova_key_abc123def456")).toBeInTheDocument(); // gitleaks:allow
     expect(onLoginSuccess).toHaveBeenCalledWith("jwt-token-xyz", "test@example.com");
     expect(window.localStorage.getItem("nova_jwt_token")).toBe("jwt-token-xyz");
   });
@@ -546,7 +546,7 @@ describe("SignupPage", () => {
   it("copies API key to clipboard on the key step", async () => {
     const writeText = mockClipboard();
     vi.mocked(apiPost).mockResolvedValueOnce({
-      data: { api_key: "nova_key_test123456" },
+      data: { api_key: "nova_key_test123456" }, // gitleaks:allow
       baseUrl: "https://test-api.example.com",
     });
 
@@ -569,14 +569,14 @@ describe("SignupPage", () => {
       fireEvent.click(screen.getByLabelText("Copy API key to clipboard"));
     });
 
-    expect(writeText).toHaveBeenCalledWith("nova_key_test123456");
+    expect(writeText).toHaveBeenCalledWith("nova_key_test123456"); // gitleaks:allow
     expect(screen.getByText("Copied")).toBeInTheDocument();
   });
 
   it("navigates to getting-started from API key step", async () => {
     mockClipboard();
     vi.mocked(apiPost).mockResolvedValueOnce({
-      data: { api_key: "nova_key_xyz" },
+      data: { api_key: "nova_key_xyz" }, // gitleaks:allow
       baseUrl: "https://test-api.example.com",
     });
 
@@ -654,22 +654,22 @@ describe("GettingStartedPage", () => {
   });
 
   it("renders step 1 with API key display when key is in localStorage", () => {
-    window.localStorage.setItem("nova_api_key", "test-key-12345");
+    window.localStorage.setItem("nova_api_key", "test-key-12345"); // gitleaks:allow
     render(<GettingStartedPage onNavigate={onNavigate} />);
-    expect(screen.getByText("test-key-12345")).toBeInTheDocument();
+    expect(screen.getByText("test-key-12345")).toBeInTheDocument(); // gitleaks:allow
     expect(screen.getByText("Copy")).toBeInTheDocument();
   });
 
   it("copies API key from step 1", async () => {
     const writeText = mockClipboard();
-    window.localStorage.setItem("nova_api_key", "test-key-12345");
+    window.localStorage.setItem("nova_api_key", "test-key-12345"); // gitleaks:allow
     render(<GettingStartedPage onNavigate={onNavigate} />);
 
     await act(async () => {
       fireEvent.click(screen.getByLabelText("Copy API key to clipboard"));
     });
 
-    expect(writeText).toHaveBeenCalledWith("test-key-12345");
+    expect(writeText).toHaveBeenCalledWith("test-key-12345"); // gitleaks:allow
     expect(screen.getByText("Copied")).toBeInTheDocument();
   });
 

@@ -404,7 +404,7 @@ describe("MovieDialog", () => {
     explanation_text: "Because you like futuristic space adventures.",
     cast: "Jane Doe, John Smith",
     director: "Jane Director",
-    trailer_key: "abc_test_key",
+    trailer_key: "abc_test_key", // gitleaks:allow
     vote_count: 1420,
     popularity: 98.2,
     similarity_score: 0.94,
