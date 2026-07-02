@@ -3489,6 +3489,13 @@ input:focus-visible {
     width: 100% !important;
     box-sizing: border-box !important;
   }
+  .kg-empty, .kg-loading {
+    height: 380px !important;
+    min-height: 380px !important;
+    padding: 24px 16px !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+  }
 
   /* Evaluation page Mobile overrides */
   .metric-desc span:nth-child(n+2) {
