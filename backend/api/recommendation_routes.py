@@ -995,97 +995,121 @@ def create_search_movie_router(deps: RouterDeps):
             if not 1 <= payload.rating <= 5:
                 raise HTTPException(status_code=400, detail="rating must be between 1 and 5")
 
+        import uuid
+        from backend.events.events import utc_now
+        event_id = str(payload.event_id or uuid.uuid4())
+        event_ts = str(payload.event_ts or utc_now())
+
         event_payload = payload.model_dump(exclude_none=True)
+        event_payload["event_id"] = event_id
+        event_payload["event_ts"] = event_ts
         event_payload["tenant_id"] = event_payload.get("tenant_id") or context.tenant_id
         event_payload["catalog_id"] = event_payload.get("catalog_id") or context.catalog_id
         event_payload["source"] = "api"
 
-        try:
-            event = append_event(event_payload)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-        from backend.data.database import UserEvent
-
         # Map non-UUID tenant IDs (like 'demo-media-co') to the default public tenant UUID for DB storage
         db_tenant_id = context.tenant_id
         try:
-            import uuid
-
             uuid.UUID(db_tenant_id)
         except (ValueError, TypeError):
             db_tenant_id = "00000000-0000-0000-0000-000000000001"
 
-        try:
-            pg_event = UserEvent(
-                tenant_id=db_tenant_id,
-                event_type=payload.event_type,
-                event_value=payload.rating,
-                query_text=payload.query_text,
-            )
-            db.add(pg_event)
-            db.commit()
-        except Exception as e:
-            logger.error("Failed to persist event to PostgreSQL: %s", e)
-            db.rollback()
-
-        # Fan out to all online learners (SASRec + KAN + LightGCN) via coordinator
-        coordinator = _online_learning_coordinator_getter() if _online_learning_coordinator_getter else None
-        if payload.event_type in {"click", "rating"} and coordinator is not None:
+        def persist_and_process_event_bg(payload_dict: dict, db_session: Session, tenant_uuid: str):
+            # 1. JSONL append I/O
             try:
-                coordinator.enqueue(event_payload)
-            except Exception as exc:
-                logger.warning("OnlineLearningCoordinator.enqueue failed: %s", exc)
-        else:
-            # Fallback: use standalone OnlineLearner (LightGCN only) when coordinator not available
-            ol = _online_learner_getter() if _online_learner_getter else None
-            if payload.event_type in {"click", "rating"} and ol is not None:
-                try:
-                    ol.enqueue(event_payload)
-                except Exception as exc:
-                    logger.warning("OnlineLearner.enqueue failed: %s", exc)
-
-        try:
-            from backend.serving.realtime_feature_updater import update_user_index
-
-            update_user_index(event_payload)
-        except Exception as exc:
-            logger.warning("Real-time index update failed: %s", exc)
-
-        if payload.event_type == "rating" and payload.movie_id and payload.rating is not None:
-            if payload.rating >= 4.0:
-                background_tasks.add_task(_trigger_active_inference_fn, payload.movie_id, 1.0)
-            elif payload.rating <= 2.0:
-                background_tasks.add_task(_trigger_active_inference_fn, payload.movie_id, -1.0)
-
-        if payload.movie_id and payload.event_type in ["click", "rating"]:
-            try:
-                from backend.intelligence.contextual_bandit import get_bandit_engine
-
-                bandit = get_bandit_engine()
-                is_success = payload.event_type == "click" or (payload.event_type == "rating" and payload.rating >= 4.0)
-                bandit.update_reward(payload.movie_id, clicked=is_success)
+                append_event(payload_dict)
             except Exception as e:
-                logger.error("Bandit Engine failed to update reward: %s", e)
+                logger.error("Failed to append event to JSONL in background: %s", e)
 
-        rec_ref = _recommender_getter() if _recommender_getter else None
-        if rec_ref is not None:
-            rec_ref.refresh_behavior_features(force=True)
+            # 2. Database insert transaction
+            try:
+                from backend.data.database import UserEvent
+                pg_event = UserEvent(
+                    tenant_id=tenant_uuid,
+                    event_type=payload_dict["event_type"],
+                    event_value=payload_dict.get("rating"),
+                    query_text=payload_dict.get("query_text"),
+                )
+                db_session.add(pg_event)
+                db_session.commit()
+            except Exception as e:
+                logger.error("Failed to persist event to Database in background: %s", e)
+                db_session.rollback()
 
-        record_usage(
-            "events.write",
-            event_payload["tenant_id"],
-            event_payload["catalog_id"],
-            plan=context.plan,
-            authenticated=context.authenticated,
-        )
+            # 3. Fan out to online learners via coordinator
+            coordinator = _online_learning_coordinator_getter() if _online_learning_coordinator_getter else None
+            if payload_dict["event_type"] in {"click", "rating"} and coordinator is not None:
+                try:
+                    coordinator.enqueue(payload_dict)
+                except Exception as exc:
+                    logger.warning("OnlineLearningCoordinator.enqueue failed in background: %s", exc)
+            else:
+                ol = _online_learner_getter() if _online_learner_getter else None
+                if payload_dict["event_type"] in {"click", "rating"} and ol is not None:
+                    try:
+                        ol.enqueue(payload_dict)
+                    except Exception as exc:
+                        logger.warning("OnlineLearner.enqueue failed in background: %s", exc)
+
+            # 4. Real-time user index updates
+            try:
+                from backend.serving.realtime_feature_updater import update_user_index
+                update_user_index(payload_dict)
+            except Exception as exc:
+                logger.warning("Real-time index update failed in background: %s", exc)
+
+            # 5. Active inference trigger
+            if payload_dict["event_type"] == "rating" and payload_dict.get("movie_id") and payload_dict.get("rating") is not None:
+                try:
+                    if payload_dict["rating"] >= 4.0:
+                        _trigger_active_inference_fn(payload_dict["movie_id"], 1.0)
+                    elif payload_dict["rating"] <= 2.0:
+                        _trigger_active_inference_fn(payload_dict["movie_id"], -1.0)
+                except Exception as exc:
+                    logger.warning("Failed to trigger active inference in background: %s", exc)
+
+            # 6. Bandit update reward
+            if payload_dict.get("movie_id") and payload_dict["event_type"] in ["click", "rating"]:
+                try:
+                    from backend.intelligence.contextual_bandit import get_bandit_engine
+                    bandit = get_bandit_engine()
+                    is_success = payload_dict["event_type"] == "click" or (
+                        payload_dict["event_type"] == "rating" and payload_dict.get("rating", 0.0) >= 4.0
+                    )
+                    bandit.update_reward(payload_dict["movie_id"], clicked=is_success)
+                except Exception as e:
+                    logger.error("Bandit Engine failed to update reward in background: %s", e)
+
+            # 7. Recommender refresh behavior features (VERY HEAVY disk/memory scans)
+            rec_ref = _recommender_getter() if _recommender_getter else None
+            if rec_ref is not None:
+                try:
+                    rec_ref.refresh_behavior_features(force=True)
+                except Exception as e:
+                    logger.error("Failed to refresh behavior features in background: %s", e)
+
+            # 8. Record usage
+            try:
+                record_usage(
+                    "events.write",
+                    payload_dict["tenant_id"],
+                    payload_dict["catalog_id"],
+                    plan=context.plan,
+                    authenticated=context.authenticated,
+                )
+            except Exception as e:
+                logger.error("Failed to record usage in background: %s", e)
+
+        # Queue everything in FastAPI background runner
+        background_tasks.add_task(persist_and_process_event_bg, event_payload, db, db_tenant_id)
+
         storage = event_storage_status()
         return EventResponse(
             status="accepted",
-            event_id=event["event_id"],
-            event_path=str(event.get("event_log_path") or get_events_path()),
-            event_store=str(event.get("event_store") or storage["event_store"]),
-            durable=bool(event.get("durable") or storage["durable"]),
+            event_id=event_id,
+            event_path=str(get_events_path()),
+            event_store=storage["event_store"],
+            durable=storage["durable"],
         )
 
     @router.get("/v1/events/features")
