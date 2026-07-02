@@ -33,6 +33,7 @@ from backend.response_models import (
 from backend.router_deps import RouterDeps
 
 logger = logging.getLogger(__name__)
+from backend.api.fast_cache import cached_endpoint
 
 # ---------------------------------------------------------------------------
 # Module-level Pydantic models for chat endpoint
@@ -322,6 +323,7 @@ def create_recommendation_router(deps: RouterDeps):
 
     # ── /movies/latest ──────────────────────────────────────────────────────
     @router.get("/movies/latest")
+    @cached_endpoint(ttl=120.0)
     async def get_latest_movies(
         request: Request,
         limit: int = Query(default=8, le=20),
@@ -856,6 +858,7 @@ def create_search_movie_router(deps: RouterDeps):
     @router.get("/v1/search", response_model=list[Movie])
     @router.get("/search", response_model=list[Movie])
     @limiter.limit("300/minute")
+    @cached_endpoint(ttl=60.0)
     async def search_movies(
         request: Request,
         q: str = Query(..., min_length=1),
@@ -881,6 +884,7 @@ def create_search_movie_router(deps: RouterDeps):
 
     # ── /v1/search/ai ────────────────────────────────────────────────────────
     @router.get("/v1/search/ai", response_model=list[Movie])
+    @cached_endpoint(ttl=60.0)
     async def ai_search_movies(
         q: str = Query(..., min_length=1),
         limit: int = Query(default=20, le=100),
@@ -909,6 +913,7 @@ def create_search_movie_router(deps: RouterDeps):
 
     # ── /movie/{movie_id} ────────────────────────────────────────────────────
     @router.get("/movie/{movie_id}", response_model=Movie)
+    @cached_endpoint(ttl=120.0)
     async def get_movie(movie_id: int):
         remote_payload = await remote_payload_or_raise(f"/movie/{movie_id}")
         if remote_payload is not None:
@@ -920,6 +925,7 @@ def create_search_movie_router(deps: RouterDeps):
         return movie
 
     @router.get("/movie/{movie_id}/enriched", response_model=EnrichedMovie)
+    @cached_endpoint(ttl=120.0)
     async def get_movie_enriched(movie_id: int):
         rec = get_rec()
         movie = rec.get_movie_by_id(movie_id)
@@ -1170,6 +1176,7 @@ def create_rec_engine_router(deps: RouterDeps):
 
     # ── /v1/recommendations/visually-similar/{movie_id} ─────────────────────
     @router.get("/v1/recommendations/visually-similar/{movie_id}", response_model=RecommendationResponse)
+    @cached_endpoint(ttl=60.0)
     async def visual_recommendation_by_id(
         movie_id: int,
         background_tasks: BackgroundTasks,
@@ -1204,6 +1211,7 @@ def create_rec_engine_router(deps: RouterDeps):
 
     # ── /v1/recommendations/knowledge-graph/{movie_id} ──────────────────────
     @router.get("/v1/recommendations/knowledge-graph/{movie_id}", response_model=RecommendationResponse)
+    @cached_endpoint(ttl=60.0)
     async def kg_recommendation_by_id(
         movie_id: int,
         background_tasks: BackgroundTasks,
@@ -1235,6 +1243,7 @@ def create_rec_engine_router(deps: RouterDeps):
     # ── /v1/recommendations/id/{movie_id} ────────────────────────────────────
     @router.get("/v1/recommendations/id/{movie_id}", response_model=RecommendationResponse)
     @router.get("/recommend/id/{movie_id}", response_model=RecommendationResponse)
+    @cached_endpoint(ttl=60.0)
     async def recommend_by_id(
         movie_id: int,
         background_tasks: BackgroundTasks,
@@ -1311,6 +1320,7 @@ def create_rec_engine_router(deps: RouterDeps):
     # ── /v1/recommendations/id/{movie_id}/enriched ───────────────────────────
     @router.get("/v1/recommendations/id/{movie_id}/enriched", response_model=EnrichedRecommendationResponse)
     @router.get("/recommend/id/{movie_id}/enriched", response_model=EnrichedRecommendationResponse)
+    @cached_endpoint(ttl=60.0)
     async def recommend_by_id_enriched(
         movie_id: int,
         background_tasks: BackgroundTasks,

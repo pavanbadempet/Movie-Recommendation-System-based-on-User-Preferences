@@ -99,6 +99,13 @@ def reload_local_recommender(force_download: bool):
 
     _set_recommender(fresh_recommender)
     recommender_module._recommender = fresh_recommender
+
+    try:
+        from backend.api.fast_cache import clear_all_caches
+        clear_all_caches()
+    except Exception:
+        pass
+
     gc.collect()
     return fresh_recommender
 
