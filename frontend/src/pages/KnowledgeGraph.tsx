@@ -352,6 +352,7 @@ function ForceGraph({
             return node;
           }
         }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return null as any;
       })
       .on("start", (event) => {
@@ -371,6 +372,7 @@ function ForceGraph({
         event.subject.fy = null;
       });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     d3.select(canvas).call(drag as any);
 
     return () => {
