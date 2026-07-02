@@ -66,43 +66,63 @@ def apply_query_mmr(
     if len(candidates) <= n or vectors is None:
         return candidates[:n]
 
-    selected: list[dict] = []
-    remaining = candidates.copy()
-    selected.append(remaining.pop(0))
-    vector_cache: dict[int, np.ndarray] = {}
+    import rust_core
 
-    def candidate_vector(movie: dict) -> np.ndarray | None:
-        row_idx = index_for_movie_id_fn(movie.get("id"))
-        if row_idx is None:
-            return None
-        if row_idx not in vector_cache:
-            vector_cache[row_idx] = np.asarray(vectors[row_idx], dtype=np.float32)
-        return vector_cache[row_idx]
+    candidate_indices = []
+    candidate_relevance = []
+    for c in candidates:
+        row_idx = index_for_movie_id_fn(c.get("id"))
+        candidate_indices.append(row_idx if row_idx is not None else -1)
+        candidate_relevance.append(float(c.get("similarity_score") or 0.0))
 
-    while remaining and len(selected) < n:
-        best_idx = 0
-        best_score = -float("inf")
-        for idx, candidate in enumerate(remaining):
-            candidate_vec = candidate_vector(candidate)
-            if candidate_vec is None:
-                continue
-            relevance = float(candidate.get("similarity_score") or 0)
+    try:
+        selected_order = rust_core.mmr_diversify_rust(
+            candidate_indices,
+            candidate_relevance,
+            vectors,
+            n,
+            float(lambda_param)
+        )
+        return [candidates[idx] for idx in selected_order]
+    except Exception as exc:
+        logger.warning("Rust MMR diversification failed: %s; falling back to python", exc)
+        selected: list[dict] = []
+        remaining = candidates.copy()
+        selected.append(remaining.pop(0))
+        vector_cache: dict[int, np.ndarray] = {}
 
-            max_similarity = 0.0
-            for chosen in selected:
-                chosen_vec = candidate_vector(chosen)
-                if chosen_vec is None:
+        def candidate_vector(movie: dict) -> np.ndarray | None:
+            row_idx = index_for_movie_id_fn(movie.get("id"))
+            if row_idx is None:
+                return None
+            if row_idx not in vector_cache:
+                vector_cache[row_idx] = np.asarray(vectors[row_idx], dtype=np.float32)
+            return vector_cache[row_idx]
+
+        while remaining and len(selected) < n:
+            best_idx = 0
+            best_score = -float("inf")
+            for idx, candidate in enumerate(remaining):
+                candidate_vec = candidate_vector(candidate)
+                if candidate_vec is None:
                     continue
-                max_similarity = max(max_similarity, float(np.dot(candidate_vec, chosen_vec)))
+                relevance = float(candidate.get("similarity_score") or 0)
 
-            mmr_score = lambda_param * relevance - (1 - lambda_param) * max_similarity
-            if mmr_score > best_score:
-                best_score = mmr_score
-                best_idx = idx
+                max_similarity = 0.0
+                for chosen in selected:
+                    chosen_vec = candidate_vector(chosen)
+                    if chosen_vec is None:
+                        continue
+                    max_similarity = max(max_similarity, float(np.dot(candidate_vec, chosen_vec)))
 
-        selected.append(remaining.pop(best_idx))
+                mmr_score = lambda_param * relevance - (1 - lambda_param) * max_similarity
+                if mmr_score > best_score:
+                    best_score = mmr_score
+                    best_idx = idx
 
-    return selected[:n]
+            selected.append(remaining.pop(best_idx))
+
+        return selected[:n]
 
 
 def apply_learned_ranker(
