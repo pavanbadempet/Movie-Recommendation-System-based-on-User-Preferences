@@ -1967,6 +1967,17 @@ function App() {
   }, [catalogState, retryCount]);
 
   React.useEffect(() => {
+    if (catalogState === "ready") {
+      if (homeMovies.length === 0 && !homeLoading) {
+        void loadHomeShowcase();
+      }
+      if (latestMovies.length === 0 && !latestLoading) {
+        void loadLatestShowcase();
+      }
+    }
+  }, [catalogState, homeMovies.length, homeLoading, latestMovies.length, latestLoading]);
+
+  React.useEffect(() => {
     if (catalogState !== "ready" || loadedPlatform.current) return;
     loadedPlatform.current = true;
     const timer = window.setTimeout(() => {
