@@ -3220,8 +3220,8 @@ input:focus-visible {
   }
 
   .trailer-frame img {
-    filter: blur(12px) brightness(0.35) !important;
-    transform: scale(1.15) !important;
+    filter: brightness(0.55) !important;
+    transform: none !important;
   }
 
   .billboard-info {
@@ -3389,6 +3389,7 @@ input:focus-visible {
   .movie-dialog {
     width: 100% !important;
     max-height: 92vh !important;
+    height: auto !important;
     border-radius: 20px 20px 0 0 !important;
     margin-top: auto;
   }
@@ -3397,6 +3398,16 @@ input:focus-visible {
   }
   .movie-dialog-backdrop {
     align-items: flex-end !important;
+  }
+  .dialog-media {
+    flex: 0 0 auto !important;
+    height: 220px !important;
+    min-height: 220px !important;
+  }
+  .dialog-media .trailer-frame img {
+    object-fit: cover !important;
+    filter: brightness(0.7) !important;
+    transform: none !important;
   }
   .dialog-content {
     padding: 0 !important;
