@@ -3552,6 +3552,68 @@ input:focus-visible {
   .weights-table-wrapper {
     overflow-x: auto !important;
   }
+
+  /* Spotlight mobile overrides */
+  .spotlight {
+    flex-direction: column !important;
+    gap: 16px !important;
+    padding: 16px !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+  }
+  .poster-column {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 16px !important;
+    width: 100% !important;
+  }
+  .poster-column .detail-poster {
+    width: 90px !important;
+    height: auto !important;
+    flex-shrink: 0 !important;
+    margin: 0 !important;
+  }
+  .poster-stat {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 4px !important;
+  }
+  .spotlight-copy {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+  }
+  .spotlight-copy h1 {
+    font-size: 1.5rem !important;
+    margin-bottom: 8px !important;
+  }
+  .spotlight-copy p {
+    font-size: 0.85rem !important;
+    line-height: 1.4 !important;
+    margin-bottom: 12px !important;
+  }
+  .interaction-panel {
+    margin-bottom: 12px !important;
+  }
+  .action-row {
+    flex-direction: column !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+  .action-row button, .action-row a {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    justify-content: center !important;
+  }
+  .reason-panel {
+    box-sizing: border-box !important;
+    max-width: 100% !important;
+    word-break: break-word !important;
+  }
 }
 
 /* Suggestion tags for Search & Discover empty states */
