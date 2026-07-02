@@ -7,6 +7,8 @@ import type { Movie, MovieTitle } from "./types";
 // Configure WASM paths for onnxruntime-web
 if (typeof window !== "undefined") {
   ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.0/dist/";
+  ort.env.wasm.numThreads = navigator.hardwareConcurrency || 4;
+  ort.env.wasm.simd = true;
 }
 
 // Keep static cache in memory
