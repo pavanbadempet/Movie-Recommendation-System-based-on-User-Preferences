@@ -2867,20 +2867,17 @@ input:focus-visible {
   width: 100%;
   height: 100%;
   background: #050508;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
 /* Mobile-native bottom nav bar */
 .mobile-nav-bar {
-  position: sticky;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  position: relative;
   height: 64px;
-  background: rgba(10, 10, 15, 0.78);
+  flex-shrink: 0;
+  background: rgba(10, 10, 15, 0.9);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
@@ -2929,8 +2926,9 @@ input:focus-visible {
 /* Mobile shell pages wrapper */
 .mobile-shell-content {
   flex: 1;
+  overflow-y: auto;
   padding: 16px;
-  padding-bottom: 80px; /* offset bottom nav */
+  padding-bottom: 24px;
 }
 
 /* Ambient glow orb for mobile screen */
@@ -3159,6 +3157,10 @@ input:focus-visible {
 
 /* Mobile-adapted detailed page elements */
 @media (max-width: 768px) {
+  .iphone-screen {
+    height: 100vh !important;
+    height: -webkit-fill-available !important;
+  }
   .billboard-container {
     height: 380px !important;
     aspect-ratio: auto !important;
