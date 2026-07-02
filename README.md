@@ -27,7 +27,7 @@ pinned: false
 </p>
 
 <p align="center">
-  <a href="https://movie-recommendation-system-6bm.pages.dev/"><strong>🌐 Live Demo Portal</strong></a> &middot;
+  <a href="https://pavanbadempet.github.io/Movie-Recommendation-System/"><strong>🌐 Live Demo Portal</strong></a> &middot;
   <a href="https://movie-recs-api-5qvy.onrender.com/health"><strong>📡 Production API Status</strong></a> &middot;
   <a href="https://movie-recs-api-5qvy.onrender.com/docs"><strong>📖 Swagger API Interactive Docs</strong></a>
 </p>

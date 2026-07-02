@@ -25,19 +25,33 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - name: Install dependencies
-        working-directory: frontend
-        run: npm ci
-      - name: Test and build
-        working-directory: frontend
-        env:
-          VITE_BASE_PATH: /Movie-Recommendation-System/
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
+      - name: Build redirect page
         run: |
-          npm run test
-          npm run build
+          mkdir -p dist-redirect
+          cat << 'EOF' > dist-redirect/index.html
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>APEX Movie Recommendation System — Dynamic Ensemble Discovery</title>
+            <meta http-equiv="refresh" content="0; url=https://movie-recommendation-system-6bm.pages.dev/">
+            <script type="text/javascript">
+              window.location.replace("https://movie-recommendation-system-6bm.pages.dev/");
+            </script>
+          </head>
+          <body style="margin: 0; padding: 0; background-color: #090a0f; color: #f1f5f9; display: flex; align-items: center; justify-content: center; min-height: 100vh; text-align: center; font-family: system-ui, sans-serif;">
+            <div style="max-width: 480px; padding: 2.5rem; border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(255, 255, 255, 0.02); border-radius: 16px; backdrop-filter: blur(10px);">
+              <h1 style="margin: 0 0 0.5rem 0; font-size: 1.75rem; font-weight: 800;">APEX Movie Recs</h1>
+              <p style="margin: 0 0 1.5rem 0; color: #94a3b8; font-size: 0.95rem; line-height: 1.6;">Redirecting to the live application portal...</p>
+              <a href="https://movie-recommendation-system-6bm.pages.dev/" style="display: inline-flex; align-items: center; justify-content: center; background-color: #10b981; color: #ffffff; padding: 0.75rem 1.75rem; font-size: 0.9rem; font-weight: 700; text-decoration: none; border-radius: 8px; text-transform: uppercase; letter-spacing: 0.05em;">Launch Application</a>
+            </div>
+          </body>
+          </html>
+          EOF
+          touch dist-redirect/.nojekyll
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./frontend/dist
+          publish_dir: ./dist-redirect
