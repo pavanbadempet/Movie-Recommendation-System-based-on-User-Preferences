@@ -26,6 +26,7 @@ import {
   X,
   User,
   LogOut,
+  Network,
 } from "lucide-react";
 import {
   apiGet,
@@ -2127,9 +2128,11 @@ function App() {
           <div className="topbar-right" style={{ gap: "12px" }}>
             <StatusBadge state={catalogState} backend={backend} />
             {username ? (
-              <button className="profile-btn" type="button" onClick={() => setPage("profile")} style={{ padding: "6px 12px" }}>
-                <strong>{username}</strong>
-              </button>
+              <div className="user-profile-menu" style={{ padding: "4px 12px" }}>
+                <button className="profile-btn" type="button" onClick={() => setPage("profile")}>
+                  <strong>{username}</strong>
+                </button>
+              </div>
             ) : (
               <button className="signin-nav-btn" type="button" onClick={() => setShowAuthModal(true)}>
                 Sign In
@@ -2362,27 +2365,43 @@ function App() {
         {/* Bottom Navigation Bar */}
         <nav className="mobile-nav-bar" aria-label="Mobile navigation">
           <button
+            className={`mobile-nav-tab ${page === "home" ? "active" : ""}`}
+            type="button"
+            onClick={() => { openHome(); setShowMoreDrawer(false); }}
+          >
+            <Film size={20} />
+            <span>Browse</span>
+          </button>
+          <button
             className={`mobile-nav-tab ${page === "search" ? "active" : ""}`}
             type="button"
-            onClick={() => { openSearch(); }}
+            onClick={() => { openSearch(); setShowMoreDrawer(false); }}
           >
-            <Search size={22} />
+            <Search size={20} />
             <span>Search</span>
           </button>
           <button
-            className={`mobile-nav-tab ${page === "home" ? "active" : ""}`}
+            className={`mobile-nav-tab ${page === "knowledge-graph" ? "active" : ""}`}
             type="button"
-            onClick={() => { openHome(); }}
+            onClick={() => { setPage("knowledge-graph"); setShowMoreDrawer(false); }}
           >
-            <Sparkles size={24} className="home-glow-icon" />
-            <span>Home</span>
+            <Network size={20} />
+            <span>Graph</span>
           </button>
           <button
-            className={`mobile-nav-tab ${["profile", "dashboard", "knowledge-graph", "evaluation", "admin"].includes(page) ? "active" : ""}`}
+            className={`mobile-nav-tab ${page === "evaluation" ? "active" : ""}`}
             type="button"
-            onClick={() => { setPage("profile"); }}
+            onClick={() => { setPage("evaluation"); setShowMoreDrawer(false); }}
           >
-            <User size={22} />
+            <BarChart3 size={20} />
+            <span>Eval</span>
+          </button>
+          <button
+            className={`mobile-nav-tab ${["profile", "dashboard", "admin"].includes(page) ? "active" : ""}`}
+            type="button"
+            onClick={() => { setPage("profile"); setShowMoreDrawer(false); }}
+          >
+            <User size={20} />
             <span>My Space</span>
           </button>
         </nav>
