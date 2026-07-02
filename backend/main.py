@@ -311,7 +311,6 @@ async def lifespan(app: FastAPI):
 # =====================================================================
 app = FastAPI(
     title="APEX Recommendation API",
-    default_response_class=ORJSONResponse,
     description=(
         "Production-grade AI recommendation engine with a 6-model ensemble "
         "(SASRec, KAN, LightGCN, Diffusion, Quantum-Fluid, Hyperbolic). "
