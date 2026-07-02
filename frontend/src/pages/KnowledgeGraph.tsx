@@ -97,67 +97,42 @@ function ForceGraph({
   edges: GraphEdge[];
   onNodeClick: (movie: Movie) => void;
 }) {
-  const svgRef = useRef<SVGSVGElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
+  const zoomRef = useRef<d3.ZoomBehavior<HTMLCanvasElement, unknown> | null>(null);
 
   const handleZoomIn = useCallback(() => {
-    if (svgRef.current && zoomRef.current) {
-      d3.select(svgRef.current).transition().duration(300).call(zoomRef.current.scaleBy, 1.4);
+    if (canvasRef.current && zoomRef.current) {
+      d3.select(canvasRef.current).transition().duration(300).call(zoomRef.current.scaleBy, 1.4);
     }
   }, []);
 
   const handleZoomOut = useCallback(() => {
-    if (svgRef.current && zoomRef.current) {
-      d3.select(svgRef.current).transition().duration(300).call(zoomRef.current.scaleBy, 0.7);
+    if (canvasRef.current && zoomRef.current) {
+      d3.select(canvasRef.current).transition().duration(300).call(zoomRef.current.scaleBy, 0.7);
     }
   }, []);
 
   const handleReset = useCallback(() => {
-    if (svgRef.current && zoomRef.current) {
-      d3.select(svgRef.current).transition().duration(400).call(zoomRef.current.transform, d3.zoomIdentity);
+    if (canvasRef.current && zoomRef.current) {
+      d3.select(canvasRef.current).transition().duration(400).call(zoomRef.current.transform, d3.zoomIdentity);
     }
   }, []);
 
   useEffect(() => {
-    if (!svgRef.current || !containerRef.current || nodes.length === 0) return;
+    if (!canvasRef.current || !containerRef.current || nodes.length === 0) return;
 
     const width = containerRef.current.clientWidth || 700;
     const height = containerRef.current.clientHeight || 500;
 
-    d3.select(svgRef.current).selectAll("*").remove();
+    const dpr = window.devicePixelRatio || 1;
+    const canvas = canvasRef.current;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
 
-    const svg = d3
-      .select(svgRef.current)
-      .attr("width", width)
-      .attr("height", height)
-      .attr("viewBox", `0 0 ${width} ${height}`)
-      .attr("aria-label", "Knowledge graph visualization");
-
-    // Defs: arrowhead + clip path for poster thumbnails
-    const defs = svg.append("defs");
-    defs.append("marker")
-      .attr("id", "arrowhead")
-      .attr("viewBox", "0 -5 10 10")
-      .attr("refX", 26)
-      .attr("refY", 0)
-      .attr("markerWidth", 6)
-      .attr("markerHeight", 6)
-      .attr("orient", "auto")
-      .append("path")
-      .attr("d", "M0,-5L10,0L0,5")
-      .attr("fill", "rgba(124,58,237,0.6)");
-
-    // Clip path for circular poster thumbnails
-    defs.append("clipPath")
-      .attr("id", "circle-clip-seed")
-      .append("circle")
-      .attr("r", 20);
-
-    defs.append("clipPath")
-      .attr("id", "circle-clip-rec")
-      .append("circle")
-      .attr("r", 14);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.scale(dpr, dpr);
 
     const d3Nodes: D3Node[] = nodes.map((n) => ({ ...n }));
     const nodeById = new Map(d3Nodes.map((n) => [n.id, n]));
@@ -168,18 +143,138 @@ function ForceGraph({
         target: nodeById.get(e.target) ?? e.target,
         label: e.label,
       }))
-      .filter((l) => l.source && l.target);
+      .filter((l) => l.source && l.target) as unknown as D3Link[];
 
-    // Zoom behaviour
-    const zoom = d3.zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.3, 4])
-      .on("zoom", (event) => {
-        graphGroup.attr("transform", event.transform);
+    let transform = d3.zoomIdentity;
+    let hoveredNode: D3Node | null = null;
+
+    // Load poster images
+    const images = new Map<string, HTMLImageElement>();
+    d3Nodes.forEach((node) => {
+      const url = posterUrl(node.movie.poster_path);
+      if (url) {
+        const img = new Image();
+        img.src = url;
+        img.onload = () => {
+          draw();
+        };
+        images.set(node.id, img);
+      }
+    });
+
+    const draw = () => {
+      if (!ctx) return;
+      const currentHovered: D3Node | null = hoveredNode;
+      ctx.clearRect(0, 0, width, height);
+      ctx.save();
+      ctx.translate(transform.x, transform.y);
+      ctx.scale(transform.k, transform.k);
+
+      // 1. Draw Links
+      d3Links.forEach((link) => {
+        const src = link.source as unknown as D3Node;
+        const tgt = link.target as unknown as D3Node;
+        if (src.x == null || src.y == null || tgt.x == null || tgt.y == null) return;
+
+        ctx.beginPath();
+        ctx.moveTo(src.x, src.y);
+        ctx.lineTo(tgt.x, tgt.y);
+
+        let strokeColor = "rgba(124,58,237,0.3)";
+        let lineWidth = 1.5;
+
+        if (currentHovered) {
+          const isConnected = src.id === currentHovered.id || tgt.id === currentHovered.id;
+          strokeColor = isConnected ? "#ec4899" : "rgba(124,58,237,0.08)";
+          lineWidth = isConnected ? 2.5 : 1.0;
+        }
+
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = lineWidth;
+        ctx.stroke();
+
+        // Arrow head drawing helper
+        const angle = Math.atan2(tgt.y - src.y, tgt.x - src.x);
+        const nodeRadius = tgt.type === "seed" ? 22 : 16;
+        const arrowX = tgt.x - (nodeRadius + 2) * Math.cos(angle);
+        const arrowY = tgt.y - (nodeRadius + 2) * Math.sin(angle);
+        ctx.beginPath();
+        ctx.moveTo(arrowX, arrowY);
+        ctx.lineTo(arrowX - 8 * Math.cos(angle - Math.PI / 6), arrowY - 8 * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(arrowX - 8 * Math.cos(angle + Math.PI / 6), arrowY - 8 * Math.sin(angle + Math.PI / 6));
+        ctx.closePath();
+        ctx.fillStyle = strokeColor;
+        ctx.fill();
+
+        // Link Label
+        const mx = (src.x + tgt.x) / 2;
+        const my = (src.y + tgt.y) / 2;
+        ctx.save();
+        ctx.fillStyle = currentHovered 
+          ? ((src.id === currentHovered.id || tgt.id === currentHovered.id) ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.1)")
+          : "rgba(255,255,255,0.35)";
+        ctx.font = "8px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(link.label, mx, my);
+        ctx.restore();
       });
-    zoomRef.current = zoom;
-    svg.call(zoom);
 
-    const graphGroup = svg.append("g");
+      // 2. Draw Nodes
+      d3Nodes.forEach((node) => {
+        if (node.x == null || node.y == null) return;
+        const r = node.type === "seed" ? 22 : 16;
+
+        let opacity = 1.0;
+        if (currentHovered) {
+          const isConnected = d3Links.some((l) => {
+            const src = l.source as unknown as D3Node;
+            const tgt = l.target as unknown as D3Node;
+            return (
+              (src.id === currentHovered.id && tgt.id === node.id) ||
+              (tgt.id === currentHovered.id && src.id === node.id)
+            );
+          });
+          opacity = (node.id === currentHovered.id || isConnected) ? 1.0 : 0.3;
+        }
+
+        ctx.save();
+        ctx.globalAlpha = opacity;
+
+        // Draw circular border / background
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
+        ctx.fillStyle = node.type === "seed" ? "rgba(124,58,237,0.9)" : "rgba(22,24,34,0.95)";
+        ctx.strokeStyle = node.type === "seed" ? "#7c3aed" : "rgba(255,255,255,0.18)";
+        ctx.lineWidth = node.type === "seed" ? 2.5 : 1.5;
+        ctx.fill();
+        ctx.stroke();
+
+        // Draw poster image inside node (clipped)
+        const img = images.get(node.id);
+        if (img && img.complete && img.naturalWidth !== 0) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, r - 2, 0, 2 * Math.PI);
+          ctx.clip();
+          ctx.drawImage(img, node.x - r + 2, node.y - r + 2, (r - 2) * 2, (r - 2) * 2);
+          ctx.restore();
+        }
+
+        // Draw label text below node
+        const labelY = node.y + (node.type === "seed" ? 38 : 30);
+        ctx.fillStyle = "#e8ecf5";
+        ctx.font = node.type === "seed" ? "bold 11px sans-serif" : "500 9px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        const shortLabel = node.label.length > 16 ? `${node.label.slice(0, 14)}…` : node.label;
+        ctx.fillText(shortLabel, node.x, labelY);
+
+        ctx.restore();
+      });
+
+      ctx.restore();
+    };
 
     const simulation = d3
       .forceSimulation<D3Node>(d3Nodes)
@@ -188,161 +283,104 @@ function ForceGraph({
       .force("center", d3.forceCenter(width / 2, height / 2))
       .force("collision", d3.forceCollide(44));
 
-    const linkGroup = graphGroup.append("g").attr("aria-hidden", "true");
-    const link = linkGroup
-      .selectAll("line")
-      .data(d3Links)
-      .join("line")
-      .attr("stroke", "rgba(124,58,237,0.3)")
-      .attr("stroke-width", 1.5)
-      .attr("marker-end", "url(#arrowhead)");
-
-    const linkLabel = linkGroup
-      .selectAll("text")
-      .data(d3Links)
-      .join("text")
-      .attr("fill", "rgba(255,255,255,0.35)")
-      .attr("font-size", "8px")
-      .attr("text-anchor", "middle")
-      .text((d: D3Link) => d.label);
-
-    const nodeGroup = graphGroup.append("g");
-    const node = nodeGroup
-      .selectAll<SVGGElement, D3Node>("g")
-      .data(d3Nodes)
-      .join("g")
-      .attr("role", "button")
-      .attr("tabindex", "0")
-      .attr("aria-label", (d: D3Node) => `${d.label} — click to view details`)
-      .style("cursor", "pointer")
-      .on("click", (_event: MouseEvent, d: D3Node) => onNodeClick(d.movie))
-      .on("keydown", (event: KeyboardEvent, d: D3Node) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onNodeClick(d.movie);
-        }
-      })
-      .on("mouseover", (_event: MouseEvent, d: D3Node) => {
-        link
-          .transition()
-          .duration(200)
-          .attr("stroke", (l) => {
-            const linkObj = l as unknown as D3Link;
-            const src = linkObj.source as D3Node;
-            const tgt = linkObj.target as D3Node;
-            return src.id === d.id || tgt.id === d.id
-              ? "#ec4899"
-              : "rgba(124,58,237,0.08)";
-          })
-          .attr("stroke-width", (l) => {
-            const linkObj = l as unknown as D3Link;
-            const src = linkObj.source as D3Node;
-            const tgt = linkObj.target as D3Node;
-            return src.id === d.id || tgt.id === d.id ? 2.5 : 1;
-          });
-
-        node
-          .transition()
-          .duration(200)
-          .style("opacity", (n: D3Node) => {
-            const isConnected = d3Links.some((l) => {
-              const src = l.source as D3Node;
-              const tgt = l.target as D3Node;
-              return (
-                (src.id === d.id && tgt.id === n.id) ||
-                (tgt.id === d.id && src.id === n.id)
-              );
-            });
-            return n.id === d.id || isConnected ? 1 : 0.3;
-          });
-      })
-      .on("mouseout", () => {
-        link
-          .transition()
-          .duration(200)
-          .attr("stroke", "rgba(124,58,237,0.3)")
-          .attr("stroke-width", 1.5);
-
-        node
-          .transition()
-          .duration(200)
-          .style("opacity", 1);
+    // Zoom behaviour
+    const zoom = d3.zoom<HTMLCanvasElement, unknown>()
+      .scaleExtent([0.3, 4])
+      .on("zoom", (event) => {
+        transform = event.transform;
+        draw();
       });
-
-    const drag = d3
-      .drag<SVGGElement, D3Node>()
-      .on("start", (event: d3.D3DragEvent<SVGGElement, D3Node, D3Node>, d: D3Node) => {
-        if (!event.active) simulation.alphaTarget(0.3).restart();
-        d.fx = d.x; d.fy = d.y;
-      })
-      .on("drag", (event: d3.D3DragEvent<SVGGElement, D3Node, D3Node>, d: D3Node) => {
-        d.fx = event.x; d.fy = event.y;
-      })
-      .on("end", (event: d3.D3DragEvent<SVGGElement, D3Node, D3Node>, d: D3Node) => {
-        if (!event.active) simulation.alphaTarget(0);
-        d.fx = null; d.fy = null;
-      });
-
-    node.call(drag as never);
-
-    // Background circle
-    node.append("circle")
-      .attr("r", (d: D3Node) => (d.type === "seed" ? 22 : 16))
-      .attr("fill", (d: D3Node) => d.type === "seed" ? "rgba(124,58,237,0.9)" : "rgba(22,24,34,0.95)")
-      .attr("stroke", (d: D3Node) => d.type === "seed" ? "#7c3aed" : "rgba(255,255,255,0.18)")
-      .attr("stroke-width", (d: D3Node) => (d.type === "seed" ? 2.5 : 1.5));
-
-    // Poster thumbnail (clipped to circle)
-    node.each(function(d: D3Node) {
-      const url = posterUrl(d.movie.poster_path);
-      if (!url) return;
-      const r = d.type === "seed" ? 20 : 14;
-      const clipId = `clip-${d.id.replace(/[^a-zA-Z0-9]/g, "-")}`;
-      // Add per-node clip path
-      defs.append("clipPath")
-        .attr("id", clipId)
-        .append("circle")
-        .attr("r", r);
-
-      d3.select(this).append("image")
-        .attr("href", url)
-        .attr("x", -r)
-        .attr("y", -r)
-        .attr("width", r * 2)
-        .attr("height", r * 2)
-        .attr("clip-path", `url(#${clipId})`)
-        .attr("preserveAspectRatio", "xMidYMid slice");
-    });
-
-    // Label below node
-    node.append("text")
-      .attr("dy", (d: D3Node) => (d.type === "seed" ? 38 : 30))
-      .attr("text-anchor", "middle")
-      .attr("fill", "#e8ecf5")
-      .attr("font-size", (d: D3Node) => (d.type === "seed" ? "11px" : "9px"))
-      .attr("font-weight", (d: D3Node) => (d.type === "seed" ? "800" : "500"))
-      .text((d: D3Node) => (d.label.length > 16 ? `${d.label.slice(0, 14)}…` : d.label));
+    zoomRef.current = zoom;
+    d3.select(canvas).call(zoom);
 
     simulation.on("tick", () => {
-      link
-        .attr("x1", (d: D3Link) => (d.source as D3Node).x ?? 0)
-        .attr("y1", (d: D3Link) => (d.source as D3Node).y ?? 0)
-        .attr("x2", (d: D3Link) => (d.target as D3Node).x ?? 0)
-        .attr("y2", (d: D3Link) => (d.target as D3Node).y ?? 0);
-
-      linkLabel
-        .attr("x", (d: D3Link) => (((d.source as D3Node).x ?? 0) + ((d.target as D3Node).x ?? 0)) / 2)
-        .attr("y", (d: D3Link) => (((d.source as D3Node).y ?? 0) + ((d.target as D3Node).y ?? 0)) / 2);
-
-      node.attr("transform", (d: D3Node) => `translate(${d.x ?? 0},${d.y ?? 0})`);
+      draw();
     });
 
-    return () => { simulation.stop(); };
+    // Interaction Handlers (Hover, Click, Drag)
+    d3.select(canvas).on("mousemove", (event) => {
+      const [mx, my] = d3.pointer(event, canvas);
+      const point = transform.invert([mx, my]);
+      const px = point[0];
+      const py = point[1];
+
+      let found: D3Node | null = null;
+      for (const node of d3Nodes) {
+        if (node.x == null || node.y == null) continue;
+        const r = node.type === "seed" ? 22 : 16;
+        const dist = Math.hypot(node.x - px, node.y - py);
+        if (dist <= r) {
+          found = node;
+          break;
+        }
+      }
+
+      if (found !== hoveredNode) {
+        hoveredNode = found;
+        draw();
+      }
+    });
+
+    d3.select(canvas).on("click", (event) => {
+      const [mx, my] = d3.pointer(event, canvas);
+      const point = transform.invert([mx, my]);
+      const px = point[0];
+      const py = point[1];
+
+      for (const node of d3Nodes) {
+        if (node.x == null || node.y == null) continue;
+        const r = node.type === "seed" ? 22 : 16;
+        if (Math.hypot(node.x - px, node.y - py) <= r) {
+          onNodeClick(node.movie);
+          break;
+        }
+      }
+    });
+
+    // Drag behavior setup
+    const drag = d3.drag<HTMLCanvasElement, D3Node>()
+      .subject((event) => {
+        const [mx, my] = d3.pointer(event, canvas);
+        const point = transform.invert([mx, my]);
+        const px = point[0];
+        const py = point[1];
+
+        for (const node of d3Nodes) {
+          if (node.x == null || node.y == null) continue;
+          const r = node.type === "seed" ? 22 : 16;
+          if (Math.hypot(node.x - px, node.y - py) <= r) {
+            return node;
+          }
+        }
+        return null as any;
+      })
+      .on("start", (event) => {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        event.subject.fx = event.subject.x;
+        event.subject.fy = event.subject.y;
+      })
+      .on("drag", (event) => {
+        const [mx, my] = d3.pointer(event, canvas);
+        const point = transform.invert([mx, my]);
+        event.subject.fx = point[0];
+        event.subject.fy = point[1];
+      })
+      .on("end", (event) => {
+        if (!event.active) simulation.alphaTarget(0);
+        event.subject.fx = null;
+        event.subject.fy = null;
+      });
+
+    d3.select(canvas).call(drag as any);
+
+    return () => {
+      simulation.stop();
+    };
   }, [nodes, edges, onNodeClick]);
 
   return (
     <div ref={containerRef} className="kg-graph-container" aria-label="Knowledge graph">
-      <svg ref={svgRef} className="kg-svg" />
+      <canvas ref={canvasRef} className="kg-svg" style={{ display: "block", width: "100%", height: "100%" }} />
       {/* Zoom controls */}
       <div className="kg-zoom-controls" aria-label="Graph zoom controls">
         <button type="button" onClick={handleZoomIn} aria-label="Zoom in" title="Zoom in" className="kg-zoom-btn">

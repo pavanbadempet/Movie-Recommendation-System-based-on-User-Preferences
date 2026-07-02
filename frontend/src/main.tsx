@@ -2415,23 +2415,25 @@ function App() {
             </main>
           )}
 
-          {page === "dashboard" && <main className="app-shell inner-shell"><ErrorBoundary><Dashboard /></ErrorBoundary></main>}
-          {page === "knowledge-graph" && <main className="app-shell inner-shell"><ErrorBoundary><KnowledgeGraphPage titles={titles} /></ErrorBoundary></main>}
-          {page === "evaluation" && <main className="app-shell inner-shell"><ErrorBoundary><EvaluationPage /></ErrorBoundary></main>}
-          {page === "profile" && (
-            <main className="app-shell inner-shell">
-              <ErrorBoundary>
-                <UserProfilePage
-                  token={token}
-                  username={username}
-                  onRequestLogin={() => setShowAuthModal(true)}
-                  onSelectMovie={(movie) => { setDialogMovie(movie); }}
-                  onNavigate={(p) => setPage(p as AppPage)}
-                />
-              </ErrorBoundary>
-            </main>
-          )}
-          {page === "admin" && <main className="app-shell inner-shell"><ErrorBoundary><AdminPanel token={token} /></ErrorBoundary></main>}
+          <React.Suspense fallback={<SuspenseFallback />}>
+            {page === "dashboard" && <main className="app-shell inner-shell"><ErrorBoundary><Dashboard /></ErrorBoundary></main>}
+            {page === "knowledge-graph" && <main className="app-shell inner-shell"><ErrorBoundary><KnowledgeGraphPage titles={titles} /></ErrorBoundary></main>}
+            {page === "evaluation" && <main className="app-shell inner-shell"><ErrorBoundary><EvaluationPage /></ErrorBoundary></main>}
+            {page === "profile" && (
+              <main className="app-shell inner-shell">
+                <ErrorBoundary>
+                  <UserProfilePage
+                    token={token}
+                    username={username}
+                    onRequestLogin={() => setShowAuthModal(true)}
+                    onSelectMovie={(movie) => { setDialogMovie(movie); }}
+                    onNavigate={(p) => setPage(p as AppPage)}
+                  />
+                </ErrorBoundary>
+              </main>
+            )}
+            {page === "admin" && <main className="app-shell inner-shell"><ErrorBoundary><AdminPanel token={token} /></ErrorBoundary></main>}
+          </React.Suspense>
         </div>
 
         {/* Bottom Navigation Bar */}
@@ -3231,23 +3233,25 @@ function App() {
             </main>
           )}
 
-          {page === "dashboard" && <main className="app-shell inner-shell"><ErrorBoundary><Dashboard /></ErrorBoundary></main>}
-          {page === "knowledge-graph" && <main className="app-shell inner-shell"><ErrorBoundary><KnowledgeGraphPage titles={titles} /></ErrorBoundary></main>}
-          {page === "evaluation" && <main className="app-shell inner-shell"><ErrorBoundary><EvaluationPage /></ErrorBoundary></main>}
-          {page === "profile" && (
-            <main className="app-shell inner-shell">
-              <ErrorBoundary>
-                <UserProfilePage
-                  token={token}
-                  username={username}
-                  onRequestLogin={() => setShowAuthModal(true)}
-                  onSelectMovie={(movie) => { setDialogMovie(movie); }}
-                  onNavigate={(p) => setPage(p as AppPage)}
-                />
-              </ErrorBoundary>
-            </main>
-          )}
-          {page === "admin" && <main className="app-shell inner-shell"><ErrorBoundary><AdminPanel token={token} /></ErrorBoundary></main>}
+          <React.Suspense fallback={<SuspenseFallback />}>
+            {page === "dashboard" && <main className="app-shell inner-shell"><ErrorBoundary><Dashboard /></ErrorBoundary></main>}
+            {page === "knowledge-graph" && <main className="app-shell inner-shell"><ErrorBoundary><KnowledgeGraphPage titles={titles} /></ErrorBoundary></main>}
+            {page === "evaluation" && <main className="app-shell inner-shell"><ErrorBoundary><EvaluationPage /></ErrorBoundary></main>}
+            {page === "profile" && (
+              <main className="app-shell inner-shell">
+                <ErrorBoundary>
+                  <UserProfilePage
+                    token={token}
+                    username={username}
+                    onRequestLogin={() => setShowAuthModal(true)}
+                    onSelectMovie={(movie) => { setDialogMovie(movie); }}
+                    onNavigate={(p) => setPage(p as AppPage)}
+                  />
+                </ErrorBoundary>
+              </main>
+            )}
+            {page === "admin" && <main className="app-shell inner-shell"><ErrorBoundary><AdminPanel token={token} /></ErrorBoundary></main>}
+          </React.Suspense>
         </div>
 
         {dialogMovie && (
