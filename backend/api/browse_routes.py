@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-
 from backend.data.auth import TenantContext
 from backend.router_deps import RouterDeps
+from backend.api.fast_cache import cached_endpoint
+
+# Pre-cached binary buffer for zero-copy vector serving
+_CACHED_VECTORS_BYTES: bytes | None = None
+
+def clear_vectors_cache():
+    global _CACHED_VECTORS_BYTES
+    _CACHED_VECTORS_BYTES = None
 
 
 def create_browse_router(deps: RouterDeps) -> APIRouter:
@@ -33,6 +40,7 @@ def create_browse_router(deps: RouterDeps) -> APIRouter:
         return movies.to_dict(orient="records")
 
     @router.get("/movies/titles")
+    @cached_endpoint(ttl=300.0)
     async def get_all_titles(
         limit: int = Query(default=100000, ge=1, le=100000, description="Maximum number of titles to return"),
     ):
@@ -47,12 +55,17 @@ def create_browse_router(deps: RouterDeps) -> APIRouter:
     async def get_all_vectors():
         from fastapi.responses import Response
         import numpy as np
+        global _CACHED_VECTORS_BYTES
 
         rec = get_rec()
         if rec._vectors is None:
             raise HTTPException(status_code=404, detail="Vectors not loaded")
-        vecs = np.ascontiguousarray(rec._vectors, dtype=np.float32)
-        return Response(content=vecs.tobytes(), media_type="application/octet-stream")
+
+        if _CACHED_VECTORS_BYTES is None:
+            vecs = np.ascontiguousarray(rec._vectors, dtype=np.float32)
+            _CACHED_VECTORS_BYTES = vecs.tobytes()
+
+        return Response(content=_CACHED_VECTORS_BYTES, media_type="application/octet-stream")
 
     @router.get("/v1/semantic-twins/id/{movie_id}")
     async def semantic_twin_by_id(
