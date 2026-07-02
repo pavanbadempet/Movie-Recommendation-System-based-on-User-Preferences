@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getKGRecommendations } from "../api";
+import { getKGRecommendations, getRecommendations } from "../api";
 import type { Movie } from "../types";
 
 export type GraphNode = {
@@ -49,8 +49,9 @@ export function useKnowledgeGraph(movieId: number | null): UseKnowledgeGraphResu
     setError(null);
     setGraphData(null);
 
-    getKGRecommendations(movieId, 12)
-      .then((result) => {
+    const loadGraphData = async () => {
+      try {
+        const result = await getKGRecommendations(movieId, 12);
         if (cancelled) return;
         const { query_movie, recommendations } = result.data;
         const seedId = `movie-${query_movie.id}`;
@@ -72,14 +73,54 @@ export function useKnowledgeGraph(movieId: number | null): UseKnowledgeGraphResu
         }));
 
         setGraphData({ nodes, edges });
-      })
-      .catch((err) => {
+      } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Failed to load knowledge graph");
-      })
-      .finally(() => {
+        const errMsg = err instanceof Error ? err.message : "Failed to load knowledge graph";
+        
+        // Check if error is due to missing KG artifacts (503 / disabled in Tier3 environment)
+        if (
+          errMsg.includes("503") ||
+          errMsg.includes("disabled") ||
+          errMsg.includes("missing artifacts") ||
+          errMsg.includes("Unavailable")
+        ) {
+          console.warn("[APEX] Knowledge Graph service disabled in this environment. Falling back to vector recommendations to populate movie connection graph.");
+          try {
+            const result = await getRecommendations(movieId, 12);
+            if (cancelled) return;
+            const { query_movie, recommendations } = result.data;
+            const seedId = `movie-${query_movie.id}`;
+
+            const nodes: GraphNode[] = [
+              { id: seedId, label: query_movie.title, type: "seed", movie: query_movie },
+              ...recommendations.map((rec) => ({
+                id: `movie-${rec.id}`,
+                label: rec.title,
+                type: "recommendation" as const,
+                movie: rec,
+              })),
+            ];
+
+            const edges: GraphEdge[] = recommendations.map((rec) => ({
+              source: seedId,
+              target: `movie-${rec.id}`,
+              label: rec.retrieval_stage ?? "similar",
+            }));
+
+            setGraphData({ nodes, edges });
+          } catch (fallbackErr) {
+            if (cancelled) return;
+            setError(fallbackErr instanceof Error ? fallbackErr.message : "Failed to load movie network");
+          }
+        } else {
+          setError(errMsg);
+        }
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    };
+
+    void loadGraphData();
 
     return () => {
       cancelled = true;
