@@ -875,9 +875,9 @@ function TrailerFrame({ movie }: { movie: Movie }) {
       ) : trailerKey ? (
         isMobile ? (
           /* Mobile: YouTube iframe embed with muted autoplay */
-          <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", pointerEvents: "none" }}>
+          <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden" }}>
             <iframe
-              src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&loop=1&playlist=${trailerKey}&controls=0&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&fs=0&playsinline=1`}
+              src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&controls=0&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&fs=0&playsinline=1`}
               title="Movie Trailer"
               frameBorder="0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -893,6 +893,7 @@ function TrailerFrame({ movie }: { movie: Movie }) {
                 border: "none",
                 opacity: showFallbackIframe ? 1 : 0,
                 transition: "opacity 0.8s ease-in-out",
+                pointerEvents: "none",
               }}
             />
             <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", zIndex: 10, background: "transparent" }} />
@@ -921,9 +922,9 @@ function TrailerFrame({ movie }: { movie: Movie }) {
               <Loader2 className="spin" size={24} />
             </div>
           ) : (!isCached || videoError) ? (
-            <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", pointerEvents: "none" }}>
+            <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden" }}>
               <iframe
-                src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&loop=1&playlist=${trailerKey}&controls=0&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&fs=0`}
+                src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&controls=0&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&fs=0`}
                 title="Movie Trailer Fallback"
                 frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -939,6 +940,7 @@ function TrailerFrame({ movie }: { movie: Movie }) {
                   border: "none",
                   opacity: showFallbackIframe ? 1 : 0,
                   transition: "opacity 0.8s ease-in-out",
+                  pointerEvents: "none",
                 }}
               />
               <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", zIndex: 10, background: "transparent" }} />
