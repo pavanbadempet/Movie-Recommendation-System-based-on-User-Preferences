@@ -1,4 +1,4 @@
-import{t as e}from"./clipboard-copy-Nimo7u6y.js";import{D as t,O as n,T as r,_ as i,b as a,k as o,n as s,r as c,t as l,w as u}from"./index-DxCO4Ozh.js";var d=t(`upload`,[[`path`,{d:`M12 3v12`,key:`1x0j5s`}],[`path`,{d:`m17 8-5-5-5 5`,key:`7q97r8`}],[`path`,{d:`M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4`,key:`ih7n3h`}]]),f=o(n(),1),p=l(),m=s[0]??`https://your-apex-api.onrender.com`;function h(e,t){let n=t||`YOUR_KEY`,r=n.length>12?`${n.slice(0,10)}...`:n;return e===`curl`?`curl "${m}/v1/recommendations/id/550?n=5&explain=true" \\
+import{t as e}from"./clipboard-copy-wfMpuYgG.js";import{D as t,O as n,T as r,_ as i,b as a,k as o,n as s,r as c,t as l,w as u}from"./index-CftE6fmt.js";var d=t(`upload`,[[`path`,{d:`M12 3v12`,key:`1x0j5s`}],[`path`,{d:`m17 8-5-5-5 5`,key:`7q97r8`}],[`path`,{d:`M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4`,key:`ih7n3h`}]]),f=o(n(),1),p=l(),m=s[0]??`https://your-apex-api.onrender.com`;function h(e,t){let n=t||`YOUR_KEY`,r=n.length>12?`${n.slice(0,10)}...`:n;return e===`curl`?`curl "${m}/v1/recommendations/id/550?n=5&explain=true" \\
   -H "X-Nova-API-Key: ${r}"`:e===`python`?`import httpx
 
 BASE = "${m}"

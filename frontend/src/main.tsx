@@ -767,6 +767,31 @@ function TrailerFrame({ movie }: { movie: Movie }) {
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const [isMobile, setIsMobile] = React.useState(() => typeof window !== "undefined" ? window.innerWidth <= 768 : false);
   const [showFallbackIframe, setShowFallbackIframe] = React.useState(false);
+  const [isTabVisible, setIsTabVisible] = React.useState(true);
+
+  React.useEffect(() => {
+    if (typeof document === "undefined") return;
+    const handleVisibility = () => {
+      const visible = document.visibilityState === "visible";
+      setIsTabVisible(visible);
+      if (!visible && videoRef.current) {
+        videoRef.current.pause();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    const currentVideo = videoRef.current;
+    return () => {
+      if (currentVideo) {
+        currentVideo.pause();
+      }
+    };
+  }, []);
 
   React.useEffect(() => {
     setShowFallbackIframe(false);
@@ -842,7 +867,12 @@ function TrailerFrame({ movie }: { movie: Movie }) {
 
   return (
     <div className="trailer-frame">
-      {trailerKey ? (
+      {!isTabVisible ? (
+        <>
+          <img src={backdropUrl(movie.poster_path)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+          <div className="trailer-overlay" />
+        </>
+      ) : trailerKey ? (
         isMobile ? (
           /* Mobile: YouTube iframe embed with muted autoplay */
           <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", pointerEvents: "none" }}>
