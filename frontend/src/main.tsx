@@ -970,7 +970,7 @@ function TrailerFrame({ movie }: { movie: Movie }) {
                 playsInline
                 poster={backdropUrl(movie.poster_path)}
                 onError={() => setVideoError(true)}
-                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", pointerEvents: "none" }}
               />
               <div className="trailer-overlay" />
             </>
