@@ -322,22 +322,90 @@ graph TD
 
 <img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
 
-## 🔄 PySpark Medallion Lakehouse & ETL Pipeline
+## 🔄 Data Engineering & Medallion Lakehouse Architecture
 
-APEX is built on a production-grade data platform that processes both massive historical datasets and real-time interaction events utilizing distributed compute and transactional storage.
+APEX is built on a production-grade data engineering platform that handles both high-volume batch historical processing and low-latency clickstream event ingestion. The architecture leverages **Apache Spark (PySpark)** and **Delta Lake** transaction protocols to structure raw interactions into an enterprise-grade Medallion Lakehouse.
 
-### 1. Medallion Lakehouse Architecture (`etl/delta_lakehouse.py`, `etl/pyspark_etl.py`)
-The data platform structures raw user interaction logs and movie metadata using a **Medallion Architecture** on top of **Delta Lake**:
-* **Bronze Layer (Raw Ingestion)**: Ingests raw CSV and JSON events (MovieLens, TMDB metadata) into append-only Delta tables with minimal schema enforcement.
-* **Silver Layer (Cleaned & Consolidated)**: Cleans data types, parses timestamps, applies custom data contracts (`etl/data_contracts.py`), performs multi-way joins, and handles Slowly Changing Dimensions (SCD Type 2) in `etl/scd.py` to preserve historical correctness.
-* **Gold Layer (Feature Store)**: Compiles dense interaction history arrays, user clickstream vectors, and sparse TF-IDF/co-occurrence metrics. Gold tables are optimized for direct ML model consumption.
+```
+                  ┌──────────────────────────────────────────────┐
+                  │          Kaggle CSV / TMDB JSON              │
+                  └──────────────────────┬───────────────────────┘
+                                         │  (Bronze Ingest)
+                                         ▼
+                  ┌──────────────────────────────────────────────┐
+                  │        Delta Lake Bronze: raw_movies         │
+                  └──────────────────────┬───────────────────────┘
+                                         │  (Clean, Deduplicate &
+                                         │   Validate Schema Contracts)
+                                         ▼
+                  ┌──────────────────────────────────────────────┐
+                  │       Delta Lake Silver: silver_movies       │
+                  └──────────────┬───────────────────────────────┘
+                                 │
+                 ┌───────────────┴───────────────┐
+                 │  (SCD Type 2 Merge)           │  (SBERT Embedding UDF)
+                 ▼                               ▼
+┌─────────────────────────────────┐   ┌──────────────────────────────────┐
+│ Delta Gold: dim_movie_scd       │   │ Delta Gold: dim_movie_embeddings │
+│ (Historical dimension versions) │   │ (768d dense semantic vectors)    │
+└─────────────────────────────────┘   └──────────────────────────────────┘
+```
 
-### 2. High-Throughput Streaming Feedback Loop (`etl/streaming_events.py`)
-To handle live clicks and continuous user feedback without full database rebuilds:
-* Ingests clickstream actions asynchronously through **Redis streams** buffering.
-* Uses an `OnlineLearningCoordinator` to consume mini-batches and run online gradient descent (SGD) updates directly on the user's sequential state vectors.
-* Synchronizes the updated states with local in-memory vector indexes (`turbovec` SIMD / FAISS) for immediate, sub-10ms relevance tuning.
+---
 
+### 1. Medallion Lakehouse Tiering (`etl/delta_lakehouse.py`, `etl/pyspark_etl.py`)
+Data flows systematically through three transactional quality zones on Delta Lake:
+*   **Bronze (Raw Ingestion)**: Ingests raw source catalog CSVs and clickstream events directly. Raw tables are write-optimized, append-only, and preserve the original structural state including ingestion metadata.
+*   **Silver (Cleaned & Joined)**: Standardizes schemas, casts timestamps, enforces data contracts, and cleans movie fields. It runs partition-level deduplication using Spark windows over popularity metrics to ensure downstream idempotency.
+*   **Gold (Curated Features & Embeddings)**: Compiles high-performance dimensions and feature stores optimized for machine learning serving. This includes generating dense 768-dimensional title/description semantic vector embeddings and building co-occurrence graphs.
+
+---
+
+### 2. Schema Enforcements & Data Contracts (`etl/data_contracts.py`)
+To prevent schema drift and protect downstream serving pipelines from malformed data, APEX implements a declarative **Data Contract validation engine**:
+*   **Machine-Readable Contracts**: Schemas are declared in JSON Schema format under [contracts/](file:///c:/Users/pavan/OneDrive/Documents/GitHub/Movie-Recommendation-System/contracts/) (e.g., `silver_movies.schema.json`).
+*   **Validation Rules**: During the Silver-to-Gold transition, dataframes are validated at runtime for column presence, data types, nullability boundaries, numeric ranges (`min`/`max`), and unique primary key constraints.
+*   **Pipeline Gates**: Any contract violation (such as duplicate keys or null entries in non-nullable columns) immediately raises an exception to halt the pipeline run before invalid records write to storage.
+
+---
+
+### 3. Slowly Changing Dimensions (SCD Type 2) in PySpark (`etl/scd.py`, `etl/pyspark_etl.py`)
+Tracking historical updates to movie attributes (e.g., shifts in popularity, title changes, or cast updates) is handled via a custom **SCD Type 2 dimension tracker** utilizing Delta Lake's ACID transaction layer:
+*   **Delta Merge Updates**: Uses PySpark SQL `merge` APIs to compare incoming snapshots against current records (`is_current = true`). Matching rows with changes in tracked columns are expired in a single atomic transaction:
+    ```python
+    delta_table.alias("target").merge(
+        incoming_versions.alias("source"),
+        "target.id = source.id AND target.is_current = true AND target.record_hash <> source.record_hash"
+    ).whenMatchedUpdate(
+        set={"is_current": "false", "effective_end_at": f"'{effective_ts}'"}
+    ).execute()
+    ```
+*   **Record Appending**: New records and updated versions are appended with `is_current = true`, `effective_start_at = run_date`, and `effective_end_at = '9999-12-31'`.
+*   **Z-Order Layout Optimization**: To maintain high-speed merge and join performance, the pipeline executes a post-merge optimization that collapses file fragmentation and clusters records physically using Z-Ordering:
+    ```sql
+    OPTIMIZE delta.`/data/gold/dim_movie_scd` ZORDER BY (id)
+    ```
+
+---
+
+### 4. Kafka Structured Streaming & Schema Registry (`etl/streaming_events.py`)
+Real-time interaction streams (clicks, views, ratings) are ingested continuously via Spark Structured Streaming:
+*   **Local Schema Registry**: Emulates a Confluent Schema Registry by running a `LocalSchemaRegistryClient` that compiles schemas for stream validation.
+*   **Validation UDF**: Validates raw JSON message payloads inside a distributed Spark User-Defined Function (UDF) to filter out malformed events before writing:
+    ```python
+    compliant_stream = raw_stream.filter(
+        validate_event_payload(col("value").cast("string"), lit("raw_events"))
+    )
+    ```
+*   **Stateful Writing**: The compliant event stream is parsed, partitioned by date, and written to the Gold events table using Delta transaction logs with robust checkpointing (`checkpointLocation`) to guarantee **exactly-once** write semantics.
+
+---
+
+### 5. Memory Safety & Off-Heap Performance Tuning
+Since the pipeline calls heavy neural sentence-transformer models to generate embeddings inside Spark, standard configurations would fail due to JVM heap exhaustions. The Spark Session is configured with advanced off-heap memory controls:
+*   **Adaptive Query Execution (AQE)**: Enabled (`spark.sql.adaptive.enabled=true`) to dynamically coalesce shuffle partitions and optimize skew joins.
+*   **Arrow In-Memory Transfer**: Uses Apache Arrow for high-speed PySpark-to-Python UDF serialization, capped via `spark.sql.execution.arrow.maxRecordsPerBatch=1000` to prevent memory bottlenecks.
+*   **Memory Overhead Offsets**: Allocates substantial executor memory overhead (`spark.executor.memoryOverhead=4g` and `spark.python.worker.memory=2g`) to reserve off-heap space for ONNX Runtime and PyTorch tensor allocations.
 <img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
 
 ## 📐 Architecture Decision Records (ADR) Summary
