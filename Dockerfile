@@ -128,4 +128,4 @@ ENV NOVA_FRONTEND_HEALTH_CACHE_SECONDS=30
 
 # Default command: run backend API.
 CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port $PORT"]
-ENV NOVA_APP_COMMIT=f4baf923f7fb1a50850f7eedab23421bcb6df487
+ENV NOVA_APP_COMMIT=abac3543936b16ed4514bf64e50e886d4d6cdd6e
