@@ -9,6 +9,11 @@ import {
   Server,
   GitCommit,
   Package,
+  ArrowRight,
+  FileText,
+  Shuffle,
+  Play,
+  Layers,
 } from "lucide-react";
 import { useHealth } from "../hooks/useHealth";
 import { useSlo } from "../hooks/useSlo";
@@ -351,6 +356,378 @@ function LiveTerminalLogs() {
 
 // ─── Inner Dashboard (re-mounts on refresh) ───────────────────────────────────
 
+// ─── Lakehouse & Pipelines Dashboard Tab ─────────────────────────────────────
+
+interface PipelineColumnSpec {
+  type?: string;
+  nullable?: boolean;
+  description?: string;
+}
+
+interface PipelineContractSpec {
+  name?: string;
+  version?: number;
+  primary_key?: string[];
+  required_columns?: string[];
+  columns: Record<string, PipelineColumnSpec>;
+}
+
+interface PipelineTableSummary {
+  status: string;
+  version_count: number;
+  latest: {
+    run_id: string;
+    run_date: string;
+    row_count: number;
+    data_size_bytes?: number;
+    data_sha256?: string;
+  } | null;
+  scd?: {
+    current_rows: number;
+    historical_versions: number;
+    total_versions: number;
+    business_keys: number | null;
+  } | null;
+}
+
+interface PipelineReport {
+  status: string;
+  lakehouse: {
+    status: string;
+    ready_table_count: number;
+    table_count: number;
+    tables: Record<string, PipelineTableSummary>;
+  };
+  contracts: Record<string, PipelineContractSpec>;
+  streaming: {
+    event_store: string;
+    durable: boolean;
+    postgres_configured: boolean;
+    event_table: string | null;
+    event_log_path: string;
+  };
+}
+
+function LakehouseDashboardInner() {
+  const [data, setData] = React.useState<PipelineReport | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [selectedContract, setSelectedContract] = React.useState<string>("silver_movies");
+
+  React.useEffect(() => {
+    apiGet<PipelineReport>("/v1/platform/pipelines")
+      .then((res) => {
+        if (res.data?.status === "ok") {
+          setData(res.data);
+        } else {
+          setError(res.data?.status === "error" ? res.data?.status : "Failed to load pipeline stats");
+        }
+      })
+      .catch(() => setError("Failed to connect to pipeline diagnostics API"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "center", alignItems: "center", padding: "48px 0" }}>
+        <Loader2 className="spin" size={28} style={{ color: "var(--accent)" }} />
+        <span style={{ marginLeft: "12px", color: "var(--muted)", fontWeight: 600 }}>Analyzing Medallion tables...</span>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="dashboard-card" style={{ gridColumn: "1 / -1", padding: "24px" }} role="alert">
+        <p className="dashboard-error" style={{ margin: 0 }}>{error || "Failed to retrieve pipeline data"}</p>
+        <p style={{ fontSize: "0.82rem", color: "var(--quiet)", marginTop: "8px" }}>
+          Ensure that local data files exist by running the bootstrap or rebuild scripts (e.g. <code>python scripts/rebuild_serving_artifacts.py</code>).
+        </p>
+      </div>
+    );
+  }
+
+  const lakehouse = data.lakehouse;
+  const contracts = data.contracts;
+  const streaming = data.streaming;
+
+  // Table keys in inspect_lakehouse report
+  const tableKeys = {
+    bronze: "bronze.movies_raw",
+    silver: "silver.movies_curated",
+    gold_features: "gold.movies_features",
+    gold_scd: "gold.dim_movie_scd",
+  };
+
+  const getTableSummary = (key: string): PipelineTableSummary => {
+    return lakehouse.tables?.[key] || { status: "missing", version_count: 0, latest: null };
+  };
+
+  const bronzeInfo = getTableSummary(tableKeys.bronze);
+  const silverInfo = getTableSummary(tableKeys.silver);
+  const goldFeaturesInfo = getTableSummary(tableKeys.gold_features);
+  const goldScdInfo = getTableSummary(tableKeys.gold_scd);
+
+  // Active contract selection data
+  const contractData = contracts[selectedContract] || { columns: {}, primary_key: [], version: 1 };
+  const contractColumns = contractData.columns || {};
+  const primaryKeys = contractData.primary_key || [];
+
+  const handleKeySelection = (contract: string) => (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      setSelectedContract(contract);
+    }
+  };
+
+  return (
+    <>
+      {/* 1. Medallion Pipeline Flow Chart */}
+      <div className="dashboard-card" style={{ gridColumn: "1 / -1" }}>
+        <h3 className="dashboard-card-title">
+          <Layers size={16} aria-hidden="true" />
+          Medallion Architecture Pipeline Flow
+        </h3>
+
+        <div className="medallion-flow-container">
+          {/* Bronze Node */}
+          <div
+            className={`flow-node ${bronzeInfo.status === "ready" ? "active" : "disabled"} ${selectedContract === "bronze_movies" ? "selected" : ""}`}
+            onClick={() => setSelectedContract("bronze_movies")}
+            onKeyDown={handleKeySelection("bronze_movies")}
+            role="button"
+            tabIndex={0}
+            aria-label="Bronze Ingestion Layer"
+          >
+            <div className="node-layer bronze">Bronze</div>
+            <div className="node-table-name">movies_raw</div>
+            <div className="node-status-badge">{bronzeInfo.status}</div>
+            {bronzeInfo.latest && (
+              <div className="node-stats">
+                <span>Rows: {bronzeInfo.latest.row_count?.toLocaleString() || "-"}</span>
+                <span>Batches: {bronzeInfo.version_count}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flow-connector">
+            <ArrowRight size={18} />
+          </div>
+
+          {/* Silver Node */}
+          <div
+            className={`flow-node ${silverInfo.status === "ready" ? "active" : "disabled"} ${selectedContract === "silver_movies" ? "selected" : ""}`}
+            onClick={() => setSelectedContract("silver_movies")}
+            onKeyDown={handleKeySelection("silver_movies")}
+            role="button"
+            tabIndex={0}
+            aria-label="Silver Curated Layer"
+          >
+            <div className="node-layer silver">Silver</div>
+            <div className="node-table-name">movies_curated</div>
+            <div className="node-status-badge">{silverInfo.status}</div>
+            {silverInfo.latest && (
+              <div className="node-stats">
+                <span>Rows: {silverInfo.latest.row_count?.toLocaleString() || "-"}</span>
+                <span>Deduplicated</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flow-connector">
+            <ArrowRight size={18} />
+          </div>
+
+          {/* Gold Features Node */}
+          <div
+            className={`flow-node ${goldFeaturesInfo.status === "ready" ? "active" : "disabled"} ${selectedContract === "gold_training_set" ? "selected" : ""}`}
+            onClick={() => setSelectedContract("gold_training_set")}
+            onKeyDown={handleKeySelection("gold_training_set")}
+            role="button"
+            tabIndex={0}
+            aria-label="Gold Feature Store Layer"
+          >
+            <div className="node-layer gold">Gold</div>
+            <div className="node-table-name">movies_features</div>
+            <div className="node-status-badge">{goldFeaturesInfo.status}</div>
+            {goldFeaturesInfo.latest && (
+              <div className="node-stats">
+                <span>Rows: {goldFeaturesInfo.latest.row_count?.toLocaleString() || "-"}</span>
+                <span>Vectorized (768d)</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="status-desc" style={{ marginTop: "16px" }}>
+          <span>Interactive pipeline map tracking movie ingestion quality stages. Click on any medallion node to load its corresponding schema contract.</span>
+          <span><strong>Technical:</strong> Spark pipeline processes raw JSON/CSVs (Bronze), cleanses types & validates contracts (Silver), and generates dense semantic representations (Gold).</span>
+        </div>
+      </div>
+
+      {/* 2. Interactive Schema Contracts Explorer */}
+      <div className="dashboard-card" style={{ gridColumn: "1 / -2" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+          <h3 className="dashboard-card-title" style={{ margin: 0 }}>
+            <FileText size={16} aria-hidden="true" />
+            Data Quality Contracts Explorer
+          </h3>
+          <div className="contract-select-wrapper">
+            <select
+              value={selectedContract}
+              onChange={(e) => setSelectedContract(e.target.value)}
+              className="contract-select"
+              aria-label="Select data contract schema"
+            >
+              <option value="raw_events">raw_events.schema (Ingest Fact)</option>
+              <option value="bronze_movies">bronze_movies.schema (Bronze Dim)</option>
+              <option value="silver_movies">silver_movies.schema (Silver Dim)</option>
+              <option value="gold_training_set">gold_training_set.schema (Gold Feature)</option>
+            </select>
+          </div>
+        </div>
+
+        {Object.keys(contractColumns).length === 0 ? (
+          <div style={{ padding: "16px", textAlign: "center", color: "var(--quiet)", background: "rgba(0,0,0,0.15)", borderRadius: "8px" }}>
+            No columns defined in this schema contract.
+          </div>
+        ) : (
+          <div className="table-wrapper" style={{ maxHeight: "300px", overflowY: "auto" }}>
+            <table className="status-table" style={{ fontSize: "0.82rem" }}>
+              <thead>
+                <tr>
+                  <th scope="col" style={{ width: "30%" }}>Field Name</th>
+                  <th scope="col" style={{ width: "20%" }}>Type</th>
+                  <th scope="col" style={{ width: "15%" }}>Nullability</th>
+                  <th scope="col" style={{ width: "35%" }}>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(contractColumns).map(([colName, colSpec]: [string, PipelineColumnSpec]) => {
+                  const isPk = primaryKeys.includes(colName);
+                  const isNullable = colSpec.nullable !== false;
+                  return (
+                    <tr key={colName}>
+                      <td>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <code style={{ color: "#fff", fontWeight: "700" }}>{colName}</code>
+                          {isPk && <span className="pk-badge">PK</span>}
+                        </div>
+                      </td>
+                      <td>
+                        <span className={`type-badge type-${colSpec.type || "string"}`}>
+                          {colSpec.type || "string"}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: "center", fontWeight: "700" }}>
+                        <span style={{ color: isNullable ? "var(--quiet)" : "var(--danger)" }}>
+                          {isNullable ? "Nullable" : "Required"}
+                        </span>
+                      </td>
+                      <td style={{ color: "var(--muted)" }}>{colSpec.description || "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div className="status-desc" style={{ marginTop: "12px" }}>
+          <span>Strict schema checks matching defined data formats. Version: {contractData.version || 1} | Primary Key: {primaryKeys.join(", ") || "None"}.</span>
+          <span><strong>Technical:</strong> Ingestion pipelines parse these rules from local json schemas, blocking writes on nullability or type violations.</span>
+        </div>
+      </div>
+
+      {/* 3. SCD Type 2 Merge Diagnostics */}
+      <div className="dashboard-card" style={{ gridColumn: "2 / -1" }}>
+        <h3 className="dashboard-card-title">
+          <Shuffle size={16} aria-hidden="true" />
+          SCD Type 2 Merge
+        </h3>
+
+        {goldScdInfo.status !== "ready" ? (
+          <div style={{ padding: "16px", textAlign: "center", color: "var(--quiet)", background: "rgba(0,0,0,0.15)", borderRadius: "8px", fontSize: "0.82rem" }}>
+            SCD Type 2 table not active. Run medallion pipeline to populate history.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+              <div style={{ padding: "8px 12px", border: "1px solid var(--line)", borderRadius: "8px", background: "rgba(0,0,0,0.2)", display: "flex", flexDirection: "column" }}>
+                <span style={{ fontSize: "0.72rem", color: "var(--quiet)", fontWeight: 700, textTransform: "uppercase" }}>Current Rows</span>
+                <span style={{ fontSize: "1.1rem", fontWeight: "800", color: "#10b981" }}>
+                  {goldScdInfo.scd?.current_rows?.toLocaleString() || "0"}
+                </span>
+              </div>
+              <div style={{ padding: "8px 12px", border: "1px solid var(--line)", borderRadius: "8px", background: "rgba(0,0,0,0.2)", display: "flex", flexDirection: "column" }}>
+                <span style={{ fontSize: "0.72rem", color: "var(--quiet)", fontWeight: 700, textTransform: "uppercase" }}>Historical Versions</span>
+                <span style={{ fontSize: "1.1rem", fontWeight: "800", color: "var(--muted)" }}>
+                  {goldScdInfo.scd?.historical_versions?.toLocaleString() || "0"}
+                </span>
+              </div>
+            </div>
+
+            <dl className="hardware-dl" style={{ margin: 0, padding: 0 }}>
+              <div className="hardware-row" style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "8px", background: "rgba(0,0,0,0.15)", marginBottom: "4px" }}>
+                <dt style={{ color: "var(--muted)", fontSize: "0.82rem", fontWeight: "600" }}>Total Snapshots</dt>
+                <dd style={{ margin: 0, color: "var(--text)", fontSize: "0.85rem", fontWeight: "700" }}>
+                  {goldScdInfo.version_count} runs
+                </dd>
+              </div>
+              <div className="hardware-row" style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "8px", background: "rgba(0,0,0,0.15)" }}>
+                <dt style={{ color: "var(--muted)", fontSize: "0.82rem", fontWeight: "600" }}>Business Keys</dt>
+                <dd style={{ margin: 0, color: "var(--text)", fontSize: "0.85rem", fontWeight: "700" }}>
+                  {goldScdInfo.scd?.business_keys?.toLocaleString() || "-"} items
+                </dd>
+              </div>
+            </dl>
+          </div>
+        )}
+
+        <div className="status-desc" style={{ marginTop: "12px" }}>
+          <span>Diagnostics of <code>dim_movie_scd</code> historical record tracking.</span>
+          <span><strong>Technical:</strong> Expired matching keys (is_current = false) are preserved on record hash drift, appending updated rows dynamically.</span>
+        </div>
+      </div>
+
+      {/* 4. Streaming Ingest Stats */}
+      <div className="dashboard-card" style={{ gridColumn: "1 / -1" }}>
+        <h3 className="dashboard-card-title">
+          <Play size={16} aria-hidden="true" />
+          Kafka & Redis Streaming Event Ingest
+        </h3>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px" }}>
+          <div className="hardware-row" style={{ padding: "12px", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "8px", background: "rgba(0,0,0,0.15)" }}>
+            <div style={{ fontSize: "0.78rem", color: "var(--muted)", fontWeight: 600 }}>Stream Buffering</div>
+            <div style={{ fontSize: "1.1rem", fontWeight: "800", color: "#fff", marginTop: "4px" }}>
+              {streaming.event_store === "dual" ? "Redis + Local JSONL" : streaming.event_store || "Local File (JSONL)"}
+            </div>
+          </div>
+          <div className="hardware-row" style={{ padding: "12px", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "8px", background: "rgba(0,0,0,0.15)" }}>
+            <div style={{ fontSize: "0.78rem", color: "var(--muted)", fontWeight: 600 }}>Durability Backend</div>
+            <div style={{ fontSize: "1.1rem", fontWeight: "800", color: streaming.durable ? "#10b981" : "var(--quiet)", marginTop: "4px" }}>
+              {streaming.durable ? "Active (PostgreSQL)" : "Transient Local Store"}
+            </div>
+          </div>
+          <div className="hardware-row" style={{ padding: "12px", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "8px", background: "rgba(0,0,0,0.15)", gridColumn: "span 2" }}>
+            <div style={{ fontSize: "0.78rem", color: "var(--muted)", fontWeight: 600 }}>Active Log File Destination</div>
+            <div style={{ fontSize: "0.82rem", fontFamily: "monospace", color: "var(--cyan)", marginTop: "4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {streaming.event_log_path || "—"}
+            </div>
+          </div>
+        </div>
+
+        <div className="status-desc" style={{ marginTop: "12px" }}>
+          <span>Uptime statistics of continuous user behavior clicks & ratings queue buffering.</span>
+          <span><strong>Technical:</strong> Online learning coordinator consumes event streams asynchronously, performing mini-batch SGD weights updates.</span>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── Inner Dashboard (re-mounts on refresh) ───────────────────────────────────
+
 function DashboardInner() {
   const health = useHealth();
   const slo = useSlo();
@@ -433,6 +810,7 @@ function DashboardInner() {
 export function Dashboard() {
   const [refreshKey, setRefreshKey] = React.useState(0);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const [activeTab, setActiveTab] = React.useState<"mlops" | "lakehouse">("mlops");
 
   function refresh() {
     setIsRefreshing(true);
@@ -447,17 +825,43 @@ export function Dashboard() {
           <h2 id="dashboard-heading">System Dashboard</h2>
           <p className="dashboard-subtitle">Live hardware profile, serving tier, and SLO metrics.</p>
         </div>
-        <button
-          className="icon-button"
-          type="button"
-          onClick={refresh}
-          aria-label="Refresh dashboard"
-          title="Refresh"
-        >
-          <RefreshCw size={18} className={isRefreshing ? "spin" : undefined} aria-hidden="true" />
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          {/* Tab Selector */}
+          <div className="dashboard-tabs" role="tablist">
+            <button
+              className={`dashboard-tab ${activeTab === "mlops" ? "active" : ""}`}
+              onClick={() => setActiveTab("mlops")}
+              role="tab"
+              aria-selected={activeTab === "mlops"}
+            >
+              System & MLOps
+            </button>
+            <button
+              className={`dashboard-tab ${activeTab === "lakehouse" ? "active" : ""}`}
+              onClick={() => setActiveTab("lakehouse")}
+              role="tab"
+              aria-selected={activeTab === "lakehouse"}
+            >
+              Lakehouse & Pipelines
+            </button>
+          </div>
+          <button
+            className="icon-button"
+            type="button"
+            onClick={refresh}
+            aria-label="Refresh dashboard"
+            title="Refresh"
+          >
+            <RefreshCw size={18} className={isRefreshing ? "spin" : undefined} aria-hidden="true" />
+          </button>
+        </div>
       </div>
-      <DashboardInner key={refreshKey} />
+
+      {activeTab === "mlops" ? (
+        <DashboardInner key={refreshKey} />
+      ) : (
+        <LakehouseDashboardInner key={refreshKey} />
+      )}
     </section>
   );
 }

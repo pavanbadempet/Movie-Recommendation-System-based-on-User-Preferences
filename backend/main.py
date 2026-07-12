@@ -75,6 +75,7 @@ from slowapi.util import get_remote_address
 from backend.api.admin_routes import create_admin_router
 from backend.api.admin_tests import router as admin_router
 from backend.api.artifact_routes import create_artifact_router
+from backend.api.pipeline_routes import create_pipeline_router
 from backend.api.auth_routes import router as auth_router
 from backend.api.billing_routes import router as billing_router
 from backend.api.browse_routes import create_browse_router
@@ -590,6 +591,7 @@ def _register_routes() -> None:
     app.include_router(create_evaluation_router(deps))
     app.include_router(create_admin_router(deps))
     app.include_router(create_artifact_router(deps))
+    app.include_router(create_pipeline_router(deps))
     app.include_router(create_experiment_router(deps))
     app.include_router(create_catalog_router(deps))
     app.include_router(create_browse_router(deps))
