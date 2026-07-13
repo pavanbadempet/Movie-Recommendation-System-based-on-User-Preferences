@@ -35,6 +35,7 @@ RUN uv pip install --system --no-cache -r requirements.txt --extra-index-url htt
 # Copy source code
 COPY etl/ ./etl/
 COPY backend/ ./backend/
+COPY scripts/ ./scripts/
 COPY frontend/streamlit_app.py ./frontend/streamlit_app.py
 COPY REVISION* ./
 
@@ -44,7 +45,7 @@ RUN uv pip install --system maturin && \
     uv pip install --system --no-cache dist/*.whl
 
 # Fail image builds early if synced Python source has a syntax error.
-RUN python -m compileall backend etl frontend/streamlit_app.py
+RUN python -m compileall backend etl scripts frontend/streamlit_app.py
 
 # Copy Pre-computed Models and Data (present in production builds; skipped in CI)
 # Use COPY with a wildcard so the layer is a no-op when the directories are absent
