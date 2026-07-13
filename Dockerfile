@@ -35,6 +35,7 @@ RUN uv pip install --system --no-cache -r requirements.txt --extra-index-url htt
 # Copy source code
 COPY etl/ ./etl/
 COPY backend/ ./backend/
+COPY scripts/ ./scripts/
 COPY frontend/streamlit_app.py ./frontend/streamlit_app.py
 COPY REVISION* ./
 
@@ -44,7 +45,7 @@ RUN uv pip install --system maturin && \
     uv pip install --system --no-cache dist/*.whl
 
 # Fail image builds early if synced Python source has a syntax error.
-RUN python -m compileall backend etl frontend/streamlit_app.py
+RUN python -m compileall backend etl scripts frontend/streamlit_app.py
 
 # Copy Pre-computed Models and Data (present in production builds; skipped in CI)
 # Use COPY with a wildcard so the layer is a no-op when the directories are absent
@@ -131,4 +132,4 @@ CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port $PORT"]
 ENV NOVA_APP_COMMIT=f4baf923f7fb1a50850f7eedab23421bcb6df487
 ENV NOVA_APP_COMMIT=9a1db81cd9d34eff7b8e9c551e53d0ce51e472aa
 ENV NOVA_APP_COMMIT=5136c711de4d7d53e1f0473cd9723aa666f6afe4
-ENV NOVA_APP_COMMIT=cece9cf05cae1484a5c506152f995efb9467e0c8
+ENV NOVA_APP_COMMIT=3719dd4085c131ce652f13c9cad663c405b850f1

@@ -3,12 +3,26 @@ from pathlib import Path
 import pickle
 from typing import Any
 
-import rustworkx as rx
+try:
+    import rustworkx as rx
+except ImportError:
+    rx = None
 
 logger = logging.getLogger(__name__)
 
 MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
 
+
+class DummyPyGraph:
+    def add_node(self, *args, **kwargs): return 0
+    def add_edge(self, *args, **kwargs): return 0
+    def has_edge(self, *args, **kwargs): return False
+    def get_node_data(self, *args, **kwargs): return None
+    def neighbors(self, *args, **kwargs): return []
+    def get_edge_data(self, *args, **kwargs): return None
+    def degree(self, *args, **kwargs): return 0
+    def edges(self): return []
+    def __len__(self): return 0
 
 class RustworkxGraphWrapper:
     """
@@ -18,7 +32,11 @@ class RustworkxGraphWrapper:
     """
 
     def __init__(self):
-        self._graph = rx.PyGraph(multigraph=False)
+        if rx is None:
+            self._graph = DummyPyGraph()
+            logger.warning("rustworkx not installed. Graph engine disabled.")
+        else:
+            self._graph = rx.PyGraph(multigraph=False)
         self._id_to_idx = {}
         self._idx_to_id = {}
 
