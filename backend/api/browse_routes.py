@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Path
 from backend.data.auth import TenantContext
 from backend.router_deps import RouterDeps
 from backend.api.fast_cache import cached_endpoint
@@ -25,7 +25,7 @@ def create_browse_router(deps: RouterDeps) -> APIRouter:
 
     @router.get("/movies")
     async def list_movies(
-        limit: int = Query(default=100, le=1000, description="Maximum movies to return"),
+        limit: int = Query(default=100, ge=1, le=1000, description="Maximum movies to return"),
         offset: int = Query(default=0, ge=0, description="Offset for pagination"),
     ):
         remote_payload = await remote_payload_or_raise(
@@ -69,7 +69,7 @@ def create_browse_router(deps: RouterDeps) -> APIRouter:
 
     @router.get("/v1/semantic-twins/id/{movie_id}")
     async def semantic_twin_by_id(
-        movie_id: int,
+        movie_id: int = Path(..., ge=0),
         context: TenantContext = Depends(resolve_tenant_context),
     ):
         remote_payload = await remote_payload_or_raise(

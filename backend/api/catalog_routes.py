@@ -14,7 +14,7 @@ class CatalogPreviewRequest(BaseModel):
     filename: str = "catalog.csv"
     csv_text: str
     column_mapping: dict[str, str] = Field(default_factory=dict)
-    sample_size: int = 20
+    sample_size: int = Field(default=20, ge=1, le=1000)
 
 
 class CatalogUploadRequest(CatalogPreviewRequest):

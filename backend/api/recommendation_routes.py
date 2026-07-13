@@ -15,7 +15,7 @@ import logging
 import os
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Path
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import RedirectResponse
 
@@ -340,7 +340,7 @@ def create_recommendation_router(deps: RouterDeps):
     @cached_endpoint(ttl=120.0)
     async def get_latest_movies(
         request: Request,
-        limit: int = Query(default=8, le=20),
+        limit: int = Query(default=8, ge=1, le=20),
         country: str | None = Query(default=None),
     ):
         rec = get_rec()
@@ -876,7 +876,7 @@ def create_search_movie_router(deps: RouterDeps):
     async def search_movies(
         request: Request,
         q: str = Query(..., min_length=1),
-        limit: int = Query(default=20, le=100),
+        limit: int = Query(default=20, ge=1, le=100),
         context=Depends(resolve_tenant_context),
     ):
         remote_payload = await remote_payload_or_raise("/v1/search", params={"q": q, "limit": limit}, context=context)
@@ -901,7 +901,7 @@ def create_search_movie_router(deps: RouterDeps):
     @cached_endpoint(ttl=60.0)
     async def ai_search_movies(
         q: str = Query(..., min_length=1),
-        limit: int = Query(default=20, le=100),
+        limit: int = Query(default=20, ge=1, le=100),
         top_k: int | None = Query(default=None, ge=1, le=100),
         context=Depends(resolve_tenant_context),
     ):
@@ -928,7 +928,7 @@ def create_search_movie_router(deps: RouterDeps):
     # ── /movie/{movie_id} ────────────────────────────────────────────────────
     @router.get("/movie/{movie_id}", response_model=Movie)
     @cached_endpoint(ttl=120.0)
-    async def get_movie(movie_id: int):
+    async def get_movie(movie_id: int = Path(..., ge=0)):
         remote_payload = await remote_payload_or_raise(f"/movie/{movie_id}")
         if remote_payload is not None:
             return remote_payload
@@ -940,7 +940,7 @@ def create_search_movie_router(deps: RouterDeps):
 
     @router.get("/movie/{movie_id}/enriched", response_model=EnrichedMovie)
     @cached_endpoint(ttl=120.0)
-    async def get_movie_enriched(movie_id: int):
+    async def get_movie_enriched(movie_id: int = Path(..., ge=0)):
         rec = get_rec()
         movie = rec.get_movie_by_id(movie_id)
         if movie is None:
@@ -950,7 +950,7 @@ def create_search_movie_router(deps: RouterDeps):
         return await enrich_movie(movie)
 
     @router.get("/movie/{movie_id}/trailer")
-    async def get_movie_trailer(movie_id: int):
+    async def get_movie_trailer(movie_id: int = Path(..., ge=0)):
         if not _TMDB_KEY:
             return {"trailer_key": None}
         return {"trailer_key": await fetch_trailer(movie_id)}
@@ -1188,7 +1188,7 @@ def create_rec_engine_router(deps: RouterDeps):
     # ── /v1/diagnostics/recommendations/{movie_id} ───────────────────────────
     @router.get("/v1/diagnostics/recommendations/{movie_id}")
     async def recommendation_diagnostics(
-        movie_id: int,
+        movie_id: int = Path(..., ge=0),
         n: int = Query(default=10, ge=1, le=50),
         context=Depends(resolve_tenant_context),
     ):
@@ -1225,9 +1225,9 @@ def create_rec_engine_router(deps: RouterDeps):
     @router.get("/v1/recommendations/visually-similar/{movie_id}", response_model=RecommendationResponse)
     @cached_endpoint(ttl=60.0)
     async def visual_recommendation_by_id(
-        movie_id: int,
         background_tasks: BackgroundTasks,
         request: Request,
+        movie_id: int = Path(..., ge=0),
         context=Depends(resolve_tenant_context),
         n: int = Query(default=10, ge=1, le=100),
         explain: bool = Query(default=False),
@@ -1260,9 +1260,9 @@ def create_rec_engine_router(deps: RouterDeps):
     @router.get("/v1/recommendations/knowledge-graph/{movie_id}", response_model=RecommendationResponse)
     @cached_endpoint(ttl=60.0)
     async def kg_recommendation_by_id(
-        movie_id: int,
         background_tasks: BackgroundTasks,
         request: Request,
+        movie_id: int = Path(..., ge=0),
         context=Depends(resolve_tenant_context),
         n: int = Query(default=10, ge=1, le=100),
     ):
@@ -1292,9 +1292,9 @@ def create_rec_engine_router(deps: RouterDeps):
     @router.get("/recommend/id/{movie_id}", response_model=RecommendationResponse)
     @cached_endpoint(ttl=60.0)
     async def recommend_by_id(
-        movie_id: int,
         background_tasks: BackgroundTasks,
-        n: int = Query(default=10, le=50),
+        movie_id: int = Path(..., ge=0),
+        n: int = Query(default=10, ge=1, le=50),
         request_id: str | None = Query(default=None),
         user_id: str | None = Query(default=None),
         session_id: str | None = Query(default=None),
@@ -1369,9 +1369,9 @@ def create_rec_engine_router(deps: RouterDeps):
     @router.get("/recommend/id/{movie_id}/enriched", response_model=EnrichedRecommendationResponse)
     @cached_endpoint(ttl=60.0)
     async def recommend_by_id_enriched(
-        movie_id: int,
         background_tasks: BackgroundTasks,
-        n: int = Query(default=10, le=50),
+        movie_id: int = Path(..., ge=0),
+        n: int = Query(default=10, ge=1, le=50),
         request_id: str | None = Query(default=None),
         user_id: str | None = Query(default=None),
         session_id: str | None = Query(default=None),
@@ -1439,7 +1439,7 @@ def create_rec_engine_router(deps: RouterDeps):
     async def recommend_by_title(
         title: str,
         background_tasks: BackgroundTasks,
-        n: int = Query(default=10, le=50),
+        n: int = Query(default=10, ge=1, le=50),
         request_id: str | None = Query(default=None),
         user_id: str | None = Query(default=None),
         session_id: str | None = Query(default=None),
