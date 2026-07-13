@@ -141,3 +141,6 @@ docs/INTERVIEW_AND_PRODUCT_PLAYBOOK.md
 
 # Rust builds
 /backend/rust_core/target/
+
+# Interview prep files
+interview_prep/
