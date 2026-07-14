@@ -162,23 +162,30 @@ async def startup(
 
     http_client = httpx.AsyncClient(timeout=10.0)
 
-    online_learning_coordinator = None
-    online_learner: OnlineLearner | None = None
+    state = {
+        "http_client": http_client,
+        "online_learner": None,
+        "online_learning_coordinator": None,
+        "tier_detector": tier_detector,
+    }
+
+    def init_tier1():
+        coord, learner = _start_tier1_engine(tier_detector)
+        state["online_learning_coordinator"] = coord
+        state["online_learner"] = learner
+
+    def init_tier2():
+        _start_tier2_engine(tier_detector)
 
     if active_tier == "tier1":
-        online_learning_coordinator, online_learner = _start_tier1_engine(tier_detector)
+        asyncio.get_event_loop().run_in_executor(None, init_tier1)
     elif active_tier == "tier2":
-        _start_tier2_engine(tier_detector)
+        asyncio.get_event_loop().run_in_executor(None, init_tier2)
     # tier3: no engine pre-loading; recommender loads lazily on first request.
 
     _preload_realtime_index()
 
-    return {
-        "http_client": http_client,
-        "online_learner": online_learner,
-        "online_learning_coordinator": online_learning_coordinator,
-        "tier_detector": tier_detector,
-    }
+    return state
 
 
 async def shutdown(state: dict) -> None:
