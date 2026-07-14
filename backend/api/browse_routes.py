@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Path
 from backend.data.auth import TenantContext
 from backend.router_deps import RouterDeps
 from backend.api.fast_cache import cached_endpoint
+from starlette.concurrency import run_in_threadpool
 
 # Pre-cached binary buffer for zero-copy vector serving
 _CACHED_VECTORS_BYTES: bytes | None = None
@@ -35,7 +36,7 @@ def create_browse_router(deps: RouterDeps) -> APIRouter:
         if remote_payload is not None:
             return remote_payload
 
-        rec = get_rec()
+        rec = await run_in_threadpool(get_rec)
         movies = rec.movies.iloc[offset : offset + limit]
         return movies.to_dict(orient="records")
 
@@ -48,7 +49,7 @@ def create_browse_router(deps: RouterDeps) -> APIRouter:
         if remote_payload is not None:
             return remote_payload
 
-        rec = get_rec()
+        rec = await run_in_threadpool(get_rec)
         return rec.get_all_titles(limit=limit)
 
     @router.get("/movies/vectors")
@@ -57,7 +58,7 @@ def create_browse_router(deps: RouterDeps) -> APIRouter:
         import numpy as np
         global _CACHED_VECTORS_BYTES
 
-        rec = get_rec()
+        rec = await run_in_threadpool(get_rec)
         if rec._vectors is None:
             raise HTTPException(status_code=404, detail="Vectors not loaded")
 
@@ -86,7 +87,7 @@ def create_browse_router(deps: RouterDeps) -> APIRouter:
             )
             return remote_payload
 
-        rec = get_rec()
+        rec = await run_in_threadpool(get_rec)
         twin = rec.get_semantic_twin_by_id(movie_id)
         if twin is None:
             raise HTTPException(status_code=404, detail=f"Movie with ID {movie_id} not found")
