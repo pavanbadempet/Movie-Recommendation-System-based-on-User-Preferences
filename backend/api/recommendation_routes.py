@@ -332,7 +332,7 @@ def create_recommendation_router(deps: RouterDeps):
         This endpoint avoids TMDB API calls and ML pipeline loads, making it
         ideal for the initial page render on cold-start. Responds in < 200ms.
         """
-        rec = get_rec()
+        rec = await run_in_threadpool(get_rec)
         return rec.get_showcase_movies(limit=limit)
 
     # ── /movies/latest ──────────────────────────────────────────────────────
@@ -343,7 +343,7 @@ def create_recommendation_router(deps: RouterDeps):
         limit: int = Query(default=8, ge=1, le=20),
         country: str | None = Query(default=None),
     ):
-        rec = get_rec()
+        rec = await run_in_threadpool(get_rec)
         import math
 
         def _sanitize_float(v):
@@ -646,7 +646,7 @@ def create_core_router(deps: RouterDeps):
                 tier_selection_reason=tier_selection_reason,
             )
         try:
-            rec = get_rec()
+            rec = await run_in_threadpool(get_rec)
             return HealthResponse(
                 status="healthy",
                 movie_count=len(rec.movies),
@@ -721,7 +721,7 @@ def create_core_router(deps: RouterDeps):
                 }
                 return payload
             return remote_payload
-        rec = get_rec()
+        rec = await run_in_threadpool(get_rec)
         ranker = getattr(rec, "_learned_ranker", None)
         behavior = aggregate_behavior_features(limit=5)
         assignment = assign_experiment(subject_id=f"{context.tenant_id}:{context.catalog_id}:status")
@@ -889,7 +889,7 @@ def create_search_movie_router(deps: RouterDeps):
                 authenticated=context.authenticated,
             )
             return remote_payload
-        rec = get_rec()
+        rec = await run_in_threadpool(get_rec)
         results = rec.search_movies(q, limit=limit)
         record_usage(
             "search", context.tenant_id, context.catalog_id, plan=context.plan, authenticated=context.authenticated
@@ -918,7 +918,7 @@ def create_search_movie_router(deps: RouterDeps):
                 authenticated=context.authenticated,
             )
             return remote_payload
-        rec = get_rec()
+        rec = await run_in_threadpool(get_rec)
         results = rec.ai_search(q, n=result_limit)
         record_usage(
             "search.ai", context.tenant_id, context.catalog_id, plan=context.plan, authenticated=context.authenticated
@@ -932,7 +932,7 @@ def create_search_movie_router(deps: RouterDeps):
         remote_payload = await remote_payload_or_raise(f"/movie/{movie_id}")
         if remote_payload is not None:
             return remote_payload
-        rec = get_rec()
+        rec = await run_in_threadpool(get_rec)
         movie = rec.get_movie_by_id(movie_id)
         if movie is None:
             raise HTTPException(status_code=404, detail=f"Movie with ID {movie_id} not found")
@@ -941,7 +941,7 @@ def create_search_movie_router(deps: RouterDeps):
     @router.get("/movie/{movie_id}/enriched", response_model=EnrichedMovie)
     @cached_endpoint(ttl=120.0)
     async def get_movie_enriched(movie_id: int = Path(..., ge=0)):
-        rec = get_rec()
+        rec = await run_in_threadpool(get_rec)
         movie = rec.get_movie_by_id(movie_id)
         if movie is None:
             raise HTTPException(status_code=404, detail=f"Movie with ID {movie_id} not found")
@@ -1335,7 +1335,7 @@ def create_rec_engine_router(deps: RouterDeps):
                 authenticated=context.authenticated,
             )
             return remote_payload
-        rec = get_rec()
+        rec = await run_in_threadpool(get_rec)
         query_movie = rec.get_movie_by_id(movie_id)
         if query_movie is None:
             raise HTTPException(status_code=404, detail=f"Movie with ID {movie_id} not found")
@@ -1405,7 +1405,7 @@ def create_rec_engine_router(deps: RouterDeps):
                 authenticated=context.authenticated,
             )
             return remote_payload
-        rec = get_rec()
+        rec = await run_in_threadpool(get_rec)
         query_movie = rec.get_movie_by_id(movie_id)
         if query_movie is None:
             raise HTTPException(status_code=404, detail=f"Movie with ID {movie_id} not found")
@@ -1473,7 +1473,7 @@ def create_rec_engine_router(deps: RouterDeps):
                 authenticated=context.authenticated,
             )
             return remote_payload
-        rec = get_rec()
+        rec = await run_in_threadpool(get_rec)
         matches = await run_in_threadpool(lambda: rec.search_movies(title, limit=1))
         if not matches:
             raise HTTPException(status_code=404, detail=f"Movie '{title}' not found")
@@ -1583,7 +1583,7 @@ def create_rec_engine_router(deps: RouterDeps):
             )
             return cached[1]
 
-        rec = get_rec()
+        rec = await run_in_threadpool(get_rec)
         profile = await run_in_threadpool(
             lambda: build_user_behavior_profile(
                 user_id,

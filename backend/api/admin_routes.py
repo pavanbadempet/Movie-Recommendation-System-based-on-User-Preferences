@@ -12,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, Depends
+from starlette.concurrency import run_in_threadpool
 
 from backend.router_deps import RouterDeps
 
@@ -42,8 +43,8 @@ def create_admin_router(deps: RouterDeps) -> APIRouter:
         admin_token: str = Depends(resolve_admin_token),
     ):
         """Reload baseline demo recommendation artifacts from disk."""
-        rec = deps.get_rec()
-        rec.load()
+        rec = await run_in_threadpool(deps.get_rec)
+        await run_in_threadpool(rec.load)
         return {
             "status": "ok",
             "message": "Demo recommendation artifacts successfully reloaded from disk.",
