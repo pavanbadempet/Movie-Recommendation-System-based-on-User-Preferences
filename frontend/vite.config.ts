@@ -17,11 +17,19 @@ export default defineConfig({
     target: "esnext",
     rollupOptions: {
       output: {
-        manualChunks: {
-          react: ["react", "react-dom"],
-          d3: ["d3"],
-          lucide: ["lucide-react"],
-          onnx: ["onnxruntime-web"]
+        manualChunks(id) {
+          if (id.includes("node_modules/react/") || id.includes("node_modules/react-dom/")) {
+            return "react";
+          }
+          if (id.includes("node_modules/d3")) {
+            return "d3";
+          }
+          if (id.includes("node_modules/lucide-react")) {
+            return "lucide";
+          }
+          if (id.includes("node_modules/onnxruntime-web")) {
+            return "onnx";
+          }
         }
       }
     }
