@@ -4127,13 +4127,13 @@ input:focus-visible {
 
 
 /* Simulator Screen Layout Overrides (Forcing Mobile view inside Desktop viewport) */
-.simulator-screen {
+.iphone-screen {
   flex: 1;
   overflow-y: auto;
   position: relative;
 }
 
-.simulator-screen .billboard-container {
+.iphone-screen .billboard-container {
   width: auto !important;
   height: 380px !important;
   aspect-ratio: auto !important;
@@ -4143,12 +4143,12 @@ input:focus-visible {
   overflow: hidden !important;
 }
 
-.simulator-screen .trailer-frame img {
+.iphone-screen .trailer-frame img {
   filter: brightness(0.55) !important;
   transform: none !important;
 }
 
-.simulator-screen .billboard-info {
+.iphone-screen .billboard-info {
   padding: 24px 20px !important;
   background: linear-gradient(to top, #050508 40%, rgba(5, 5, 8, 0.4) 80%, transparent 100%) !important;
   width: 100% !important;
@@ -4156,15 +4156,15 @@ input:focus-visible {
   box-sizing: border-box !important;
 }
 
-.simulator-screen .metrics-strip {
+.iphone-screen .metrics-strip {
   grid-template-columns: repeat(2, 1fr) !important;
 }
 
-.simulator-screen .poster-grid {
+.iphone-screen .poster-grid {
   grid-template-columns: repeat(2, 1fr) !important;
 }
 
-.simulator-screen .trending-strip button {
+.iphone-screen .trending-strip button {
   flex: 0 0 120px !important;
   width: 120px !important;
 }

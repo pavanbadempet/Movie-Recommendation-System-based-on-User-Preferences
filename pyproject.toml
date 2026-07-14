@@ -123,6 +123,7 @@ disallow_untyped_decorators = false
 # Ignore missing stubs for third-party libraries that don't ship them
 [[tool.mypy.overrides]]
 module = [
+    "dotenv.*",
     "databricks.*",
     "altair.*",
     "turbovec.*",
