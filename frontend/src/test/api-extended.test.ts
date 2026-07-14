@@ -188,9 +188,9 @@ describe("API wrapper functions", () => {
   });
 
   it("checkVideoCacheStatus calls /v1/video/status", async () => {
-    mockFetch.mockResolvedValue(okJson({ cached_count: 5 }));
-    const result = await checkVideoCacheStatus();
-    expect(result.data.cached_count).toBe(5);
+    mockFetch.mockResolvedValue(okJson({ youtube_id: "abc", cached: true }));
+    const result = await checkVideoCacheStatus("abc");
+    expect(result.data.cached).toBe(true);
   });
 
   it("getUserRecommendations calls /v1/recommendations/user/:userId", async () => {

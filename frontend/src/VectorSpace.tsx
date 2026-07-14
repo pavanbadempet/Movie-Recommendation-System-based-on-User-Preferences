@@ -324,8 +324,8 @@ export function VectorSpace() {
             className="icon-button"
             type="button"
             onClick={() => {
-              setRotX(0.5);
-              setRotY(0.5);
+              rotX.current = 0.5;
+              rotY.current = 0.5;
               setAutoRotate(true);
               setSelectedNode(null);
             }}

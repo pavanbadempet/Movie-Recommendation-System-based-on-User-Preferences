@@ -1,6 +1,6 @@
+/// <reference types="vitest/globals" />
 import "@testing-library/jest-dom";
 import { cleanup } from "@testing-library/react";
-import { afterEach, beforeAll, afterAll, vi } from "vitest";
 
 const originalLocation = window.location;
 
@@ -12,7 +12,7 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  window.location = originalLocation;
+  window.location = originalLocation as any;
 });
 
 afterEach(() => {
