@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 if TYPE_CHECKING:
-    from backend.learning.online_learner import OnlineLearner
+    pass
 
 logger = logging.getLogger(__name__)
 
