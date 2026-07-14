@@ -49,6 +49,12 @@ export function VectorSpace() {
   const [hoveredNode, setHoveredNode] = useState<MovieNode | null>(null);
   const [selectedNode, setSelectedNode] = useState<MovieNode | null>(null);
   
+  const hoveredNodeRef = useRef(hoveredNode);
+  hoveredNodeRef.current = hoveredNode;
+  
+  const selectedNodeRef = useRef(selectedNode);
+  selectedNodeRef.current = selectedNode;
+  
   // Camera state
   const rotX = useRef(0.5);
   const rotY = useRef(0.5);
@@ -168,8 +174,8 @@ export function VectorSpace() {
             }
           });
         }
-      } else if (hoveredNode) {
-        const hoverProj = projectedNodes.find((n) => n.id === hoveredNode.id);
+      } else if (hoveredNodeRef.current) {
+        const hoverProj = projectedNodes.find((n) => n.id === hoveredNodeRef.current!.id);
         if (hoverProj) {
           projectedNodes.forEach((other) => {
             const dist = Math.sqrt(
@@ -191,8 +197,8 @@ export function VectorSpace() {
       // 3. Draw nodes (dots)
       projectedNodes.forEach((node) => {
         const radius = Math.max(2, (400 / Math.max(1, node.pz || 1)) * 2.5);
-        const isHovered = hoveredNode && hoveredNode.id === node.id;
-        const isSelected = selectedNode && selectedNode.id === node.id;
+        const isHovered = hoveredNodeRef.current && hoveredNodeRef.current.id === node.id;
+        const isSelected = selectedNodeRef.current && selectedNodeRef.current.id === node.id;
 
         // Glow effect
         if (isHovered || isSelected) {
@@ -233,7 +239,7 @@ export function VectorSpace() {
     return () => {
       cancelAnimationFrame(animationId);
     };
-  }, [nodes, autoRotate, hoveredNode, selectedNode]);
+  }, [nodes, autoRotate]);
 
   // Handle drag to rotate camera
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -292,7 +298,7 @@ export function VectorSpace() {
       }
     });
 
-    setHoveredNode(match);
+    setHoveredNode(prev => prev?.id === match?.id ? prev : match);
   };
 
   const handleMouseUp = () => {

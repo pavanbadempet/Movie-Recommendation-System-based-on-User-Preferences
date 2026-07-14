@@ -474,7 +474,7 @@ function QualityPanel({ report }: { report: SemanticBenchmark | null }) {
   );
 }
 
-function MoviePoster({
+const MoviePoster = React.memo(function MoviePoster({
   movie,
   onSelect,
 }: {
@@ -486,9 +486,9 @@ function MoviePoster({
       <img src={posterUrl(movie.poster_path)} alt={movie.title} loading="lazy" />
     </button>
   );
-}
+});
 
-function RecommendationCard({
+const RecommendationCard = React.memo(function RecommendationCard({
   movie,
   rank,
   onSelect,
@@ -587,7 +587,7 @@ function RecommendationCard({
       </div>
     </article>
   );
-}
+});
 
 function ResultContextBar({
   kind,
@@ -626,7 +626,7 @@ function ResultContextBar({
   );
 }
 
-function MovieSpotlight({
+const MovieSpotlight = React.memo(function MovieSpotlight({
   movie,
   loading,
   onRecommend,
@@ -757,7 +757,7 @@ function MovieSpotlight({
       </div>
     </section>
   );
-}
+});
 
 function TrailerFrame({ movie }: { movie: Movie }) {
   const [playing, setPlaying] = React.useState(true);
@@ -1066,7 +1066,7 @@ function formatDate(dateStr?: string | null): string {
   return dateStr;
 }
 
-export function MovieDialog({
+export const MovieDialog = React.memo(function MovieDialog({
   movie,
   onClose,
   feedback,
@@ -1422,11 +1422,11 @@ export function MovieDialog({
       </section>
     </div>
   );
-}
+});
 
 
 
-function HomePage({
+const HomePage = React.memo(function HomePage({
   movies,
   heroIndex,
   loading,
@@ -1579,7 +1579,7 @@ function HomePage({
       )}
     </main>
   );
-}
+});
 
 // ─── Auth Modal (shared, focus-trapped) ──────────────────────────────────────
 
