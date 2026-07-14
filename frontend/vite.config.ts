@@ -13,6 +13,19 @@ export default defineConfig({
   server: {
     port: 5173,
   },
+  build: {
+    target: "esnext",
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ["react", "react-dom"],
+          d3: ["d3"],
+          lucide: ["lucide-react"],
+          onnx: ["onnxruntime-web"]
+        }
+      }
+    }
+  },
   test: {
     pool: "forks",
     fileParallelism: false,
