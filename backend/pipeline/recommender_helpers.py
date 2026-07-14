@@ -102,8 +102,10 @@ def reload_local_recommender(force_download: bool):
 
     try:
         from backend.api.fast_cache import clear_all_caches
+
         clear_all_caches()
         from backend.api.browse_routes import clear_vectors_cache
+
         clear_vectors_cache()
     except Exception:
         pass

@@ -179,14 +179,17 @@ def seed_database():
         raw_tenant_id = os.getenv("NOVA_TENANT_ID", "demo-media-co")
         try:
             import uuid
+
             uuid.UUID(raw_tenant_id)
             tenant_id = raw_tenant_id
         except (ValueError, TypeError):
             tenant_id = "00000000-0000-0000-0000-000000000001"
-            
+
         tenant = db.query(Tenant).filter_by(tenant_id=tenant_id).first()
         if not tenant:
-            new_tenant = Tenant(tenant_id=tenant_id, company_name=f"APEX Demo Tenant ({raw_tenant_id})", plan_tier="enterprise")
+            new_tenant = Tenant(
+                tenant_id=tenant_id, company_name=f"APEX Demo Tenant ({raw_tenant_id})", plan_tier="enterprise"
+            )
             db.add(new_tenant)
             db.commit()
     except Exception as e:

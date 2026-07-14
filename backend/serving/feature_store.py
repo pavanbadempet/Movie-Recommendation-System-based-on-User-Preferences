@@ -87,13 +87,9 @@ class FeatureStore:
 
         try:
             import rust_core
+
             # Call PyO3 accelerated Rayon-parallel dot product
-            return rust_core.collaborative_candidates_rust(
-                self._item_matrix,
-                user_vec,
-                self._item_ids,
-                top_k
-            )
+            return rust_core.collaborative_candidates_rust(self._item_matrix, user_vec, self._item_ids, top_k)
         except Exception as e:
             logger.warning(f"Rust acceleration for collaborative candidates failed: {e}. Falling back to NumPy.")
             # Fast vectorized dot product
