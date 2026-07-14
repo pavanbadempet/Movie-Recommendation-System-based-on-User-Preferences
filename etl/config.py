@@ -108,7 +108,7 @@ class DataConfig:
 class APIConfig:
     """Configuration for TMDB API (for poster/video fetching)."""
 
-    api_key: str = os.getenv("TMDB_API_KEY")
+    api_key: str = os.getenv("TMDB_API_KEY", "")
     base_url: str = "https://api.themoviedb.org/3"
     image_base_url: str = "https://image.tmdb.org/t/p/w500"
 

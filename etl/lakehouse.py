@@ -304,14 +304,21 @@ def write_versioned_snapshot(
       {base_path}/{table_name}/run_date=YYYY-MM-DD/run_id={run_id}/_manifest.json
       {base_path}/{table_name}/_latest.json
     """
-    model = get_table_model(model or table_name) if isinstance(model or table_name, str) else model
-    if model is None:
+    resolved_model: TableModel | None = None
+    if isinstance(model, TableModel):
+        resolved_model = model
+    elif isinstance(model, str):
+        resolved_model = get_table_model(model)
+    else:
+        resolved_model = get_table_model(table_name)
+
+    if resolved_model is None:
         raise ValueError("model could not be resolved")
 
     if validate_contract:
-        contract = validate_table_contract(df, model)
+        contract = validate_table_contract(df, resolved_model)
     else:
-        contract = {"table": model.name, "rows": len(df), "columns": list(df.columns)}
+        contract = {"table": resolved_model.name, "rows": len(df), "columns": list(df.columns)}
 
     run_date = _normalize_run_date(run_date)
     table_root = Path(base_path) / table_name
@@ -320,8 +327,8 @@ def write_versioned_snapshot(
 
     manifest = {
         "table": table_name,
-        "layer": model.layer,
-        "grain": model.grain,
+        "layer": resolved_model.layer,
+        "grain": resolved_model.grain,
         "run_id": run_id,
         "run_date": run_date,
         "created_at": utc_now(),
@@ -329,7 +336,7 @@ def write_versioned_snapshot(
         "data_path": str(data_path),
         "data_sha256": _file_sha256(data_path),
         "data_size_bytes": int(data_path.stat().st_size),
-        "model": asdict(model),
+        "model": asdict(resolved_model),
         "contract": contract,
     }
 
