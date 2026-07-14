@@ -126,6 +126,35 @@ describe("Dashboard", () => {
     render(<Dashboard />);
     expect(screen.getByRole("button", { name: /refresh dashboard/i })).toBeInTheDocument();
   });
+
+  it("renders Tier 2 badge", () => {
+    vi.mocked(useHealth).mockReturnValueOnce({ data: { ...mockHealthData, serving_tier: "tier2" }, loading: false, error: null });
+    render(<Dashboard />);
+    expect(screen.getAllByText(/Tier 2/i).length).toBeGreaterThan(0);
+  });
+
+  it("renders Tier 3 badge", () => {
+    vi.mocked(useHealth).mockReturnValueOnce({ data: { ...mockHealthData, serving_tier: "tier3" }, loading: false, error: null });
+    render(<Dashboard />);
+    expect(screen.getAllByText(/Tier 3/i).length).toBeGreaterThan(0);
+  });
+
+  it("renders unknown Tier badge", () => {
+    vi.mocked(useHealth).mockReturnValueOnce({ data: { ...mockHealthData, serving_tier: "tier4" }, loading: false, error: null });
+    render(<Dashboard />);
+    expect(screen.getByText(/tier4/i)).toBeInTheDocument();
+  });
+
+  it("handles null SLO metrics in LatencyGauge", () => {
+    vi.mocked(useSlo).mockReturnValueOnce({
+      data: { p95_latency_ms: null, error_rate: null, request_rate: null },
+      loading: false,
+      error: null,
+      degraded: false,
+    });
+    render(<Dashboard />);
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
 });
 
 // ─── KnowledgeGraphPage ───────────────────────────────────────────────────────
@@ -207,6 +236,26 @@ describe("EvaluationPage", () => {
     expect(screen.getByRole("button", { name: /refresh evaluation metrics/i })).toBeInTheDocument();
   });
 
+  it("handles errors gracefully during benchmark fetch", async () => {
+    vi.mocked(semanticBenchmark).mockRejectedValueOnce(new Error("API Error"));
+    render(<EvaluationPage />);
+    await waitFor(() => {
+      expect(screen.getByText(/API Error/i)).toBeInTheDocument();
+    });
+  });
+
+  it("handles missing metrics in benchmark data", async () => {
+    vi.mocked(semanticBenchmark).mockResolvedValueOnce({
+      data: { status: "ok", evaluated_case_count: 0, k: 0, metrics: {} },
+      baseUrl: "http://localhost:8000"
+    });
+    render(<EvaluationPage />);
+    await waitFor(() => {
+      // should render without crashing
+      expect(screen.getByRole("heading", { name: /semantic benchmark/i })).toBeInTheDocument();
+    });
+  });
+
   it("renders each section independently when one fails", async () => {
     vi.mocked(semanticBenchmark).mockRejectedValueOnce(new Error("Semantic unavailable"));
     render(<EvaluationPage />);
@@ -265,6 +314,30 @@ describe("UserProfilePage", () => {
     );
     await waitFor(() => {
       expect(screen.getByText(/no personalized recommendations yet/i)).toBeInTheDocument();
+    });
+  });
+
+  it("renders recommendations when list is populated", async () => {
+    // Override the mock for this specific test
+    const { getUserRecommendations } = await import("../api");
+    vi.mocked(getUserRecommendations).mockResolvedValueOnce({
+      data: [{
+        id: 42,
+        title: "Test Movie 42",
+        overview: "A test movie",
+        genres: "Action",
+        release_date: "2024-01-01",
+        runtime: 120,
+        vote_average: 8.0,
+        explanation_text: "Test explanation"
+      }],
+      baseUrl: "http://localhost:8000"
+    });
+    render(
+      <UserProfilePage token="tok" username="alice" onRequestLogin={vi.fn()} onSelectMovie={vi.fn()} />,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Test Movie 42")).toBeInTheDocument();
     });
   });
 });

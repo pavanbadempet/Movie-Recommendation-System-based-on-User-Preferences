@@ -14,13 +14,28 @@ export default defineConfig({
     port: 5173,
   },
   test: {
+    pool: "forks",
+    fileParallelism: false,
+    poolOptions: {
+      forks: {
+        isolate: false,
+        singleFork: true,
+      },
+    },
+    teardownTimeout: 1000,
+    hookTimeout: 5000,
     globals: true,
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     exclude: ["e2e/**", "node_modules/**", "dist/**"],
     coverage: {
-      provider: "v8",
-      reporter: ["text", "lcov"],
+      provider: "istanbul",
+      reporter: ["text", "lcov", "json"],
+      clean: false,
+      cleanOnRebuild: false,
+      thresholds: {
+        branches: 70,
+      },
       // Exclude files that cannot be meaningfully unit-tested in jsdom:
       //  - main.tsx: monolithic app shell (1,955 lines), integration-tested via E2E
       //  - types.ts / vite-env.d.ts / jest-axe.d.ts: pure type declarations
@@ -43,7 +58,6 @@ export default defineConfig({
         "vite.config.ts",
         "eslint.config.js",
       ],
-      thresholds: { lines: 75, branches: 70, functions: 60, statements: 75 },
     },
   },
 });

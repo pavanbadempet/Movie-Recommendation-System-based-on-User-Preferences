@@ -50,8 +50,8 @@ export function VectorSpace() {
   const [selectedNode, setSelectedNode] = useState<MovieNode | null>(null);
   
   // Camera state
-  const [rotX, setRotX] = useState(0.5);
-  const [rotY, setRotY] = useState(0.5);
+  const rotX = useRef(0.5);
+  const rotY = useRef(0.5);
   const [autoRotate, setAutoRotate] = useState(true);
 
   // Mouse drag state
@@ -121,10 +121,10 @@ export function VectorSpace() {
       const fov = 400; // Camera perspective focal length
 
       // Apply rotation angles
-      const cosX = Math.cos(rotX);
-      const sinX = Math.sin(rotX);
-      const cosY = Math.cos(rotY);
-      const sinY = Math.sin(rotY);
+      const cosX = Math.cos(rotX.current);
+      const sinX = Math.sin(rotX.current);
+      const cosY = Math.cos(rotY.current);
+      const sinY = Math.sin(rotY.current);
 
       // 1. Project all nodes into 2D screen coordinates
       const projectedNodes = nodes.map((node) => {
@@ -149,7 +149,7 @@ export function VectorSpace() {
       });
 
       // Sort by depth (pz descending) for painters algorithm (draw back to front)
-      projectedNodes.sort((a, b) => b.pz - a.pz);
+      projectedNodes.sort((a, b) => (b.pz || 0) - (a.pz || 0));
 
       // 2. Draw connections (lines) for Similarity Vector Web
       ctx.lineWidth = 0.5;
@@ -160,7 +160,7 @@ export function VectorSpace() {
           projectedNodes.forEach((other) => {
             if (other.id !== selectedNode.id && other.genre === selectedNode.genre) {
               // Connect nodes in the same cluster/genre
-              ctx.strokeStyle = `rgba(99, 102, 241, ${Math.max(0.1, 1 - other.pz / 600)})`;
+              ctx.strokeStyle = `rgba(99, 102, 241, ${Math.max(0.1, 1 - (other.pz || 0) / 600)})`;
               ctx.beginPath();
               ctx.moveTo(selProj.px!, selProj.py!);
               ctx.lineTo(other.px!, other.py!);
@@ -190,7 +190,7 @@ export function VectorSpace() {
 
       // 3. Draw nodes (dots)
       projectedNodes.forEach((node) => {
-        const radius = Math.max(2, (400 / node.pz) * 2.5);
+        const radius = Math.max(2, (400 / Math.max(1, node.pz || 1)) * 2.5);
         const isHovered = hoveredNode && hoveredNode.id === node.id;
         const isSelected = selectedNode && selectedNode.id === node.id;
 
@@ -222,7 +222,7 @@ export function VectorSpace() {
 
       // Update automatic rotation if enabled
       if (autoRotate) {
-        setRotY((r) => r + 0.002);
+        rotY.current += 0.002;
       }
 
       animationId = requestAnimationFrame(render);
@@ -233,7 +233,7 @@ export function VectorSpace() {
     return () => {
       cancelAnimationFrame(animationId);
     };
-  }, [nodes, rotX, rotY, autoRotate, hoveredNode, selectedNode]);
+  }, [nodes, autoRotate, hoveredNode, selectedNode]);
 
   // Handle drag to rotate camera
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -255,8 +255,8 @@ export function VectorSpace() {
       const deltaX = e.clientX - previousMousePosition.current.x;
       const deltaY = e.clientY - previousMousePosition.current.y;
 
-      setRotY((r) => r + deltaX * 0.005);
-      setRotX((r) => Math.max(-Math.PI / 3, Math.min(Math.PI / 3, r + deltaY * 0.005)));
+      rotY.current += deltaX * 0.005;
+      rotX.current = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, rotX.current + deltaY * 0.005));
 
       previousMousePosition.current = { x: e.clientX, y: e.clientY };
       return;
@@ -267,10 +267,10 @@ export function VectorSpace() {
     const cy = canvas.height / 2;
     const fov = 400;
 
-    const cosX = Math.cos(rotX);
-    const sinX = Math.sin(rotX);
-    const cosY = Math.cos(rotY);
-    const sinY = Math.sin(rotY);
+    const cosX = Math.cos(rotX.current);
+    const sinX = Math.sin(rotX.current);
+    const cosY = Math.cos(rotY.current);
+    const sinY = Math.sin(rotY.current);
 
     let match: MovieNode | null = null;
     let minDistance = 15; // Click/hover radius threshold

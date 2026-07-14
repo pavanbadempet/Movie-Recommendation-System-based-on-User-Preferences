@@ -62,8 +62,6 @@ describe("buildSuffix (via apiGet query params)", () => {
     vi.stubGlobal("window", {
       ...globalThis.window,
       localStorage: { getItem: () => null },
-      setTimeout: globalThis.setTimeout,
-      clearTimeout: globalThis.clearTimeout,
     });
   });
 
@@ -115,8 +113,6 @@ describe("apiGet – 5xx fallback behaviour", () => {
     vi.stubGlobal("window", {
       ...globalThis.window,
       localStorage: { getItem: () => null },
-      setTimeout: globalThis.setTimeout,
-      clearTimeout: globalThis.clearTimeout,
     });
   });
 

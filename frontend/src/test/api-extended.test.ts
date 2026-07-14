@@ -18,6 +18,13 @@ import "@testing-library/jest-dom";
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
+// Mock webgpuEngine
+vi.mock("../webgpuEngine", () => ({
+  getClientTextSearch: vi.fn(),
+  getClientRecommendations: vi.fn(),
+}));
+import * as webgpuEngine from "../webgpuEngine";
+
 function okJson(data: unknown) {
   return Promise.resolve({
     ok: true,
@@ -50,6 +57,11 @@ import {
   getRecommendations,
   backendLabel,
   currentBackend,
+  getShowcaseMovies,
+  getMovieEnriched,
+  getVisualRecommendations,
+  getKGRecommendations,
+  checkVideoCacheStatus,
 } from "../api";
 
 beforeEach(() => {
@@ -95,16 +107,90 @@ describe("API wrapper functions", () => {
     expect(result.data[0].title).toBe("Avatar");
   });
 
-  it("aiSearch calls /v1/search/ai", async () => {
+  it("aiSearch calls /v1/search/ai when client engine returns empty", async () => {
+    vi.mocked(webgpuEngine.getClientTextSearch).mockResolvedValue(null);
     mockFetch.mockResolvedValue(okJson([{ id: 2, title: "Inception" }]));
     const result = await aiSearch("mind bending");
     expect(result.data[0].title).toBe("Inception");
+  });
+
+  it("aiSearch falls back to server if client engine throws", async () => {
+    vi.mocked(webgpuEngine.getClientTextSearch).mockRejectedValue(new Error("client failed"));
+    mockFetch.mockResolvedValue(okJson([{ id: 3, title: "Matrix" }]));
+    const result = await aiSearch("mind bending");
+    expect(result.data[0].title).toBe("Matrix");
+  });
+
+  it("uses client engine when it returns results", async () => {
+    vi.mocked(webgpuEngine.getClientTextSearch).mockResolvedValue([{ id: 10, title: "Client Result" } as any]);
+    const result = await aiSearch("client query");
+    expect(result.data[0].title).toBe("Client Result");
+    expect(result.baseUrl).toBe("client");
   });
 
   it("getMovie calls /movie/:id", async () => {
     mockFetch.mockResolvedValue(okJson({ id: 1, title: "Avatar" }));
     const result = await getMovie(1);
     expect(result.data.id).toBe(1);
+  });
+
+  it("getShowcaseMovies calls /movies/showcase", async () => {
+    mockFetch.mockResolvedValue(okJson([{ id: 1, title: "Avatar" }]));
+    const result = await getShowcaseMovies(8);
+    expect(result.data).toHaveLength(1);
+  });
+
+  it("getMovieEnriched returns immediately if enriched endpoint has trailer", async () => {
+    mockFetch.mockResolvedValueOnce(okJson({ id: 1, trailer_key: "abc" }));
+    const result = await getMovieEnriched(1);
+    expect(result.data.trailer_key).toBe("abc");
+  });
+
+  it("getMovieEnriched falls back and fetches trailer via proxy if enriched fails", async () => {
+    mockFetch.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url.includes("/enriched")) return failResponse(404);
+      if (url.includes("/trailer")) return okJson({ trailer_key: "proxy-key" });
+      if (url.includes("/movie/1")) return okJson({ id: 1, title: "Base" });
+      return failResponse(404);
+    });
+
+    const result = await getMovieEnriched(1);
+    expect(result.data.trailer_key).toBe("proxy-key");
+    expect(result.data.title).toBe("Base");
+  });
+
+  it("getMovieEnriched falls back to recs endpoint if proxy fails", async () => {
+    mockFetch.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url.endsWith("/enriched")) return failResponse(404); // the direct movie enriched
+      if (url.includes("/trailer")) return failResponse(404);
+      if (url.includes("/recommendations/id/1/enriched")) return okJson({ query_movie: { trailer_key: "rec-key" } });
+      if (url.includes("/movie/1")) return okJson({ id: 1, title: "Base" });
+      return failResponse(404);
+    });
+
+    const result = await getMovieEnriched(1);
+    expect(result.data.trailer_key).toBe("rec-key");
+    expect(result.data.title).toBe("Base");
+  });
+
+  it("getVisualRecommendations calls /v1/recommendations/visual/:id", async () => {
+    mockFetch.mockResolvedValue(okJson({ request_id: "req", recommendations: [] }));
+    const result = await getVisualRecommendations(1, 5);
+    expect(result.data.request_id).toBe("req");
+  });
+
+  it("getKGRecommendations calls /v1/recommendations/kg/:id", async () => {
+    mockFetch.mockResolvedValue(okJson({ request_id: "req", recommendations: [] }));
+    const result = await getKGRecommendations(1, 5);
+    expect(result.data.request_id).toBe("req");
+  });
+
+  it("checkVideoCacheStatus calls /v1/video/status", async () => {
+    mockFetch.mockResolvedValue(okJson({ cached_count: 5 }));
+    const result = await checkVideoCacheStatus();
+    expect(result.data.cached_count).toBe(5);
   });
 
   it("getUserRecommendations calls /v1/recommendations/user/:userId", async () => {
@@ -130,6 +216,7 @@ describe("API wrapper functions", () => {
 
 describe("getRecommendations", () => {
   it("falls back to non-enriched endpoint when enriched fails", async () => {
+    vi.mocked(webgpuEngine.getClientRecommendations).mockResolvedValue(null);
     mockFetch
       .mockRejectedValueOnce(new Error("enriched unavailable"))
       .mockResolvedValue(okJson({
@@ -140,6 +227,39 @@ describe("getRecommendations", () => {
 
     const result = await getRecommendations(1, 5);
     expect(result.data.query_movie.title).toBe("Avatar");
+  });
+
+  it("uses client engine when it returns recommendations", async () => {
+    vi.mocked(webgpuEngine.getClientRecommendations).mockResolvedValue([{ id: 11, title: "Client Rec" } as any]);
+    // Also need to mock loadTitles, which calls /movies/titles
+    mockFetch.mockResolvedValueOnce(okJson([{ id: 1, title: "Avatar" }]));
+    
+    const result = await getRecommendations(1, 5);
+    expect(result.data.recommendations[0].title).toBe("Client Rec");
+    expect(result.data.query_movie.title).toBe("Avatar"); // from loadTitles mock
+    expect(result.baseUrl).toBe("client");
+  });
+
+  it("uses client engine even if loadTitles fails to find the query movie", async () => {
+    vi.mocked(webgpuEngine.getClientRecommendations).mockResolvedValue([{ id: 11, title: "Client Rec" } as any]);
+    // Missing from titles
+    mockFetch.mockResolvedValueOnce(okJson([{ id: 99, title: "Other Movie" }]));
+    
+    const result = await getRecommendations(1, 5);
+    expect(result.data.query_movie.title).toBe("Query Movie");
+    expect(result.baseUrl).toBe("client");
+  });
+
+  it("falls back to server if client recommendations throws", async () => {
+    vi.mocked(webgpuEngine.getClientRecommendations).mockRejectedValue(new Error("client failed"));
+    mockFetch.mockResolvedValue(okJson({
+      request_id: "req-1",
+      query_movie: { id: 1, title: "Avatar" },
+      recommendations: [],
+    }));
+    const result = await getRecommendations(1, 5);
+    expect(result.data.query_movie.title).toBe("Avatar");
+    expect(result.baseUrl).not.toBe("client");
   });
 });
 

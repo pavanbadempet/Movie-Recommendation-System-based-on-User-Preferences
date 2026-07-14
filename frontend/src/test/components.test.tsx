@@ -44,6 +44,21 @@ describe("AuthPage", () => {
     vi.spyOn(window.localStorage.__proto__, "setItem").mockImplementation(() => {});
   });
 
+  beforeAll(() => {
+    Object.defineProperty(HTMLMediaElement.prototype, 'play', {
+      writable: true,
+      value: vi.fn().mockResolvedValue(undefined),
+    });
+    Object.defineProperty(HTMLMediaElement.prototype, 'pause', {
+      writable: true,
+      value: vi.fn(),
+    });
+    Object.defineProperty(HTMLMediaElement.prototype, 'load', {
+      writable: true,
+      value: vi.fn(),
+    });
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -411,6 +426,14 @@ describe("MovieDialog", () => {
     retrieval_stage: "vector_recall",
     quality_bucket: "tier_1",
   };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+  });
 
   it("renders movie title, overview, custom rating, and metadata correctly in Overview tab", () => {
     const onCloseMock = vi.fn();
