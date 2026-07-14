@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from starlette.concurrency import run_in_threadpool
+
+from backend.api.fast_cache import cached_endpoint
 from backend.data.auth import TenantContext
 from backend.router_deps import RouterDeps
-from backend.api.fast_cache import cached_endpoint
-from starlette.concurrency import run_in_threadpool
 
 # Pre-cached binary buffer for zero-copy vector serving
 _CACHED_VECTORS_BYTES: bytes | None = None
+
 
 def clear_vectors_cache():
     global _CACHED_VECTORS_BYTES
@@ -56,6 +58,7 @@ def create_browse_router(deps: RouterDeps) -> APIRouter:
     async def get_all_vectors():
         from fastapi.responses import Response
         import numpy as np
+
         global _CACHED_VECTORS_BYTES
 
         rec = await run_in_threadpool(get_rec)
