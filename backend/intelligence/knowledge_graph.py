@@ -14,15 +14,33 @@ MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
 
 
 class DummyPyGraph:
-    def add_node(self, *args, **kwargs): return 0
-    def add_edge(self, *args, **kwargs): return 0
-    def has_edge(self, *args, **kwargs): return False
-    def get_node_data(self, *args, **kwargs): return None
-    def neighbors(self, *args, **kwargs): return []
-    def get_edge_data(self, *args, **kwargs): return None
-    def degree(self, *args, **kwargs): return 0
-    def edges(self): return []
-    def __len__(self): return 0
+    def add_node(self, *args, **kwargs):
+        return 0
+
+    def add_edge(self, *args, **kwargs):
+        return 0
+
+    def has_edge(self, *args, **kwargs):
+        return False
+
+    def get_node_data(self, *args, **kwargs):
+        return None
+
+    def neighbors(self, *args, **kwargs):
+        return []
+
+    def get_edge_data(self, *args, **kwargs):
+        return None
+
+    def degree(self, *args, **kwargs):
+        return 0
+
+    def edges(self):
+        return []
+
+    def __len__(self):
+        return 0
+
 
 class RustworkxGraphWrapper:
     """
@@ -113,6 +131,7 @@ class RustworkxGraphWrapper:
 
             def __iter__(self):
                 return iter(self.wrapper.get_nodes_view(data=False))
+
         return NodesView(self)
 
     def get_nodes_view(self, data=False):

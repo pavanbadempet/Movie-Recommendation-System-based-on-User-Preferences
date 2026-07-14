@@ -75,7 +75,6 @@ from slowapi.util import get_remote_address
 from backend.api.admin_routes import create_admin_router
 from backend.api.admin_tests import router as admin_router
 from backend.api.artifact_routes import create_artifact_router
-from backend.api.pipeline_routes import create_pipeline_router
 from backend.api.auth_routes import router as auth_router
 from backend.api.billing_routes import router as billing_router
 from backend.api.browse_routes import create_browse_router
@@ -83,6 +82,7 @@ from backend.api.catalog_routes import create_catalog_router
 from backend.api.chat import generate_chat_response
 from backend.api.evaluation_routes import create_evaluation_router
 from backend.api.experiment_routes import create_experiment_router
+from backend.api.pipeline_routes import create_pipeline_router
 from backend.api.recommendation_routes import (
     _recommendation_diagnostic_report,
     create_core_router,
@@ -407,6 +407,7 @@ app.add_middleware(
 )
 
 from fastapi.middleware.gzip import GZipMiddleware
+
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Enterprise rate limiting (token bucket via Redis)
@@ -609,9 +610,10 @@ _register_routes()
 # 15. ENTRY POINT
 # =====================================================================
 if __name__ == "__main__":
-    import uvicorn
     import os
     import sys
+
+    import uvicorn
 
     # Add repo root and backend directory to sys.path to ensure uvicorn worker string imports work
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -626,7 +628,7 @@ if __name__ == "__main__":
 
     try:
         # String import format is required for multi-worker process clustering in uvicorn
-        uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, workers=workers)
+        uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, workers=workers)  # noqa: S104
     except Exception:
         # Fallback to single worker app object format if path resolution fails
-        uvicorn.run(app, host="0.0.0.0", port=8000)
+        uvicorn.run(app, host="0.0.0.0", port=8000)  # noqa: S104

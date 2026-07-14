@@ -77,11 +77,7 @@ def apply_query_mmr(
 
     try:
         selected_order = rust_core.mmr_diversify_rust(
-            candidate_indices,
-            candidate_relevance,
-            vectors,
-            n,
-            float(lambda_param)
+            candidate_indices, candidate_relevance, vectors, n, float(lambda_param)
         )
         return [candidates[idx] for idx in selected_order]
     except Exception as exc:

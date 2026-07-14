@@ -1,13 +1,15 @@
-import time
-import logging
 from functools import wraps
-from typing import Any
 import inspect
+import logging
+import time
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
+
 class FastCache:
     """A fast, thread-safe in-process TTL cache."""
+
     def __init__(self, ttl_seconds: float = 60.0, max_size: int = 2048):
         self.ttl = ttl_seconds
         self.max_size = max_size
@@ -54,6 +56,7 @@ def cached_endpoint(ttl: float = 60.0, max_size: int = 1024):
 
     def decorator(func):
         if inspect.iscoroutinefunction(func):
+
             @wraps(func)
             async def async_wrapper(*args, **kwargs):
                 # Build unique cache key from args and kwargs
@@ -65,7 +68,7 @@ def cached_endpoint(ttl: float = 60.0, max_size: int = 1024):
                 for k, v in sorted(kwargs.items()):
                     if k not in ("request", "response", "db", "background_tasks"):
                         key_parts.append(f"{k}:{v}")
-                
+
                 cache_key = f"{func.__name__}:" + ":".join(key_parts)
 
                 cached_val = cache.get(cache_key)
@@ -75,8 +78,10 @@ def cached_endpoint(ttl: float = 60.0, max_size: int = 1024):
                 res = await func(*args, **kwargs)
                 cache.set(cache_key, res)
                 return res
+
             return async_wrapper
         else:
+
             @wraps(func)
             def sync_wrapper(*args, **kwargs):
                 # Build unique cache key from args and kwargs
@@ -88,7 +93,7 @@ def cached_endpoint(ttl: float = 60.0, max_size: int = 1024):
                 for k, v in sorted(kwargs.items()):
                     if k not in ("request", "response", "db", "background_tasks"):
                         key_parts.append(f"{k}:{v}")
-                
+
                 cache_key = f"{func.__name__}:" + ":".join(key_parts)
 
                 cached_val = cache.get(cache_key)
@@ -98,5 +103,7 @@ def cached_endpoint(ttl: float = 60.0, max_size: int = 1024):
                 res = func(*args, **kwargs)
                 cache.set(cache_key, res)
                 return res
+
             return sync_wrapper
+
     return decorator

@@ -47,13 +47,13 @@ def create_pipeline_router(deps: RouterDeps) -> APIRouter:
         try:
             # 1. Query table snapshots metadata via inspect_lakehouse helper
             lakehouse_report = inspect_lakehouse()
-            
+
             # 2. Get event storage status
             stream_status = event_storage_status()
-            
+
             # 3. Load defined contracts schemas
             contracts_schema = get_all_contracts()
-            
+
             # Record usage
             record_usage(
                 "platform.pipelines",
@@ -62,7 +62,7 @@ def create_pipeline_router(deps: RouterDeps) -> APIRouter:
                 plan=context.plan,
                 authenticated=context.authenticated,
             )
-            
+
             return {
                 "status": "ok",
                 "lakehouse": lakehouse_report,
@@ -71,9 +71,6 @@ def create_pipeline_router(deps: RouterDeps) -> APIRouter:
             }
         except Exception as exc:
             logger.exception("Failed to retrieve pipeline diagnostics")
-            return {
-                "status": "error",
-                "message": str(exc)
-            }
+            return {"status": "error", "message": str(exc)}
 
     return router

@@ -736,7 +736,9 @@ class ApexEnsembleEngine(nn.Module):
             try:
                 with torch.no_grad():
                     u_emb = (
-                        self.lightgcn.user_embedding(torch.tensor([safe_user_id])).expand(len(safe_item_ids), -1).numpy()
+                        self.lightgcn.user_embedding(torch.tensor([safe_user_id]))
+                        .expand(len(safe_item_ids), -1)
+                        .numpy()
                     )
                     i_emb = self.lightgcn.item_embedding(torch.tensor(safe_item_ids)).numpy()
                 k_s = onnx.predict_kan(u_emb, i_emb)
@@ -748,7 +750,9 @@ class ApexEnsembleEngine(nn.Module):
             try:
                 with torch.no_grad():
                     u_emb_d = (
-                        self.lightgcn.user_embedding(torch.tensor([safe_user_id])).expand(len(safe_item_ids), -1).numpy()
+                        self.lightgcn.user_embedding(torch.tensor([safe_user_id]))
+                        .expand(len(safe_item_ids), -1)
+                        .numpy()
                     )
                     i_emb_d = self.lightgcn.item_embedding(torch.tensor(safe_item_ids)).numpy()
                 t_arr = _np.full((len(safe_item_ids), 1), 0.5, dtype=_np.float32)
@@ -773,6 +777,7 @@ class ApexEnsembleEngine(nn.Module):
         active_fns = {name: fn for name, fn in onnx_fns.items() if w.get(name, 0.0) > 0.0}
 
         from concurrent.futures import as_completed
+
         futures = {executor.submit(fn): name for name, fn in active_fns.items()}
         for future in as_completed(futures):
             name = futures[future]
@@ -798,6 +803,7 @@ class ApexEnsembleEngine(nn.Module):
         }
         try:
             import rust_core
+
             w_mapped = {name: float(w.get(key_map.get(name, name), 0.0)) for name, _ in scores_list}
             return rust_core.blend_scores_rust(scores_list, w_mapped, candidate_item_ids)
         except Exception as e:
