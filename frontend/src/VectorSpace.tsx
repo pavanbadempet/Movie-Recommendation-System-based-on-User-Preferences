@@ -159,12 +159,12 @@ export function VectorSpace() {
 
       // 2. Draw connections (lines) for Similarity Vector Web
       ctx.lineWidth = 0.5;
-      if (selectedNode) {
+      if (selectedNodeRef.current) {
         // Draw strong similarity lines from selected node to 5 nearest neighbors
-        const selProj = projectedNodes.find((n) => n.id === selectedNode.id);
+        const selProj = projectedNodes.find((n) => n.id === selectedNodeRef.current!.id);
         if (selProj) {
           projectedNodes.forEach((other) => {
-            if (other.id !== selectedNode.id && other.genre === selectedNode.genre) {
+            if (other.id !== selectedNodeRef.current!.id && other.genre === selectedNodeRef.current!.genre) {
               // Connect nodes in the same cluster/genre
               ctx.strokeStyle = `rgba(99, 102, 241, ${Math.max(0.1, 1 - (other.pz || 0) / 600)})`;
               ctx.beginPath();
