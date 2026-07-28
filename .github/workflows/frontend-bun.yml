@@ -1,0 +1,46 @@
+name: Frontend CI (Bun)
+
+on:
+  push:
+    paths:
+      - 'frontend/**'
+  pull_request:
+    paths:
+      - 'frontend/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Install dependencies (bun)
+        working-directory: frontend
+        run: bun install
+
+      - name: Run type check
+        working-directory: frontend
+        run: bun run type-check
+
+      - name: Build
+        working-directory: frontend
+        run: bun run build
+
+      - name: Run unit tests
+        working-directory: frontend
+        run: bun run test
+
+      # Optional: run Playwright E2E (requires browsers)
+      - name: Install Playwright browsers
+        if: always()
+        working-directory: frontend
+        run: |
+          npx playwright install --with-deps
+
+      - name: Run e2e tests (Playwright)
+        if: always()
+        working-directory: frontend
+        run: bun run test:e2e
