@@ -7,7 +7,7 @@ on:
     branches: [ "main" ]
 
 env:
-  PYTHON_VERSION: "3.11"
+  PYTHON_VERSION: "3.12"
   NODE_VERSION: "24"
 
 jobs:
@@ -313,32 +313,33 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Use Node.js ${{ env.NODE_VERSION }}
+    - name: Use Node.js 24
       uses: actions/setup-node@v4
       with:
-        node-version: ${{ env.NODE_VERSION }}
-        cache: 'npm'
-        cache-dependency-path: frontend/package-lock.json
+        node-version: "24"
 
-    - name: Install NPM dependencies
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v2
+
+    - name: Install dependencies (bun)
       working-directory: ./frontend
-      run: npm ci
+      run: bun install
 
     - name: Run linter
       working-directory: ./frontend
-      run: npm run lint
+      run: bun run lint
 
     - name: Run type check
       working-directory: ./frontend
-      run: npm run type-check
+      run: bun run type-check
 
     - name: Run Vitest unit tests
       working-directory: ./frontend
-      run: npm run test -- --coverage --reporter=verbose
+      run: bun run test -- --coverage --reporter=verbose
 
     - name: Build React application
       working-directory: ./frontend
-      run: npm run build
+      run: bun run build
 
   # ---------------------------------------------------------------------------
   # 5.5 OpenAPI spec export (validates spec can be generated; uploads artifact)
