@@ -37,12 +37,6 @@ export default defineConfig({
   test: {
     pool: "forks",
     fileParallelism: false,
-    poolOptions: {
-      forks: {
-        isolate: false,
-        singleFork: true,
-      },
-    },
     teardownTimeout: 1000,
     hookTimeout: 5000,
     globals: true,
