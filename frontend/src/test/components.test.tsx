@@ -485,7 +485,7 @@ describe("MovieDialog", () => {
 
     const closeBtn = screen.getByRole("button", { name: /close movie details/i });
     fireEvent.click(closeBtn);
-    expect(onCloseMock).toHaveBeenCalledOnce();
+    expect(onCloseMock).toHaveBeenCalledTimes(1);
   });
 
   it("triggers onFeedback callback with positive and negative sentiment", () => {

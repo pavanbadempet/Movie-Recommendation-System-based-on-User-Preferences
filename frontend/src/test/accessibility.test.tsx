@@ -13,7 +13,7 @@ import { render } from "@testing-library/react";
 import { axe, toHaveNoViolations } from "jest-axe";
 import "@testing-library/jest-dom";
 
-expect.extend(toHaveNoViolations);
+expect.extend(toHaveNoViolations as any);
 
 // ─── Mock hooks ───────────────────────────────────────────────────────────────
 
