@@ -2,7 +2,10 @@
   "name": "movie-recommendation-system",
   "private": true,
   "version": "1.0.0",
+  "packageManager": "bun@1.2.0",
   "scripts": {
-    "build": "npm --prefix frontend run build"
+    "dev": "bun --cwd frontend dev",
+    "build": "bun --cwd frontend run build",
+    "test": "bun --cwd frontend test"
   }
 }
