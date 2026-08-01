@@ -23,11 +23,8 @@ COPY . .
 # Build the React app via Vite using existing npm scripts via Bun
 RUN bun run build
 
-# Install a simple static file server to serve the built assets
-RUN npm install -g serve
-
 # Expose port used by the static server
 EXPOSE 5173
 
-# Serve the dist folder
-CMD ["serve", "-s", "dist", "-l", "5173"]
+# Serve the dist folder using bunx (runs the package without globally installing)
+CMD ["bunx", "serve", "-s", "dist", "-l", "5173"]

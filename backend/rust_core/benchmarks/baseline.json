@@ -1,0 +1,7 @@
+{
+  "description": "Conservative baseline to avoid CI false-positives. Update after an authoritative run.",
+  "iterations": 10,
+  "baseline_avg_ms": 100.0,
+  "max_avg_ms": 250.0,
+  "note": "Replace `baseline_avg_ms` and `max_avg_ms` with measured values from CI benchmark artifact `bench_result.json`."
+}

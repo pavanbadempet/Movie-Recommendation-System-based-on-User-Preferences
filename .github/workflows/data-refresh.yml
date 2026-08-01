@@ -23,7 +23,7 @@ on:
   workflow_dispatch:  # Allow manual trigger
 
 env:
-  PYTHON_VERSION: '3.11'
+  PYTHON_VERSION: '3.12'
 
 concurrency:
   group: daily-data-refresh-${{ github.ref }}

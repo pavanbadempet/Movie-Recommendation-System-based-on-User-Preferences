@@ -29,7 +29,7 @@ Thanks for your interest. This document covers everything you need to get from z
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.12+
 - Node.js 24+ (for frontend)
 - Docker + Docker Compose (for the full stack)
 
@@ -80,8 +80,8 @@ Services:
 
 ```bash
 cd frontend
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 ---
@@ -170,8 +170,8 @@ Key rules:
 For TypeScript (frontend):
 ```bash
 cd frontend
-npm run lint        # ESLint
-npm run type-check  # TypeScript strict check
+bun run lint        # ESLint
+bun run type-check  # TypeScript strict check
 ```
 
 ---
@@ -198,8 +198,8 @@ python -m pytest tests/test_ranker.py -v
 
 ```bash
 cd frontend
-npm run test              # Run all tests once
-npm run test:coverage     # With coverage report (80% threshold)
+bun run test              # Run all tests once
+bun run test:coverage     # With coverage report (80% threshold)
 ```
 
 ### Mutation testing (weekly CI, or run locally)

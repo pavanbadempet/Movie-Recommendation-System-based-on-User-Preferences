@@ -143,7 +143,7 @@ Update `ci.yml` frontend job:
 ```yaml
 - name: Run Vitest with coverage
   working-directory: ./frontend
-  run: npm run test -- --coverage
+  run: bun run test -- --coverage
 ```
 
 Add coverage badge to `README.md`:

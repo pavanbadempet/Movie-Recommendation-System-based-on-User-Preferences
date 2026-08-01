@@ -419,7 +419,7 @@ Remove the global auth gate that blocks search.
 Run:
 
 ```bash
-npm run build
+bun run build
 ```
 
 from `frontend`.
@@ -459,7 +459,7 @@ Expected: full suite passes or only known optional integration skips remain.
 Run:
 
 ```bash
-npm run build
+bun run build
 ```
 
 from `frontend`.

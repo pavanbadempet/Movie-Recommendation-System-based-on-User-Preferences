@@ -4,7 +4,7 @@
 version: "3.8"
 
 x-airflow-common: &airflow-common
-  image: apache/airflow:2.8.0-python3.11
+  image: apache/airflow:2.8.0-python3.12
   environment:
     - AIRFLOW__CORE__EXECUTOR=LocalExecutor
     - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow

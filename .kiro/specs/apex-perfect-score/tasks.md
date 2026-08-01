@@ -327,7 +327,7 @@ Close the four remaining gaps (ML completeness, testing completeness, frontend c
 
 - [x] 20. Run full test suite and verify all gates pass
   - Run: `pytest tests/ backend/tests/ -v --cov=backend --cov-fail-under=80`
-  - Run: `cd frontend && npm run test -- --coverage`
+  - Run: `cd frontend && bun run test -- --coverage`
   - Verify no test failures and both coverage gates pass
   - Run: `python scripts/run_offline_evaluation.py` and verify report is written
   - Verify `docs/APEX_WHITEPAPER.md` Section 6.1 contains actual metric values

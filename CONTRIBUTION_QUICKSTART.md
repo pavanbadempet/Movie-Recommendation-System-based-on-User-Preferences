@@ -4,7 +4,7 @@
 
 ### Prerequisites
 - Git installed
-- Python 3.11+ installed
+- Python 3.12+ installed
 - 4GB RAM available
 - Basic Python knowledge
 

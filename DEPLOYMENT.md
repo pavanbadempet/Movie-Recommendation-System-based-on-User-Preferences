@@ -141,7 +141,7 @@ Recommended for the primary frontend — global CDN, zero cost, automatic HTTPS.
 2. Select your repository.
 3. Build settings:
    - **Root directory:** `frontend`
-   - **Build command:** `npm ci && npm run build`
+  - **Build command:** `bun install && bun run build`
    - **Build output directory:** `dist`
    - **Node version:** `22` (Cloudflare Pages max supported version)
 4. Environment variables (optional):

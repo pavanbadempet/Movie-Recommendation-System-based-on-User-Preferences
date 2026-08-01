@@ -77,7 +77,7 @@ Close the four remaining gaps to bring the APEX Movie Recommendation System to a
 
   - [-] 4.2 Create `.github/workflows/mutation-tests.yml`
     - Trigger: `workflow_dispatch` + `schedule: cron: '0 10 * * 1'`
-    - Steps: checkout → setup Python 3.11 with pip cache → install `mutmut`, `pytest`, `hypothesis`, torch CPU, `requirements.txt` → run `mutmut run --paths-to-mutate backend/serving_tier.py,backend/onnx_engine.py --runner "python -m pytest tests/test_serving_tier_properties.py tests/test_onnx_thread_count.py -x -q"` → run `mutmut results` with `if: always()`
+    - Steps: checkout → setup Python 3.12 with pip cache → install `mutmut`, `pytest`, `hypothesis`, torch CPU, `requirements.txt` → run `mutmut run --paths-to-mutate backend/serving_tier.py,backend/onnx_engine.py --runner "python -m pytest tests/test_serving_tier_properties.py tests/test_onnx_thread_count.py -x -q"` → run `mutmut results` with `if: always()`
     - Set `JWT_SECRET_KEY` and `NOVA_DISABLE_MODEL_DOWNLOADS` env vars on the run step
     - _Requirements: 4.1, 4.2, 4.3, 4.4_
 

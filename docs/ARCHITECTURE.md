@@ -37,7 +37,7 @@ It describes the actual running system — not a prototype or aspirational desig
 └────────────────────────┬────────────────────────────────────────────────┘
                          │
 ┌────────────────────────▼────────────────────────────────────────────────┐
-│                   FASTAPI BACKEND  (Python 3.11)                        │
+│                   FASTAPI BACKEND  (Python 3.12)                        │
 │                                                                         │
 │  ┌──────────────────────────────────────────────────────────────────┐   │
 │  │              10-STAGE RECOMMENDATION PIPELINE                    │   │
@@ -66,7 +66,7 @@ It describes the actual running system — not a prototype or aspirational desig
 
 | Layer | Technology |
 |-------|-----------|
-| API framework | FastAPI (Python 3.11), Uvicorn, orjson |
+| API framework | FastAPI (Python 3.12), Uvicorn, orjson |
 | ML / inference | PyTorch, ONNX Runtime, scikit-learn, LightGBM |
 | Vector search | FAISS IVF (251 MB index, 768-dim SBERT + 512-dim CLIP) |
 | Embeddings | `all-mpnet-base-v2` (SBERT, 768-dim), CLIP ViT (512-dim) |
@@ -479,7 +479,7 @@ backend is cold-starting or unavailable.
 ```bash
 cd frontend
 npm ci
-npm run build   # outputs to frontend/dist/
+bun run build   # outputs to frontend/dist/
 ```
 
 The built `dist/` is served by FastAPI as a static mount at `/ui/` when present.
@@ -493,8 +493,8 @@ It can also be deployed independently to GitHub Pages via
 ### Docker
 
 Multi-stage `backend/Dockerfile`:
-1. **Stage 1 (Node 24):** builds the React frontend (`npm run build`)
-2. **Stage 2 (Python 3.11-slim):** installs Python dependencies, copies built
+1. **Stage 1 (Node 24):** builds the React frontend (`bun run build`)
+2. **Stage 2 (Python 3.12-slim):** installs Python dependencies, copies built
    frontend, runs as a non-root user
 
 ### docker-compose Services (9 total)
@@ -556,7 +556,7 @@ All services share the `apex-net` bridge network.
 | API Integration | `test_api`, `test_api_endpoints`, `test_security_api`, `test_artifact_health`, `test_catalogs`, `test_database` |
 | Data Pipeline | `test_pyspark_scd`, `test_etl`, `test_delta_lakehouse`, `test_semantic_artifacts` |
 | ML Models | `test_semantic_benchmark`, `test_recommendation_benchmark`, model fuzzing, replay, integration pipeline |
-| Frontend | ESLint + `npm run build` (Node 24) |
+| Frontend | ESLint + `bun run build` (Node 24) |
 | Docker | `docker compose config` + Hadolint Dockerfile lint |
 
 ### Live Quality Gates (`serving-quality.yml`)

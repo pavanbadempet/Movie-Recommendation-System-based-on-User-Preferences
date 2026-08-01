@@ -3,18 +3,30 @@
 # Stage 2: Build ETL artifacts
 # Stage 3: Lightweight runtime
 
-FROM node:24-slim AS frontend_builder
+FROM node:24-bullseye-slim AS frontend_builder
 
 WORKDIR /frontend
 
-COPY frontend/package*.json ./
-RUN npm ci
+# Install curl for Bun installer
+RUN apt-get update && apt-get install -y curl ca-certificates --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
 
+# Copy package files and install Bun
+COPY frontend/package*.json ./
+
+# Install Bun and use it to install dependencies
+RUN curl -fsSL https://bun.sh/install | bash -s -- --prefix /usr/local \
+    && ln -s /root/.bun/bin/bun /usr/local/bin/bun
+ENV PATH="/root/.bun/bin:${PATH}"
+
+RUN bun install
+
+# Copy source and build
 COPY frontend/ ./
 ENV VITE_BASE_PATH=/ui/
-RUN npm run build
+RUN bun run build
 
-FROM python:3.11-slim AS builder
+FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
@@ -41,7 +53,7 @@ COPY REVISION* ./
 
 # Build and install the Rust core extension module
 RUN uv pip install --system maturin && \
-    maturin build --manifest-path backend/rust_core/Cargo.toml --release --interpreter python3.11 --out dist && \
+    maturin build --manifest-path backend/rust_core/Cargo.toml --release --interpreter python3.12 --out dist && \
     uv pip install --system --no-cache dist/*.whl
 
 # Fail image builds early if synced Python source has a syntax error.
@@ -66,7 +78,7 @@ RUN python -c "from backend.models.model_loader import ensure_model_files, defau
 
 # -------------------------------------------
 # Stage 2: Runtime image
-FROM python:3.11-slim AS runtime
+FROM python:3.12-slim AS runtime
 
 WORKDIR /app
 
@@ -77,7 +89,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed packages from builder
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application code

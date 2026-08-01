@@ -140,6 +140,6 @@ This spec closes all five gaps to bring APEX to a verifiable 10/10.
 4. WHEN `UserProfilePage` is tested, THE accessibility test SHALL cover both the unauthenticated state (token null) and the authenticated state (token non-null).
 5. WHEN `AdminPanel` is tested, THE accessibility test SHALL cover both the unauthenticated state and the authenticated state.
 6. WHEN `KnowledgeGraphPage` is tested, THE accessibility test SHALL cover both the empty-titles state and a state with a non-empty titles list.
-7. WHEN the frontend test suite is run with `npm run test`, THE accessibility test file SHALL be discovered and executed automatically by Vitest without additional configuration.
+7. WHEN the frontend test suite is run with `bun run test`, THE accessibility test file SHALL be discovered and executed automatically by Vitest without additional configuration.
 8. WHEN any of the tested components produces a WCAG 2.0 A or AA violation as reported by axe, THE Vitest test run SHALL fail with a descriptive violation message.
 9. THE `jest-axe` package (version `^8.0.0`) and `@axe-core/react` (version `^4.10.0`) SHALL be listed as dev dependencies in `frontend/package.json`.

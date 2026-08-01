@@ -63,7 +63,7 @@ Full WCAG 2.1 AA validation requires manual testing with assistive technologies.
 Recommended tools:
 - **axe DevTools** browser extension — run on each page
 - **NVDA + Firefox** (Windows) or **VoiceOver + Safari** (macOS) — screen reader smoke test
-- **Lighthouse accessibility audit** — `npm run build && npx serve dist` then run Lighthouse
+- **Lighthouse accessibility audit** — `bun run build && bunx serve -s dist -l 5173` then run Lighthouse
 
 To run axe in CI (once `@axe-core/playwright` is added):
 ```bash

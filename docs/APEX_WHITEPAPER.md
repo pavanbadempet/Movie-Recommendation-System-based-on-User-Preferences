@@ -317,7 +317,7 @@ pytest backend/tests/ -v
 uvicorn backend.main:app --reload
 
 # 6. Open the frontend
-cd frontend && npm run dev
+cd frontend && bun run dev
 ```
 
 No API keys. No cloud accounts. No GPU. No money.

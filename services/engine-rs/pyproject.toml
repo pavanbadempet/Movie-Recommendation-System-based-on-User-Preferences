@@ -1,0 +1,15 @@
+[build-system]
+requires = ["maturin>=1.1"]
+build-backend = "maturin"
+
+[project]
+name = "engine-rs"
+version = "0.1.0"
+description = "Compute engine Rust crate with optional Python bindings"
+authors = ["Movie Recommendation Team <dev@local>"]
+
+[tool.maturin]
+bindings = "pyo3"
+scripts = []
+sdist = true
+manylinux = "off"

@@ -11,7 +11,7 @@ on:
     - cron: '30 8 * * *'
 
 env:
-  PYTHON_VERSION: '3.11'
+  PYTHON_VERSION: '3.12'
   NOVA_SERVING_URL: https://pavanbadempet-movie-rec-api.hf.space
   NOVA_RENDER_GATEWAY_URL: https://movie-recs-api-5qvy.onrender.com
 

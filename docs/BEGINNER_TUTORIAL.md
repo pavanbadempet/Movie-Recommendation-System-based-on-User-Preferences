@@ -5,7 +5,7 @@
 - Basic Python knowledge
 - Understanding of functions and classes
 - 4GB RAM available
-- Python 3.11+ installed
+- Python 3.12+ installed
 
 ## Lesson 1: Understanding the Basics (30 minutes)
 

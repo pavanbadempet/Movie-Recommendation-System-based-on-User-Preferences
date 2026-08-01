@@ -1,0 +1,104 @@
+name: Build and Test Rust Extension
+
+on:
+  push:
+    paths:
+      - 'backend/rust_core/**'
+  pull_request:
+    paths:
+      - 'backend/rust_core/**'
+
+jobs:
+  build-rust-core:
+    name: Build Rust Python extension (maturin)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+
+      - name: Install build deps
+        run: |
+          python -m pip install --upgrade pip build setuptools wheel
+          python -m pip install maturin numpy
+
+      - name: Cache pip and cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-pip-cargo-${{ hashFiles('**/poetry.lock', '**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-cargo-
+
+      - name: Build wheel with maturin
+        working-directory: backend/rust_core
+        run: |
+          python -m maturin build --release -o dist
+
+      - name: Install built wheel
+        run: |
+          python -m pip install backend/rust_core/dist/*.whl
+
+      - name: Run micro-benchmark
+        working-directory: backend/rust_core
+        run: |
+          python -m pip install numpy
+          python benchmarks/run_mmr_bench.py
+
+      - name: Compare benchmark to baseline or upload result
+        working-directory: backend/rust_core
+        run: |
+          set -e
+          if [ -f benchmarks/bench_result.json ]; then
+            echo "bench result found"
+            if [ -f benchmarks/baseline.json ]; then
+              echo "baseline found; comparing"
+              python - <<'PY'
+import json,sys
+r=json.load(open('benchmarks/bench_result.json'))
+b=json.load(open('benchmarks/baseline.json'))
+max_allowed = float(b.get('max_avg_ms', 1e9))
+print(f"avg_ms={r['avg_ms']}, max_allowed={max_allowed}")
+if r['avg_ms'] > max_allowed:
+    print('BENCHMARK_REGRESSION: avg_ms too high')
+    sys.exit(2)
+else:
+    print('Benchmark within baseline')
+    sys.exit(0)
+PY
+            else
+              echo "no baseline, uploading bench_result.json for inspection"
+            fi
+          else
+            echo "no bench_result.json produced"
+          fi
+
+      - name: Upload benchmark result artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-core-benchmark
+          path: backend/rust_core/benchmarks/bench_result.json
+
+      - name: Smoke test rust_core
+        run: |
+          python -c "import rust_core; print('rust_core OK:', hasattr(rust_core, 'mmr_diversify_rust'))"
+
+      - name: Run quick MMR profile smoke (optional)
+        run: |
+          python -m pip install pytest
+          python -c "import numpy; print('numpy OK', numpy.__version__)"
+          # Not running full profile in CI by default

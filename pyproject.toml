@@ -2,7 +2,7 @@
 name = "apex-recommendation-engine"
 version = "2.0.0"
 description = "APEX: Production-grade AI recommendation engine with 6-model ensemble"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 readme = "README.md"
 license = { text = "MIT" }
 
@@ -10,7 +10,7 @@ license = { text = "MIT" }
 # Ruff — linter + formatter
 # ---------------------------------------------------------------------------
 [tool.ruff]
-target-version = "py311"
+target-version = "py312"
 line-length = 120
 
 [tool.ruff.lint]
@@ -106,7 +106,7 @@ skip-magic-trailing-comma = false
 # Mypy — static type checking
 # ---------------------------------------------------------------------------
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 # Strict mode components — enabled selectively to keep the codebase clean
 # without overwhelming noise from third-party stubs.
 warn_return_any = true

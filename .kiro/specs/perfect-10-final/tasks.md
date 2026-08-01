@@ -220,7 +220,7 @@ All five tracks are independent and can execute in parallel.
     - _Requirements: 3.1, 3.2_
 
   - [x] 9.2 Fix any WCAG 2.0 AA violations found by the tests
-    - Run `npm run test -- src/test/accessibility.test.tsx` locally
+    - Run `bun run test -- src/test/accessibility.test.tsx` locally
     - For any violations reported by `axe`, fix the underlying component:
       - Missing `alt` on images: add descriptive `alt` text or `alt=""` for decorative images
       - Missing labels on form inputs: add `<label htmlFor>` or `aria-label`

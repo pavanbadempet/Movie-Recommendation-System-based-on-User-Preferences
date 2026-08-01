@@ -147,14 +147,14 @@ def run_app():
 
     if node_modules.exists():
         log("Starting React Frontend on http://localhost:5173 ...")
-        npm_cmd = "npm.cmd" if platform.system() == "Windows" else "npm"
-        frontend = run_cmd(f"{npm_cmd} run dev", cwd=str(frontend_dir), background=True)
+        bun_cmd = "bun.cmd" if platform.system() == "Windows" else "bun"
+        frontend = run_cmd(f"{bun_cmd} run dev", cwd=str(frontend_dir), background=True)
         log("App running!", Colors.OKGREEN)
         log("  Backend API : http://localhost:8000", Colors.OKGREEN)
         log("  Frontend UI : http://localhost:5173", Colors.OKGREEN)
         log("  API Docs    : http://localhost:8000/docs", Colors.OKGREEN)
     else:
-        log("React node_modules not found. Run 'cd frontend && npm install' first.", Colors.WARNING)
+        log("React node_modules not found. Run 'cd frontend && bun install' first.", Colors.WARNING)
         log("Falling back to Streamlit frontend on http://localhost:8501 ...", Colors.WARNING)
         frontend = run_cmd(
             f"{sys.executable} -m streamlit run frontend/streamlit_app.py",
