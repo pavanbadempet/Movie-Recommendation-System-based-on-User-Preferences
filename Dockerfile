@@ -8,6 +8,7 @@ FROM node:24-bullseye-slim AS frontend_builder
 WORKDIR /frontend
 
 # Install curl for Bun installer
+# hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y curl ca-certificates --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
@@ -15,6 +16,7 @@ RUN apt-get update && apt-get install -y curl ca-certificates --no-install-recom
 COPY frontend/package*.json ./
 
 # Install Bun and use it to install dependencies
+# hadolint ignore=DL4006
 RUN curl -fsSL https://bun.sh/install | bash -s -- --prefix /usr/local \
     && ln -s /root/.bun/bin/bun /usr/local/bin/bun
 ENV PATH="/root/.bun/bin:${PATH}"
