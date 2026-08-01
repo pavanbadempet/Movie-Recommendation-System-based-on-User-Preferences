@@ -66,19 +66,7 @@ jobs:
             echo "bench result found"
             if [ -f benchmarks/baseline.json ]; then
               echo "baseline found; comparing"
-              python - <<'PY'
-import json,sys
-r=json.load(open('benchmarks/bench_result.json'))
-b=json.load(open('benchmarks/baseline.json'))
-max_allowed = float(b.get('max_avg_ms', 1e9))
-print(f"avg_ms={r['avg_ms']}, max_allowed={max_allowed}")
-if r['avg_ms'] > max_allowed:
-    print('BENCHMARK_REGRESSION: avg_ms too high')
-    sys.exit(2)
-else:
-    print('Benchmark within baseline')
-    sys.exit(0)
-PY
+              python -c "import json,sys; r=json.load(open('benchmarks/bench_result.json')); b=json.load(open('benchmarks/baseline.json')); m=float(b.get('max_avg_ms',1e9)); print(f'avg_ms={r[\"avg_ms\"]}, max_allowed={m}'); sys.exit(2 if r[\"avg_ms\"] > m else 0)"
             else
               echo "no baseline, uploading bench_result.json for inspection"
             fi
