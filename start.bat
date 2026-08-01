@@ -24,28 +24,28 @@ if exist "frontend\node_modules" (
     echo [WARN] React node_modules not found.
     echo [INFO] Installing frontend dependencies...
     cd frontend
-    call npm install
+    call bun install
     cd ..
     set FRONTEND_READY=1
 )
 
 echo.
-echo [INFO] Starting FastAPI Backend on http://localhost:8000 ...
-start "APEX Backend" cmd /k "python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload"
+echo [INFO] Starting Pure Rust APEX Server on http://localhost:8080 ...
+start "APEX Rust Server" cmd /k "cd backend\rust_core && .\target\release\apex_server.exe"
 
-echo [INFO] Waiting for backend to start...
-timeout /t 4 /nobreak >nul
+echo [INFO] Waiting for server to start...
+timeout /t 2 /nobreak >nul
 
-echo [INFO] Starting React Frontend on http://localhost:5173 ...
-start "APEX Frontend" cmd /k "cd frontend && npm run dev"
+echo [INFO] Starting Bun React Frontend on http://localhost:5173 ...
+start "APEX Frontend" cmd /k "cd frontend && bun run dev"
 
 echo.
 echo  ============================================
-echo   App is running!
+echo   App is running (Pure Rust & Bun)!
 echo.
-echo   Backend API  :  http://localhost:8000
-echo   Frontend UI  :  http://localhost:5173
-echo   API Docs     :  http://localhost:8000/docs
+echo   Rust Backend API :  http://localhost:8080
+echo   Bun Frontend UI  :  http://localhost:5173
+echo   Health Status    :  http://localhost:8080/health
 echo  ============================================
 echo.
 echo  Press any key to open the app in your browser...

@@ -26,8 +26,8 @@ Static React + TypeScript UI for the APEX recommendation platform. Built with Vi
 ## Quick Start
 
 ```bash
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 Open [http://localhost:5173](http://localhost:5173).
@@ -38,25 +38,25 @@ Open [http://localhost:5173](http://localhost:5173).
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Start development server on port 5173 |
-| `npm run build` | Type-check + production build to `dist/` |
-| `npm run preview` | Preview production build locally |
-| `npm run test` | Run all tests once |
-| `npm run test:watch` | Run tests in watch mode |
-| `npm run test:coverage` | Run tests with coverage report (80% threshold) |
-| `npm run type-check` | TypeScript type check without emitting |
-| `npm run lint` | TypeScript strict type check (acts as linter) |
+| `bun run dev` | Start development server on port 5173 |
+| `bun run build` | Type-check + production build to `dist/` |
+| `bun run preview` | Preview production build locally |
+| `bun run test` | Run all tests once |
+| `bun run test:watch` | Run tests in watch mode |
+| `bun run test:coverage` | Run tests with coverage report (80% threshold) |
+| `bun run type-check` | TypeScript type check without emitting |
+| `bun run lint` | TypeScript strict type check (acts as linter) |
 
 ---
 
 ## Testing
 
 ```bash
-# Run all 128 tests
-npm run test
+# Run all tests via Bun
+bun run test
 
-# Run with coverage (enforces 80% lines/functions, 75% branches)
-npm run test:coverage
+# Run with coverage via Bun
+bun run test:coverage
 ```
 
 Test files live in `src/test/`:
@@ -92,7 +92,7 @@ The UI has request-level backend failover — if the primary API is sleeping, it
 ### Cloudflare Pages (recommended)
 
 - Root directory: `frontend`
-- Build command: `npm ci && npm run build`
+- Build command: `bun install && bun run build`
 - Output directory: `dist`
 - Node version: `24`
 

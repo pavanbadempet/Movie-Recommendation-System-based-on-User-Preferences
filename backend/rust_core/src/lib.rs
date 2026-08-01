@@ -208,10 +208,48 @@ fn collaborative_candidates_rust(
     Ok(candidates)
 }
 
+#[pyfunction]
+fn fast_rerank_blend_rust(
+    scores: Vec<f32>,
+    similarity_scores: Vec<f32>,
+    blend_weight: f32,
+) -> PyResult<(Vec<f32>, Vec<f32>)> {
+    let n = scores.len();
+    if n == 0 {
+        return Ok((vec![], vec![]));
+    }
+
+    let mut min_score = f32::INFINITY;
+    let mut max_score = f32::NEG_INFINITY;
+    for &s in scores.iter() {
+        if s < min_score { min_score = s; }
+        if s > max_score { max_score = s; }
+    }
+
+    let diff = max_score - min_score;
+
+    let mut ranker_scores = vec![0.0f32; n];
+    let mut blended_scores = vec![0.0f32; n];
+
+    for i in 0..n {
+        let learned = if diff > 0.0 {
+            (scores[i] - min_score) / diff
+        } else {
+            1.0
+        };
+        let prev = similarity_scores[i];
+        ranker_scores[i] = (learned * 1000000.0).round() / 1000000.0;
+        blended_scores[i] = blend_weight * learned + (1.0 - blend_weight) * prev;
+    }
+
+    Ok((ranker_scores, blended_scores))
+}
+
 #[pymodule]
 fn rust_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(blend_scores_rust, m)?)?;
     m.add_function(wrap_pyfunction!(mmr_diversify_rust, m)?)?;
     m.add_function(wrap_pyfunction!(collaborative_candidates_rust, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_rerank_blend_rust, m)?)?;
     Ok(())
 }

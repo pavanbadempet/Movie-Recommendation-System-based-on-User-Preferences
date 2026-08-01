@@ -21,6 +21,12 @@ import joblib
 import numpy as np
 import pandas as pd
 
+try:
+    from rust_core import fast_rerank_blend_rust
+    _RUST_CORE_AVAILABLE = True
+except ImportError:
+    _RUST_CORE_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 FEATURE_COLUMNS = [
@@ -232,29 +238,48 @@ class NovaRanker:
         if len(scores) == 0:
             return candidates
 
-        min_score = float(scores.min())
-        max_score = float(scores.max())
-        if max_score > min_score:
-            normalized = (scores - min_score) / (max_score - min_score)
+        if _RUST_CORE_AVAILABLE:
+            raw_scores = [float(s) for s in scores]
+            sim_scores = [_safe_float(c.get("similarity_score")) for c in candidates]
+            ranker_scores, blended_scores = fast_rerank_blend_rust(raw_scores, sim_scores, float(blend_weight))
+            reranked = []
+            for idx, candidate in enumerate(candidates):
+                item = dict(candidate)
+                item["ranker_score"] = ranker_scores[idx]
+                item["similarity_score"] = blended_scores[idx]
+                stage = str(item.get("retrieval_stage") or "candidate")
+                if "learned_ranker" not in stage:
+                    item["retrieval_stage"] = f"{stage}_learned_ranker"
+                explanation = list(item.get("explanation") or [])
+                if "learned feedback ranker" not in explanation:
+                    explanation.insert(0, "learned feedback ranker")
+                item["explanation"] = explanation[:5]
+                item["explanation_text"] = " | ".join(item["explanation"])
+                reranked.append(item)
         else:
-            normalized = np.ones_like(scores, dtype=np.float32)
+            min_score = float(scores.min())
+            max_score = float(scores.max())
+            if max_score > min_score:
+                normalized = (scores - min_score) / (max_score - min_score)
+            else:
+                normalized = np.ones_like(scores, dtype=np.float32)
 
-        reranked = []
-        for candidate, ranker_score in zip(candidates, normalized, strict=False):
-            item = dict(candidate)
-            previous_score = _safe_float(item.get("similarity_score"))
-            learned_score = float(ranker_score)
-            item["ranker_score"] = round(learned_score, 6)
-            item["similarity_score"] = float(blend_weight * learned_score + (1 - blend_weight) * previous_score)
-            stage = str(item.get("retrieval_stage") or "candidate")
-            if "learned_ranker" not in stage:
-                item["retrieval_stage"] = f"{stage}_learned_ranker"
-            explanation = list(item.get("explanation") or [])
-            if "learned feedback ranker" not in explanation:
-                explanation.insert(0, "learned feedback ranker")
-            item["explanation"] = explanation[:5]
-            item["explanation_text"] = " | ".join(item["explanation"])
-            reranked.append(item)
+            reranked = []
+            for candidate, ranker_score in zip(candidates, normalized, strict=False):
+                item = dict(candidate)
+                previous_score = _safe_float(item.get("similarity_score"))
+                learned_score = float(ranker_score)
+                item["ranker_score"] = round(learned_score, 6)
+                item["similarity_score"] = float(blend_weight * learned_score + (1 - blend_weight) * previous_score)
+                stage = str(item.get("retrieval_stage") or "candidate")
+                if "learned_ranker" not in stage:
+                    item["retrieval_stage"] = f"{stage}_learned_ranker"
+                explanation = list(item.get("explanation") or [])
+                if "learned feedback ranker" not in explanation:
+                    explanation.insert(0, "learned feedback ranker")
+                item["explanation"] = explanation[:5]
+                item["explanation_text"] = " | ".join(item["explanation"])
+                reranked.append(item)
 
         reranked.sort(key=lambda item: _safe_float(item.get("similarity_score")), reverse=True)
         return reranked

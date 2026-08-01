@@ -34,7 +34,7 @@ pinned: false
 
 <!-- Tech Stack Badges Row (for-the-badge) -->
 <p align="center">
-  <img src="https://img.shields.io/badge/Python_3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/Python_3.12+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React" />
   <img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
@@ -596,8 +596,8 @@ uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 ```bash
 # Start React client
 cd frontend
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 | Service | Access URL |
@@ -698,7 +698,7 @@ All tests must pass in CI before merging. We enforce strict regression gates for
 python -m pytest tests/ -v
 
 # Run the frontend unit tests
-npm --prefix frontend run test
+bun --cwd frontend run test
 ```
 
 <img src="docs/assets/divider.svg" alt="APEX Movie Recommendation System visual separator divider line" width="100%"/>
@@ -784,7 +784,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT
 
 ```bash
 python -m pytest tests/ -v
-npm --prefix frontend run test
+bun --cwd frontend run test
 ```
 
 <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/graphs/contributors">
