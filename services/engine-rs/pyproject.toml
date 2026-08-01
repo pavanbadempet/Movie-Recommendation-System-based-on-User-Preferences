@@ -9,7 +9,7 @@ description = "Compute engine Rust crate with optional Python bindings"
 authors = [{ name = "Movie Recommendation Team", email = "dev@local" }]
 
 [tool.maturin]
-bindings = "pyo3"
+features = ["python"]
 scripts = []
 sdist = true
 manylinux = "off"
