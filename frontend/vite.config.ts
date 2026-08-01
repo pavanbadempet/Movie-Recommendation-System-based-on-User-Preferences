@@ -50,7 +50,7 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     exclude: ["e2e/**", "node_modules/**", "dist/**"],
     coverage: {
-      provider: "istanbul",
+      provider: "v8",
       reporter: ["text", "lcov", "json"],
       clean: false,
       cleanOnRebuild: false,
