@@ -20,6 +20,12 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+# Try importing the optional Rust extension once at module import time.
+try:
+    import rust_core  # type: ignore
+except Exception:
+    rust_core = None
+
 
 def apply_query_mmr(
     candidates: list[dict],
@@ -66,8 +72,6 @@ def apply_query_mmr(
     if len(candidates) <= n or vectors is None:
         return candidates[:n]
 
-    import rust_core
-
     candidate_indices = []
     candidate_relevance = []
     for c in candidates:
@@ -75,25 +79,29 @@ def apply_query_mmr(
         candidate_indices.append(row_idx if row_idx is not None else -1)
         candidate_relevance.append(float(c.get("similarity_score") or 0.0))
 
-    try:
-        selected_order = rust_core.mmr_diversify_rust(
-            candidate_indices, candidate_relevance, vectors, n, float(lambda_param)
-        )
-        return [candidates[idx] for idx in selected_order]
-    except Exception as exc:
-        logger.warning("Rust MMR diversification failed: %s; falling back to python", exc)
-        selected: list[dict] = []
-        remaining = candidates.copy()
-        selected.append(remaining.pop(0))
-        vector_cache: dict[int, np.ndarray] = {}
+    # Use Rust implementation when available for performance-critical path.
+    if rust_core is not None:
+        try:
+            selected_order = rust_core.mmr_diversify_rust(
+                candidate_indices, candidate_relevance, vectors, n, float(lambda_param)
+            )
+            return [candidates[idx] for idx in selected_order]
+        except Exception as exc:
+            logger.warning("Rust MMR diversification failed: %s; falling back to python", exc)
 
-        def candidate_vector(movie: dict) -> np.ndarray | None:
-            row_idx = index_for_movie_id_fn(movie.get("id"))
-            if row_idx is None:
-                return None
-            if row_idx not in vector_cache:
-                vector_cache[row_idx] = np.asarray(vectors[row_idx], dtype=np.float32)
-            return vector_cache[row_idx]
+    # Python fallback path
+    selected: list[dict] = []
+    remaining = candidates.copy()
+    selected.append(remaining.pop(0))
+    vector_cache: dict[int, np.ndarray] = {}
+
+    def candidate_vector(movie: dict) -> np.ndarray | None:
+        row_idx = index_for_movie_id_fn(movie.get("id"))
+        if row_idx is None:
+            return None
+        if row_idx not in vector_cache:
+            vector_cache[row_idx] = np.asarray(vectors[row_idx], dtype=np.float32)
+        return vector_cache[row_idx]
 
         while remaining and len(selected) < n:
             best_idx = 0

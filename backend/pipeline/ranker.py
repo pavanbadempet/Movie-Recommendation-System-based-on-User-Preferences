@@ -23,6 +23,7 @@ import pandas as pd
 
 try:
     from rust_core import fast_rerank_blend_rust
+
     _RUST_CORE_AVAILABLE = True
 except ImportError:
     _RUST_CORE_AVAILABLE = False
