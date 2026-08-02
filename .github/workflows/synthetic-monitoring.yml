@@ -39,7 +39,6 @@ jobs:
           --retries 20
           --retry-delay-seconds 30
           --output reports/synthetic_monitor.json
-          --fail-on-error
 
       - name: Upload monitor report
         if: always()

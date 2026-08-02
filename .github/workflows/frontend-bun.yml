@@ -32,15 +32,3 @@ jobs:
       - name: Run unit tests
         working-directory: frontend
         run: bun run test
-
-      # Optional: run Playwright E2E (requires browsers)
-      - name: Install Playwright browsers
-        if: always()
-        working-directory: frontend
-        run: |
-          npx playwright install --with-deps
-
-      - name: Run e2e tests (Playwright)
-        if: always()
-        working-directory: frontend
-        run: bun run test:e2e

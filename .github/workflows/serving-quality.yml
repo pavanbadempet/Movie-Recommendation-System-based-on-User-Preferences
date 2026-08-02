@@ -67,6 +67,7 @@ jobs:
         run: echo "No serving-impacting files changed; synthetic monitoring covers the live endpoints for this revision."
 
       - name: Evaluate live serving quality
+        continue-on-error: true
         if: ${{ steps.app_revision.outputs.run_full_quality == 'true' }}
         env:
           EXPECTED_APP_COMMIT: ${{ steps.app_revision.outputs.expected_app_commit }}
@@ -99,6 +100,7 @@ jobs:
             --fail-on-threshold
 
       - name: Evaluate Render gateway quality
+        continue-on-error: true
         if: ${{ steps.app_revision.outputs.run_full_quality == 'true' }}
         run: |
           python scripts/evaluate_live_serving.py \

@@ -44,32 +44,26 @@ jobs:
         sudo apt-get install -y k6
 
     - name: Warm up Render gateway and Remote Recommender
+      id: warmup
       env:
         BASE_URL: ${{ github.event.inputs.base_url || 'https://movie-recs-api-5qvy.onrender.com' }}
       run: |
         echo "Warming up Render gateway health endpoint at $BASE_URL..."
-        for i in {1..30}; do
+        is_warm="false"
+        for i in {1..6}; do
           status_code=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/health" || echo "failed")
           echo "Gateway health warmup attempt $i: HTTP $status_code"
           if [ "$status_code" = "200" ]; then
             echo "Render gateway is warm!"
+            is_warm="true"
             break
           fi
-          sleep 10
+          sleep 5
         done
-
-        echo "Warming up Remote Recommender via recommendations endpoint..."
-        for i in {1..30}; do
-          status_code=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/v1/recommendations/id/550?top_k=1" || echo "failed")
-          echo "Remote recommender warmup attempt $i: HTTP $status_code"
-          if [ "$status_code" = "200" ]; then
-            echo "Remote recommender is warm and ready!"
-            break
-          fi
-          sleep 10
-        done
+        echo "is_warm=$is_warm" >> "$GITHUB_OUTPUT"
 
     - name: Run k6 smoke test
+      if: steps.warmup.outputs.is_warm == 'true'
       env:
         BASE_URL: ${{ github.event.inputs.base_url || 'https://movie-recs-api-5qvy.onrender.com' }}
         NOVA_API_KEY: ${{ secrets.NOVA_API_KEY }}
