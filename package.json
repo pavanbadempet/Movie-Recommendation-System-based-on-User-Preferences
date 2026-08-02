@@ -5,7 +5,7 @@
   "packageManager": "bun@1.2.0",
   "scripts": {
     "dev": "bun --cwd frontend dev",
-    "build": "bun --cwd frontend run build && node -e \"require('fs').cpSync('frontend/dist', 'dist', {recursive: true})\"",
+    "build": "(bun --cwd frontend run build || npx --yes bun --cwd frontend run build || (cd frontend && npm install && npm run build)) && node -e \"require('fs').cpSync('frontend/dist', 'dist', {recursive: true})\"",
     "test": "bun --cwd frontend test"
   }
 }
