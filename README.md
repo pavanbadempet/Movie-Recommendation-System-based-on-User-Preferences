@@ -1,8 +1,8 @@
 <div align="center">
 
-# 🎬 APEX — Enterprise-Grade Causal Recommendation Engine & Serving Platform
+# 🎬 AI Movie Recommendation System
 
-> **A high-performance, real-time recommendation engine combining sequential Transformers (SASRec), learnable edge networks (KAN), and graph collaboration (LightGCN) with causal popularity debiasing.**
+> **A real-time recommendation engine powered by SASRec Transformers, LightGCN Graphs, and PySpark Delta Lake.**
 
 <br/>
 
