@@ -389,6 +389,8 @@ input:focus-visible {
   font-size: 0.95rem;
   font-weight: 700;
   cursor: pointer;
+  position: relative;
+  z-index: 25;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
