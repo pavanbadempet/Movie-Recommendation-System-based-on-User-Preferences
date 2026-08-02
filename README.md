@@ -1,8 +1,8 @@
 <div align="center">
 
-# 🎬 AI Movie Recommendation System
+# 🎬 AI Recommendation System
 
-> **A real-time recommendation engine powered by SASRec Transformers, LightGCN Graphs, and PySpark Delta Lake.**
+> **A real-time recommendation engine for movies, video, and digital media powered by SASRec Transformers, LightGCN Graphs, and PySpark Delta Lake.**
 
 <br/>
 
