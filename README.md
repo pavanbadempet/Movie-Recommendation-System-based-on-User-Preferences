@@ -1,12 +1,3 @@
----
-title: Movie Recommendation System
-emoji: 🎬
-colorFrom: blue
-colorTo: indigo
-sdk: docker
-pinned: false
----
-
 # 🎬 APEX — Enterprise-Grade Causal Recommendation Engine & Serving Platform
 
 > A high-performance, real-time recommendation engine combining sequential Transformers (SASRec), learnable edge networks (KAN), and graph collaboration (LightGCN) with causal popularity debiasing.

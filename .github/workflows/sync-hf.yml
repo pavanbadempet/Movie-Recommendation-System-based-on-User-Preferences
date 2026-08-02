@@ -33,6 +33,17 @@ jobs:
           git add -f REVISION
           echo "ENV NOVA_APP_COMMIT=${GITHUB_SHA}" >> Dockerfile
 
+      - name: Inject Hugging Face Space metadata into README.md
+        run: |
+          python -c "
+          frontmatter = '---\ntitle: Movie Recommendation System\nemoji: 🎬\ncolorFrom: blue\ncolorTo: indigo\nsdk: docker\npinned: false\n---\n\n'
+          with open('README.md', 'r', encoding='utf-8') as f:
+              content = f.read()
+          with open('README.md', 'w', encoding='utf-8') as f:
+              f.write(frontmatter + content)
+          print('Injected HF frontmatter into README.md for Space deployment')
+          "
+
       - name: Deploy to Hugging Face Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
