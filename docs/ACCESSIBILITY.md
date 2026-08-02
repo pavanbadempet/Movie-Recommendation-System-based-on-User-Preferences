@@ -67,5 +67,5 @@ Recommended tools:
 
 To run axe in CI (once `@axe-core/playwright` is added):
 ```bash
-npx playwright test --grep accessibility
+bunx playwright test --grep accessibility
 ```

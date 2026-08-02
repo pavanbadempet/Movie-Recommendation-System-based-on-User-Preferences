@@ -200,12 +200,12 @@ Install shadcn/ui for consistent, accessible components:
 
 ```bash
 cd frontend
-npx shadcn-ui@latest init
-npx shadcn-ui@latest add button
-npx shadcn-ui@latest add card
-npx shadcn-ui@latest add input
-npx shadcn-ui@latest add dialog
-npx shadcn-ui@latest add dropdown-menu
+bunx shadcn-ui@latest init
+bunx shadcn-ui@latest add button
+bunx shadcn-ui@latest add card
+bunx shadcn-ui@latest add input
+bunx shadcn-ui@latest add dialog
+bunx shadcn-ui@latest add dropdown-menu
 ```
 
 ### Updated Package.json Dependencies
