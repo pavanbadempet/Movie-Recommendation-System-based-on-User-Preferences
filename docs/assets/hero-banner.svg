@@ -1,93 +1,149 @@
-<svg width="1600" height="720" viewBox="0 0 1600 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg width="1600" height="640" viewBox="0 0 1600 640" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bg" x1="130" y1="80" x2="1450" y2="650" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#0F172A"/>
-      <stop offset="0.48" stop-color="#111827"/>
-      <stop offset="1" stop-color="#0B1120"/>
+    <!-- Background Gradient -->
+    <linearGradient id="bg-grad" x1="0" y1="0" x2="1600" y2="640" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0B0F19"/>
+      <stop offset="50%" stop-color="#111827"/>
+      <stop offset="100%" stop-color="#070A10"/>
     </linearGradient>
-    <linearGradient id="accent" x1="210" y1="150" x2="1230" y2="540" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#22C55E"/>
-      <stop offset="0.5" stop-color="#06B6D4"/>
-      <stop offset="1" stop-color="#8B5CF6"/>
+
+    <!-- Glowing Accent Gradients -->
+    <linearGradient id="text-gradient" x1="0" y1="0" x2="800" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#10B981"/>
+      <stop offset="50%" stop-color="#06B6D4"/>
+      <stop offset="100%" stop-color="#6366F1"/>
     </linearGradient>
-    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
-      <stop stop-color="#172033"/>
-      <stop offset="1" stop-color="#0F172A"/>
+
+    <linearGradient id="accent-line" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#10B981"/>
+      <stop offset="50%" stop-color="#06B6D4"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
     </linearGradient>
-    <filter id="blur" x="0" y="0" width="1600" height="720" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-      <feGaussianBlur stdDeviation="60"/>
+
+    <linearGradient id="glass-card-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="rgba(30, 41, 59, 0.7)"/>
+      <stop offset="100%" stop-color="rgba(15, 23, 42, 0.8)"/>
+    </linearGradient>
+
+    <!-- Blur Filters for Glow Orbs -->
+    <filter id="glow-emerald" x="-200" y="-200" width="800" height="800" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="90"/>
+    </filter>
+    <filter id="glow-cyan" x="800" y="-200" width="800" height="800" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="100"/>
     </filter>
   </defs>
 
-  <rect width="1600" height="720" rx="36" fill="url(#bg)"/>
-  <g opacity="0.34" filter="url(#blur)">
-    <circle cx="310" cy="150" r="140" fill="#22C55E"/>
-    <circle cx="1240" cy="200" r="160" fill="#06B6D4"/>
-    <circle cx="1030" cy="590" r="180" fill="#8B5CF6"/>
+  <!-- Background Base -->
+  <rect width="1600" height="640" rx="32" fill="url(#bg-grad)"/>
+
+  <!-- Ambient Glow Orbs -->
+  <g opacity="0.25">
+    <circle cx="250" cy="150" r="220" fill="#10B981" filter="url(#glow-emerald)"/>
+    <circle cx="1350" cy="200" r="250" fill="#06B6D4" filter="url(#glow-cyan)"/>
+    <circle cx="800" cy="500" r="200" fill="#6366F1" filter="url(#glow-emerald)"/>
   </g>
 
-  <rect x="72" y="72" width="1456" height="576" rx="28" stroke="rgba(255,255,255,0.12)" stroke-width="2" fill="rgba(255,255,255,0.02)"/>
+  <!-- Outer Glass Frame -->
+  <rect x="40" y="40" width="1520" height="560" rx="24" stroke="rgba(255, 255, 255, 0.1)" stroke-width="1.5" fill="rgba(255, 255, 255, 0.015)"/>
 
-  <text x="110" y="160" fill="#E2E8F0" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="700" letter-spacing="2.8">
-    APEX
-  </text>
-  <text x="110" y="238" fill="white" font-family="Segoe UI, Arial, sans-serif" font-size="60" font-weight="800">
-    Movie Recommendation System
-  </text>
-  <text x="110" y="292" fill="#94A3B8" font-family="Segoe UI, Arial, sans-serif" font-size="26">
-    FastAPI API · React UI · Semantic Search · Vector Search · Offline Evaluation
-  </text>
-  <text x="110" y="330" fill="#94A3B8" font-family="Segoe UI, Arial, sans-serif" font-size="26">
-    ML Engineering · Docker · Observability · Deployment Tooling
+  <!-- LEFT COLUMN: Main Branding & Specs -->
+  <!-- Top Category Tag -->
+  <rect x="90" y="90" width="230" height="36" rx="18" fill="rgba(16, 185, 129, 0.12)" stroke="rgba(16, 185, 129, 0.4)"/>
+  <text x="120" y="114" fill="#34D399" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" letter-spacing="1.5">PRODUCTION ML ENGINE</text>
+
+  <!-- Main Hero Title -->
+  <text x="90" y="180" fill="white" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="52" font-weight="900" letter-spacing="-1">
+    APEX Movie Recommender
   </text>
 
-  <rect x="110" y="380" width="174" height="44" rx="22" fill="rgba(34,197,94,0.16)" stroke="rgba(34,197,94,0.55)"/>
-  <text x="141" y="409" fill="#BBF7D0" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="700">FastAPI</text>
+  <!-- Subtitle -->
+  <text x="90" y="225" fill="url(#text-gradient)" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="24" font-weight="700">
+    Causal Debiasing · Sequential Transformers · Graph Neural Networks
+  </text>
 
-  <rect x="300" y="380" width="144" height="44" rx="22" fill="rgba(14,165,233,0.15)" stroke="rgba(34,211,238,0.5)"/>
-  <text x="334" y="409" fill="#BAE6FD" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="700">React</text>
+  <!-- Descriptive Text -->
+  <text x="90" y="270" fill="#94A3B8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="18">
+    A high-performance recommendation platform combining 6 ML architectures
+  </text>
+  <text x="90" y="296" fill="#94A3B8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="18">
+    (SASRec, KAN, LightGCN, Neural ODE) with PySpark Medallion Delta Lake ETL.
+  </text>
 
-  <rect x="460" y="380" width="178" height="44" rx="22" fill="rgba(99,102,241,0.15)" stroke="rgba(129,140,248,0.5)"/>
-  <text x="492" y="409" fill="#C7D2FE" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="700">TypeScript</text>
+  <!-- Tech Stack Pill Badges -->
+  <g transform="translate(90, 340)">
+    <!-- Bun 1.2 -->
+    <rect x="0" y="0" width="120" height="38" rx="12" fill="rgba(249, 241, 225, 0.12)" stroke="rgba(249, 241, 225, 0.3)"/>
+    <text x="24" y="24" fill="#F9F1E1" font-family="sans-serif" font-size="15" font-weight="700">⚡ Bun 1.2</text>
 
-  <rect x="654" y="380" width="156" height="44" rx="22" fill="rgba(234,88,12,0.14)" stroke="rgba(251,146,60,0.5)"/>
-  <text x="689" y="409" fill="#FED7AA" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="700">PyTorch</text>
+    <!-- React 19 -->
+    <rect x="135" y="0" width="130" height="38" rx="12" fill="rgba(97, 218, 251, 0.12)" stroke="rgba(97, 218, 251, 0.3)"/>
+    <text x="159" y="24" fill="#61DAFB" font-family="sans-serif" font-size="15" font-weight="700">⚛ React 19</text>
 
-  <rect x="826" y="380" width="145" height="44" rx="22" fill="rgba(168,85,247,0.14)" stroke="rgba(192,132,252,0.5)"/>
-  <text x="867" y="409" fill="#E9D5FF" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="700">FAISS</text>
+    <!-- PyTorch -->
+    <rect x="280" y="0" width="130" height="38" rx="12" fill="rgba(238, 76, 44, 0.12)" stroke="rgba(238, 76, 44, 0.3)"/>
+    <text x="304" y="24" fill="#FF7A63" font-family="sans-serif" font-size="15" font-weight="700">🔥 PyTorch</text>
 
-  <g transform="translate(970 120)">
-    <rect x="0" y="0" width="470" height="420" rx="28" fill="url(#card)" stroke="rgba(255,255,255,0.1)"/>
-    <text x="36" y="52" fill="#E2E8F0" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="700">
-      End-to-End Surface
-    </text>
+    <!-- FastAPI -->
+    <rect x="425" y="0" width="125" height="38" rx="12" fill="rgba(0, 150, 136, 0.12)" stroke="rgba(0, 150, 136, 0.3)"/>
+    <text x="449" y="24" fill="#2DD4BF" font-family="sans-serif" font-size="15" font-weight="700">🚀 FastAPI</text>
 
-    <rect x="36" y="84" width="398" height="1" fill="rgba(255,255,255,0.08)"/>
-
-    <circle cx="52" cy="124" r="7" fill="#22C55E"/>
-    <text x="72" y="131" fill="#CBD5E1" font-family="Segoe UI, Arial, sans-serif" font-size="19">Recommendation API and search endpoints</text>
-
-    <circle cx="52" cy="172" r="7" fill="#06B6D4"/>
-    <text x="72" y="179" fill="#CBD5E1" font-family="Segoe UI, Arial, sans-serif" font-size="19">React + TypeScript frontend</text>
-
-    <circle cx="52" cy="220" r="7" fill="#8B5CF6"/>
-    <text x="72" y="227" fill="#CBD5E1" font-family="Segoe UI, Arial, sans-serif" font-size="19">Artifact rebuild and evaluation tooling</text>
-
-    <circle cx="52" cy="268" r="7" fill="#F59E0B"/>
-    <text x="72" y="275" fill="#CBD5E1" font-family="Segoe UI, Arial, sans-serif" font-size="19">Prometheus + Grafana observability</text>
-
-    <circle cx="52" cy="316" r="7" fill="#34D399"/>
-    <text x="72" y="323" fill="#CBD5E1" font-family="Segoe UI, Arial, sans-serif" font-size="19">Docker, Render, and Kubernetes configs</text>
-
-    <rect x="36" y="352" width="180" height="38" rx="19" fill="rgba(34,197,94,0.14)" stroke="rgba(34,197,94,0.45)"/>
-    <text x="65" y="377" fill="#BBF7D0" font-family="Segoe UI, Arial, sans-serif" font-size="18" font-weight="700">Portfolio-Grade</text>
-
-    <rect x="232" y="352" width="180" height="38" rx="19" fill="rgba(14,165,233,0.14)" stroke="rgba(34,211,238,0.45)"/>
-    <text x="264" y="377" fill="#BAE6FD" font-family="Segoe UI, Arial, sans-serif" font-size="18" font-weight="700">Open Source</text>
+    <!-- PySpark -->
+    <rect x="565" y="0" width="135" height="38" rx="12" fill="rgba(226, 90, 28, 0.12)" stroke="rgba(226, 90, 28, 0.3)"/>
+    <text x="589" y="24" fill="#FB923C" font-family="sans-serif" font-size="15" font-weight="700">⚡ PySpark</text>
   </g>
 
-  <path d="M110 474H920" stroke="url(#accent)" stroke-width="4" stroke-linecap="round"/>
-  <text x="110" y="530" fill="#E2E8F0" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="700">
-    Built to showcase recommender systems, recommendation APIs, and modern ML platform patterns.
-  </text>
+  <!-- Accent Divider Line -->
+  <rect x="90" y="420" width="800" height="3" rx="1.5" fill="url(#accent-line)"/>
+
+  <!-- Key Architecture Guarantees Grid -->
+  <g transform="translate(90, 450)">
+    <!-- Stat 1 -->
+    <text x="0" y="30" fill="#34D399" font-family="sans-serif" font-size="28" font-weight="800">&lt; 12.5ms</text>
+    <text x="0" y="52" fill="#64748B" font-family="sans-serif" font-size="14" font-weight="600">GPU SERVING LATENCY</text>
+
+    <!-- Stat 2 -->
+    <text x="240" y="30" fill="#38BDF8" font-family="sans-serif" font-size="28" font-weight="800">6 Models</text>
+    <text x="240" y="52" fill="#64748B" font-family="sans-serif" font-size="14" font-weight="600">HYBRID ENSEMBLE</text>
+
+    <!-- Stat 3 -->
+    <text x="460" y="30" fill="#A78BFA" font-family="sans-serif" font-size="28" font-weight="800">DR-IPS</text>
+    <text x="460" y="52" fill="#64748B" font-family="sans-serif" font-size="14" font-weight="600">CAUSAL DEBIASING</text>
+  </g>
+
+  <!-- RIGHT COLUMN: Glassmorphic Features Card -->
+  <g transform="translate(960, 90)">
+    <rect x="0" y="0" width="550" height="460" rx="20" fill="url(#glass-card-bg)" stroke="rgba(255, 255, 255, 0.12)" stroke-width="1.5"/>
+
+    <!-- Card Header -->
+    <text x="36" y="50" fill="#F8FAFC" font-family="sans-serif" font-size="20" font-weight="700">Platform Capabilities</text>
+    <rect x="36" y="72" width="478" height="1" fill="rgba(255, 255, 255, 0.08)"/>
+
+    <!-- Feature Row 1 -->
+    <circle cx="52" cy="115" r="6" fill="#10B981"/>
+    <text x="74" y="121" fill="#E2E8F0" font-family="sans-serif" font-size="16" font-weight="600">SASRec &amp; LightGCN Graph Scoring</text>
+    <text x="74" y="141" fill="#64748B" font-family="sans-serif" font-size="13">Sequential transformer self-attention + GNN embedding</text>
+
+    <!-- Feature Row 2 -->
+    <circle cx="52" cy="185" r="6" fill="#06B6D4"/>
+    <text x="74" y="191" fill="#E2E8F0" font-family="sans-serif" font-size="16" font-weight="600">Kolmogorov-Arnold Network (KAN) Ranking</text>
+    <text x="74" y="211" fill="#64748B" font-family="sans-serif" font-size="13">Learnable 1D B-spline activations on edges</text>
+
+    <!-- Feature Row 3 -->
+    <circle cx="52" cy="255" r="6" fill="#8B5CF6"/>
+    <text x="74" y="261" fill="#E2E8F0" font-family="sans-serif" font-size="16" font-weight="600">Hardware-Aware Serving Tiers (1-3)</text>
+    <text x="74" y="281" fill="#64748B" font-family="sans-serif" font-size="13">Auto-detects GPU, ONNX CPU, or SIMD vector mode</text>
+
+    <!-- Feature Row 4 -->
+    <circle cx="52" cy="325" r="6" fill="#F59E0B"/>
+    <text x="74" y="331" fill="#E2E8F0" font-family="sans-serif" font-size="16" font-weight="600">Delta Lake Medallion Architecture</text>
+    <text x="74" y="351" fill="#64748B" font-family="sans-serif" font-size="13">Bronze raw, Silver contracts, Gold feature vectors</text>
+
+    <!-- Footer Badges in Card -->
+    <rect x="36" y="390" width="220" height="36" rx="18" fill="rgba(16, 185, 129, 0.12)" stroke="rgba(16, 185, 129, 0.4)"/>
+    <text x="65" y="413" fill="#34D399" font-family="sans-serif" font-size="14" font-weight="700">✓ Production Ready</text>
+
+    <rect x="274" y="390" width="240" height="36" rx="18" fill="rgba(6, 182, 212, 0.12)" stroke="rgba(6, 182, 212, 0.4)"/>
+    <text x="306" y="413" fill="#38BDF8" font-family="sans-serif" font-size="14" font-weight="700">⭐ Open Source MIT</text>
+  </g>
 </svg>
