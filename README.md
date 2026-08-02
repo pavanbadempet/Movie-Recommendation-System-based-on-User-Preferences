@@ -1,35 +1,42 @@
-# 🎬 APEX — Enterprise-Grade Causal Recommendation Engine & Serving Platform
-
-> A high-performance, real-time recommendation engine combining sequential Transformers (SASRec), learnable edge networks (KAN), and graph collaboration (LightGCN) with causal popularity debiasing.
-
 <div align="center">
 
-<img src="docs/assets/hero-banner.svg" alt="APEX Movie Recommendation System - Open-Source Causal Recommendation Engine with SASRec, KAN, LightGCN, Delta Lake Medallion ETL, and DR-IPS debiasing" width="100%"/>
+# 🎬 APEX — Enterprise-Grade Causal Recommendation Engine & Serving Platform
+
+> **A high-performance, real-time recommendation engine combining sequential Transformers (SASRec), learnable edge networks (KAN), and graph collaboration (LightGCN) with causal popularity debiasing.**
 
 <br/>
 
+<img src="docs/assets/hero-banner.svg" alt="APEX Movie Recommendation System - Open-Source Causal Recommendation Engine" width="100%"/>
+
+<br/>
+<br/>
+
+<!-- Status Badges Row -->
 <p align="center">
   <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/ci.yml"><img src="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/ci.yml/badge.svg" alt="CI build status badge" /></a>
   <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/secrets-scan.yml"><img src="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/secrets-scan.yml/badge.svg" alt="Secrets Scan status badge" /></a>
-  <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/serving-quality.yml"><img src="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/serving-quality.yml/badge.svg" alt="Serving Quality status badge" /></a>
-  <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/data-refresh.yml"><img src="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/data-refresh.yml/badge.svg" alt="Daily Data Refresh status badge" /></a>
-  <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/load-test.yml"><img src="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/load-test.yml/badge.svg" alt="SLO Load Test status badge" /></a>
   <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/frontend-pages.yml"><img src="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/frontend-pages.yml/badge.svg" alt="Frontend Pages status badge" /></a>
+  <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/sync-hf.yml"><img src="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/sync-hf.yml/badge.svg" alt="Hugging Face Sync status badge" /></a>
+  <img src="https://img.shields.io/badge/Bun-1.2.0-F9F1E1?style=flat&logo=bun&logoColor=black" alt="Bun 1.2" />
+  <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License" />
 </p>
 
+<!-- Live Production Action Links -->
 <p align="center">
-  <a href="https://pavanbadempet.github.io/Movie-Recommendation-System/"><strong>🌐 Live Demo Portal</strong></a> &middot;
-  <a href="https://movie-recs-api-5qvy.onrender.com/health"><strong>📡 Production API Status</strong></a> &middot;
-  <a href="https://movie-recs-api-5qvy.onrender.com/docs"><strong>📖 Swagger API Interactive Docs</strong></a>
+  <a href="https://pavanbadempet.github.io/Movie-Recommendation-System/"><strong>🌐 Live Portal</strong></a> &middot;
+  <a href="https://pavanbadempet-movie-rec-api.hf.space/health"><strong>📡 Live API Health</strong></a> &middot;
+  <a href="https://pavanbadempet-movie-rec-api.hf.space/docs"><strong>📖 Interactive Swagger Docs</strong></a>
 </p>
 
-<!-- Tech Stack Badges Row (for-the-badge) -->
+<br/>
+
+<!-- Tech Stack Badges Row -->
 <p align="center">
+  <img src="https://img.shields.io/badge/Bun-1.2-F9F1E1?style=for-the-badge&logo=bun&logoColor=black" alt="Bun" />
   <img src="https://img.shields.io/badge/Python_3.12+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI" />
-  <img src="https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React" />
+  <img src="https://img.shields.io/badge/React_19-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React" />
   <img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
-  <img src="https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white" alt="Vite" />
 </p>
 <p align="center">
   <img src="https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white" alt="PyTorch" />
@@ -37,9 +44,10 @@
   <img src="https://img.shields.io/badge/FAISS-0467DF?style=for-the-badge&logo=meta&logoColor=white" alt="FAISS" />
   <img src="https://img.shields.io/badge/PySpark-E25A1C?style=for-the-badge&logo=apachespark&logoColor=white" alt="PySpark" />
   <img src="https://img.shields.io/badge/Delta_Lake-003366?style=for-the-badge&logo=deltalake&logoColor=white" alt="Delta Lake" />
-  <img src="https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis" />
   <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
 </p>
+
+<br/>
 
 <h3>
   <a href="#-quick-start"><strong>Quick Start Guide</strong></a> &middot;
