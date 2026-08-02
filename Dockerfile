@@ -3,24 +3,14 @@
 # Stage 2: Build ETL artifacts
 # Stage 3: Lightweight runtime
 
-FROM node:24-bullseye-slim AS frontend_builder
+FROM oven/bun:1-slim AS frontend_builder
 
 WORKDIR /frontend
 
-# Install curl for Bun installer
-# hadolint ignore=DL3008
-RUN apt-get update && apt-get install -y curl ca-certificates --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/*
+# Copy package files and lockfile
+COPY frontend/package.json frontend/bun.lock* ./
 
-# Copy package files and install Bun
-COPY frontend/package*.json ./
-
-# Install Bun and use it to install dependencies
-# hadolint ignore=DL4006
-RUN curl -fsSL https://bun.sh/install | bash -s -- --prefix /usr/local \
-    && ln -s /root/.bun/bin/bun /usr/local/bin/bun
-ENV PATH="/root/.bun/bin:${PATH}"
-
+# Install dependencies with Bun
 RUN bun install
 
 # Copy source and build
