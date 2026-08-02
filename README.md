@@ -13,17 +13,17 @@
 
 <!-- Status Badges Row -->
 <p align="center">
-  <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/ci.yml"><img src="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/ci.yml/badge.svg" alt="CI build status badge" /></a>
-  <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/secrets-scan.yml"><img src="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/secrets-scan.yml/badge.svg" alt="Secrets Scan status badge" /></a>
-  <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/frontend-pages.yml"><img src="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/frontend-pages.yml/badge.svg" alt="Frontend Pages status badge" /></a>
-  <a href="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/sync-hf.yml"><img src="https://github.com/pavanbadempet/Movie-Recommendation-System/actions/workflows/sync-hf.yml/badge.svg" alt="Hugging Face Sync status badge" /></a>
+  <a href="https://github.com/pavanbadempet/AI-Recommendation-System/actions/workflows/ci.yml"><img src="https://github.com/pavanbadempet/AI-Recommendation-System/actions/workflows/ci.yml/badge.svg" alt="CI build status badge" /></a>
+  <a href="https://github.com/pavanbadempet/AI-Recommendation-System/actions/workflows/secrets-scan.yml"><img src="https://github.com/pavanbadempet/AI-Recommendation-System/actions/workflows/secrets-scan.yml/badge.svg" alt="Secrets Scan status badge" /></a>
+  <a href="https://github.com/pavanbadempet/AI-Recommendation-System/actions/workflows/frontend-pages.yml"><img src="https://github.com/pavanbadempet/AI-Recommendation-System/actions/workflows/frontend-pages.yml/badge.svg" alt="Frontend Pages status badge" /></a>
+  <a href="https://github.com/pavanbadempet/AI-Recommendation-System/actions/workflows/sync-hf.yml"><img src="https://github.com/pavanbadempet/AI-Recommendation-System/actions/workflows/sync-hf.yml/badge.svg" alt="Hugging Face Sync status badge" /></a>
   <img src="https://img.shields.io/badge/Bun-1.2.0-F9F1E1?style=flat&logo=bun&logoColor=black" alt="Bun 1.2" />
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License" />
 </p>
 
 <!-- Live Production Action Links -->
 <p align="center">
-  <a href="https://pavanbadempet.github.io/Movie-Recommendation-System/"><strong>🌐 Live Portal</strong></a> &middot;
+  <a href="https://pavanbadempet.github.io/AI-Recommendation-System/"><strong>🌐 Live Portal</strong></a> &middot;
   <a href="https://pavanbadempet-movie-rec-api.hf.space/health"><strong>📡 Live API Health</strong></a> &middot;
   <a href="https://pavanbadempet-movie-rec-api.hf.space/docs"><strong>📖 Interactive Swagger Docs</strong></a>
 </p>
