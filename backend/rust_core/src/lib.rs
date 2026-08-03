@@ -245,11 +245,69 @@ fn fast_rerank_blend_rust(
     Ok((ranker_scores, blended_scores))
 }
 
+#[pyfunction]
+fn simd_score_candidates_rust(
+    _py: Python<'_>,
+    candidate_matrix: &PyArray2<f32>,
+    query_vector: &PyArray1<f32>,
+) -> PyResult<Vec<f32>> {
+    let matrix_readonly = candidate_matrix.readonly();
+    let matrix_view = matrix_readonly.as_array();
+
+    let query_readonly = query_vector.readonly();
+    let query_slice = match query_readonly.as_slice() {
+        Ok(s) => s,
+        Err(e) => return Err(pyo3::exceptions::PyValueError::new_err(format!("Query vector is not contiguous: {}", e))),
+    };
+
+    let num_rows = matrix_view.shape()[0];
+    let dim = matrix_view.shape()[1];
+
+    if dim != query_slice.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err("matrix column count does not match query vector length"));
+    }
+
+    let scores: Vec<f32> = (0..num_rows)
+        .into_par_iter()
+        .map(|idx| {
+            let row = matrix_view.row(idx);
+            let dot = match row.as_slice() {
+                Some(slice) => {
+                    let mut sum = 0.0f32;
+                    let chunk_size = 4;
+                    let mut chunks = slice.chunks_exact(chunk_size);
+                    let mut query_chunks = query_slice.chunks_exact(chunk_size);
+
+                    while let (Some(c), Some(q)) = (chunks.next(), query_chunks.next()) {
+                        sum += c[0] * q[0] + c[1] * q[1] + c[2] * q[2] + c[3] * q[3];
+                    }
+
+                    for (&c, &q) in chunks.remainder().iter().zip(query_chunks.remainder().iter()) {
+                        sum += c * q;
+                    }
+                    sum
+                }
+                None => {
+                    let mut sum = 0.0f32;
+                    for i in 0..dim {
+                        sum += row[i] * query_slice[i];
+                    }
+                    sum
+                }
+            };
+            dot
+        })
+        .collect();
+
+    Ok(scores)
+}
+
 #[pymodule]
 fn rust_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(blend_scores_rust, m)?)?;
     m.add_function(wrap_pyfunction!(mmr_diversify_rust, m)?)?;
     m.add_function(wrap_pyfunction!(collaborative_candidates_rust, m)?)?;
     m.add_function(wrap_pyfunction!(fast_rerank_blend_rust, m)?)?;
+    m.add_function(wrap_pyfunction!(simd_score_candidates_rust, m)?)?;
     Ok(())
 }
