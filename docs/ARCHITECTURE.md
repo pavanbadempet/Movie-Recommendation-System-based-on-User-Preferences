@@ -25,29 +25,37 @@ It describes the actual running system — not a prototype or aspirational desig
 ## 1. System Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        CLIENTS                                          │
-│   React 19/Vite (Cloudflare Pages)  │  Streamlit (backup)              │
-└────────────────────────┬────────────────────────────────────────────────┘
-                         │  HTTPS / JWT
-┌────────────────────────▼────────────────────────────────────────────────┐
-│                   GATEWAY LAYER                                         │
-│   Render.com (gateway)  ←→  HuggingFace Spaces (primary API)           │
-│   SlowAPI rate limiter (30 req/min)  +  Redis token bucket (B2B SaaS)  │
-└────────────────────────┬────────────────────────────────────────────────┘
-                         │
-┌────────────────────────▼────────────────────────────────────────────────┐
-│                   FASTAPI BACKEND  (Python 3.12)                        │
-│                                                                         │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │              10-STAGE RECOMMENDATION PIPELINE                    │   │
-│  │  FAISS ANN → TF-IDF → MultiModal → KG → Ensemble → RL → LGB →  │   │
-│  │  MMR → SafetyFilter → LLM Explanation                           │   │
-│  └──────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-│  ┌─────────────────────┐   ┌──────────────────────────────────────┐    │
-│  │  ApexEnsembleEngine │   │  OnlineLearner (BPR background thread)│    │
-│  │  6 models in        │   │  ActiveInferenceEngine (free-energy)  │    │
+┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                     FRONTEND & EDGE LAYER                                       │
+│   React 19  •  Vite 6  •  TypeScript 5.8  •  Bun 1.2  •  WebAssembly (Wasm) 0ms Vector Engine  │
+│   HTTP/3 (QUIC) Edge  •  Modern Glassmorphic Dark-Mode CSS  •  Inter & Outfit Typography       │
+└────────────────────────────────────────────────┬────────────────────────────────────────────────┘
+                                                 │ (gRPC over HTTP/2 & REST)
+                                                 ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                    BACKEND & SERVING LAYER                                      │
+│   FastAPI 0.136+  •  Uvicorn ASGI  •  Async gRPC Servicer (Port 50051)  •  orjson SIMD        │
+│   Multi-Tier LRU & Redis Cache  •  Prometheus Metrics  •  Sentry Error Monitoring               │
+└────────────────────────────────────────────────┬────────────────────────────────────────────────┘
+                                                 │
+                        ┌────────────────────────┴────────────────────────┐
+                        ▼                                                 ▼
+┌──────────────────────────────────────────────┐ ┌──────────────────────────────────────────────┐
+│             AI & INFERENCE ENGINE            │ │           DATA ENGINEERING LAKEHOUSE         │
+│  • Rust SIMD Core (PyO3 / Maturin < 0.3ms)   │ │  • Apache Spark 4.1 (pyspark 4.1.1)          │
+│  • PyTorch Two-Tower Neural Dual Encoders    │ │  • Delta Lake 4.3 (delta-spark 4.3.1)       │
+│  • SASRec Transformers + LightGCN Graphs     │ │  • Polars 1.41 (Rust-backed 100k items/sec) │
+│  • FAISS HNSW + Quantized ONNX INT8          │ │  • SCD Type 2 Dimension History              │
+│  • Multi-Armed Bandit (Thompson & UCB1)      │ │  • Pandera Data Quality Contracts            │
+└──────────────────────────────────────────────┘ └──────────────────────────────────────────────┘
+                                                 │
+                                                 ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                 GOVERNANCE & LINEAGE LAYER                                      │
+│   Unity Catalog 3-Level Namespace (main.recommendations.*)  •  OpenLineage 1.0 Automated DAG   │
+│   Cryptographic SHA-256 PII Column Masking  •  Role-Based Access Control (RBAC)                │
+└─────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
 │  │  ThreadPoolExecutor │   └──────────────────────────────────────┘    │
 │  └─────────────────────┘                                                │
 └──────┬──────────┬──────────┬──────────┬──────────────────────────────┘
