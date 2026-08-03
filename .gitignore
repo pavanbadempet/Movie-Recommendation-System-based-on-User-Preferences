@@ -3,11 +3,12 @@
 __pycache__/
 *.py[cod]
 *$py.class
-# Virtual environments
+# Virtual environments & external apps
 .venv/
 .venv_cuda/
 venv/
 ENV/
+flutter_app/
 # IDE
 .idea/
 .vscode/
