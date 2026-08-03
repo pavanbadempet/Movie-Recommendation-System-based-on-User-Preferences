@@ -588,7 +588,8 @@ def _register_routes() -> None:
         persist_catalog_upload=persist_catalog_upload,
     )
 
-    # Include routers using unified RouterDeps instance
+    from backend.api.governance_routes import router as governance_router
+
     app.include_router(create_evaluation_router(deps))
     app.include_router(create_admin_router(deps))
     app.include_router(create_artifact_router(deps))
@@ -600,6 +601,7 @@ def _register_routes() -> None:
     app.include_router(create_core_router(deps))
     app.include_router(create_search_movie_router(deps))
     app.include_router(create_rec_engine_router(deps))
+    app.include_router(governance_router)
 
 
 # Execute route registration
