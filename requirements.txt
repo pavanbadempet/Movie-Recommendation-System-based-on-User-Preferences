@@ -2,11 +2,13 @@
 # Pinned to exact versions for reproducible builds.
 # To upgrade: pip install --upgrade <package> && pip freeze | grep <package>
 
-# Core data processing
+# Core data processing & Apache Spark 4.x
 pandas==2.2.3
 numpy==2.4.4
 pyarrow>=18.0.0  # Parquet support — compatible with NumPy 2.x
 polars==1.41.2   # Fast Rust-backed DataFrame library for optimized ingestion
+pyspark>=4.0.0   # Apache Spark 4.x distributed compute engine
+delta-spark>=4.0.0 # Delta Lake 4.x ACID storage engine
 
 # Machine learning & NLP
 scikit-learn==1.8.0
