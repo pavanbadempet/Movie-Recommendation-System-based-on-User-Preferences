@@ -603,6 +603,26 @@ def _register_routes() -> None:
     app.include_router(create_rec_engine_router(deps))
     app.include_router(governance_router)
 
+    @app.get("/api/v1/bi/query")
+    async def agentic_bi_query(prompt: str = "top highest rated movies"):
+        """Agentic BI (AI + BI) natural language query endpoint."""
+        from backend.intelligence.agentic_bi import AgenticBIEngine
+        engine = AgenticBIEngine()
+        return ORJSONResponse(engine.execute_analytics(prompt))
+
+    @app.get("/api/v1/agentic/recommend")
+    async def agentic_recommend(q: str = "mind-bending sci-fi movies"):
+        """Multi-Agent Orchestrator autonomous recommendation endpoint."""
+        from backend.agents.multi_agent_orchestrator import MultiAgentOrchestrator
+        orchestrator = MultiAgentOrchestrator()
+        task = await orchestrator.execute_task(query=q)
+        return ORJSONResponse({
+            "query": task.query,
+            "explanation": task.explanation,
+            "recommendations": task.final_recommendations,
+            "trace": task.trace,
+        })
+
 
 # Execute route registration
 _register_routes()
