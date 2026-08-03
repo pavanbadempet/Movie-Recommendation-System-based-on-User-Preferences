@@ -302,6 +302,63 @@ fn simd_score_candidates_rust(
     Ok(scores)
 }
 
+#[pyfunction]
+fn fast_feature_hash_rust(tokens: Vec<String>, num_buckets: usize) -> PyResult<Vec<usize>> {
+    if num_buckets == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err("num_buckets must be > 0"));
+    }
+
+    let hashes: Vec<usize> = tokens
+        .into_par_iter()
+        .map(|token| {
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            std::hash::Hash::hash(&token, &mut hasher);
+            (std::hash::Hasher::finish(&hasher) as usize) % num_buckets
+        })
+        .collect();
+
+    Ok(hashes)
+}
+
+#[pyfunction]
+fn fast_cosine_similarity_rust(
+    _py: Python<'_>,
+    vec_a: &PyArray1<f32>,
+    vec_b: &PyArray1<f32>,
+) -> PyResult<f32> {
+    let a_readonly = vec_a.readonly();
+    let a_slice = match a_readonly.as_slice() {
+        Ok(s) => s,
+        Err(e) => return Err(pyo3::exceptions::PyValueError::new_err(format!("vec_a is not contiguous: {}", e))),
+    };
+
+    let b_readonly = vec_b.readonly();
+    let b_slice = match b_readonly.as_slice() {
+        Ok(s) => s,
+        Err(e) => return Err(pyo3::exceptions::PyValueError::new_err(format!("vec_b is not contiguous: {}", e))),
+    };
+
+    if a_slice.len() != b_slice.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err("Vector lengths do not match"));
+    }
+
+    let mut dot = 0.0f32;
+    let mut norm_a = 0.0f32;
+    let mut norm_b = 0.0f32;
+
+    for i in 0..a_slice.len() {
+        dot += a_slice[i] * b_slice[i];
+        norm_a += a_slice[i] * a_slice[i];
+        norm_b += b_slice[i] * b_slice[i];
+    }
+
+    if norm_a == 0.0 || norm_b == 0.0 {
+        return Ok(0.0);
+    }
+
+    Ok(dot / (norm_a.sqrt() * norm_b.sqrt()))
+}
+
 #[pymodule]
 fn rust_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(blend_scores_rust, m)?)?;
@@ -309,5 +366,7 @@ fn rust_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(collaborative_candidates_rust, m)?)?;
     m.add_function(wrap_pyfunction!(fast_rerank_blend_rust, m)?)?;
     m.add_function(wrap_pyfunction!(simd_score_candidates_rust, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_feature_hash_rust, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_cosine_similarity_rust, m)?)?;
     Ok(())
 }
