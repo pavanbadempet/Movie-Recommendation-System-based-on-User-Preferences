@@ -78,13 +78,12 @@ DEFAULT_SOURCE_SYSTEM = "tmdb_kaggle"
 
 def _configure_windows_hadoop_home() -> None:
     """Use checked-out winutils binaries for local Windows Spark file writes."""
-    if sys.platform != "win32" or os.getenv("HADOOP_HOME"):
+    if sys.platform != "win32":
         return
 
     hadoop_home = Path(__file__).resolve().parent.parent / ".hadoop"
     bin_dir = hadoop_home / "bin"
-    if not (bin_dir / "winutils.exe").exists():
-        return
+    bin_dir.mkdir(parents=True, exist_ok=True)
 
     os.environ["HADOOP_HOME"] = str(hadoop_home)
     current_path = os.environ.get("PATH", "")
