@@ -1,0 +1,50 @@
+# Apache Spark Declarative Pipeline (SDP) Specification
+pipeline_id: "apex_movie_recommendation_pipeline"
+version: "1.0"
+catalog: "main"
+target_schema: "recommendations"
+edition: "ADVANCED"
+continuous: false
+
+clusters:
+  - label: "default"
+    spark_version: "4.1.1"
+    node_type_id: "Standard_DS3_v2"
+    autoscale:
+      min_workers: 1
+      max_workers: 8
+    spark_conf:
+      spark.sql.execution.arrow.pyspark.enabled: "true"
+      spark.sql.adaptive.enabled: "true"
+      spark.sql.extensions: "io.delta.sql.DeltaSparkSessionExtension"
+
+tables:
+  - name: "bronze_raw_movies"
+    layer: "BRONZE"
+    format: "delta"
+    source:
+      format: "parquet"
+      path: "data/bronze/movies_raw"
+    description: "Raw ingested movie metadata."
+
+  - name: "silver_curated_movies"
+    layer: "SILVER"
+    format: "delta"
+    source_table: "bronze_raw_movies"
+    expectations:
+      - name: "valid_movie_id"
+        expr: "movie_id IS NOT NULL AND movie_id > 0"
+        action: "FAIL"
+      - name: "valid_title"
+        expr: "title IS NOT NULL AND length(title) > 0"
+        action: "DROP"
+    scd_type: 2
+    primary_key: ["movie_id"]
+    description: "Cleansed, validated, and SCD Type 2 tracked movie dimension."
+
+  - name: "gold_movie_features"
+    layer: "GOLD"
+    format: "delta"
+    source_table: "silver_curated_movies"
+    z_order_by: ["movie_id", "genres"]
+    description: "Gold analytical feature embeddings table for model inference."
