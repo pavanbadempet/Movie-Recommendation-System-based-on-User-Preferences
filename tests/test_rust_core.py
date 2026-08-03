@@ -31,3 +31,34 @@ def test_rust_fast_cosine_similarity():
 
     assert pytest.approx(sim_identical, abs=1e-4) == 1.0
     assert pytest.approx(sim_orthogonal, abs=1e-4) == 0.0
+
+
+def test_rust_tokenize_title():
+    tokens = rust_core.rust_tokenize_title_rust("The Dark Knight (2008)")
+    assert tokens == ["the", "dark", "knight", "2008"]
+
+
+def test_rust_time_decay_score():
+    now = 1000000.0
+    timestamps = [now, now - 86400.0, now - 86400.0 * 2]
+    scores = rust_core.rust_time_decay_score_rust(timestamps, reference_time=now, half_life_days=1.0)
+
+    assert len(scores) == 3
+    assert pytest.approx(scores[0], abs=1e-3) == 1.0
+    assert pytest.approx(scores[1], abs=1e-3) == 0.5
+    assert pytest.approx(scores[2], abs=1e-3) == 0.25
+
+
+def test_rust_fast_json_parse_names():
+    json_data = '[{"id": 28, "name": "Action"}, {"id": 12, "name": "Adventure"}]'
+    names = rust_core.fast_json_parse_names_rust(json_data)
+    assert names == ["Action", "Adventure"]
+
+
+def test_rust_fast_softmax():
+    scores = [2.0, 1.0, 0.1]
+    probabilities = rust_core.fast_softmax_rust(scores, temperature=1.0)
+
+    assert len(probabilities) == 3
+    assert pytest.approx(sum(probabilities), abs=1e-4) == 1.0
+    assert probabilities[0] > probabilities[1] > probabilities[2]

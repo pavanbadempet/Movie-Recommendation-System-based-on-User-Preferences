@@ -359,6 +359,90 @@ fn fast_cosine_similarity_rust(
     Ok(dot / (norm_a.sqrt() * norm_b.sqrt()))
 }
 
+#[pyfunction]
+fn rust_tokenize_title_rust(title: String) -> PyResult<Vec<String>> {
+    let tokens: Vec<String> = title
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { ' ' })
+        .collect::<String>()
+        .split_whitespace()
+        .map(|s| s.to_string())
+        .collect();
+
+    Ok(tokens)
+}
+
+#[pyfunction]
+fn rust_time_decay_score_rust(
+    timestamps: Vec<f64>,
+    reference_time: f64,
+    half_life_days: f64,
+) -> PyResult<Vec<f32>> {
+    if half_life_days <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err("half_life_days must be > 0"));
+    }
+
+    let seconds_in_day = 86400.0;
+    let decay_constant = (2.0f64).ln() / (half_life_days * seconds_in_day);
+
+    let scores: Vec<f32> = timestamps
+        .into_par_iter()
+        .map(|ts| {
+            let age_seconds = (reference_time - ts).max(0.0);
+            let weight = (-decay_constant * age_seconds).exp();
+            weight as f32
+        })
+        .collect();
+
+    Ok(scores)
+}
+
+#[pyfunction]
+fn fast_json_parse_names_rust(json_str: String) -> PyResult<Vec<String>> {
+    if json_str.trim().is_empty() {
+        return Ok(vec![]);
+    }
+
+    let parsed: Result<serde_json::Value, _> = serde_json::from_str(&json_str);
+    match parsed {
+        Ok(serde_json::Value::Array(arr)) => {
+            let names: Vec<String> = arr
+                .into_iter()
+                .filter_map(|item| {
+                    item.get("name")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string())
+                })
+                .collect();
+            Ok(names)
+        }
+        _ => Ok(vec![]),
+    }
+}
+
+#[pyfunction]
+fn fast_softmax_rust(scores: Vec<f32>, temperature: f32) -> PyResult<Vec<f32>> {
+    if scores.is_empty() {
+        return Ok(vec![]);
+    }
+    let temp = if temperature <= 0.0 { 1.0f32 } else { temperature };
+
+    let max_score = scores.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+    let exp_scores: Vec<f32> = scores
+        .iter()
+        .map(|&s| ((s - max_score) / temp).exp())
+        .collect();
+
+    let sum_exp: f32 = exp_scores.iter().sum();
+    if sum_exp == 0.0 {
+        let uniform = 1.0f32 / (scores.len() as f32);
+        return Ok(vec![uniform; scores.len()]);
+    }
+
+    Ok(exp_scores.into_iter().map(|e| e / sum_exp).collect())
+}
+
 #[pymodule]
 fn rust_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(blend_scores_rust, m)?)?;
@@ -368,5 +452,9 @@ fn rust_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(simd_score_candidates_rust, m)?)?;
     m.add_function(wrap_pyfunction!(fast_feature_hash_rust, m)?)?;
     m.add_function(wrap_pyfunction!(fast_cosine_similarity_rust, m)?)?;
+    m.add_function(wrap_pyfunction!(rust_tokenize_title_rust, m)?)?;
+    m.add_function(wrap_pyfunction!(rust_time_decay_score_rust, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_json_parse_names_rust, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_softmax_rust, m)?)?;
     Ok(())
 }
