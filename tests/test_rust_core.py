@@ -3,7 +3,14 @@
 import numpy as np
 import pytest
 
-import rust_core
+try:
+    import rust_core
+except ImportError:
+    rust_core = None
+
+pytestmark = pytest.mark.skipif(
+    rust_core is None, reason="rust_core binary not installed in this Python environment"
+)
 
 
 def test_rust_fast_feature_hash():
