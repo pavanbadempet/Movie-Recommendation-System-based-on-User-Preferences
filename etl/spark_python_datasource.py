@@ -34,6 +34,9 @@ class MovieRecommendationDataSource(DataSource):
     Allows PySpark 4.2 to query custom recommendation streams via standard `spark.read.format("movie_rec").load()`.
     """
 
+    def __init__(self, options: dict | None = None):
+        super().__init__(options=options or {})
+
     @classmethod
     def name(cls) -> str:
         return "movie_rec"
