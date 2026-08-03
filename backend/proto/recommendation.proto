@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package apex.recommendation.v1;
+
+// Service definition for APEX High-Throughput Recommendation Service
+service RecommendationService {
+  // Retrieve ranked recommendations for a movie ID or user session
+  rpc GetRecommendations (RecommendationRequest) returns (RecommendationResponse);
+
+  // Search catalog items via vector embeddings / semantic query
+  rpc SearchCatalog (SearchRequest) returns (SearchResponse);
+
+  // Stream real-time behavior telemetry events
+  rpc StreamEvents (stream EventRequest) returns (EventResponse);
+}
+
+message RecommendationRequest {
+  int32 movie_id = 1;
+  int32 limit = 2;
+  string user_id = 3;
+  string session_id = 4;
+  bool explain = 5;
+}
+
+message MovieItem {
+  int32 id = 1;
+  string title = 2;
+  string genres = 3;
+  float similarity_score = 4;
+  string poster_path = 5;
+  string release_date = 6;
+  float vote_average = 7;
+  string retrieval_stage = 8;
+  repeated string explanation = 9;
+}
+
+message RecommendationResponse {
+  string request_id = 1;
+  MovieItem query_movie = 2;
+  repeated MovieItem recommendations = 3;
+  float latency_ms = 4;
+  string serving_tier = 5;
+}
+
+message SearchRequest {
+  string query = 1;
+  int32 limit = 2;
+  string mode = 3; // "semantic" or "title"
+}
+
+message SearchResponse {
+  repeated MovieItem results = 1;
+  int32 total_count = 2;
+  float latency_ms = 3;
+}
+
+message EventRequest {
+  string event_type = 1;
+  string user_id = 2;
+  int32 movie_id = 3;
+  string session_id = 4;
+  float rating = 5;
+}
+
+message EventResponse {
+  bool success = 1;
+  string message = 2;
+}
