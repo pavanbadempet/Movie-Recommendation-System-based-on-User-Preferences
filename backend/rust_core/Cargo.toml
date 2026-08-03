@@ -12,7 +12,7 @@ name = "apex_server"
 path = "src/main.rs"
 
 [dependencies]
-pyo3 = { version = "0.20", features = ["extension-module"] }
+pyo3 = { version = "0.20", features = ["extension-module", "abi3-py310"] }
 rayon = "1.8"
 numpy = "0.20"
 tokio = { version = "1.35", features = ["full"] }
