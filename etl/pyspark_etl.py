@@ -1131,7 +1131,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--source-system", type=str, help="Upstream catalog source system", default=DEFAULT_SOURCE_SYSTEM
     )
+    parser.add_argument("--declarative", action="store_true", help="Execute Spark Declarative Pipeline (SDP) spec")
     args = parser.parse_args()
+
+    if args.declarative:
+        from etl.spark_declarative_pipeline import SparkDeclarativePipeline
+
+        declarative_pipeline = SparkDeclarativePipeline()
+        declarative_res = declarative_pipeline.run()
+        logger.info(f"Spark Declarative Pipeline (SDP) completed: {declarative_res}")
 
     run_spark_etl(
         run_date=args.date,
