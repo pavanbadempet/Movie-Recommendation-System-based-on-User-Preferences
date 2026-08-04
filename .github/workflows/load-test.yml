@@ -50,11 +50,12 @@ jobs:
       run: |
         echo "Warming up Render gateway health endpoint at $BASE_URL..."
         is_warm="false"
-        for i in {1..6}; do
+        for i in {1..12}; do
           status_code=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/health" || echo "failed")
           echo "Gateway health warmup attempt $i: HTTP $status_code"
           if [ "$status_code" = "200" ]; then
-            echo "Render gateway is warm!"
+            echo "Render gateway is warm! Pre-warming recommendation pipeline..."
+            curl -s -o /dev/null "$BASE_URL/v1/recommendations/id/550?top_k=5" || true
             is_warm="true"
             break
           fi
