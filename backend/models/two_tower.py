@@ -58,9 +58,19 @@ class TwoTowerModel(nn.Module):
     """SOTA Two-Tower Model orchestrating User & Item towers with InfoNCE Loss."""
 
     def __init__(
-        self, num_users: int = 10000, num_items: int = 50000, embedding_dim: int = 128, temperature: float = 0.07
+        self,
+        num_users: int = 10000,
+        num_items: int = 50000,
+        embedding_dim: int = 128,
+        temperature: float = 0.07,
+        user_input_dim: int | None = None,
+        item_input_dim: int | None = None,
     ):
         super().__init__()
+        if user_input_dim is not None:
+            num_users = user_input_dim
+        if item_input_dim is not None:
+            num_items = item_input_dim
         self.user_tower = UserTower(num_users=num_users, embedding_dim=embedding_dim)
         self.item_tower = ItemTower(num_items=num_items, embedding_dim=embedding_dim)
         self.temperature = temperature
