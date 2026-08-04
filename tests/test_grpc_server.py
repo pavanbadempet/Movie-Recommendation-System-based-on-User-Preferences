@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import MagicMock, patch
 
-import pytest
 import grpc
+import pytest
 
 from backend.grpc_server import serve_grpc
 from backend.proto import recommendation_pb2 as pb2

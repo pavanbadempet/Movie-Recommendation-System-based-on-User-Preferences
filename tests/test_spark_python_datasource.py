@@ -1,6 +1,5 @@
 """Unit tests for Spark 4.2 Python Data Source API v2."""
 
-import pytest
 from etl.spark_python_datasource import MovieRecommendationDataSource, MovieRecommendationDataSourceReader
 
 

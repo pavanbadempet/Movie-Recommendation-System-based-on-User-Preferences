@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 import logging
-from typing import Iterator
 
 from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
 
@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 class MovieRecommendationPartition(InputPartition):
     """Represents an input partition for movie recommendation streams."""
+
     def __init__(self, partition_id: int):
         self.partition_id = partition_id
 

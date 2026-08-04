@@ -1,6 +1,5 @@
 """Unit tests for Spark Declarative Pipeline (SDP) Specification & Executor Engine."""
 
-import pytest
 from etl.spark_declarative_pipeline import SparkDeclarativePipeline
 
 

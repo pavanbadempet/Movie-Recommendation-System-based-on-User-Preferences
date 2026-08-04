@@ -3,11 +3,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import argparse
+import asyncio
 import logging
-import sys
 from pathlib import Path
+import sys
 
 # Add project root to sys.path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]

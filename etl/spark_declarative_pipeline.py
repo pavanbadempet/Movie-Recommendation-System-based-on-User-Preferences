@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+import sys
+from typing import Any
 
 import yaml
 
@@ -31,19 +31,21 @@ class SparkDeclarativePipeline:
     enforces data quality expectations, and registers tables in Unity Catalog.
     """
 
-    def __init__(self, spec_path: Optional[str] = None):
+    def __init__(self, spec_path: str | None = None):
         _configure_windows_hadoop_home()
-        self.spec_path = Path(spec_path or (Path(__file__).resolve().parent.parent / "config" / "spark_declarative_pipeline.yaml"))
+        self.spec_path = Path(
+            spec_path or (Path(__file__).resolve().parent.parent / "config" / "spark_declarative_pipeline.yaml")
+        )
         self.spec = self._load_spec()
         self.catalog = self.spec.get("catalog", "main")
         self.schema = self.spec.get("target_schema", "recommendations")
 
-    def _load_spec(self) -> Dict[str, Any]:
+    def _load_spec(self) -> dict[str, Any]:
         """Loads and parses the declarative pipeline YAML specification."""
         if not self.spec_path.exists():
             raise FileNotFoundError(f"Spark Declarative Pipeline spec not found at: {self.spec_path}")
 
-        with open(self.spec_path, "r", encoding="utf-8") as f:
+        with open(self.spec_path, encoding="utf-8") as f:
             spec = yaml.safe_load(f)
 
         logger.info(f"Loaded Spark Declarative Pipeline spec: {spec.get('pipeline_id')}")
@@ -64,7 +66,7 @@ class SparkDeclarativePipeline:
         logger.info(f"Declarative pipeline spec validated with layers: {layers}")
         return True
 
-    def compile_dag(self) -> List[Dict[str, Any]]:
+    def compile_dag(self) -> list[dict[str, Any]]:
         """Compiles declarative pipeline spec tables into a topological DAG execution plan."""
         tables = self.spec.get("tables", [])
         dag_plan = []
@@ -84,13 +86,15 @@ class SparkDeclarativePipeline:
 
         return dag_plan
 
-    def run(self, spark_session: Optional[Any] = None) -> Dict[str, Any]:
+    def run(self, spark_session: Any | None = None) -> dict[str, Any]:
         """Executes the Spark Declarative Pipeline DAG plan."""
         self.validate_spec()
         dag_plan = self.compile_dag()
-        
-        logger.info(f"Executing Spark Declarative Pipeline '{self.spec.get('pipeline_id')}' across {len(dag_plan)} DAG steps.")
-        
+
+        logger.info(
+            f"Executing Spark Declarative Pipeline '{self.spec.get('pipeline_id')}' across {len(dag_plan)} DAG steps."
+        )
+
         results = {
             "pipeline_id": self.spec.get("pipeline_id"),
             "status": "SUCCESS",

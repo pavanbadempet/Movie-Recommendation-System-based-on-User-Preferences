@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ class AgenticBIEngine:
                 f"FROM {self.catalog}.{self.schema}.silver_curated_movies;"
             )
 
-    def execute_analytics(self, natural_language_prompt: str) -> Dict[str, Any]:
+    def execute_analytics(self, natural_language_prompt: str) -> dict[str, Any]:
         """Executes natural language BI query and returns data payload and SQL query."""
         sql_query = self.generate_sql(natural_language_prompt)
         logger.info(f"Agentic BI generated SQL for '{natural_language_prompt}': {sql_query}")

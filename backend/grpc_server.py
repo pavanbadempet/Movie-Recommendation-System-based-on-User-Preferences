@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-import uuid
 from typing import Any
+import uuid
 
 import grpc
 
@@ -65,9 +65,7 @@ class RecommendationServiceServicer(pb2_grpc.RecommendationServiceServicer):
                 context.set_details(f"Movie with ID {movie_id} not found")
                 return pb2.RecommendationResponse()
 
-            recs = await asyncio.to_thread(
-                rec_engine.recommend_by_id, movie_id, n=limit
-            )
+            recs = await asyncio.to_thread(rec_engine.recommend_by_id, movie_id, n=limit)
             rec_items = [_dict_to_movie_item(m) for m in recs]
             query_item = _dict_to_movie_item(query_movie)
             latency_ms = (time.perf_counter() - start_time) * 1000.0
@@ -85,9 +83,7 @@ class RecommendationServiceServicer(pb2_grpc.RecommendationServiceServicer):
             context.set_details(str(exc))
             return pb2.RecommendationResponse()
 
-    async def SearchCatalog(
-        self, request: pb2.SearchRequest, context: grpc.aio.ServicerContext
-    ) -> pb2.SearchResponse:
+    async def SearchCatalog(self, request: pb2.SearchRequest, context: grpc.aio.ServicerContext) -> pb2.SearchResponse:
         """Search catalog items via vector embeddings / semantic query."""
         start_time = time.perf_counter()
 
@@ -101,9 +97,7 @@ class RecommendationServiceServicer(pb2_grpc.RecommendationServiceServicer):
                 context.set_details("Search query cannot be empty")
                 return pb2.SearchResponse()
 
-            results = await asyncio.to_thread(
-                rec_engine.search_by_title, query, top_n=limit
-            )
+            results = await asyncio.to_thread(rec_engine.search_by_title, query, top_n=limit)
             result_items = [_dict_to_movie_item(m) for m in results]
             latency_ms = (time.perf_counter() - start_time) * 1000.0
 
@@ -128,9 +122,7 @@ class RecommendationServiceServicer(pb2_grpc.RecommendationServiceServicer):
         try:
             async for event in request_iterator:
                 event_count += 1
-                logger.debug(
-                    f"Received gRPC telemetry event: {event.event_type} from user {event.user_id}"
-                )
+                logger.debug(f"Received gRPC telemetry event: {event.event_type} from user {event.user_id}")
 
             return pb2.EventResponse(
                 success=True,
@@ -146,9 +138,7 @@ class RecommendationServiceServicer(pb2_grpc.RecommendationServiceServicer):
 async def serve_grpc(host: str = "0.0.0.0", port: int = 50051) -> grpc.aio.Server:
     """Initialize and start the async gRPC server."""
     server = grpc.aio.server()
-    pb2_grpc.add_RecommendationServiceServicer_to_server(
-        RecommendationServiceServicer(), server
-    )
+    pb2_grpc.add_RecommendationServiceServicer_to_server(RecommendationServiceServicer(), server)
     listen_addr = f"{host}:{port}"
     server.add_insecure_port(listen_addr)
     logger.info(f"Starting APEX gRPC Recommendation Server listening on {listen_addr}")

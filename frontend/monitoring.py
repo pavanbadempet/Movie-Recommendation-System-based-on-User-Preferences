@@ -20,9 +20,7 @@ def build_monitoring_snapshot(api_get: Callable[..., Any]) -> dict:
     analytics = _payload(api_get, "/v1/events/recommendation-analytics", {"limit": 20})
 
     event_store = platform.get("event_store") if isinstance(platform.get("event_store"), dict) else {}
-    event_type_counts = (
-        features.get("event_type_counts") if isinstance(features.get("event_type_counts"), dict) else {}
-    )
+    event_type_counts = features.get("event_type_counts") if isinstance(features.get("event_type_counts"), dict) else {}
     return {
         "telemetry_source": "backend_api",
         "health_status": health.get("status", "unavailable"),

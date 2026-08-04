@@ -1,8 +1,8 @@
 """Tests for SOTA Two-Tower PyTorch Neural Model."""
 
-import pytest
 import torch
-from backend.models.two_tower import TwoTowerModel, UserTower, ItemTower
+
+from backend.models.two_tower import ItemTower, TwoTowerModel, UserTower
 
 
 def test_user_and_item_towers():

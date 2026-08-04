@@ -1,6 +1,5 @@
 """Tests for Multi-Armed Bandit Exploration Engine."""
 
-import pytest
 from backend.intelligence.bandit_engine import ThompsonSamplingBandit, UCB1Bandit
 
 

@@ -1,8 +1,7 @@
 """Unit tests for Unified Data & AI Intelligence Platform (Lakeflow & Agentic BI)."""
 
-import pytest
-from etl.lakeflow_pipeline import LakeflowPipelineOrchestrator
 from backend.intelligence.agentic_bi import AgenticBIEngine
+from etl.lakeflow_pipeline import LakeflowPipelineOrchestrator
 
 
 def test_lakeflow_pipeline_orchestrator():

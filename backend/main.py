@@ -607,6 +607,7 @@ def _register_routes() -> None:
     async def agentic_bi_query(prompt: str = "top highest rated movies"):
         """Agentic BI (AI + BI) natural language query endpoint."""
         from backend.intelligence.agentic_bi import AgenticBIEngine
+
         engine = AgenticBIEngine()
         return ORJSONResponse(engine.execute_analytics(prompt))
 
@@ -614,14 +615,17 @@ def _register_routes() -> None:
     async def agentic_recommend(q: str = "mind-bending sci-fi movies"):
         """Multi-Agent Orchestrator autonomous recommendation endpoint."""
         from backend.agents.multi_agent_orchestrator import MultiAgentOrchestrator
+
         orchestrator = MultiAgentOrchestrator()
         task = await orchestrator.execute_task(query=q)
-        return ORJSONResponse({
-            "query": task.query,
-            "explanation": task.explanation,
-            "recommendations": task.final_recommendations,
-            "trace": task.trace,
-        })
+        return ORJSONResponse(
+            {
+                "query": task.query,
+                "explanation": task.explanation,
+                "recommendations": task.final_recommendations,
+                "trace": task.trace,
+            }
+        )
 
 
 # Execute route registration

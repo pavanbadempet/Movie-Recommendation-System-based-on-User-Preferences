@@ -2219,9 +2219,7 @@ elif st.session_state.page == "monitoring":
     if snapshot["event_features_available"]:
         event_counts = snapshot["event_type_counts"]
         if event_counts:
-            event_frame = pd.DataFrame(
-                {"Event type": list(event_counts), "Count": list(event_counts.values())}
-            )
+            event_frame = pd.DataFrame({"Event type": list(event_counts), "Count": list(event_counts.values())})
             st.bar_chart(event_frame.set_index("Event type"))
         else:
             st.info("The event endpoint returned no event-type counts.")

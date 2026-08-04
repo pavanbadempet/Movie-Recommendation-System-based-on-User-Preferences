@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Tuple
 
 import torch
 import torch.nn as nn
@@ -58,13 +57,15 @@ class ItemTower(nn.Module):
 class TwoTowerModel(nn.Module):
     """SOTA Two-Tower Model orchestrating User & Item towers with InfoNCE Loss."""
 
-    def __init__(self, num_users: int = 10000, num_items: int = 50000, embedding_dim: int = 128, temperature: float = 0.07):
+    def __init__(
+        self, num_users: int = 10000, num_items: int = 50000, embedding_dim: int = 128, temperature: float = 0.07
+    ):
         super().__init__()
         self.user_tower = UserTower(num_users=num_users, embedding_dim=embedding_dim)
         self.item_tower = ItemTower(num_items=num_items, embedding_dim=embedding_dim)
         self.temperature = temperature
 
-    def forward(self, user_ids: torch.Tensor, item_ids: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, user_ids: torch.Tensor, item_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         user_embeds = self.user_tower(user_ids)
         item_embeds = self.item_tower(item_ids)
         return user_embeds, item_embeds

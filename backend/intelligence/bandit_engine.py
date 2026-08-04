@@ -7,8 +7,7 @@ to dynamic balance high-performing recommendations with new catalog item discove
 from __future__ import annotations
 
 import math
-import random
-from typing import Any, Dict, List
+from typing import Any
 
 import numpy as np
 
@@ -18,7 +17,7 @@ class ThompsonSamplingBandit:
 
     def __init__(self):
         # Maps item_id -> {"successes": int, "failures": int}
-        self.item_stats: Dict[int, Dict[str, int]] = {}
+        self.item_stats: dict[int, dict[str, int]] = {}
 
     def record_feedback(self, item_id: int, reward: float):
         """Record positive (click/conversion) or negative signal."""
@@ -37,7 +36,9 @@ class ThompsonSamplingBandit:
         beta = max(1, stats["failures"])
         return float(np.random.beta(alpha, beta))
 
-    def rank_candidates(self, candidates: List[Dict[str, Any]], exploration_weight: float = 0.3) -> List[Dict[str, Any]]:
+    def rank_candidates(
+        self, candidates: list[dict[str, Any]], exploration_weight: float = 0.3
+    ) -> list[dict[str, Any]]:
         """Rank candidate items by combining exploitation relevance with Thompson Sampling exploration."""
         reranked = []
         for item in candidates:
@@ -60,8 +61,8 @@ class UCB1Bandit:
 
     def __init__(self, c_parameter: float = 1.414):
         self.c_parameter = c_parameter
-        self.item_counts: Dict[int, int] = {}
-        self.item_rewards: Dict[int, float] = {}
+        self.item_counts: dict[int, int] = {}
+        self.item_rewards: dict[int, float] = {}
         self.total_pulls = 0
 
     def record_feedback(self, item_id: int, reward: float):

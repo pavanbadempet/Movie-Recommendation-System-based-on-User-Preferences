@@ -6,10 +6,10 @@ RBAC privilege evaluation, and PII column data masking policies.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import hashlib
 import logging
-from datetime import UTC, datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +28,8 @@ class UnityCatalogTable:
         name: str,
         table_type: str = "MANAGED",
         data_format: str = "DELTA",
-        columns: Optional[List[Dict[str, Any]]] = None,
-        properties: Optional[Dict[str, Any]] = None,
+        columns: list[dict[str, Any]] | None = None,
+        properties: dict[str, Any] | None = None,
     ):
         self.catalog = catalog
         self.schema = schema
@@ -41,7 +41,7 @@ class UnityCatalogTable:
         self.properties = properties or {}
         self.created_at = _utc_now()
         self.updated_at = _utc_now()
-        self.grants: Dict[str, List[str]] = {}  # principal -> list of privileges
+        self.grants: dict[str, list[str]] = {}  # principal -> list of privileges
 
     def grant_privilege(self, principal: str, privilege: str):
         """Grant a privilege (e.g. SELECT, MODIFY) to a principal user or group."""
@@ -55,7 +55,7 @@ class UnityCatalogTable:
         user_privs = self.grants.get(principal, [])
         return privilege.upper() in user_privs or "ALL_PRIVILEGES" in user_privs
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "catalog": self.catalog,
             "schema": self.schema,
@@ -76,7 +76,7 @@ class UnityCatalogManager:
 
     def __init__(self, default_catalog: str = "main"):
         self.default_catalog = default_catalog
-        self._catalogs: Dict[str, Dict[str, Dict[str, UnityCatalogTable]]] = {}
+        self._catalogs: dict[str, dict[str, dict[str, UnityCatalogTable]]] = {}
         self._init_default_medallion_namespaces()
 
     def _init_default_medallion_namespaces(self):
@@ -131,8 +131,8 @@ class UnityCatalogManager:
         table_name: str,
         table_type: str = "MANAGED",
         data_format: str = "DELTA",
-        columns: Optional[List[Dict[str, Any]]] = None,
-        properties: Optional[Dict[str, Any]] = None,
+        columns: list[dict[str, Any]] | None = None,
+        properties: dict[str, Any] | None = None,
     ) -> UnityCatalogTable:
         """Register or update a table in the 3-level Unity Catalog metastore."""
         if catalog not in self._catalogs:
@@ -153,11 +153,11 @@ class UnityCatalogManager:
         logger.info(f"Registered Unity Catalog table: {table.full_name}")
         return table
 
-    def get_table(self, catalog: str, schema: str, table_name: str) -> Optional[UnityCatalogTable]:
+    def get_table(self, catalog: str, schema: str, table_name: str) -> UnityCatalogTable | None:
         """Fetch table metadata from Unity Catalog metastore."""
         return self._catalogs.get(catalog, {}).get(schema, {}).get(table_name)
 
-    def list_tables(self, catalog: str, schema: str) -> List[UnityCatalogTable]:
+    def list_tables(self, catalog: str, schema: str) -> list[UnityCatalogTable]:
         """List all tables in a specific catalog.schema namespace."""
         return list(self._catalogs.get(catalog, {}).get(schema, {}).values())
 
@@ -167,9 +167,9 @@ class UnityCatalogManager:
             return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
         return value
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Export full Unity Catalog metastore tree as dictionary."""
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
         for cat, schemas in self._catalogs.items():
             result[cat] = {}
             for sch, tables in schemas.items():
@@ -178,7 +178,7 @@ class UnityCatalogManager:
 
 
 # Global singleton instance
-_unity_catalog: Optional[UnityCatalogManager] = None
+_unity_catalog: UnityCatalogManager | None = None
 
 
 def get_unity_catalog() -> UnityCatalogManager:

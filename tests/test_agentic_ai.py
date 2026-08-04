@@ -1,7 +1,8 @@
 """Unit tests for Multi-Agent Orchestrator Framework and Agentic AI reasoning."""
 
 import pytest
-from backend.agents.multi_agent_orchestrator import MultiAgentOrchestrator, AgenticRecommendationTask
+
+from backend.agents.multi_agent_orchestrator import AgenticRecommendationTask, MultiAgentOrchestrator
 
 
 @pytest.mark.asyncio
