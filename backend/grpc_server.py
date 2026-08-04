@@ -47,7 +47,7 @@ class RecommendationServiceServicer(pb2_grpc.RecommendationServiceServicer):
             self._recommender = get_recommender()
         return self._recommender
 
-    async def GetRecommendations(
+    async def GetRecommendations(  # noqa: N802
         self, request: pb2.RecommendationRequest, context: grpc.aio.ServicerContext
     ) -> pb2.RecommendationResponse:
         """Retrieve ranked recommendations for a movie ID or session."""
@@ -83,7 +83,7 @@ class RecommendationServiceServicer(pb2_grpc.RecommendationServiceServicer):
             context.set_details(str(exc))
             return pb2.RecommendationResponse()
 
-    async def SearchCatalog(self, request: pb2.SearchRequest, context: grpc.aio.ServicerContext) -> pb2.SearchResponse:
+    async def SearchCatalog(self, request: pb2.SearchRequest, context: grpc.aio.ServicerContext) -> pb2.SearchResponse:  # noqa: N802
         """Search catalog items via vector embeddings / semantic query."""
         start_time = time.perf_counter()
 
@@ -112,7 +112,7 @@ class RecommendationServiceServicer(pb2_grpc.RecommendationServiceServicer):
             context.set_details(str(exc))
             return pb2.SearchResponse()
 
-    async def StreamEvents(
+    async def StreamEvents(  # noqa: N802
         self,
         request_iterator: Any,
         context: grpc.aio.ServicerContext,
@@ -135,7 +135,7 @@ class RecommendationServiceServicer(pb2_grpc.RecommendationServiceServicer):
             return pb2.EventResponse(success=False, message=str(exc))
 
 
-async def serve_grpc(host: str = "0.0.0.0", port: int = 50051) -> grpc.aio.Server:
+async def serve_grpc(host: str = "0.0.0.0", port: int = 50051) -> grpc.aio.Server:  # noqa: S104
     """Initialize and start the async gRPC server."""
     server = grpc.aio.server()
     pb2_grpc.add_RecommendationServiceServicer_to_server(RecommendationServiceServicer(), server)

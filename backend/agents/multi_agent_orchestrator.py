@@ -76,8 +76,8 @@ class RetrievalAgent(BaseAgent):
             "Candidate Retrieval", f"Invoking FAISS ANN and Collaborative filtering engines for {intent.get('query')}"
         )
 
-        recommender = get_recommender()
         try:
+            recommender = get_recommender()
             results = recommender.search_by_title(intent.get("query", ""), top_n=top_n)
             candidates = [
                 {
