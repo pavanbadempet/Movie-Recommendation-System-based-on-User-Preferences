@@ -17,38 +17,46 @@ logger = logging.getLogger(__name__)
 
 
 class UserTower(nn.Module):
-    """User-Tower: Maps user features and historical interactions to dense embedding space."""
+    """User-Tower: Maps user features or IDs to dense embedding space."""
 
     def __init__(self, num_users: int = 10000, feature_dim: int = 64, embedding_dim: int = 128):
         super().__init__()
         self.user_embedding = nn.Embedding(num_users, feature_dim)
+        self.user_proj = nn.LazyLinear(256)
         self.fc1 = nn.Linear(feature_dim, 256)
         self.bn1 = nn.BatchNorm1d(256)
         self.fc2 = nn.Linear(256, embedding_dim)
         self.dropout = nn.Dropout(0.2)
 
-    def forward(self, user_ids: torch.Tensor) -> torch.Tensor:
-        x = self.user_embedding(user_ids)
-        x = F.relu(self.bn1(self.fc1(x)))
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.dtype in (torch.long, torch.int64, torch.int32, torch.int):
+            x = self.user_embedding(x)
+            x = F.relu(self.bn1(self.fc1(x)))
+        else:
+            x = F.relu(self.bn1(self.user_proj(x)))
         x = self.dropout(x)
         x = self.fc2(x)
         return F.normalize(x, p=2, dim=1)
 
 
 class ItemTower(nn.Module):
-    """Item-Tower: Maps item catalog features and metadata to dense embedding space."""
+    """Item-Tower: Maps item catalog features or IDs to dense embedding space."""
 
     def __init__(self, num_items: int = 50000, feature_dim: int = 64, embedding_dim: int = 128):
         super().__init__()
         self.item_embedding = nn.Embedding(num_items, feature_dim)
+        self.item_proj = nn.LazyLinear(256)
         self.fc1 = nn.Linear(feature_dim, 256)
         self.bn1 = nn.BatchNorm1d(256)
         self.fc2 = nn.Linear(256, embedding_dim)
         self.dropout = nn.Dropout(0.2)
 
-    def forward(self, item_ids: torch.Tensor) -> torch.Tensor:
-        x = self.item_embedding(item_ids)
-        x = F.relu(self.bn1(self.fc1(x)))
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.dtype in (torch.long, torch.int64, torch.int32, torch.int):
+            x = self.item_embedding(x)
+            x = F.relu(self.bn1(self.fc1(x)))
+        else:
+            x = F.relu(self.bn1(self.item_proj(x)))
         x = self.dropout(x)
         x = self.fc2(x)
         return F.normalize(x, p=2, dim=1)
@@ -94,33 +102,36 @@ class TwoTowerModel(nn.Module):
 
     def compute_contrastive_loss(
         self,
-        user_embeds: torch.Tensor,
-        pos_item_embeds: torch.Tensor,
-        neg_item_embeds: torch.Tensor | None = None,
+        user_inputs: torch.Tensor,
+        pos_item_inputs: torch.Tensor,
+        neg_item_inputs: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Compute Contrastive / InfoNCE Loss with optional negative samples."""
-        if neg_item_embeds is None:
-            return self.compute_infonce_loss(user_embeds, pos_item_embeds)
+        user_embeds = self.user_tower(user_inputs)
+        pos_item_embeds = self.item_tower(pos_item_inputs)
 
-        if user_embeds.dtype == torch.long:
-            user_embeds = self.user_tower(user_embeds)
-        if pos_item_embeds.dtype == torch.long:
-            pos_item_embeds = self.item_tower(pos_item_embeds)
+        if neg_item_inputs is None:
+            return self.compute_infonce_loss(user_embeds, pos_item_embeds)
 
         pos_sim = torch.sum(user_embeds * pos_item_embeds, dim=1) / self.temperature
 
-        if neg_item_embeds.dtype == torch.long:
-            batch_size, num_negs = neg_item_embeds.shape
-            neg_flat = self.item_tower(neg_item_embeds.view(-1))
-            neg_embeds = neg_flat.view(batch_size, num_negs, -1)
+        if neg_item_inputs.dim() == 3:
+            B, K, F_dim = neg_item_inputs.shape
+            neg_flat = neg_item_inputs.reshape(B * K, F_dim)
+            neg_embeds_flat = self.item_tower(neg_flat)
+            neg_embeds = neg_embeds_flat.view(B, K, -1)
             neg_sim = torch.sum(user_embeds.unsqueeze(1) * neg_embeds, dim=2) / self.temperature
-        elif neg_item_embeds.dim() == 3:
-            neg_sim = torch.sum(user_embeds.unsqueeze(1) * neg_item_embeds, dim=2) / self.temperature
+        elif neg_item_inputs.dtype in (torch.long, torch.int64):
+            B, K = neg_item_inputs.shape
+            neg_flat = self.item_tower(neg_item_inputs.view(-1))
+            neg_embeds = neg_flat.view(B, K, -1)
+            neg_sim = torch.sum(user_embeds.unsqueeze(1) * neg_embeds, dim=2) / self.temperature
         else:
-            neg_sim = torch.matmul(user_embeds, neg_item_embeds.T) / self.temperature
+            neg_embeds = self.item_tower(neg_item_inputs)
+            neg_sim = torch.matmul(user_embeds, neg_embeds.T) / self.temperature
 
         logits = torch.cat([pos_sim.unsqueeze(1), neg_sim], dim=1)
-        labels = torch.zeros(logits.size(0), dtype=torch.long, device=user_embeds.device)
+        labels = torch.zeros(logits.size(0), dtype=torch.long, device=user_inputs.device)
         return F.cross_entropy(logits, labels)
 
     def export_onnx(self, output_path: str | Path):
