@@ -19,7 +19,7 @@ from backend.grpc_server import serve_grpc
 
 def main():
     parser = argparse.ArgumentParser(description="APEX gRPC Recommendation Server")
-    parser.add_argument("--host", default="0.0.0.0", help="Host address to bind to")
+    parser.add_argument("--host", default="0.0.0.0", help="Host address to bind to")  # noqa: S104
     parser.add_argument("--port", type=int, default=50051, help="Port to listen on")
     args = parser.parse_args()
 

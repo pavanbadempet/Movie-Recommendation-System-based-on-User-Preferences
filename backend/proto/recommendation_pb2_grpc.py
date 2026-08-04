@@ -58,26 +58,26 @@ class RecommendationServiceStub:
 class RecommendationServiceServicer:
     """Service definition for APEX High-Throughput Recommendation Service"""
 
-    def GetRecommendations(self, request, context):
+    def GetRecommendations(self, request, context):  # noqa: N802
         """Retrieve ranked recommendations for a movie ID or user session"""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
-    def SearchCatalog(self, request, context):
+    def SearchCatalog(self, request, context):  # noqa: N802
         """Search catalog items via vector embeddings / semantic query"""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
-    def StreamEvents(self, request_iterator, context):
+    def StreamEvents(self, request_iterator, context):  # noqa: N802
         """Stream real-time behavior telemetry events"""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
 
-def add_RecommendationServiceServicer_to_server(servicer, server):
+def add_RecommendationServiceServicer_to_server(servicer, server):  # noqa: N802
     rpc_method_handlers = {
         "GetRecommendations": grpc.unary_unary_rpc_method_handler(
             servicer.GetRecommendations,
@@ -107,7 +107,7 @@ class RecommendationService:
     """Service definition for APEX High-Throughput Recommendation Service"""
 
     @staticmethod
-    def GetRecommendations(
+    def GetRecommendations(  # noqa: N802
         request,
         target,
         options=(),
@@ -137,7 +137,7 @@ class RecommendationService:
         )
 
     @staticmethod
-    def SearchCatalog(
+    def SearchCatalog(  # noqa: N802
         request,
         target,
         options=(),
@@ -167,7 +167,7 @@ class RecommendationService:
         )
 
     @staticmethod
-    def StreamEvents(
+    def StreamEvents(  # noqa: N802
         request_iterator,
         target,
         options=(),
