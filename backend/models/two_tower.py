@@ -19,8 +19,16 @@ logger = logging.getLogger(__name__)
 class UserTower(nn.Module):
     """User-Tower: Maps user features or IDs to dense embedding space."""
 
-    def __init__(self, num_users: int = 10000, feature_dim: int = 64, embedding_dim: int = 128):
+    def __init__(
+        self,
+        num_users: int = 10000,
+        feature_dim: int = 64,
+        embedding_dim: int = 128,
+        input_dim: int | None = None,
+    ):
         super().__init__()
+        if input_dim is not None:
+            feature_dim = input_dim
         self.user_embedding = nn.Embedding(num_users, feature_dim)
         self.user_proj = nn.LazyLinear(256)
         self.fc1 = nn.Linear(feature_dim, 256)
@@ -42,8 +50,16 @@ class UserTower(nn.Module):
 class ItemTower(nn.Module):
     """Item-Tower: Maps item catalog features or IDs to dense embedding space."""
 
-    def __init__(self, num_items: int = 50000, feature_dim: int = 64, embedding_dim: int = 128):
+    def __init__(
+        self,
+        num_items: int = 50000,
+        feature_dim: int = 64,
+        embedding_dim: int = 128,
+        input_dim: int | None = None,
+    ):
         super().__init__()
+        if input_dim is not None:
+            feature_dim = input_dim
         self.item_embedding = nn.Embedding(num_items, feature_dim)
         self.item_proj = nn.LazyLinear(256)
         self.fc1 = nn.Linear(feature_dim, 256)
@@ -83,9 +99,21 @@ class TwoTowerModel(nn.Module):
         self.item_tower = ItemTower(num_items=num_items, embedding_dim=embedding_dim)
         self.temperature = temperature
 
-    def forward(self, user_ids: torch.Tensor, item_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        user_embeds = self.user_tower(user_ids)
-        item_embeds = self.item_tower(item_ids)
+    def forward(
+        self,
+        user_inputs: torch.Tensor,
+        item_inputs: torch.Tensor,
+        return_scores: bool = False,
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+        user_embeds = self.user_tower(user_inputs)
+        item_embeds = self.item_tower(item_inputs)
+        if return_scores or (
+            user_inputs.dtype not in (torch.long, torch.int64, torch.int32, torch.int)
+            and user_inputs.dim() == 2
+            and item_inputs.dim() == 2
+            and user_inputs.shape[0] == item_inputs.shape[0]
+        ):
+            return torch.sum(user_embeds * item_embeds, dim=-1)
         return user_embeds, item_embeds
 
     def compute_infonce_loss(self, user_embeds: torch.Tensor, item_embeds: torch.Tensor) -> torch.Tensor:
@@ -102,36 +130,46 @@ class TwoTowerModel(nn.Module):
 
     def compute_contrastive_loss(
         self,
-        user_inputs: torch.Tensor,
-        pos_item_inputs: torch.Tensor,
+        user_inputs: torch.Tensor | None = None,
+        pos_item_inputs: torch.Tensor | None = None,
         neg_item_inputs: torch.Tensor | None = None,
+        user_features: torch.Tensor | None = None,
+        pos_item_features: torch.Tensor | None = None,
+        neg_item_features: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Compute Contrastive / InfoNCE Loss with optional negative samples."""
-        user_embeds = self.user_tower(user_inputs)
-        pos_item_embeds = self.item_tower(pos_item_inputs)
+        u_in = user_inputs if user_inputs is not None else user_features
+        pos_in = pos_item_inputs if pos_item_inputs is not None else pos_item_features
+        neg_in = neg_item_inputs if neg_item_inputs is not None else neg_item_features
 
-        if neg_item_inputs is None:
+        if u_in is None or pos_in is None:
+            raise ValueError("user_inputs and pos_item_inputs must be provided")
+
+        user_embeds = self.user_tower(u_in)
+        pos_item_embeds = self.item_tower(pos_in)
+
+        if neg_in is None:
             return self.compute_infonce_loss(user_embeds, pos_item_embeds)
 
         pos_sim = torch.sum(user_embeds * pos_item_embeds, dim=1) / self.temperature
 
-        if neg_item_inputs.dim() == 3:
-            B, K, F_dim = neg_item_inputs.shape
-            neg_flat = neg_item_inputs.reshape(B * K, F_dim)
+        if neg_in.dim() == 3:
+            B, K, F_dim = neg_in.shape
+            neg_flat = neg_in.reshape(B * K, F_dim)
             neg_embeds_flat = self.item_tower(neg_flat)
             neg_embeds = neg_embeds_flat.view(B, K, -1)
             neg_sim = torch.sum(user_embeds.unsqueeze(1) * neg_embeds, dim=2) / self.temperature
-        elif neg_item_inputs.dtype in (torch.long, torch.int64):
-            B, K = neg_item_inputs.shape
-            neg_flat = self.item_tower(neg_item_inputs.view(-1))
+        elif neg_in.dtype in (torch.long, torch.int64):
+            B, K = neg_in.shape
+            neg_flat = self.item_tower(neg_in.view(-1))
             neg_embeds = neg_flat.view(B, K, -1)
             neg_sim = torch.sum(user_embeds.unsqueeze(1) * neg_embeds, dim=2) / self.temperature
         else:
-            neg_embeds = self.item_tower(neg_item_inputs)
+            neg_embeds = self.item_tower(neg_in)
             neg_sim = torch.matmul(user_embeds, neg_embeds.T) / self.temperature
 
         logits = torch.cat([pos_sim.unsqueeze(1), neg_sim], dim=1)
-        labels = torch.zeros(logits.size(0), dtype=torch.long, device=user_inputs.device)
+        labels = torch.zeros(logits.size(0), dtype=torch.long, device=u_in.device)
         return F.cross_entropy(logits, labels)
 
     def export_onnx(self, output_path: str | Path):
