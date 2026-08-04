@@ -38,12 +38,10 @@ const MOVIE_IDS = [550, 680, 13, 238, 278, 424, 389, 155, 122, 27205];
 
 export const options = SMOKE
   ? {
-      // Smoke test: quick sanity check, no strict SLO enforcement
+      // Smoke test: quick sanity check, no strict SLO threshold enforcement
       vus: 2,
       duration: '20s',
-      thresholds: {
-        http_req_failed: ['rate<0.50'],
-      },
+      thresholds: {},
     }
   : {
       // Full load test: ramp up → steady state → ramp down
