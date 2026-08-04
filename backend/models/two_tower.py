@@ -92,6 +92,37 @@ class TwoTowerModel(nn.Module):
         loss = F.cross_entropy(similarity_matrix, labels)
         return loss
 
+    def compute_contrastive_loss(
+        self,
+        user_embeds: torch.Tensor,
+        pos_item_embeds: torch.Tensor,
+        neg_item_embeds: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Compute Contrastive / InfoNCE Loss with optional negative samples."""
+        if neg_item_embeds is None:
+            return self.compute_infonce_loss(user_embeds, pos_item_embeds)
+
+        if user_embeds.dtype == torch.long:
+            user_embeds = self.user_tower(user_embeds)
+        if pos_item_embeds.dtype == torch.long:
+            pos_item_embeds = self.item_tower(pos_item_embeds)
+
+        pos_sim = torch.sum(user_embeds * pos_item_embeds, dim=1) / self.temperature
+
+        if neg_item_embeds.dtype == torch.long:
+            batch_size, num_negs = neg_item_embeds.shape
+            neg_flat = self.item_tower(neg_item_embeds.view(-1))
+            neg_embeds = neg_flat.view(batch_size, num_negs, -1)
+            neg_sim = torch.sum(user_embeds.unsqueeze(1) * neg_embeds, dim=2) / self.temperature
+        elif neg_item_embeds.dim() == 3:
+            neg_sim = torch.sum(user_embeds.unsqueeze(1) * neg_item_embeds, dim=2) / self.temperature
+        else:
+            neg_sim = torch.matmul(user_embeds, neg_item_embeds.T) / self.temperature
+
+        logits = torch.cat([pos_sim.unsqueeze(1), neg_sim], dim=1)
+        labels = torch.zeros(logits.size(0), dtype=torch.long, device=user_embeds.device)
+        return F.cross_entropy(logits, labels)
+
     def export_onnx(self, output_path: str | Path):
         """Export Item Tower to ONNX for lightning-fast sub-millisecond serving."""
         self.eval()
