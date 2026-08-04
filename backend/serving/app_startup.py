@@ -185,6 +185,18 @@ async def startup(
 
     _preload_realtime_index()
 
+    # Pre-warm recommender singleton in background so first user request responds in < 5ms
+    def _prewarm_recommender():
+        try:
+            rec = recommender_get_fn()
+            if rec is not None:
+                rec.search_by_title("Action", top_n=5)
+                logger.info("Recommender model pre-warmed successfully for zero-latency HF Spaces serving.")
+        except Exception as err:
+            logger.warning("Recommender pre-warming skipped: %s", err)
+
+    asyncio.get_event_loop().run_in_executor(None, _prewarm_recommender)
+
     return state
 
 
