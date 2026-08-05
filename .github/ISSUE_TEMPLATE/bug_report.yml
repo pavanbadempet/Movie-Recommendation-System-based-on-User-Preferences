@@ -1,0 +1,46 @@
+name: 🐛 Bug Report
+description: Report a reproducible bug or issue in the backend, frontend, PySpark ETL, or models
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thank you for taking the time to report a bug! Please fill out the details below.
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: Describe what happened...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps To Reproduce
+      description: Exact steps to reproduce the behavior.
+      placeholder: |
+        1. Run 'python etl/pyspark_etl.py --declarative'
+        2. Execute API request 'GET /v1/recommendations/id/550'
+        3. See error traceback...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error Logs & Traceback
+      description: Paste relevant logs or stack trace outputs here.
+      render: shell
+    validations:
+      required: false
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Operating Environment
+      options:
+        - Docker Compose
+        - Local Python / Bun Dev
+        - Hugging Face Spaces
+        - Databricks / Kubernetes
+    validations:
+      required: true

@@ -1,3 +1,21 @@
+---
+title: APEX AI Recommendation Engine
+emoji: 🎬
+colorFrom: red
+colorTo: indigo
+sdk: docker
+app_file: backend/main.py
+pinned: false
+tags:
+  - recommendation-system
+  - pytorch
+  - pyspark
+  - delta-lake
+  - fastapi
+  - react
+  - agentic-ai
+---
+
 <div align="center">
 
 # 🎬 APEX AI Recommendation Engine & Unified Data Intelligence Platform
@@ -50,6 +68,15 @@
   <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/Kubernetes_Helm-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white" alt="Kubernetes Helm" />
 </p>
+
+<br/>
+
+> [!TIP]
+> ### ⭐ Why Star This Repo?
+> * **Production Engineering Reference**: A complete, real-world alternative to toy Jupyter notebook recommendations.
+> * **Zero Vendor Lock-In**: Databricks-compatible PySpark 4.2 & Delta Lake pipelines built 100% on open standards.
+> * **Cutting-Edge Deep Learning**: 6 PyTorch architectures (SASRec, KAN B-Splines, LightGCN, Neural ODE, Poincaré Hyperbolic, Latent Diffusion).
+> * **Agentic AI Architecture**: Autonomous multi-agent routing with real-time natural language recommendation reasoning.
 
 <br/>
 
@@ -368,6 +395,12 @@ service RecommendationService {
 
 ---
 
+## 📈 Community Growth & Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=pavanbadempet/AI-Recommendation-System&type=Date)](https://star-history.com/#pavanbadempet/AI-Recommendation-System&Date)
+
+---
+
 ## 🧪 Verification & Test Suite
 
 The platform maintains **100% Green CI/CD Quality Gates** across 11 parallel GitHub Actions matrix jobs:
@@ -404,12 +437,15 @@ Movie-Recommendation-System/
 
 ---
 
-## 📄 License & Contributing
+## 📄 License, Citation & Contributing
 
 Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for details.
 Please adhere to repository coding standards outlined in [`AGENTS.md`](AGENTS.md) and [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
+For academic citations or software references, see [`CITATION.cff`](CITATION.cff).
+For promotional launch playbooks and social growth guides, see [`docs/VIRAL_LAUNCH_STRATEGY.md`](docs/VIRAL_LAUNCH_STRATEGY.md).
+
 <div align="center">
   <br/>
-  <sub>Built with ❤️ by the APEX Engineering Team. Star ⭐ this repository if you find it useful!</sub>
+  <sub>Built with ❤️ by Pavan Badempet and the APEX Engineering Team. Star ⭐ this repository if you find it useful!</sub>
 </div>

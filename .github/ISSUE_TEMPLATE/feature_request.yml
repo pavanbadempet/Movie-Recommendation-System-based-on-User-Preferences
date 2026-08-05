@@ -1,0 +1,41 @@
+name: 💡 Feature Proposal / Enhancement
+description: Propose a new feature, architecture enhancement, or algorithm integration
+title: "[FEATURE] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: Thank you for helping improve the **APEX AI Recommendation System**! Please fill out the form below.
+  - type: input
+    id: summary
+    attributes:
+      label: Feature Title / Summary
+      description: A concise 1-line summary of the proposed feature.
+      placeholder: e.g. Add Graph Neural Network temporal attention layer to LightGCN
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement / Motivation
+      description: Is your feature request related to a specific problem or bottleneck?
+      placeholder: e.g. Serving latency increases when candidate pool exceeds 10,000 items...
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution & Technical Design
+      description: Describe the solution you'd like to see implemented.
+      placeholder: e.g. Integrate HNSW SIMD indexing into Tier 3 vector retrieval engine...
+    validations:
+      required: true
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Contribution Checklist
+      options:
+        - label: I have searched existing issues to ensure this feature hasn't already been proposed.
+          required: true
+        - label: I am willing to submit a Pull Request to implement this feature.
+          required: false

@@ -1,23 +1,23 @@
-## What
-<!-- One-line summary of the change. -->
+## 📝 Description
 
-## Why
-<!-- The problem this solves or the improvement it makes. -->
+Brief summary of the changes introduced by this pull request.
 
-## How
-<!-- Key implementation decisions. Link to ADR if applicable. -->
+- **Feature / Fix**:
+- **Affected Components**: [e.g. Backend API, PySpark ETL, PyTorch Models, Frontend UI]
 
-## Testing
-<!-- What tests were added or modified. -->
-- [ ] Unit tests added / updated
-- [ ] Property-based tests added / updated (Hypothesis)
-- [ ] API integration test added / updated
+---
 
-## Checklist
-- [ ] `python -m ruff check backend/ tests/ scripts/ etl/` passes
-- [ ] `python -m ruff format --check backend/ tests/ scripts/ etl/` passes
-- [ ] `python -m mypy backend/` passes
-- [ ] `python -m pytest tests/ backend/tests/ --cov=backend --cov-fail-under=80` passes
-- [ ] No binary artifacts, model weights, or `.env` files added
-- [ ] `docs/` updated if public API or architecture changed
-- [ ] Targets `develop`, not `main`
+## 🧪 Verification & Testing
+
+- [ ] Added or updated unit tests under `tests/` or `frontend/src/__tests__/`.
+- [ ] Ran `python -m pytest tests/ -v` (100% passing).
+- [ ] Ran `bun --cwd frontend run test` (100% passing).
+- [ ] Executed `git diff --check` before submitting PR.
+
+---
+
+## 📋 Checklist
+
+- [ ] Followed coding guidelines in `AGENTS.md` and `CONTRIBUTING.md`.
+- [ ] Preserved existing API contracts and schema backwards compatibility.
+- [ ] Updated documentation or docstrings if applicable.
