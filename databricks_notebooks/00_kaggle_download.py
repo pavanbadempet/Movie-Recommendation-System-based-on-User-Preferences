@@ -17,15 +17,11 @@ import shutil
 # MAGIC We grab the Kaggle API credentials from the notebook widgets (which you will pass in via the Job Parameters).
 
 # COMMAND ----------
-# Create widgets to accept Kaggle credentials securely
-dbutils.widgets.text("KAGGLE_USERNAME", "", "Kaggle Username")
-dbutils.widgets.text("KAGGLE_KEY", "", "Kaggle API Key")
-
-os.environ['KAGGLE_USERNAME'] = dbutils.widgets.get("KAGGLE_USERNAME")
-os.environ['KAGGLE_KEY'] = dbutils.widgets.get("KAGGLE_KEY")
-
-if not os.environ['KAGGLE_USERNAME'] or not os.environ['KAGGLE_KEY']:
-    raise ValueError("Kaggle credentials not provided! Please set them in the Job Parameters.")
+try:
+    os.environ['KAGGLE_USERNAME'] = dbutils.secrets.get(scope="apex", key="kaggle_username")
+    os.environ['KAGGLE_KEY'] = dbutils.secrets.get(scope="apex", key="kaggle_key")
+except Exception as e:
+    raise ValueError("Failed to retrieve Kaggle credentials from Databricks Secrets. Please create the 'apex' secret scope and add 'kaggle_username' and 'kaggle_key'.")
 
 # COMMAND ----------
 # MAGIC %md
