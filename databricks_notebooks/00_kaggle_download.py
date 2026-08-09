@@ -17,11 +17,29 @@ import shutil
 # MAGIC We grab the Kaggle API credentials from the notebook widgets (which you will pass in via the Job Parameters).
 
 # COMMAND ----------
+import requests
+
 try:
-    os.environ['KAGGLE_USERNAME'] = dbutils.secrets.get(scope="apex", key="kaggle_username")
-    os.environ['KAGGLE_KEY'] = dbutils.secrets.get(scope="apex", key="kaggle_key")
+    # Fetch all secrets securely from Doppler using the cluster token
+    doppler_token = os.environ.get("DOPPLER_TOKEN")
+    if not doppler_token:
+        raise ValueError("DOPPLER_TOKEN environment variable is missing on the cluster!")
+        
+    response = requests.get(
+        "https://api.doppler.com/v3/configs/config/secrets",
+        headers={"Authorization": f"Bearer {doppler_token}", "Accept": "application/json"}
+    )
+    response.raise_for_status()
+    secrets = response.json()["secrets"]
+    
+    os.environ['KAGGLE_USERNAME'] = secrets.get("KAGGLE_USERNAME", {}).get("computed")
+    os.environ['KAGGLE_KEY'] = secrets.get("KAGGLE_KEY", {}).get("computed")
+    
+    if not os.environ['KAGGLE_USERNAME'] or not os.environ['KAGGLE_KEY']:
+        raise ValueError("Kaggle credentials not found in Doppler!")
+        
 except Exception as e:
-    raise ValueError("Failed to retrieve Kaggle credentials from Databricks Secrets. Please create the 'apex' secret scope and add 'kaggle_username' and 'kaggle_key'.")
+    raise ValueError(f"Failed to retrieve Kaggle credentials from Doppler: {e}")
 
 # COMMAND ----------
 # MAGIC %md

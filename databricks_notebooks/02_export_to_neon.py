@@ -11,15 +11,30 @@
 import os
 import pandas as pd
 from sqlalchemy import create_engine
+import requests
 
 # COMMAND ----------
-# Define the Neon Database URL (Configure this in Databricks Secrets)
-# Example: dbutils.secrets.get(scope="neon", key="database_url")
+# Define the Neon Database URL (Configure this in Doppler)
+
 try:
-    DATABASE_URL = dbutils.secrets.get(scope="apex", key="neon_db_url")
-except:
-    # Fallback to env var if running outside of Databricks secrets scope
-    DATABASE_URL = os.getenv("DATABASE_URL")
+    doppler_token = os.environ.get("DOPPLER_TOKEN")
+    if not doppler_token:
+        raise ValueError("DOPPLER_TOKEN environment variable is missing on the cluster!")
+        
+    response = requests.get(
+        "https://api.doppler.com/v3/configs/config/secrets",
+        headers={"Authorization": f"Bearer {doppler_token}", "Accept": "application/json"}
+    )
+    response.raise_for_status()
+    secrets = response.json()["secrets"]
+    
+    DATABASE_URL = secrets.get("DATABASE_URL", {}).get("computed")
+    
+    if not DATABASE_URL:
+        raise ValueError("DATABASE_URL not found in Doppler!")
+        
+except Exception as e:
+    raise ValueError(f"Failed to retrieve DATABASE_URL from Doppler: {e}")
 
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL is not set!")
