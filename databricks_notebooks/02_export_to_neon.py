@@ -32,8 +32,11 @@ if DATABASE_URL.startswith("postgres://"):
 gold_path = "dbfs:/FileStore/apex/data/gold/movie_features"
 print(f"Reading Gold table from {gold_path}...")
 
-# Read Delta table
+# Read Delta table and filter ONLY for current active records (SCD Type 2)
 df_spark = spark.read.format("delta").load(gold_path)
+if "is_current" in df_spark.columns:
+    df_spark = df_spark.filter(df_spark.is_current == True)
+
 df_pandas = df_spark.toPandas()
 
 # COMMAND ----------
