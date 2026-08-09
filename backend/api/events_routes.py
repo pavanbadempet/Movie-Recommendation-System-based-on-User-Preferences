@@ -4,6 +4,7 @@ import logging
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional
+from backend.intelligence.contextual_bandit import get_bandit_engine
 
 router = APIRouter(prefix="/events", tags=["events"])
 logger = logging.getLogger(__name__)
@@ -53,6 +54,13 @@ async def ingest_event(event: UserInteractionEvent, background_tasks: Background
     Webhook for the Hugging Face / Flutter UI to send user interactions.
     Streams directly to Databricks Zerobus for real-time processing.
     """
-    # Delegate to a background task so the UI doesn't block waiting for Databricks
+    # 1. Update the in-memory Contextual Bandit (Reinforcement Learning) instantly
+    if event.interaction_type in ["click", "like"]:
+        try:
+            get_bandit_engine().update_reward(int(event.movie_id), clicked=(event.interaction_type == "like"))
+        except ValueError:
+            pass # ignore invalid movie ids
+
+    # 2. Delegate to a background task so the UI doesn't block waiting for Databricks
     background_tasks.add_task(send_to_zerobus, event)
-    return {"status": "accepted", "message": "Event queued for Databricks ingestion."}
+    return {"status": "accepted", "message": "Event processed for ML Bandits and queued for Databricks ingestion."}
