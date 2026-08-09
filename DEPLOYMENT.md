@@ -31,9 +31,10 @@ graph TD
 ---
 
 ## 2. Databricks Community Edition (Data Platform & AI)
-*Databricks Community Edition gives you a free 15GB Apache Spark cluster. We use this to run the nightly Medallion ETL and generate Hugging Face embeddings.*
+*Databricks Free Edition gives you a free ML environment to run Apache Spark. We use this to run the nightly Medallion ETL and generate Hugging Face embeddings.*
 
-1. Sign up for [Databricks Community Edition](https://community.cloud.databricks.com).
+1. Sign up for the [Databricks Free Edition / Free Trial](https://databricks.com/try-databricks).
+2. Log into your Databricks Workspace URL (e.g. `https://<your-workspace-id>.cloud.databricks.com`).
 2. Go to **Compute** and create a cluster (use the default 15GB ML runtime).
 3. Go to **Workspace**, click on your user profile, and select **Create Git folder**. 
 4. Paste your GitHub repository URL.
