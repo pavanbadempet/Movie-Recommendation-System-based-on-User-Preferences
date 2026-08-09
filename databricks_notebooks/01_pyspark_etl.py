@@ -111,15 +111,15 @@ def load_gold_data(spark):
             
         return pd.Series(results)
         
-    # Apply the LLM feature extractor to the movie overview
+    
+    # Apply the UDF to extract rich semantic features if an overview exists
     if "overview" in incoming_df.columns:
         incoming_df = incoming_df.withColumn("gen_ai_features", extract_llm_features(col("overview")))
     else:
         incoming_df = incoming_df.withColumn("gen_ai_features", lit(""))
-
-    print("Generating AI Embeddings using Distributed Pandas UDF...")
+        
     # Create a dense 'tags' column representing the movie (Title + Genres + Overview + GEN AI FEATURES)
-    # The inclusion of Gen AI features makes the resulting 768-D vector significantly smarter!
+    # This forms the high-signal text payload for embedding.
     incoming_df = incoming_df.withColumn(
         "tags",
         concat_ws(" | ", 
@@ -129,55 +129,65 @@ def load_gold_data(spark):
             coalesce(col("gen_ai_features"), lit(""))
         )
     )
-    
-    # Apply the SentenceTransformer model! 
-    incoming_df = incoming_df.withColumn("embedding", predict_embeddings(col("tags")))
 
+    # Embed the tags using our fast SentenceTransformer UDF
+    incoming_df = incoming_df.withColumn("embedding", predict_embeddings(col("tags")))
+    
     # ----------------------------------------------------------------------
-    # 4. SCD TYPE 2 PREPARATION (SOTA CDC)
+    # 4. SCD TYPE 2 LOGIC (Data Lakehouse standard)
     # ----------------------------------------------------------------------
     # Add SCD tracking columns to incoming data
     incoming_df = incoming_df.withColumn("is_current", lit(True)) \
                              .withColumn("effective_start_at", current_timestamp()) \
                              .withColumn("effective_end_at", lit(datetime(9999, 12, 31)))
-                             
-    # If the Gold table doesn't exist yet, do a first-time full save
-    if not DeltaTable.isDeltaTable(spark, gold_path):
-        print("First run detected: Creating base Gold table with Liquid Clustering...")
+
+    print(f"Merging enriched data into Gold Table: {gold_table_name}...")
+    
+    # Check if the Gold Table exists in the metastore
+    table_exists = spark.catalog.tableExists(gold_table_name)
+    
+    if not table_exists:
+        print("Gold table does not exist. Creating it for the first time...")
         # Enable Liquid Clustering on the 'id' column (SOTA replacing Z-Order)
-        incoming_df.write.format("delta").clusterBy("id").save(gold_path)
+        incoming_df.write.format("delta").clusterBy("id").saveAsTable(gold_table_name)
     else:
-        # ------------------------------------------------------------------
-        # 5. DELTA LAKE MERGE (SCD TYPE 2 LOGIC)
-        # ------------------------------------------------------------------
-        print("Delta Table exists: Running SCD Type 2 MERGE...")
-        gold_table = DeltaTable.forPath(spark, gold_path)
+        print("Gold table exists. Performing SCD Type 2 UPSERT...")
+        from delta.tables import DeltaTable
         
-        update_condition = "gold.id = incoming.id AND gold.is_current = True"
+        gold_table = DeltaTable.forName(spark, gold_table_name)
         
+        # Determine updates vs inserts based on 'tags' hash change
+        update_condition = "gold.id = updates.id AND gold.tags != updates.tags AND gold.is_current = True"
+        
+        # Step 1: Identify records that need to be updated and mark the old ones as inactive
+        staged_updates = incoming_df.alias("updates").join(
+            gold_table.toDF().alias("gold"),
+            expr(update_condition)
+        ).selectExpr("updates.*")
+        
+        # Step 2: Merge the updates back to the gold table
         gold_table.alias("gold").merge(
-            source=incoming_df.alias("incoming"),
-            condition=update_condition
+            source=incoming_df.alias("updates"),
+            condition="gold.id = updates.id AND gold.is_current = True"
         ).whenMatchedUpdate(
+            condition="gold.tags != updates.tags",
             set={
-                "is_current": lit(False),
-                "effective_end_at": current_timestamp()
+                "is_current": "False",
+                "effective_end_at": "current_timestamp()"
             }
-        ).execute()
-        
-        gold_table.alias("gold").merge(
-            source=incoming_df.alias("incoming"),
-            condition="gold.id = incoming.id AND gold.is_current = True"
         ).whenNotMatchedInsertAll().execute()
+        
+        # Step 3: Insert the new active versions of the updated records
+        staged_updates.write.format("delta").mode("append").saveAsTable(gold_table_name)
 
     # ----------------------------------------------------------------------
-    # 6. OPTIMIZATIONS (LIQUID CLUSTERING & VACUUM)
+    # 5. MAINTENANCE & OPTIMIZATION (SOTA)
     # ----------------------------------------------------------------------
-    print("Running Delta Optimizations (Liquid Clustering)...")
-    spark.sql(f"OPTIMIZE delta.`{gold_path}`")
-    
-    print("Running Vacuum to clear unneeded historical snapshots...")
-    spark.sql(f"VACUUM delta.`{gold_path}` RETAIN 168 HOURS")
+    print("Optimizing Gold Table...")
+    # Run optimize to physically compact files
+    spark.sql(f"OPTIMIZE {gold_table_name}")
+    # Vacuum old files to save storage costs (retention 7 days)
+    spark.sql(f"VACUUM {gold_table_name} RETAIN 168 HOURS")
 
     print(f"ETL Pipeline completed successfully for Gold table!")
     return True

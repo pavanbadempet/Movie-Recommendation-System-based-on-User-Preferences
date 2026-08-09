@@ -80,19 +80,29 @@ api.dataset_download_files(KAGGLE_DATASET, path=local_download_dir, unzip=True)
 
 # COMMAND ----------
 # MAGIC %md
-# MAGIC ## Move to DBFS (Data Lake)
-
+# MAGIC ## Save to Managed Table (Data Lake)
 # COMMAND ----------
-print(f"Moving extracted files to DBFS at {dbfs_raw_dir}...")
-os.makedirs(dbfs_raw_dir, exist_ok=True)
+# Since DBFS is disabled in Serverless Free Tier, we use PySpark to read the CSV from the local /tmp folder
+# and save it directly as a Databricks Managed Table!
 
-# Move all CSV/JSON files to the permanent DBFS location
-for filename in os.listdir(local_download_dir):
-    source_file = os.path.join(local_download_dir, filename)
-    dest_file = os.path.join(dbfs_raw_dir, filename)
-    
-    if os.path.isfile(source_file):
-        shutil.move(source_file, dest_file)
-        print(f"Saved: {filename}")
+print("Reading raw CSV into Spark...")
+# Find the downloaded CSV in /tmp/kaggle_data
+import glob
+csv_files = glob.glob(f"{local_download_dir}/*.csv")
+if not csv_files:
+    raise FileNotFoundError("No CSV files found in the Kaggle download!")
+
+raw_csv_path = f"file:{csv_files[0]}"
+
+# Load it into Spark
+df = spark.read.format("csv") \
+    .option("header", "true") \
+    .option("inferSchema", "true") \
+    .option("quote", "\"") \
+    .option("escape", "\"") \
+    .load(raw_csv_path)
+
+print("Saving to Managed Table 'default.tmdb_raw_data'...")
+df.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("default.tmdb_raw_data")
 
 print("Data Ingestion Complete! The raw data is ready for the Medallion ETL.")

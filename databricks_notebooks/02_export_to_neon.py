@@ -54,12 +54,14 @@ if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 # COMMAND ----------
-# Load the Gold Delta Table using Spark, convert to Pandas for SQLAlchemy export
-gold_path = "dbfs:/FileStore/apex/data/gold/movie_features"
-print(f"Reading Gold table from {gold_path}...")
+# MAGIC ## 3. Read Data from Gold Table & Export
+# COMMAND ----------
 
-# Read Delta table and filter ONLY for current active records (SCD Type 2)
-df_spark = spark.read.format("delta").load(gold_path)
+gold_table_name = "default.tmdb_gold_data"
+print(f"Reading Gold table from {gold_table_name}...")
+
+# Load the Delta table into a Spark DataFrame
+df_spark = spark.table(gold_table_name)
 if "is_current" in df_spark.columns:
     df_spark = df_spark.filter(df_spark.is_current == True)
 
