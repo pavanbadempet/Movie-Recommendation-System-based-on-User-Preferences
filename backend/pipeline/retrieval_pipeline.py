@@ -239,13 +239,19 @@ class RetrievalPipeline:
         all_candidates: list[CandidateItem] = []
 
         # ----------------------------------------------------------------
-        # Step 1: TurboVec ANN retrieval
+        # Step 1: Primary Vector ANN Retrieval (PGVector or TurboVec)
         # ----------------------------------------------------------------
-        if self.turbovec_index is not None:
+        import os
+        db_url = os.getenv("DATABASE_URL", "")
+        
+        if "postgres" in db_url:
+            pg_candidates = self._retrieve_pgvector(query_embedding)
+            all_candidates.extend(pg_candidates)
+        elif self.turbovec_index is not None:
             turbovec_candidates = self._retrieve_turbovec(query_embedding)
             all_candidates.extend(turbovec_candidates)
         else:
-            logger.debug("TurboVec index not available; skipping TurboVec retrieval.")
+            logger.debug("No vector index available; skipping dense retrieval.")
 
         # ----------------------------------------------------------------
         # Step 2: TF-IDF sparse retrieval
@@ -351,6 +357,50 @@ class RetrievalPipeline:
                 type(exc).__name__,
                 exc,
             )
+            return []
+
+    def _retrieve_pgvector(self, query_embedding: np.ndarray) -> list[CandidateItem]:
+        """Query the Neon Postgres pgvector index for candidates."""
+        import os
+        from sqlalchemy import create_engine, text
+        
+        try:
+            db_url = os.getenv("DATABASE_URL")
+            if db_url.startswith("postgres://"):
+                db_url = db_url.replace("postgres://", "postgresql://", 1)
+                
+            engine = create_engine(db_url)
+            k = self.config.turbovec_k
+            
+            # Format numpy array for pgvector literal: "[0.1, 0.2, ...]"
+            vector_str = "[" + ",".join(map(str, query_embedding.flatten().tolist())) + "]"
+            
+            candidates: list[CandidateItem] = []
+            with engine.connect() as conn:
+                query = text("""
+                    SELECT id, title, embedding <=> :vec AS distance
+                    FROM movies
+                    ORDER BY embedding <=> :vec
+                    LIMIT :k
+                """)
+                result = conn.execute(query, {"vec": vector_str, "k": k}).fetchall()
+                
+                for row in result:
+                    # Convert distance to similarity score
+                    score = 1.0 - float(row[2])
+                    candidates.append(
+                        CandidateItem(
+                            movie_id=str(row[0]),
+                            retrieval_score=score,
+                            retrieval_source="pgvector", # type: ignore
+                            metadata={"title": row[1]}
+                        )
+                    )
+                    
+            logger.debug("PGVector retrieval returned %d candidates.", len(candidates))
+            return candidates
+        except Exception as exc:
+            logger.warning("PGVector retrieval failed: %s", exc)
             return []
 
     def _retrieve_tfidf(self, query_embedding: np.ndarray, query_text: str | None = None) -> list[CandidateItem]:

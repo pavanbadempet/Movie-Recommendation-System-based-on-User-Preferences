@@ -77,6 +77,7 @@ from backend.api.admin_tests import router as admin_router
 from backend.api.artifact_routes import create_artifact_router
 from backend.api.auth_routes import router as auth_router
 from backend.api.billing_routes import router as billing_router
+from backend.api.events_routes import router as events_router
 from backend.api.browse_routes import create_browse_router
 from backend.api.catalog_routes import create_catalog_router
 from backend.api.chat import generate_chat_response
@@ -512,6 +513,7 @@ def _register_routes() -> None:
     app.include_router(admin_router, dependencies=[Depends(resolve_admin_token)])
     app.include_router(auth_router)
     app.include_router(billing_router)
+    app.include_router(events_router)
 
     # --- Configure recommendation route module globals ---
     _configure_rec_routes(

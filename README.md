@@ -35,11 +35,19 @@ tags:
   <a href="https://github.com/pavanbadempet/AI-Recommendation-System/actions/workflows/secrets-scan.yml"><img src="https://github.com/pavanbadempet/AI-Recommendation-System/actions/workflows/secrets-scan.yml/badge.svg" alt="Secrets Scanning Status" /></a>
   <a href="https://github.com/pavanbadempet/AI-Recommendation-System/actions/workflows/frontend-pages.yml"><img src="https://github.com/pavanbadempet/AI-Recommendation-System/actions/workflows/frontend-pages.yml/badge.svg" alt="Frontend Deployment Status" /></a>
   <a href="https://github.com/pavanbadempet/AI-Recommendation-System/actions/workflows/sync-hf.yml"><img src="https://github.com/pavanbadempet/AI-Recommendation-System/actions/workflows/sync-hf.yml/badge.svg" alt="Hugging Face Hub Sync Status" /></a>
+  <a href="https://awesome.re"><img src="https://awesome.re/badge.svg" alt="Awesome" /></a>
   <img src="https://img.shields.io/badge/Bun-1.2.0-F9F1E1?style=flat&logo=bun&logoColor=black" alt="Bun 1.2" />
   <img src="https://img.shields.io/badge/Python-3.12+-3776AB?style=flat&logo=python&logoColor=white" alt="Python 3.12" />
   <img src="https://img.shields.io/badge/PySpark-4.2-E25A1C?style=flat&logo=apachespark&logoColor=white" alt="PySpark 4.2" />
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License" />
 </p>
+
+> [!TIP]
+> ### ⭐ Why Star This Repo?
+> * **Production Engineering Reference**: A complete, real-world alternative to toy Jupyter notebook recommendations.
+> * **Zero Vendor Lock-In**: Databricks-compatible PySpark 4.2 & Delta Lake pipelines built 100% on open standards.
+> * **Cutting-Edge Deep Learning**: 6 PyTorch architectures (SASRec, KAN B-Splines, LightGCN, Neural ODE, Poincaré Hyperbolic, Latent Diffusion).
+> * **Agentic AI Architecture**: Autonomous multi-agent routing with real-time natural language recommendation reasoning.
 
 <!-- Live Production Action Links -->
 <p align="center">
@@ -68,15 +76,6 @@ tags:
   <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/Kubernetes_Helm-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white" alt="Kubernetes Helm" />
 </p>
-
-<br/>
-
-> [!TIP]
-> ### ⭐ Why Star This Repo?
-> * **Production Engineering Reference**: A complete, real-world alternative to toy Jupyter notebook recommendations.
-> * **Zero Vendor Lock-In**: Databricks-compatible PySpark 4.2 & Delta Lake pipelines built 100% on open standards.
-> * **Cutting-Edge Deep Learning**: 6 PyTorch architectures (SASRec, KAN B-Splines, LightGCN, Neural ODE, Poincaré Hyperbolic, Latent Diffusion).
-> * **Agentic AI Architecture**: Autonomous multi-agent routing with real-time natural language recommendation reasoning.
 
 <br/>
 

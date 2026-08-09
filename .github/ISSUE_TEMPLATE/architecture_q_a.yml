@@ -1,0 +1,23 @@
+name: Architecture Q&A
+description: Ask questions about the system design, PySpark ETL, or Deep Learning ensemble
+title: "[Architecture] "
+labels: ["question", "architecture"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for digging into the APEX architecture! Please provide as much context as possible so the maintainers and community can have a deep technical discussion.
+  - type: textarea
+    id: question
+    attributes:
+      label: What is your architectural question?
+      description: Explain what part of the system you are curious about (e.g., ONNX Quantization, Delta Lake Medallion, LightGCN).
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context or Potential Alternatives
+      description: Did you have an alternative design in mind? (e.g., "Why use FAISS over Qdrant?", "Why not use Ray Serve?")
+    validations:
+      required: false

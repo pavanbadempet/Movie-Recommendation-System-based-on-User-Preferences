@@ -20,6 +20,15 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from sqlalchemy.types import CHAR, TypeDecorator
 
+try:
+    from pgvector.sqlalchemy import Vector
+except ImportError:
+    # Fallback if pgvector is not installed locally
+    from sqlalchemy.types import UserDefinedType
+    class Vector(UserDefinedType):
+        def get_col_spec(self):
+            return "VECTOR"
+
 # PostgreSQL Connection String (Fallback to SQLite if no PGSQL)
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///apex.db")
 
@@ -140,6 +149,23 @@ class UserEvent(Base):
     context_device = Column(String(100), nullable=True)
     context_os = Column(String(100), nullable=True)
     created_at = Column(DateTime, default=utc_now)
+
+
+class Movie(Base):
+    """
+    Gold Layer Movie Features exported from Databricks ETL.
+    Includes pgvector embeddings for Stage 1 Cascade Retrieval.
+    """
+    __tablename__ = "movies"
+    id = Column(String(100), primary_key=True)
+    title = Column(String(255))
+    overview = Column(String)
+    genres = Column(String)
+    # pgvector embedding for semantic search / LightGCN retrieval
+    embedding = Column(Vector(768))
+    vote_average = Column(Float, nullable=True)
+    vote_count = Column(Integer, nullable=True)
+    popularity = Column(Float, nullable=True)
 
 
 # -----------------------------------------------------------------------------

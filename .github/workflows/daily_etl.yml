@@ -1,0 +1,37 @@
+name: Daily Autonomous ETL Pipeline
+
+on:
+  schedule:
+    - cron: '0 2 * * *' # Run at 2:00 AM UTC every day
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  run-etl-and-export:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements-etl.txt
+          pip install psycopg2-binary sqlalchemy
+
+      - name: Run PySpark Medallion ETL
+        run: |
+          python -m etl.pyspark_etl
+        env:
+          SPARK_LOCAL_DIRS: /tmp
+          HADOOP_HOME: /tmp
+
+      - name: Export Gold Tables to Neon Postgres
+        run: |
+          python etl/export_to_postgres.py
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
