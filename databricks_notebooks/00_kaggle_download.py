@@ -94,13 +94,16 @@ if not csv_files:
 
 raw_csv_path = f"file:{csv_files[0]}"
 
-# Load it into Spark
-df = spark.read.format("csv") \
-    .option("header", "true") \
-    .option("inferSchema", "true") \
-    .option("quote", "\"") \
-    .option("escape", "\"") \
-    .load(raw_csv_path)
+# Load it into memory with Pandas first to bypass the Serverless 'file:/tmp' read ban
+import pandas as pd
+print("Reading CSV into memory using Pandas (bypassing Databricks Serverless storage limits)...")
+
+# Read everything as string to prevent Spark Arrow inference errors on mixed types
+pandas_df = pd.read_csv(csv_files[0], dtype=str)
+
+# Convert Pandas DataFrame directly to Spark DataFrame in-memory
+spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
+df = spark.createDataFrame(pandas_df)
 
 print("Saving to Managed Table 'default.tmdb_raw_data'...")
 df.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("default.tmdb_raw_data")
