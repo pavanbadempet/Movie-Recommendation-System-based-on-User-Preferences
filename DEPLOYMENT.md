@@ -1,258 +1,77 @@
-# Deployment Guide
+# The "Zero-Cost SOTA" Deployment Guide
 
-Complete guide for deploying APEX across all supported environments.
+This guide details how to deploy the entire APEX architecture using 100% free-tier services. This is the optimal setup for a portfolio project, interview showcase, or hackathon.
 
----
+## Architecture Topology
 
-## Table of Contents
-
-- [Environment Variables Reference](#environment-variables-reference)
-- [Local Development (Docker Compose)](#local-development-docker-compose)
-- [Production: Render (Backend)](#production-render-backend)
-- [Production: Cloudflare Pages (Frontend)](#production-cloudflare-pages-frontend)
-- [Production: GitHub Pages (Frontend)](#production-github-pages-frontend)
-- [Backup Frontend: Streamlit Cloud](#backup-frontend-streamlit-cloud)
-- [Serving Tier Selection](#serving-tier-selection)
-- [Health Check & Verification](#health-check--verification)
-- [Upgrading](#upgrading)
-
----
-
-## Environment Variables Reference
-
-| Variable | Required | Description | Example |
-|---|---|---|---|
-| `TMDB_API_KEY` | Yes | TMDB API key for movie metadata enrichment | `abc123...` |
-| `JWT_SECRET_KEY` | Yes | Secret for JWT token signing — generate with `openssl rand -hex 32` | `a1b2c3...` |
-| `OPENROUTER_API_KEY` | No | OpenRouter key for LLM explanation generation (GPT-4o / Llama 3) | `sk-or-...` |
-| `DATABASE_URL` | No | PostgreSQL connection string. Defaults to SQLite if unset | `postgresql://user:pass@host/db` |
-| `REDIS_URL` | No | Redis connection string for feature store. In-memory fallback if unset | `redis://localhost:6379/0` |
-| `NOVA_SERVING_PROFILE` | No | `full` forces Tier1 behavior; `lite` forces Tier3. Auto-detected if unset | `lite` |
-| `NOVA_SERVING_TIER` | No | Explicit tier override: `tier1`, `tier2`, or `tier3` | `tier2` |
-| `NOVA_ADMIN_TOKEN` | No | Bearer token for admin endpoints (`/v1/admin/*`) | `secret-token` |
-| `SENTRY_DSN` | No | Sentry DSN for error monitoring | `https://...@sentry.io/...` |
-| `ALLOWED_ORIGINS` | No | Comma-separated CORS origins. Defaults to known frontend URLs | `https://myapp.pages.dev` |
-| `NOVA_HEALTH_LOAD_RECOMMENDER` | No | Set `false` to skip recommender load on `/health` (faster cold start) | `false` |
-| `NOVA_BACKGROUND_RECOMMENDER_WARMUP` | No | Set `true` to warm recommender in background after startup | `true` |
-| `KAFKA_BROKER_URL` | No | Kafka broker for streaming events | `kafka:9092` |
-
-Copy `.env.example` to `.env` and fill in the required values before running locally.
-
----
-
-## Local Development (Docker Compose)
-
-The full stack — backend, frontend, Kafka, Spark, Redis, PostgreSQL, Prometheus, Grafana — runs with a single command.
-
-```bash
-# Start all services
-docker compose up --build
-
-# Start only the backend + Redis (faster for API development)
-docker compose up apex-backend redis --build
-
-# Stop everything
-docker compose down
-
-# Stop and remove volumes (full reset)
-docker compose down -v
-```
-
-### Service URLs
-
-| Service | URL | Notes |
-|---|---|---|
-| Backend API | http://localhost:8000 | FastAPI |
-| API Docs (Swagger) | http://localhost:8000/docs | Auto-generated |
-| React Frontend | http://localhost:5173 | Vite dev server |
-| Prometheus | http://localhost:9090 | Metrics scraping |
-| Grafana | http://localhost:3000 | Dashboards (admin/admin) |
-| Spark Master UI | http://localhost:8080 | PySpark cluster |
-| PostgreSQL | localhost:5432 | nova_user/nova_password |
-| Redis | localhost:6379 | Feature store |
-
-### First-time data setup
-
-```bash
-# Build FAISS index and serving artifacts from scratch
-docker compose run --rm apex-backend python scripts/rebuild_serving_artifacts.py
-
-# Or run the full medallion ETL pipeline
-docker compose run --rm apex-backend python scripts/etl_pipeline.py
+```mermaid
+graph TD
+    A[Kaggle] -->|Nightly Ingest| B(Databricks Free)
+    B -->|PySpark ETL & \n SentenceTransformers| B
+    B -->|Export 768-D Vectors| C[(Neon Postgres Free)]
+    D[React Frontend] -->|Get Recommendations| E[Hugging Face Space]
+    D -->|Click/Like Events| F[Cloudflare Worker]
+    E -->|Vector Similarity Search| C
+    E -->|RAG Explanations| G[OpenRouter API]
 ```
 
 ---
 
-## Production: Render (Backend)
+## 1. Neon Postgres (Vector Database)
+*Neon provides a fully managed, serverless Postgres database with `pgvector` pre-installed on their free tier.*
 
-### Deploy via Blueprint (recommended)
-
-1. Push this repository to GitHub.
-2. Go to [Render Dashboard](https://dashboard.render.com) → **New** → **Blueprint**.
-3. Connect your repository. Render reads `render.yaml` automatically.
-4. The blueprint deploys the backend as a Python web service `movie-recs-api` on the free plan (Tier 3).
-5. Add secret environment variables in the Render dashboard (never commit these):
-   - `JWT_SECRET_KEY`
-   - `NOVA_ADMIN_TOKEN`
-   - `DATABASE_URL` (optional — SQLite used if unset)
-   - `REDIS_URL` (optional)
-   - `TMDB_API_KEY`
-   - `OPENROUTER_API_KEY` (optional)
-
-### Upgrade to Tier 2 (CPU ONNX — Standard plan)
-
-Edit `render.yaml`:
-```yaml
-plan: standard
-envVars:
-  - key: NOVA_SERVING_PROFILE
-    value: full
-  - key: NOVA_SERVING_TIER
-    value: tier2
-```
-
-### Upgrade to Tier 1 (GPU — Pro plan)
-
-```yaml
-plan: pro
-envVars:
-  - key: NOVA_SERVING_PROFILE
-    value: full
-  - key: NOVA_SERVING_TIER
-    value: tier1
-```
-
-### Manual deploy (without Blueprint)
-
-1. **New** → **Web Service** → Connect repository.
-2. Runtime: **Python**.
-3. Build Command: `pip install --upgrade pip && pip install -r requirements.txt`.
-4. Start Command: `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`.
-5. Health check path: `/health`.
-6. Add environment variables as above.
-
----
-
-## Production: Cloudflare Pages (Frontend)
-
-Recommended for the primary frontend — global CDN, zero cost, automatic HTTPS.
-
-1. Go to [Cloudflare Pages](https://pages.cloudflare.com) → **Create a project** → **Connect to Git**.
-2. Select your repository.
-3. Build settings:
-   - **Root directory:** `frontend`
-  - **Build command:** `bun install && bun run build`
-   - **Build output directory:** `dist`
-   - **Node version:** `22` (Cloudflare Pages max supported version)
-4. Environment variables (optional):
-   - `VITE_API_URL` — primary backend URL (e.g., `https://your-api.onrender.com`)
-   - `VITE_BACKUP_API_URL` — backup backend URL
-5. Deploy.
-
-The React frontend has built-in request-level API failover — if the primary backend is sleeping (free tier cold start), it automatically retries the backup URL.
-
----
-
-## Production: GitHub Pages (Frontend)
-
-Zero-cost static hosting deployed automatically via GitHub Actions.
-
-1. The workflow `.github/workflows/frontend-pages.yml` runs automatically on pushes to `main` that touch `frontend/**` (or when run manually). It builds the frontend and pushes the built assets to the `gh-pages` branch.
-2. In your repository settings on GitHub, go to **Pages**.
-3. Under **Build and deployment** → **Source**, select **Deploy from a branch**.
-4. Set the branch to `gh-pages` and folder to `/ (root)`, then click **Save**.
-
----
-
-## Backup Frontend: Streamlit Cloud
-
-The Streamlit app (`frontend/streamlit_app.py`) provides a lightweight fallback UI.
-
-1. Go to [share.streamlit.io](https://share.streamlit.io) → **New app**.
-2. Repository: your repo. Branch: `main`. Main file: `frontend/streamlit_app.py`.
-3. In **Advanced settings** → **Secrets**, add:
-   ```toml
-   API_URL = "https://your-api.onrender.com"
-   TMDB_API_KEY = "your_tmdb_key"
+1. Go to [Neon.tech](https://neon.tech) and create a free project.
+2. Under your project settings, copy the **Connection String** (it starts with `postgresql://`).
+3. Go to the Neon SQL Editor and run the following command to enable the extension:
+   ```sql
+   CREATE EXTENSION IF NOT EXISTS vector;
    ```
-4. Deploy.
+4. Save your `DATABASE_URL`—you will need this for both Databricks and Hugging Face!
 
 ---
 
-## Serving Tier Selection
+## 2. Databricks Community Edition (Data Platform & AI)
+*Databricks Community Edition gives you a free 15GB Apache Spark cluster. We use this to run the nightly Medallion ETL and generate Hugging Face embeddings.*
 
-APEX auto-detects hardware at startup and selects the appropriate tier. You can override this with environment variables.
-
-| Tier | Hardware Condition | Active Models | Typical Latency |
-|---|---|---|---|
-| **Tier 1** | GPU present + RAM ≥ 16 GB | Full 6-model ensemble + RL + Active Inference | 50–200 ms |
-| **Tier 2** | No GPU + RAM ≥ 8 GB | ONNX-quantized ensemble | 200–800 ms |
-| **Tier 3** | RAM < 8 GB | FAISS + TF-IDF only | 800–2000 ms |
-
-Check the active tier at runtime:
-```bash
-curl https://your-api.onrender.com/health
-# Response includes: "serving_tier": "tier3", "tier_selection_reason": "legacy_profile_mapping"
-```
+1. Sign up for [Databricks Community Edition](https://community.cloud.databricks.com).
+2. Go to **Compute** and create a cluster (use the default 15GB ML runtime).
+3. Go to **Workspace**, click on your user profile, and select **Create Git folder**. 
+4. Paste your GitHub repository URL.
+5. Create a new **Job** to sequence the notebooks located in `databricks_notebooks/`:
+   - **Task 1: `00_kaggle_download`** (Parameters: `KAGGLE_USERNAME`, `KAGGLE_KEY`)
+   - **Task 2: `01_pyspark_etl`** (Depends on Task 1)
+   - **Task 3: `02_export_to_neon`** (Depends on Task 2, Parameters: `DATABASE_URL`)
+6. Set the Job Trigger to run nightly.
 
 ---
 
-## Health Check & Verification
+## 3. Hugging Face Spaces (FastAPI Backend)
+*Hugging Face Spaces provides free Docker hosting. We use this to host the live Python FastAPI backend which serves real-time recommendations.*
 
-After deploying, verify the service is healthy:
-
-```bash
-# Basic health check
-curl https://your-api.onrender.com/health
-
-# Platform readiness (detailed component status)
-curl https://your-api.onrender.com/v1/platform/readiness
-
-# Semantic benchmark (17 curated intent cases)
-curl https://your-api.onrender.com/v1/evaluation/semantic-benchmark
-
-# Test a recommendation
-curl "https://your-api.onrender.com/v1/recommendations/id/155"
-# Should return recommendations for The Dark Knight
-```
-
-Expected `/health` response:
-```json
-{
-  "status": "ok",
-  "movie_count": 10000,
-  "serving_tier": "tier3",
-  "app_version": "2.0.0"
-}
-```
-
-Expected `/v1/platform/readiness` response includes component statuses for: `catalog`, `artifact_health`, `vector_serving`, `search_smoke`, `recommendation_smoke`.
+1. Go to [Hugging Face Spaces](https://huggingface.co/spaces) and create a new Space.
+2. Select **Docker** as the Space SDK.
+3. Link your GitHub repository.
+4. Go to the Space **Settings** -> **Variables and secrets**. Add your secrets:
+   - `DATABASE_URL`: (Your Neon Postgres connection string)
+   - `OPENROUTER_API_KEY`: (Your free/low-cost OpenRouter API key for LLM RAG)
+5. Hugging Face will automatically read the `Dockerfile` in the root of the repo, build it, and expose your API!
 
 ---
 
-## Upgrading
+## 4. Cloudflare Workers (Event Ingest / Edge)
+*Cloudflare Workers gives you 100,000 free requests per day on the edge. This is perfect for capturing live streaming user events (clicks, likes, watch time).*
 
-### Updating model weights
+1. Install the Cloudflare CLI: `npm install -g wrangler`
+2. Authenticate: `npx wrangler login`
+3. Navigate to the frontend/worker directory (or wherever your `wrangler.toml` is stored).
+4. Run: `npx wrangler deploy`
+5. The Worker will now act as a globally distributed ingest endpoint for the `events_routes.py` logic, ensuring zero latency for user feedback.
 
-```bash
-# Rebuild all serving artifacts (FAISS index, embeddings, ONNX models)
-python scripts/rebuild_serving_artifacts.py
+---
 
-# Or just retrain the ensemble with IPS debiasing
-python scripts/causal_debias_training.py
-
-# Validate artifacts before deploying
-python scripts/validate_serving_artifacts.py
-```
-
-### Updating the catalog (new movies)
-
-```bash
-# Download latest TMDB data and rebuild
-python scripts/download_real_datasets.py
-python scripts/rebuild_serving_artifacts.py
-```
-
-### Rolling back
-
-Render keeps the last 5 deploys. Go to **Deploys** in the Render dashboard and click **Rollback** on any previous deploy.
+## Conclusion
+With this setup, you have deployed a true **Modern Data Stack + Generative AI** pipeline for **$0/month**. 
+- Databricks handles the big data and heavy machine learning compute.
+- Neon handles the vector mathematics.
+- Hugging Face handles the real-time API.
+- Cloudflare handles the high-volume streaming telemetry.
