@@ -17,12 +17,20 @@ import requests
 # Define the Neon Database URL (Configure this in Doppler)
 
 try:
-    # Securely retrieve the Doppler Token from the Job Parameters
+    # 1. Try to get it from the Job Parameter / Widget first
     dbutils.widgets.text("DOPPLER_TOKEN", "", "Doppler Service Token")
     doppler_token = dbutils.widgets.get("DOPPLER_TOKEN")
     
+    # 2. If the widget is empty, try to read it from DBFS (persistent storage)
     if not doppler_token:
-        raise ValueError("Please paste your DOPPLER_TOKEN in the text box at the top of the notebook!")
+        try:
+            with open("/dbfs/FileStore/doppler_token.txt", "r") as f:
+                doppler_token = f.read().strip()
+        except FileNotFoundError:
+            pass
+            
+    if not doppler_token:
+        raise ValueError("DOPPLER_TOKEN is missing! Please save it using dbutils.fs.put('/FileStore/doppler_token.txt', 'your_token')")
         
     response = requests.get(
         "https://api.doppler.com/v3/configs/config/secrets",
