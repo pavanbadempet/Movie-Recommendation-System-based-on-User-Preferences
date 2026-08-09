@@ -30,14 +30,14 @@ graph TD
 
 ---
 
-## 2. Databricks Community Edition (Data Platform & AI)
-*Databricks Free Edition gives you a free ML environment to run Apache Spark. We use this to run the nightly Medallion ETL and generate Hugging Face embeddings.*
+## 2. Databricks Free Edition (Data Platform & AI)
+*Databricks Free Edition gives you instant Serverless compute. We use this to run the nightly Medallion ETL and generate Hugging Face embeddings.*
 
-1. Sign up for the [Databricks Free Edition / Free Trial](https://databricks.com/try-databricks).
+1. Sign up for the [Databricks Free Edition](https://databricks.com/try-databricks).
 2. Log into your Databricks Workspace URL (e.g. `https://<your-workspace-id>.cloud.databricks.com`).
-2. Go to **Compute** and create a cluster (use the default 15GB ML runtime).
 3. Go to **Workspace**, click on your user profile, and select **Create Git folder**. 
 4. Paste your GitHub repository URL.
+5. You do NOT need to create a cluster! When you open a notebook, just select **Serverless** from the connect dropdown in the top right.
 5. Create a new **Job** to sequence the notebooks located in `databricks_notebooks/`:
    - **Task 1: `00_kaggle_download`** (Parameters: `KAGGLE_USERNAME`, `KAGGLE_KEY`)
    - **Task 2: `01_pyspark_etl`** (Depends on Task 1)
