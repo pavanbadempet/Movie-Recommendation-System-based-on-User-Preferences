@@ -53,7 +53,7 @@ except Exception as e:
 # CONFIGURATION
 # -------------------------------------------------------------------------
 # The Kaggle dataset identifier
-KAGGLE_DATASET = "ahsanaseer/top-rated-tmdb-movies-10k"
+KAGGLE_DATASET = "alanvourch/tmdb-movies-daily-updates"
 
 # Define temporary local path and final DBFS path
 local_download_dir = "/tmp/kaggle_data"
