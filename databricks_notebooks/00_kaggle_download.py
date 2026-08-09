@@ -49,9 +49,11 @@ except Exception as e:
 # MAGIC ## Download the Dataset
 
 # COMMAND ----------
-# Define the dataset. (Assuming the popular asaniczka/tmdb-movies-dataset-2023-10k-movies or similar)
-# Change this string to whatever specific TMDB Kaggle dataset you are using!
-KAGGLE_DATASET = "asaniczka/tmdb-movies-dataset-2023-10k-movies"
+# -------------------------------------------------------------------------
+# CONFIGURATION
+# -------------------------------------------------------------------------
+# The Kaggle dataset identifier
+KAGGLE_DATASET = "ahsanaseer/top-rated-tmdb-movies-10k"
 
 # Define temporary local path and final DBFS path
 local_download_dir = "/tmp/kaggle_data"

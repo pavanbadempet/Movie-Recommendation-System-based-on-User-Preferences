@@ -63,7 +63,7 @@ def load_gold_data(spark):
     print(f"Reading Real Raw Data from {raw_path}...")
     
     # 1. Read the incoming raw dataset
-    incoming_df = spark.read.format("csv").option("header", "true").option("inferSchema", "true").load(raw_path)
+    incoming_df = spark.read.format("csv").option("header", "true").option("inferSchema", "true").load(raw_path).withColumnRenamed("genre", "genres")
     
     # ----------------------------------------------------------------------
     # 2. DATA QUALITY GATES (SOTA)
