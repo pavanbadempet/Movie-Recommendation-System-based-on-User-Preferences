@@ -50,8 +50,9 @@ def load_gold_data(spark):
                              
     # If the Gold table doesn't exist yet, do a first-time full save
     if not DeltaTable.isDeltaTable(spark, gold_path):
-        print("First run detected: Creating base Gold table...")
-        incoming_df.write.format("delta").save(gold_path)
+        print("First run detected: Creating base Gold table with Liquid Clustering...")
+        # Enable Liquid Clustering on the 'id' column (SOTA replacing Z-Order)
+        incoming_df.write.format("delta").clusterBy("id").save(gold_path)
     else:
         # ------------------------------------------------------------------
         # 4. DELTA LAKE MERGE (SCD TYPE 2 LOGIC)
@@ -82,10 +83,11 @@ def load_gold_data(spark):
         ).whenNotMatchedInsertAll().execute()
 
     # ----------------------------------------------------------------------
-    # 5. OPTIMIZATIONS (Z-ORDER & VACUUM)
+    # 5. OPTIMIZATIONS (LIQUID CLUSTERING & VACUUM)
     # ----------------------------------------------------------------------
-    print("Running Delta Optimizations (Z-ORDER)...")
-    spark.sql(f"OPTIMIZE delta.`{gold_path}` ZORDER BY (id)")
+    print("Running Delta Optimizations (Liquid Clustering)...")
+    # Because the table was created with clusterBy, OPTIMIZE automatically applies Liquid Clustering!
+    spark.sql(f"OPTIMIZE delta.`{gold_path}`")
     
     print("Running Vacuum to clear unneeded historical snapshots...")
     # Retain 168 hours (7 days) of time travel
