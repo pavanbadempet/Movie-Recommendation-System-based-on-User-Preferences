@@ -20,10 +20,13 @@ import shutil
 import requests
 
 try:
-    # Fetch all secrets securely from Doppler using the cluster token
-    doppler_token = os.environ.get("DOPPLER_TOKEN")
+    # In Databricks Serverless, we can't set global environment variables easily.
+    # We pass the Doppler Token securely via a Job Parameter (Widget) at runtime.
+    dbutils.widgets.text("DOPPLER_TOKEN", "", "Doppler Service Token")
+    doppler_token = dbutils.widgets.get("DOPPLER_TOKEN")
+    
     if not doppler_token:
-        raise ValueError("DOPPLER_TOKEN environment variable is missing on the cluster!")
+        raise ValueError("Please paste your DOPPLER_TOKEN in the text box at the top of the notebook!")
         
     response = requests.get(
         "https://api.doppler.com/v3/configs/config/secrets",
