@@ -123,12 +123,15 @@ def load_gold_data(spark):
     incoming_df = spark.table(raw_table)
     
     # ----------------------------------------------------------------------
-    # 2. DATA QUALITY GATES (SOTA)
+    # 2. DATA QUALITY GATES & SCHEMA VALIDATION
     # ----------------------------------------------------------------------
     print("Running Data Quality Gates...")
     # Drop rows with critical missing keys
     incoming_df = incoming_df.filter(col("id").isNotNull())
-    # Ensure ratings are mathematically valid before reaching the Vector DB (use try_cast to handle corrupt text)
+
+    # CONDITION 1: Validate rating range [0.0, 10.0] if 'vote_average' exists
+    # - IF 'vote_average' exists: Safely cast text to DOUBLE using try_cast (corrupt text -> NULL), then keep valid ratings.
+    # - IMPLICIT ELSE: Skip rating filtering if column is absent in raw payload.
     if "vote_average" in incoming_df.columns:
         incoming_df = incoming_df.withColumn("vote_average", expr("try_cast(vote_average as double)"))
         incoming_df = incoming_df.filter((col("vote_average") >= 0.0) & (col("vote_average") <= 10.0))
@@ -136,7 +139,8 @@ def load_gold_data(spark):
     # Standardize ID to string for Vector DB compatibility
     incoming_df = incoming_df.withColumn("id", col("id").cast("string"))
 
-    # Ensure Lineage Metadata Columns exist
+    # CONDITION 2: Enforce Data Lineage Metadata Presence
+    # - IF lineage columns missing: Generate fallback timestamps/sources to guarantee 100% data provenance.
     if "_ingested_at" not in incoming_df.columns:
         incoming_df = incoming_df.withColumn("_ingested_at", current_timestamp())
     if "_source_file" not in incoming_df.columns:
@@ -146,6 +150,9 @@ def load_gold_data(spark):
     # 2.5 GEN AI FEATURE EXTRACTION
     # ----------------------------------------------------------------------
     print("Running Gen AI Agentic Feature Extraction...")
+    # CONDITION 3: Extract semantic metadata from plot text if 'overview' exists
+    # - IF 'overview' exists: Apply Pandas UDF to extract rich semantic features (mood, pacing, tropes).
+    # - ELSE: Supply empty string lit("") so downstream concat_ws payload generation remains uniform.
     if "overview" in incoming_df.columns:
         incoming_df = incoming_df.withColumn("gen_ai_features", extract_llm_features(col("overview")))
     else:
@@ -186,29 +193,35 @@ def load_gold_data(spark):
 
     print(f"Merging enriched data into Gold Table: {gold_table_name}...")
     
-    # Check if the Gold Table exists in the metastore
+    # CONDITION 4: Check Metastore Table Existence
+    # - IF table_exists IS FALSE (First-Time Pipeline Execution):
+    #   Creates the Gold Delta table for the first time with Liquid Clustering enabled on 'id'.
+    # - ELSE (Incremental CDC Pipeline Execution):
+    #   Executes a 3-step Delta Lake SCD Type 2 UPSERT merge.
     table_exists = spark.catalog.tableExists(gold_table_name)
     
     if not table_exists:
-        print("Gold table does not exist. Creating it for the first time...")
-        # Enable Liquid Clustering on the 'id' column (SOTA replacing Z-Order)
+        print("Gold table does not exist. Creating it for the first time with Liquid Clustering...")
+        # Enable Liquid Clustering on 'id' (SOTA replacement for Z-Ordering)
         incoming_df.write.format("delta").clusterBy("id").saveAsTable(gold_table_name)
     else:
-        print("Gold table exists. Performing SCD Type 2 UPSERT...")
+        print("Gold table exists. Performing SCD Type 2 UPSERT Merge...")
         from delta.tables import DeltaTable
         
         gold_table = DeltaTable.forName(spark, gold_table_name)
         
-        # Determine updates vs inserts based on 'tags' hash change
+        # Identify rows where ID matches but tags content has changed
         update_condition = "gold.id = updates.id AND gold.tags != updates.tags AND gold.is_current = True"
         
-        # Step 1: Identify records that need to be updated and mark the old ones as inactive
+        # Step 1: Stage updated records to insert as new active versions later
         staged_updates = incoming_df.alias("updates").join(
             gold_table.toDF().alias("gold"),
             expr(update_condition)
         ).selectExpr("updates.*")
         
-        # Step 2: Merge the updates back to the gold table
+        # Step 2: Merge incoming updates into Gold table
+        # - MATCHED AND CHANGED: Invalidate old active row (is_current = False, effective_end_at = current_timestamp())
+        # - NOT MATCHED: Insert new incoming movie records as active (is_current = True)
         gold_table.alias("gold").merge(
             source=incoming_df.alias("updates"),
             condition="gold.id = updates.id AND gold.is_current = True"
@@ -220,7 +233,7 @@ def load_gold_data(spark):
             }
         ).whenNotMatchedInsertAll().execute()
         
-        # Step 3: Insert the new active versions of the updated records
+        # Step 3: Append new active version records of updated rows to complete history chain
         staged_updates.write.format("delta").mode("append").saveAsTable(gold_table_name)
 
     # ----------------------------------------------------------------------
