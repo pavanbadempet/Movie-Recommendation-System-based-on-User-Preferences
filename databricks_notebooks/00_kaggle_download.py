@@ -72,49 +72,32 @@ except Exception as e:
 # The Kaggle dataset identifier
 KAGGLE_DATASET = "alanvourch/tmdb-movies-daily-updates"
 
-# Define temporary local path and final DBFS path
-local_download_dir = "/tmp/kaggle_data"
-dbfs_raw_dir = "/dbfs/FileStore/apex/data/raw/tmdb"
+# Download directly into Unity Catalog Volume so PySpark can read it natively
+volume_raw_dir = "/Volumes/apex/default/secrets/raw_data"
+os.makedirs(volume_raw_dir, exist_ok=True)
 
-print(f"Downloading {KAGGLE_DATASET} from Kaggle...")
-
-# We import kaggle here AFTER setting the environment variables so it authenticates properly
-from kaggle.api.kaggle_api_extended import KaggleApi
+print(f"Authenticating Kaggle API & downloading {KAGGLE_DATASET} to {volume_raw_dir}...")
 api = KaggleApi()
 api.authenticate()
 
-# Download and unzip the files locally on the cluster
-os.makedirs(local_download_dir, exist_ok=True)
-api.dataset_download_files(KAGGLE_DATASET, path=local_download_dir, unzip=True)
+# Download and unzip directly into the Volume
+api.dataset_download_files(KAGGLE_DATASET, path=volume_raw_dir, unzip=True)
+print("Download and unzip complete!")
 
 # COMMAND ----------
-# MAGIC %md
-# MAGIC ## Save to Managed Table (Data Lake)
+# MAGIC ## Save to Delta Lake Managed Table
 # COMMAND ----------
-# Since DBFS is disabled in Serverless Free Tier, we use PySpark to read the CSV from the local /tmp folder
-# and save it directly as a Databricks Managed Table!
+print(f"Reading raw CSV directly with PySpark from {volume_raw_dir}...")
 
-print("Reading raw CSV into Spark...")
-# Find the downloaded CSV in /tmp/kaggle_data
-import glob
-csv_files = glob.glob(f"{local_download_dir}/*.csv")
-if not csv_files:
-    raise FileNotFoundError("No CSV files found in the Kaggle download!")
+# Load directly with PySpark (No Pandas, pure distributed Spark read)
+df = spark.read.format("csv") \
+    .option("header", "true") \
+    .option("inferSchema", "true") \
+    .option("quote", "\"") \
+    .option("escape", "\"") \
+    .load(f"{volume_raw_dir}/*.csv")
 
-raw_csv_path = f"file:{csv_files[0]}"
-
-# Load it into memory with Pandas first to bypass the Serverless 'file:/tmp' read ban
-import pandas as pd
-print("Reading CSV into memory using Pandas (bypassing Databricks Serverless storage limits)...")
-
-# Read everything as string to prevent Spark Arrow inference errors on mixed types
-pandas_df = pd.read_csv(csv_files[0], dtype=str)
-
-# Convert Pandas DataFrame directly to Spark DataFrame in-memory
-spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
-df = spark.createDataFrame(pandas_df)
-
-print("Saving to Managed Table 'apex.default.tmdb_raw_data'...")
+print("Saving directly to Delta Lake Table 'apex.default.tmdb_raw_data'...")
 df.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("apex.default.tmdb_raw_data")
 
-print("Data Ingestion Complete! The raw data is ready for the Medallion ETL.")
+print("Data Ingestion Complete! Raw data is now persisted in Delta Lake format.")
