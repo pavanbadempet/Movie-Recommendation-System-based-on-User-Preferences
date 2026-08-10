@@ -1,26 +1,26 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # 01 - APEX PySpark ETL (SOTA Medallion Gold Layer)
+# MAGIC # 01 - APEX PySpark ETL (Medallion Gold Layer)
 # MAGIC
-# MAGIC ## 📖 System Design & DDIA Principles (*Designing Data-Intensive Applications* by Martin Kleppmann)
+# MAGIC ## System Design & DDIA Principles (*Designing Data-Intensive Applications* by Martin Kleppmann)
 # MAGIC
-# MAGIC ### 1. 🛡️ Reliability (Fault Tolerance & Data Integrity)
+# MAGIC ### 1. Reliability (Fault Tolerance & Data Integrity)
 # MAGIC - **ACID Transactions:** Delta Lake's `_delta_log` provides **Snapshot Isolation** and **Serializable Writes**, ensuring concurrent batch & streaming writes never corrupt table state.
 # MAGIC - **Idempotent Ingestion & MERGE:** The SCD Type 2 `MERGE INTO` operation is deterministic and idempotent. Re-running the ETL produces identical output without duplicating records.
 # MAGIC - **Fault-Tolerant Quality Gates:** Corrupted raw data is handled via `expr("try_cast(...)")`, preventing pipeline crashes while logging bad records.
 # MAGIC
-# MAGIC ### 2. ⚡ Scalability (Handling Volume & Throughput Growth)
+# MAGIC ### 2. Scalability (Handling Volume & Throughput Growth)
 # MAGIC - **Shared-Nothing Distributed Execution:** PySpark partitions computation across independent worker nodes, scaling linearly from 10k to 100M+ records.
 # MAGIC - **Dynamic Liquid Clustering (`clusterBy("id")`):** Replaces static hive partitioning to eliminate data skew and hotspots without manual partition tuning.
 # MAGIC - **Decoupled Storage & Compute:** Storage resides in Unity Catalog Volumes/S3 while compute scales down to zero when idle, optimizing cost and elasticity.
 # MAGIC
-# MAGIC ### 3. 🔧 Maintainability (Operability, Simplicity, & Evolvability)
+# MAGIC ### 3. Maintainability (Operability, Simplicity, & Evolvability)
 # MAGIC - **Operability & Auditability:** Every record carries full data provenance (`_source_file`, `_ingested_at`), and Delta Time Travel enables point-in-time auditing and instant rollback.
 # MAGIC - **Evolvability & Unbundling:** Analytical processing (Delta Lake OLAP) is cleanly decoupled from real-time vector serving (Neon PostgreSQL Vector DB), allowing the UI/serving layer to evolve independently of the ETL core.
 # MAGIC
 # MAGIC ---
 # MAGIC
-# MAGIC ## 📌 Tradeoff & Edge Case Matrix
+# MAGIC ## Enterprise Tradeoff & Edge Case Matrix
 # MAGIC
 # MAGIC | Architectural Pattern | Chosen Implementation | Why We Chose It (Pros) | Alternative Rejected | Why Rejected (Cons / Tradeoffs) | Edge Cases Handled |
 # MAGIC | :--- | :--- | :--- | :--- | :--- | :--- |
