@@ -28,9 +28,10 @@ try:
     # 2. Try Unity Catalog Volume (Using your 'apex' catalog!)
     if not doppler_token:
         try:
-            with open("/Volumes/apex/default/secrets/doppler_token.txt", "r") as f:
-                doppler_token = f.read().strip()
-        except FileNotFoundError:
+            # On Serverless, standard Python open() is sometimes restricted. We use Spark to read the volume.
+            df_token = spark.read.text("/Volumes/apex/default/secrets/doppler_token.txt")
+            doppler_token = df_token.collect()[0][0].strip()
+        except Exception:
             pass
             
     # 3. Try Local Workspace File (Fallback)
