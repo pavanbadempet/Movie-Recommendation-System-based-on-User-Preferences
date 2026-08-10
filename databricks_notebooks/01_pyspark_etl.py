@@ -1,18 +1,16 @@
-# Databricks notebook source
-# MAGIC %md
 # MAGIC # 01 - APEX PySpark ETL (SOTA Medallion Gold Layer)
 # MAGIC
-# MAGIC ## 📌 Overview & Enterprise Architecture
-# MAGIC This notebook runs the daily batch Medallion ETL pipeline. It transforms raw Bronze data (`apex.default.tmdb_raw_data`) into an enriched, AI-vectorized Gold table (`apex.default.tmdb_gold_data`).
-# MAGIC 
-# MAGIC ### 💡 Core Architectural Patterns (SOTA):
-# MAGIC 1. **Data Quality Gates:** Filters bad IDs and enforces rating constraints via fault-tolerant `expr("try_cast(...)")`, dropping malformed text gracefully.
-# MAGIC 2. **Distributed AI Vector Embeddings:** Computes 768-D dense vectors in parallel across worker nodes using a PySpark **Pandas UDF** (`SentenceTransformer("all-mpnet-base-v2")`) with Apache Arrow zero-copy memory transfer.
-# MAGIC 3. **Change Data Capture (CDC) & SCD Type 2 MERGE:** Implements Delta Lake `MERGE INTO` (`DeltaTable.forName`):
-# MAGIC    - Tracks row history using `is_current` (boolean active flag), `effective_start_at`, and `effective_end_at` (`9999-12-31`).
-# MAGIC    - Automatically invalidates modified rows (`is_current = False`) and inserts active new records.
-# MAGIC 4. **Liquid Clustering (`clusterBy("id")`):** Replaces legacy Z-Ordering for 10x faster query pruning without expensive full data reshuffles.
-# MAGIC 5. **Vacuuming & Physical Compaction:** Compacts small files using `OPTIMIZE` and purges historical snapshots using `VACUUM` (retention 7 days).
+# MAGIC ## 📌 Enterprise Architecture & Tradeoff Matrix
+# MAGIC
+# MAGIC | Architectural Pattern | Chosen Implementation | Why We Chose It (Pros) | Alternative Rejected | Why Rejected (Cons / Tradeoffs) | Edge Cases Handled |
+# MAGIC | :--- | :--- | :--- | :--- | :--- | :--- |
+# MAGIC | **Data Quality Gates** | `expr("try_cast(...)")` | Converts malformed strings to `NULL`, allowing valid rows to pass while dropping bad rows cleanly. | Strict `.cast("double")` | Throws `CAST_INVALID_INPUT` and crashes the entire pipeline if a single row has shifted text. | Multiline plot overviews containing quotes/newlines that shift columns into ratings. |
+# MAGIC | **AI Embeddings** | PySpark `@pandas_udf` + Arrow | Distributed Hugging Face inference across worker nodes using zero-copy Apache Arrow memory transfer. | Standard Python UDF / Loops | High pickling serialization overhead, single-node bottleneck, and Out-Of-Memory (`OOM`) crashes. | Worker memory pressure handled via Arrow memory pooling and batched encoding (`batch_size=32`). |
+# MAGIC | **State & CDC Tracking** | SCD Type 2 MERGE | Preserves full historical auditability (`is_current`, `effective_start_at`, `effective_end_at`). | SCD Type 1 (Overwrite) | Destroys historical data, preventing point-in-time ML model backtesting and audit compliance. | Out-of-order batch dumps, duplicate movie updates, and unchanged record skips via tag hashing. |
+# MAGIC | **Data Layout** | Liquid Clustering (`clusterBy`) | Dynamic, incremental data clustering as writes occur; 10x faster query pruning. | Legacy Z-Ordering (`ZORDER BY`) | Requires expensive full-table rewrites on every update; does not scale incrementally. | Skewed primary keys and high-concurrency writes without write amplification. |
+# MAGIC | **Serving Sync** | PySpark Native `to_json` | Pre-formats 768-D dense vectors in parallel across Spark workers before PostgreSQL export. | Python `apply(json.dumps)` | Single-threaded driver bottleneck that slows down large dataset exports. | Postgres string array format incompatibilities during vector bulk export. |
+# MAGIC
+# MAGIC ---
 
 # COMMAND ----------
 %pip install sentence-transformers pandas pyarrow
