@@ -95,6 +95,7 @@ print(f"Reading raw CSV directly with PySpark from {volume_raw_dir}...")
 df = spark.read.format("csv") \
     .option("header", "true") \
     .option("inferSchema", "true") \
+    .option("multiLine", "true") \
     .option("quote", "\"") \
     .option("escape", "\"") \
     .load(f"{volume_raw_dir}/*.csv")

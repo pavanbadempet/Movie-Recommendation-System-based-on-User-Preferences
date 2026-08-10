@@ -71,9 +71,9 @@ def load_gold_data(spark):
     print("Running Data Quality Gates...")
     # Drop rows with critical missing keys
     incoming_df = incoming_df.filter(col("id").isNotNull())
-    # Ensure ratings are mathematically valid before reaching the Vector DB
+    # Ensure ratings are mathematically valid before reaching the Vector DB (use try_cast to handle corrupt text)
     if "vote_average" in incoming_df.columns:
-        incoming_df = incoming_df.withColumn("vote_average", col("vote_average").cast("double"))
+        incoming_df = incoming_df.withColumn("vote_average", expr("try_cast(vote_average as double)"))
         incoming_df = incoming_df.filter((col("vote_average") >= 0.0) & (col("vote_average") <= 10.0))
         
     # Standardize ID to string for Vector DB compatibility
