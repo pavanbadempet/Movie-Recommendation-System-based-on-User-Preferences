@@ -30,23 +30,36 @@ try:
     env = dbutils.widgets.get("ENVIRONMENT")
     doppler_token = None
 
-    # 1. Try Unity Catalog Volume FIRST (Primary Production Method)
+    # -------------------------------------------------------------------------
+    # ZERO-TRUST TOKEN RESOLUTION (3-TIER ENTERPRISE FALLBACK)
+    # -------------------------------------------------------------------------
+    # Tier 1: Check Unity Catalog Volume Storage (RBAC Protected Volume File)
     for token_name in [f"{env}_doppler_token.txt", "doppler_token.txt"]:
         try:
             token_path = f"/Volumes/apex/default/secrets/{token_name}"
             doppler_token = dbutils.fs.head(token_path).strip()
             if doppler_token:
-                print(f"Loaded token from Volume: {token_path}")
+                print(f"Loaded secret from Unity Catalog Volume: {token_path}")
                 break
         except Exception:
             pass
 
-    # 2. Fallback to Job Parameter / Widget if Volume file not present
+    # Tier 2: Check Databricks Secret Scope (Azure Key Vault / AWS KMS Backed)
+    if not doppler_token:
+        try:
+            doppler_token = dbutils.secrets.get(scope="apex_secrets", key="doppler_token").strip()
+            if doppler_token:
+                print("Loaded secret from Databricks Secret Scope: apex_secrets/doppler_token")
+        except Exception:
+            pass
+
+    # Tier 3: Fallback to Databricks Job Parameter Widget
     if not doppler_token:
         doppler_token = dbutils.widgets.get("DOPPLER_TOKEN").strip()
 
+    # ZERO-TRUST GUARD: Ensure token is present before external API request
     if not doppler_token:
-        raise ValueError(f"DOPPLER_TOKEN is missing! Please upload '{env}_doppler_token.txt' to /Volumes/apex/default/secrets/")
+        raise ValueError(f"DOPPLER_TOKEN is missing! Upload '{env}_doppler_token.txt' to /Volumes/apex/default/secrets/ or configure secret scope 'apex_secrets'.")
         
     response = requests.get(
         "https://api.doppler.com/v3/configs/config/secrets",
@@ -58,10 +71,12 @@ try:
     DATABASE_URL = secrets.get("DATABASE_URL", {}).get("computed")
     
     if not DATABASE_URL:
-        raise ValueError("DATABASE_URL not found in Doppler!")
+        raise ValueError("DATABASE_URL not found in Doppler secrets payload!")
         
 except Exception as e:
-    raise ValueError(f"Failed to retrieve DATABASE_URL from Doppler: {e}")
+    # Redact error details to prevent connection string / secret leakage in job logs
+    sanitized_err = str(e).replace(str(doppler_token), "***REDACTED***") if doppler_token else str(e)
+    raise ValueError(f"Failed to retrieve DATABASE_URL from Doppler: {sanitized_err}")
 
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL is not set!")
