@@ -76,6 +76,8 @@ KAGGLE_DATASET = "alanvourch/tmdb-movies-daily-updates"
 volume_raw_dir = "/Volumes/apex/default/secrets/raw_data"
 os.makedirs(volume_raw_dir, exist_ok=True)
 
+from kaggle.api.kaggle_api_extended import KaggleApi
+
 print(f"Authenticating Kaggle API & downloading {KAGGLE_DATASET} to {volume_raw_dir}...")
 api = KaggleApi()
 api.authenticate()
