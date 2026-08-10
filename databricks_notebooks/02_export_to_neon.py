@@ -17,36 +17,29 @@ import requests
 # Define the Neon Database URL (Configure this in Doppler)
 
 try:
-    # 1. Try to get it from the Job Parameter / Widget first
     dbutils.widgets.text("DOPPLER_TOKEN", "", "Doppler Service Token")
     dbutils.widgets.text("ENVIRONMENT", "dev", "Deployment Environment (dev, stg, prd)")
     
-    doppler_token = dbutils.widgets.get("DOPPLER_TOKEN")
     env = dbutils.widgets.get("ENVIRONMENT")
-    
-    # 2. Try Unity Catalog Volume (Using your 'apex' catalog!)
-    if not doppler_token:
+    doppler_token = None
+
+    # 1. Try Unity Catalog Volume FIRST (Primary Production Method)
+    for token_name in [f"{env}_doppler_token.txt", "doppler_token.txt"]:
         try:
-            # Lightweight Databricks DBFS/Volume utility (instant, zero Spark overhead)
-            token_path = f"/Volumes/apex/default/secrets/{env}_doppler_token.txt"
+            token_path = f"/Volumes/apex/default/secrets/{token_name}"
             doppler_token = dbutils.fs.head(token_path).strip()
+            if doppler_token:
+                print(f"Loaded token from Volume: {token_path}")
+                break
         except Exception:
             pass
-            
-    # 3. Try Local Workspace File (Fallback)
+
+    # 2. Fallback to Job Parameter / Widget if Volume file not present
     if not doppler_token:
-        # Check multiple common Databricks working directories
-        import os
-        for path in ["doppler_token.txt", "databricks_notebooks/doppler_token.txt", "../doppler_token.txt"]:
-            if os.path.exists(path):
-                with open(path, "r") as f:
-                    doppler_token = f.read().strip()
-                if doppler_token:
-                    break
-            
+        doppler_token = dbutils.widgets.get("DOPPLER_TOKEN").strip()
+
     if not doppler_token:
-        cwd = os.getcwd()
-        raise ValueError(f"DOPPLER_TOKEN is missing! Please create a Volume at apex.default.secrets and upload doppler_token.txt there.")
+        raise ValueError(f"DOPPLER_TOKEN is missing! Please upload '{env}_doppler_token.txt' to /Volumes/apex/default/secrets/")
         
     response = requests.get(
         "https://api.doppler.com/v3/configs/config/secrets",
