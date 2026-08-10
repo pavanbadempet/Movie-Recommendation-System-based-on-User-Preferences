@@ -67,14 +67,23 @@ except Exception as e:
 
 # COMMAND ----------
 # -------------------------------------------------------------------------
-# CONFIGURATION
+# CONFIGURATION & CLEANUP
 # -------------------------------------------------------------------------
-# The Kaggle dataset identifier
 KAGGLE_DATASET = "alanvourch/tmdb-movies-daily-updates"
-
-# Download directly into Unity Catalog Volume so PySpark can read it natively
 volume_raw_dir = "/Volumes/apex/default/secrets/raw_data"
+
+import glob
+import time
+
+start_time = time.time()
 os.makedirs(volume_raw_dir, exist_ok=True)
+
+# Clean up previous CSV files in the volume directory to prevent duplicate reads
+for old_csv in glob.glob(f"{volume_raw_dir}/*.csv"):
+    try:
+        os.remove(old_csv)
+    except Exception:
+        pass
 
 from kaggle.api.kaggle_api_extended import KaggleApi
 
@@ -87,14 +96,14 @@ api.dataset_download_files(KAGGLE_DATASET, path=volume_raw_dir, unzip=True)
 print("Download and unzip complete!")
 
 # COMMAND ----------
-# MAGIC ## Save to Delta Lake Managed Table
+# MAGIC ## Save to Delta Lake Managed Table (Bronze Layer)
 # COMMAND ----------
 print(f"Reading raw CSV directly with PySpark from {volume_raw_dir}...")
 
-# Load directly with PySpark (No Pandas, pure distributed Spark read)
+# 1-Pass Ultra-Fast Ingestion (inferSchema=false saves 50% CPU time; strong typing happens in ETL)
 df = spark.read.format("csv") \
     .option("header", "true") \
-    .option("inferSchema", "true") \
+    .option("inferSchema", "false") \
     .option("multiLine", "true") \
     .option("quote", "\"") \
     .option("escape", "\"") \
@@ -109,4 +118,5 @@ df = df.withColumn("_ingested_at", current_timestamp()) \
 print("Appending raw snapshot directly to Bronze Delta Lake Table 'apex.default.tmdb_raw_data'...")
 df.write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable("apex.default.tmdb_raw_data")
 
-print("Data Ingestion Complete! Raw data is now persisted in Delta Lake format.")
+elapsed = round(time.time() - start_time, 2)
+print(f"Data Ingestion Complete in {elapsed}s! Raw data is now persisted in Delta Lake format.")
