@@ -97,7 +97,7 @@ df = spark.read.format("csv") \
     .option("escape", "\"") \
     .load(f"{volume_raw_dir}/*.csv")
 
-print("Saving directly to Delta Lake Table 'apex.default.tmdb_raw_data'...")
-df.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("apex.default.tmdb_raw_data")
+print("Appending raw snapshot directly to Bronze Delta Lake Table 'apex.default.tmdb_raw_data'...")
+df.write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable("apex.default.tmdb_raw_data")
 
 print("Data Ingestion Complete! Raw data is now persisted in Delta Lake format.")
