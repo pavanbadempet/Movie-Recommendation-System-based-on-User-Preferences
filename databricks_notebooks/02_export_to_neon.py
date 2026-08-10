@@ -97,9 +97,9 @@ from pyspark.sql.functions import col, to_json
 # 1. Load Gold Delta Table
 df_spark = spark.table(gold_table_name)
 
-# EDGE CASE 1: Empty Gold Table Check
+# EDGE CASE 1: Empty Gold Table Check (Databricks Serverless / Spark Connect Native)
 # - IF Gold table has 0 rows: Exit early without attempting database transaction write.
-if df_spark.rdd.isEmpty():
+if df_spark.limit(1).count() == 0:
     print("Gold table is empty. Skipping Neon PostgreSQL export.")
 else:
     # CONDITION 1: Filter Active Records Only

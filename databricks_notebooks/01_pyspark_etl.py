@@ -141,9 +141,10 @@ def load_gold_data(spark):
     # 1. Read the incoming raw dataset
     incoming_df = spark.table(raw_table)
 
-    # EDGE CASE 1: Empty Raw Dataset Check
+    # EDGE CASE 1: Empty Raw Dataset Check (Databricks Serverless / Spark Connect Native)
     # - IF raw dataset has 0 rows: Exit cleanly without consuming expensive GPU compute resources.
-    if incoming_df.rdd.isEmpty():
+    # - NOTE: Uses df.limit(1).count() == 0 instead of RDD methods for 100% Serverless compatibility.
+    if incoming_df.limit(1).count() == 0:
         print("Incoming raw table is empty. Skipping ETL pipeline execution.")
         return True
     
