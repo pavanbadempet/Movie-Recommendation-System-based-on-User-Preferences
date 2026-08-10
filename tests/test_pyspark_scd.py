@@ -168,31 +168,36 @@ def test_upsert_movie_scd_dimension_with_parquet_fallback(spark_session, tmp_pat
             {"id": 2, "title": "Inception", "overview": "Dreams", "vote_count": 200.0, "popularity": 20.0},
         ],
     )
-    first_result = upsert_movie_scd_dimension(
-        spark_session,
-        first_snapshot,
-        dimension_path=dimension_path,
-        run_date="2026-05-01",
-        sink_format="parquet",
-    )
+    try:
+        first_result = upsert_movie_scd_dimension(
+            spark_session,
+            first_snapshot,
+            dimension_path=dimension_path,
+            run_date="2026-05-01",
+            sink_format="parquet",
+        )
 
-    second_snapshot = _movie_snapshot(
-        spark_session,
-        [
-            {"id": 1, "title": "Matrix", "overview": "Red pill updated", "vote_count": 100.0, "popularity": 10.0},
-            {"id": 2, "title": "Inception", "overview": "Dreams", "vote_count": 200.0, "popularity": 20.0},
-            {"id": 3, "title": "Interstellar", "overview": "Space", "vote_count": 300.0, "popularity": 30.0},
-        ],
-    )
-    second_result = upsert_movie_scd_dimension(
-        spark_session,
-        second_snapshot,
-        dimension_path=dimension_path,
-        run_date="2026-05-02",
-        sink_format="parquet",
-    )
+        second_snapshot = _movie_snapshot(
+            spark_session,
+            [
+                {"id": 1, "title": "Matrix", "overview": "Red pill updated", "vote_count": 100.0, "popularity": 10.0},
+                {"id": 2, "title": "Inception", "overview": "Dreams", "vote_count": 200.0, "popularity": 20.0},
+                {"id": 3, "title": "Interstellar", "overview": "Space", "vote_count": 300.0, "popularity": 30.0},
+            ],
+        )
+        second_result = upsert_movie_scd_dimension(
+            spark_session,
+            second_snapshot,
+            dimension_path=dimension_path,
+            run_date="2026-05-02",
+            sink_format="parquet",
+        )
 
-    assert first_result["current_rows"] == 2
-    assert first_result["total_versions"] == 2
-    assert second_result["current_rows"] == 3
-    assert second_result["total_versions"] == 4
+        assert first_result["current_rows"] == 2
+        assert first_result["total_versions"] == 2
+        assert second_result["current_rows"] == 3
+        assert second_result["total_versions"] == 4
+    except Exception as exc:
+        if "HADOOP_HOME" in str(exc) or "winutils" in str(exc):
+            pytest.skip(f"Skipping local Parquet write test on Windows without Hadoop winutils: {exc}")
+        raise exc
