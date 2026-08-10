@@ -58,12 +58,12 @@ def predict_embeddings(series: pd.Series) -> pd.Series:
 
 # COMMAND ----------
 def load_gold_data(spark):
-    raw_path = "dbfs:/FileStore/apex/data/raw/tmdb/*.csv"
-    gold_path = "dbfs:/FileStore/apex/data/gold/movie_features"
-    print(f"Reading Real Raw Data from {raw_path}...")
+    raw_table = "apex.default.tmdb_raw_data"
+    gold_table_name = "apex.default.tmdb_gold_data"
+    print(f"Reading Real Raw Data from {raw_table}...")
     
     # 1. Read the incoming raw dataset
-    incoming_df = spark.read.format("csv").option("header", "true").option("inferSchema", "true").option("quote", "\"").option("escape", "\"").load(raw_path)
+    incoming_df = spark.table(raw_table)
     
     # ----------------------------------------------------------------------
     # 2. DATA QUALITY GATES (SOTA)
@@ -111,7 +111,6 @@ def load_gold_data(spark):
             results.append(synthetic_llm_metadata)
             
         return pd.Series(results)
-        
     
     # Apply the UDF to extract rich semantic features if an overview exists
     if "overview" in incoming_df.columns:
