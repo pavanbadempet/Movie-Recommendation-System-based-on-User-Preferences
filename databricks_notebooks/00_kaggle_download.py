@@ -99,6 +99,8 @@ df = spark.read.format("csv") \
     .option("escape", "\"") \
     .load(f"{volume_raw_dir}/*.csv")
 
+from pyspark.sql.functions import col, current_timestamp
+
 # Add Data Lineage & Provenance metadata columns (Unity Catalog Standard)
 df = df.withColumn("_ingested_at", current_timestamp()) \
        .withColumn("_source_file", col("_metadata.file_path"))
