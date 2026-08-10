@@ -1,24 +1,33 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # 00 - Automated Kaggle Data Ingestion
-# MAGIC This notebook acts as Task 0 in our automated pipeline. It securely connects to the Kaggle API, downloads the latest TMDB movie dataset, unzips it, and saves it to the Databricks FileStore (DBFS) so the next ETL steps have fresh data.
+# MAGIC # 00 - Automated Kaggle Data Ingestion (Bronze Layer)
+# MAGIC
+# MAGIC ## 📌 Overview & System Architecture
+# MAGIC This notebook performs automated, production-grade ingestion of the daily TMDB Movies dataset directly into Databricks.
+# MAGIC
+# MAGIC ### 💡 Key Design Decisions & Speed Optimizations:
+# MAGIC 1. **Doppler Secrets Management:** Fetches Kaggle API tokens securely via Unity Catalog Volumes (`/Volumes/apex/default/secrets/`).
+# MAGIC 2. **Direct-to-Volume Download:** Downloads raw dataset archives directly into Unity Catalog Volumes (`/Volumes/apex/default/secrets/raw_data`), enabling PySpark to read raw files natively.
+# MAGIC 3. **Single-Pass Fast Ingestion (`inferSchema=false`):** Avoids PySpark's default 2-pass full dataset scan, saving ~50% CPU ingestion time.
+# MAGIC 4. **Data Lineage & Provenance:** Automatically stamps every raw row with `_source_file` (`_metadata.file_path`) and `_ingested_at` (`current_timestamp()`) for 100% auditability.
+# MAGIC 5. **Append-Only Bronze Ledger:** Appends raw snapshots (`mode("append")`) to preserve full raw historical lineage.
 
 # COMMAND ----------
-# MAGIC %pip install kaggle
+%pip install kaggle
 
 # COMMAND ----------
 import os
-import zipfile
-import shutil
-
-# COMMAND ----------
-# MAGIC %md
-# MAGIC ## Authentication Setup
-# MAGIC We grab the Kaggle API credentials from the notebook widgets (which you will pass in via the Job Parameters).
-
-# COMMAND ----------
+import glob
+import time
+import logging
 import requests
-import os
+
+# Configure Structured Logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger("IngestionPipeline")
+
+start_time = time.time()
+logger.info("Initializing Kaggle Data Ingestion Pipeline...")
 
 try:
     dbutils.widgets.text("DOPPLER_TOKEN", "", "Doppler Service Token")

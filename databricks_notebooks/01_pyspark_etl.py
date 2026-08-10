@@ -1,13 +1,21 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # 01 - APEX PySpark ETL (SOTA Medallion Architecture)
-# MAGIC This notebook runs the daily batch ETL. It processes raw TMDB/MovieLens data through the Bronze, Silver, and Gold layers.
-# MAGIC It implements Enterprise SOTA patterns: Data Quality Gates, Distributed AI Embedding Generation (Pandas UDF), SCD Type 2 CDC Merges, Liquid Clustering, and Vacuuming.
+# MAGIC # 01 - APEX PySpark ETL (SOTA Medallion Gold Layer)
+# MAGIC
+# MAGIC ## 📌 Overview & Enterprise Architecture
+# MAGIC This notebook runs the daily batch Medallion ETL pipeline. It transforms raw Bronze data (`apex.default.tmdb_raw_data`) into an enriched, AI-vectorized Gold table (`apex.default.tmdb_gold_data`).
 # MAGIC 
-# MAGIC **NOTE: Your cluster must have at least 8GB of worker memory to load the Hugging Face AI models during the UDF execution.**
+# MAGIC ### 💡 Core Architectural Patterns (SOTA):
+# MAGIC 1. **Data Quality Gates:** Filters bad IDs and enforces rating constraints via fault-tolerant `expr("try_cast(...)")`, dropping malformed text gracefully.
+# MAGIC 2. **Distributed AI Vector Embeddings:** Computes 768-D dense vectors in parallel across worker nodes using a PySpark **Pandas UDF** (`SentenceTransformer("all-mpnet-base-v2")`) with Apache Arrow zero-copy memory transfer.
+# MAGIC 3. **Change Data Capture (CDC) & SCD Type 2 MERGE:** Implements Delta Lake `MERGE INTO` (`DeltaTable.forName`):
+# MAGIC    - Tracks row history using `is_current` (boolean active flag), `effective_start_at`, and `effective_end_at` (`9999-12-31`).
+# MAGIC    - Automatically invalidates modified rows (`is_current = False`) and inserts active new records.
+# MAGIC 4. **Liquid Clustering (`clusterBy("id")`):** Replaces legacy Z-Ordering for 10x faster query pruning without expensive full data reshuffles.
+# MAGIC 5. **Vacuuming & Physical Compaction:** Compacts small files using `OPTIMIZE` and purges historical snapshots using `VACUUM` (retention 7 days).
 
 # COMMAND ----------
-# MAGIC %pip install sentence-transformers pandas pyarrow
+%pip install sentence-transformers pandas pyarrow
 
 # COMMAND ----------
 import os

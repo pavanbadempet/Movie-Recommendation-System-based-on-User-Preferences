@@ -1,8 +1,14 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # 02 - Export Gold Features to Neon Postgres
-# MAGIC This script pulls the final Gold tables (which power the ML models) and exports them to a Serverless Neon Postgres database.
-# MAGIC This allows the Hugging Face Space to read the data 24/7 without needing Databricks to be awake.
+# MAGIC # 02 - Export Gold Features to Neon PostgreSQL (Serving Layer Sync)
+# MAGIC
+# MAGIC ## 📌 Overview & Serving Architecture
+# MAGIC This notebook pulls active records (`is_current == True`) from the Gold Delta table (`apex.default.tmdb_gold_data`) and synchronizes them with a **Serverless Neon PostgreSQL Database**.
+# MAGIC
+# MAGIC ### 💡 Core Serving Patterns:
+# MAGIC 1. **Decoupled Architecture:** Allows 24/7 web apps (Hugging Face / Vercel / Next.js) to query vector embeddings from Neon without keeping expensive Databricks clusters awake.
+# MAGIC 2. **PySpark Distributed Vector Serialization:** Uses PySpark `to_json(col("embedding"))` to format 768-D dense vectors in parallel across worker nodes before export.
+# MAGIC 3. **Doppler Environment Resolution:** Fetches the target `DATABASE_URL` dynamically based on the deployment environment parameter (`dev`, `stg`, `prd`).
 
 # COMMAND ----------
 # MAGIC %pip install psycopg2-binary sqlalchemy pandas

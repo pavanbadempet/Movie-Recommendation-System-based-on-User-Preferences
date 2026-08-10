@@ -1,8 +1,15 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # 01b - Real-Time Streaming Ingest (Auto Loader)
-# MAGIC This notebook runs 24/7 (or micro-batch) using Spark Structured Streaming.
-# MAGIC It watches the raw events storage for the JSON files dropped by the Zerobus API (Cloudflare Workers) and merges them into the Silver interaction tables instantly.
+# MAGIC # 01b - Real-Time Streaming Ingest (Auto Loader & Micro-Batching)
+# MAGIC
+# MAGIC ## 📌 Overview & Streaming Architecture
+# MAGIC This notebook runs 24/7 (or on micro-batch schedule) using **Spark Structured Streaming**.
+# MAGIC It watches Unity Catalog Volume storage (`/Volumes/apex/default/secrets/events_raw/`) for JSON event logs dropped by external APIs/webhooks (e.g. Cloudflare Workers / FastAPI).
+# MAGIC
+# MAGIC ### 💡 Core Streaming Patterns:
+# MAGIC 1. **Databricks Auto Loader (`cloudFiles`):** Natively discovers and ingests new files as they arrive with automatic schema inference and evolution.
+# MAGIC 2. **Checkpointing:** Tracks processed offsets in `/Volumes/apex/default/secrets/checkpoints/` ensuring **exactly-once processing semantics** across cluster restarts.
+# MAGIC 3. **Delta Micro-Batching:** Streams incoming interaction logs directly into the managed Delta table `apex.default.user_events`.
 
 # COMMAND ----------
 from pyspark.sql import SparkSession
