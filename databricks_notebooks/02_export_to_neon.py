@@ -27,10 +27,9 @@ try:
     # 2. Try Unity Catalog Volume (Using your 'apex' catalog!)
     if not doppler_token:
         try:
-            # On Serverless, standard Python open() is sometimes restricted. We use Spark to read the volume.
+            # Lightweight Databricks DBFS/Volume utility (instant, zero Spark overhead)
             token_path = f"/Volumes/apex/default/secrets/{env}_doppler_token.txt"
-            df_token = spark.read.text(token_path)
-            doppler_token = df_token.collect()[0][0].strip()
+            doppler_token = dbutils.fs.head(token_path).strip()
         except Exception:
             pass
             
