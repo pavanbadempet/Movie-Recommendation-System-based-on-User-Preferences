@@ -21,16 +21,20 @@ try:
     dbutils.widgets.text("DOPPLER_TOKEN", "", "Doppler Service Token")
     doppler_token = dbutils.widgets.get("DOPPLER_TOKEN")
     
-    # 2. Try Local Workspace File (Most reliable)
+    # 2. Try Local Workspace File (Most reliable since DBFS and Unity Catalog are locked)
     if not doppler_token:
-        try:
-            with open("doppler_token.txt", "r") as f:
-                doppler_token = f.read().strip()
-        except FileNotFoundError:
-            pass
+        # Check multiple common Databricks working directories
+        import os
+        for path in ["doppler_token.txt", "databricks_notebooks/doppler_token.txt", "../doppler_token.txt"]:
+            if os.path.exists(path):
+                with open(path, "r") as f:
+                    doppler_token = f.read().strip()
+                if doppler_token:
+                    break
             
     if not doppler_token:
-        raise ValueError("DOPPLER_TOKEN is missing! Please store it or pass it as a Job Parameter.")
+        cwd = os.getcwd()
+        raise ValueError(f"DOPPLER_TOKEN is missing! It was not found in the widget, and the local file 'doppler_token.txt' could not be found (Current working directory: {cwd}). Please make sure you pasted the token inside the file!")
         
     response = requests.get(
         "https://api.doppler.com/v3/configs/config/secrets",
