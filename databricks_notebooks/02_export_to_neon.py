@@ -70,7 +70,8 @@ if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 # COMMAND ----------
-# MAGIC ## 3. Read Data from Gold Table & Export
+# COMMAND ----------
+# MAGIC ## 3. Read Active Records from Gold Table & Export to PostgreSQL
 # COMMAND ----------
 
 gold_table_name = "apex.default.tmdb_gold_data"
@@ -78,22 +79,42 @@ print(f"Reading Gold table from {gold_table_name}...")
 
 from pyspark.sql.functions import col, to_json
 
-# Load the Delta table into a Spark DataFrame
+# 1. Load Gold Delta Table
 df_spark = spark.table(gold_table_name)
-if "is_current" in df_spark.columns:
-    df_spark = df_spark.filter(col("is_current") == True)
 
-# Serialize vector array embeddings natively in PySpark before Pandas export
-if "embedding" in df_spark.columns:
-    df_spark = df_spark.withColumn("embedding", to_json(col("embedding")))
+# EDGE CASE 1: Empty Gold Table Check
+# - IF Gold table has 0 rows: Exit early without attempting database transaction write.
+if df_spark.rdd.isEmpty():
+    print("Gold table is empty. Skipping Neon PostgreSQL export.")
+else:
+    # CONDITION 1: Filter Active Records Only
+    # - IF 'is_current' column exists: Keep active SCD Type 2 records (is_current == True).
+    # - IMPLICIT ELSE: Process full dataset if is_current is absent.
+    if "is_current" in df_spark.columns:
+        df_spark = df_spark.filter(col("is_current") == True)
 
-df_pandas = df_spark.toPandas()
+    # CONDITION 2: Vector Embedding Serialization
+    # - IF 'embedding' vector column exists: Use PySpark native to_json() to format 768-D array into JSON string.
+    #   📥 ARRAY PAYLOAD:  [0.0124, -0.0451, 0.0892, ...]
+    #   📤 JSON STRING:   "[0.0124, -0.0451, 0.0892, ...]" (Parsed natively by pgvector in Neon Postgres)
+    if "embedding" in df_spark.columns:
+        df_spark = df_spark.withColumn("embedding", to_json(col("embedding")))
 
-# COMMAND ----------
-print(f"Connecting to Neon Postgres...")
-engine = create_engine(DATABASE_URL)
+    print(f"Converting Spark DataFrame to Pandas for PostgreSQL bulk export...")
+    df_pandas = df_spark.toPandas()
 
-print(f"Exporting {len(df_pandas)} rows to Postgres table 'movies'...")
-df_pandas.to_sql("movies", engine, if_exists="replace", index=False)
+    # -------------------------------------------------------------------------
+    # NEON POSTGRESQL SYNC
+    # -------------------------------------------------------------------------
+    print(f"Connecting to Neon Postgres...")
+    # EDGE CASE 2: SSL Mode Requirement for Serverless Postgres Connections
+    engine = create_engine(
+        DATABASE_URL,
+        connect_args={"sslmode": "require"},
+        pool_pre_ping=True
+    )
 
-print("Export Complete! Hugging Face UI can now read the latest features.")
+    print(f"Exporting {len(df_pandas)} active records to Postgres table 'movies'...")
+    df_pandas.to_sql("movies", engine, if_exists="replace", index=False)
+
+    print("Export Complete! Neon PostgreSQL serving table 'movies' is now updated and ready for 24/7 web apps.")

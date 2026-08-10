@@ -36,7 +36,12 @@ try:
     env = dbutils.widgets.get("ENVIRONMENT")
     doppler_token = None
 
-    # 1. Try Unity Catalog Volume FIRST (Primary Production Method)
+    # -------------------------------------------------------------------------
+    # SECURE TOKEN RESOLUTION (MULTI-TIERED FALLBACK)
+    # -------------------------------------------------------------------------
+    # CONDITION 1: Check Unity Catalog Volume first (Primary Production Method)
+    # - IF volume secret file exists (/Volumes/apex/default/secrets/dev_doppler_token.txt): Read token securely.
+    # - IMPLICIT ELSE: Continue loop to fallback candidates.
     for token_name in [f"{env}_doppler_token.txt", "doppler_token.txt"]:
         try:
             token_path = f"/Volumes/apex/default/secrets/{token_name}"
@@ -47,10 +52,14 @@ try:
         except Exception:
             pass
 
-    # 2. Fallback to Job Parameter / Widget if Volume file not present
+    # CONDITION 2: Fallback to Job Parameter Widget if Volume file absent
+    # - IF doppler_token IS NULL: Check dbutils.widgets.get("DOPPLER_TOKEN")
+    # - ELSE: Use token loaded from Volume.
     if not doppler_token:
         doppler_token = dbutils.widgets.get("DOPPLER_TOKEN").strip()
 
+    # EDGE CASE 1: Missing Token Error Guard
+    # - IF no token found in Volume or Widget: Raise explicit ValueError with actionable guidance.
     if not doppler_token:
         raise ValueError(f"DOPPLER_TOKEN is missing! Please upload '{env}_doppler_token.txt' to /Volumes/apex/default/secrets/")
         
@@ -64,8 +73,9 @@ try:
     os.environ['KAGGLE_USERNAME'] = secrets.get("KAGGLE_USERNAME", {}).get("computed")
     os.environ['KAGGLE_KEY'] = secrets.get("KAGGLE_KEY", {}).get("computed")
     
+    # EDGE CASE 2: Invalid Doppler Secret Schema Guard
     if not os.environ['KAGGLE_USERNAME'] or not os.environ['KAGGLE_KEY']:
-        raise ValueError("Kaggle credentials not found in Doppler!")
+        raise ValueError("Kaggle credentials not found in Doppler secrets response!")
         
 except Exception as e:
     raise ValueError(f"Failed to retrieve Kaggle credentials from Doppler: {e}")
@@ -73,21 +83,15 @@ except Exception as e:
 # COMMAND ----------
 # MAGIC %md
 # MAGIC ## Download the Dataset
-
 # COMMAND ----------
-# -------------------------------------------------------------------------
-# CONFIGURATION & CLEANUP
-# -------------------------------------------------------------------------
 KAGGLE_DATASET = "alanvourch/tmdb-movies-daily-updates"
 volume_raw_dir = "/Volumes/apex/default/secrets/raw_data"
 
-import glob
-import time
-
-start_time = time.time()
+# Ensure target directory exists on Unity Catalog Volume
 os.makedirs(volume_raw_dir, exist_ok=True)
 
-# Clean up previous CSV files in the volume directory to prevent duplicate reads
+# EDGE CASE 3: Stale CSV File Cleanup
+# Removes previous CSV files to prevent duplicate reads during PySpark glob ingestion.
 for old_csv in glob.glob(f"{volume_raw_dir}/*.csv"):
     try:
         os.remove(old_csv)
@@ -102,14 +106,19 @@ api.authenticate()
 
 # Download and unzip directly into the Volume
 api.dataset_download_files(KAGGLE_DATASET, path=volume_raw_dir, unzip=True)
-print("Download and unzip complete!")
+
+# EDGE CASE 4: Download Verification Check
+downloaded_csvs = glob.glob(f"{volume_raw_dir}/*.csv")
+if len(downloaded_csvs) == 0:
+    raise FileNotFoundError(f"Kaggle download failed: No CSV files found in {volume_raw_dir} after unzip!")
+print(f"Download and unzip complete! Found raw file: {downloaded_csvs[0]}")
 
 # COMMAND ----------
 # MAGIC ## Save to Delta Lake Managed Table (Bronze Layer)
 # COMMAND ----------
 print(f"Reading raw CSV directly with PySpark from {volume_raw_dir}...")
 
-# 1-Pass Ultra-Fast Ingestion (inferSchema=false saves 50% CPU time; strong typing happens in ETL)
+# 1-Pass Fast Ingestion (inferSchema=false saves 50% CPU overhead)
 df = spark.read.format("csv") \
     .option("header", "true") \
     .option("inferSchema", "false") \
@@ -121,6 +130,8 @@ df = spark.read.format("csv") \
 from pyspark.sql.functions import col, current_timestamp
 
 # Add Data Lineage & Provenance metadata columns (Unity Catalog Standard)
+# - _ingested_at: Timestamp when raw batch entered Bronze layer
+# - _source_file: Exact Volume file path (col("_metadata.file_path"))
 df = df.withColumn("_ingested_at", current_timestamp()) \
        .withColumn("_source_file", col("_metadata.file_path"))
 
@@ -128,4 +139,4 @@ print("Appending raw snapshot directly to Bronze Delta Lake Table 'apex.default.
 df.write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable("apex.default.tmdb_raw_data")
 
 elapsed = round(time.time() - start_time, 2)
-print(f"Data Ingestion Complete in {elapsed}s! Raw data is now persisted in Delta Lake format.")
+print(f"Data Ingestion Complete in {elapsed}s! Raw data is now persisted in Bronze Delta Lake format.")
