@@ -17,16 +17,9 @@ import pandas as pd
 from datetime import datetime
 from delta.tables import DeltaTable
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, lit, current_timestamp, concat_ws, pandas_udf, coalesce, expr
+from pyspark.sql.functions import col, lit, current_timestamp, concat_ws, pandas_udf, coalesce, expr, to_timestamp
 from pyspark.sql.types import ArrayType, FloatType, StringType
 
-logger = logging.getLogger(__name__)
-
-# COMMAND ----------
-# MAGIC %md
-# MAGIC ## Distributed AI Embedding Generation (PySpark Pandas UDF)
-
-# COMMAND ----------
 # Broadcast the model name so all workers know which one to download
 EMBEDDING_MODEL_NAME = "all-mpnet-base-v2"
 
@@ -51,6 +44,24 @@ def predict_embeddings(series: pd.Series) -> pd.Series:
     
     # Return as a Pandas Series of lists (which Spark converts to ArrayType)
     return pd.Series(list(embeddings))
+
+# ----------------------------------------------------------------------
+# Gen AI Feature Extraction UDF (Top-Level Scope)
+# ----------------------------------------------------------------------
+@pandas_udf(StringType())
+def extract_llm_features(overview_series: pd.Series) -> pd.Series:
+    """
+    Simulated GenAI Feature Extractor UDF.
+    Extracts semantic metadata (mood, pacing, tropes) from movie plot overviews.
+    """
+    results = []
+    for text in overview_series:
+        if not text or len(text) < 10:
+            results.append("")
+            continue
+        synthetic_llm_metadata = "Mood: Tense | Pacing: Fast | Tropes: Unreliable Narrator"
+        results.append(synthetic_llm_metadata)
+    return pd.Series(results)
 
 # COMMAND ----------
 # MAGIC %md
@@ -86,46 +97,15 @@ def load_gold_data(spark):
         incoming_df = incoming_df.withColumn("_source_file", lit("unknown"))
 
     # ----------------------------------------------------------------------
-    # 2.5 GEN AI FEATURE EXTRACTION (PEAK / BEYOND SOTA)
+    # 2.5 GEN AI FEATURE EXTRACTION
     # ----------------------------------------------------------------------
     print("Running Gen AI Agentic Feature Extraction...")
-    # In a true SOTA pipeline, we use an LLM to extract hidden metadata (mood, pacing, tropes) 
-    # from the raw text to generate higher-quality vector embeddings.
-    # We define a Pandas UDF to run this LLM extraction in parallel across the cluster.
-    
-    @pandas_udf(StringType())
-    def extract_llm_features(overview_series: pd.Series) -> pd.Series:
-        import json
-        import requests
-        
-        # NOTE: For a massive dataset, this should point to a local open-source LLM hosted on 
-        # a Databricks GPU cluster (e.g. vLLM or TGI) to avoid 3rd-party API rate limits and costs.
-        # For this portfolio demo, it represents the architecture of LLM-in-the-loop ETL.
-        
-        results = []
-        for text in overview_series:
-            if not text or len(text) < 10:
-                results.append("")
-                continue
-                
-            # Example prompt to an LLM
-            # prompt = f"Analyze this movie plot and return a JSON with 'mood', 'pacing', and 'tropes': {text}"
-            # response = requests.post("YOUR_LOCAL_LLM_URL", json={"prompt": prompt})
-            
-            # Simulated LLM response for demonstration to prevent API cost burn
-            synthetic_llm_metadata = "Mood: Tense | Pacing: Fast | Tropes: Unreliable Narrator"
-            results.append(synthetic_llm_metadata)
-            
-        return pd.Series(results)
-    
-    # Apply the UDF to extract rich semantic features if an overview exists
     if "overview" in incoming_df.columns:
         incoming_df = incoming_df.withColumn("gen_ai_features", extract_llm_features(col("overview")))
     else:
         incoming_df = incoming_df.withColumn("gen_ai_features", lit(""))
         
     # Create a dense 'tags' column representing the movie (Title + Genres + Overview + GEN AI FEATURES)
-    # This forms the high-signal text payload for embedding.
     incoming_df = incoming_df.withColumn(
         "tags",
         concat_ws(" | ", 
@@ -145,7 +125,7 @@ def load_gold_data(spark):
     # Add SCD tracking columns to incoming data
     incoming_df = incoming_df.withColumn("is_current", lit(True)) \
                              .withColumn("effective_start_at", current_timestamp()) \
-                             .withColumn("effective_end_at", lit(datetime(9999, 12, 31)))
+                             .withColumn("effective_end_at", to_timestamp(lit("9999-12-31 23:59:59")))
 
     print(f"Merging enriched data into Gold Table: {gold_table_name}...")
     
