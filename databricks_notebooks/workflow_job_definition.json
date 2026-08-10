@@ -17,6 +17,7 @@
           "ENVIRONMENT": "dev"
         }
       },
+      "environment_key": "serverless_cpu",
       "timeout_seconds": 1200,
       "max_retries": 2
     },
@@ -31,6 +32,7 @@
         "notebook_path": "databricks_notebooks/01_pyspark_etl",
         "source": "GIT"
       },
+      "environment_key": "serverless_gpu_a10",
       "timeout_seconds": 1800,
       "max_retries": 1
     },
@@ -48,6 +50,7 @@
           "ENVIRONMENT": "dev"
         }
       },
+      "environment_key": "serverless_cpu",
       "timeout_seconds": 900,
       "max_retries": 2
     }
