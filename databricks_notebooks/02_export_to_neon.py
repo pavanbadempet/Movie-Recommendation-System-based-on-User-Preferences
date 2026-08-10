@@ -70,24 +70,22 @@ if DATABASE_URL.startswith("postgres://"):
 gold_table_name = "apex.default.tmdb_gold_data"
 print(f"Reading Gold table from {gold_table_name}...")
 
+from pyspark.sql.functions import col, to_json
+
 # Load the Delta table into a Spark DataFrame
 df_spark = spark.table(gold_table_name)
 if "is_current" in df_spark.columns:
     df_spark = df_spark.filter(col("is_current") == True)
+
+# Serialize vector array embeddings natively in PySpark before Pandas export
+if "embedding" in df_spark.columns:
+    df_spark = df_spark.withColumn("embedding", to_json(col("embedding")))
 
 df_pandas = df_spark.toPandas()
 
 # COMMAND ----------
 print(f"Connecting to Neon Postgres...")
 engine = create_engine(DATABASE_URL)
-
-# Ensure vector embeddings are serialized to JSON strings for PostgreSQL compatibility
-if "embedding" in df_pandas.columns:
-    import json
-    import numpy as np
-    df_pandas["embedding"] = df_pandas["embedding"].apply(
-        lambda x: json.dumps(x.tolist() if isinstance(x, np.ndarray) else x) if x is not None else None
-    )
 
 print(f"Exporting {len(df_pandas)} rows to Postgres table 'movies'...")
 df_pandas.to_sql("movies", engine, if_exists="replace", index=False)
