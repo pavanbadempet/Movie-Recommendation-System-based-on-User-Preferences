@@ -149,3 +149,15 @@ df.write.format("delta").mode("append").option("mergeSchema", "true").saveAsTabl
 
 elapsed = round(time.time() - start_time, 2)
 print(f"Data Ingestion Complete in {elapsed}s! Raw data is now persisted in Bronze Delta Lake format.")
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## 📊 Visual Verification & Querying (Bronze Table)
+
+# COMMAND ----------
+# MAGIC %sql
+# MAGIC SELECT _ingested_at, _source_file, count(1) AS raw_record_count
+# MAGIC FROM apex.default.tmdb_raw_data
+# MAGIC GROUP BY _ingested_at, _source_file
+# MAGIC ORDER BY _ingested_at DESC
+# MAGIC LIMIT 10;

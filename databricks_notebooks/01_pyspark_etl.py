@@ -284,3 +284,15 @@ def load_gold_data(spark):
 
 # COMMAND ----------
 load_gold_data(spark)
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## 📊 Visual Verification & Querying (Gold Table)
+
+# COMMAND ----------
+# MAGIC %sql
+# MAGIC SELECT id, title, genres, vote_average, is_current, effective_start_at, effective_end_at, substring(tags, 1, 60) AS tags_preview
+# MAGIC FROM apex.default.tmdb_gold_data
+# MAGIC WHERE is_current = True
+# MAGIC ORDER BY effective_start_at DESC
+# MAGIC LIMIT 10;
