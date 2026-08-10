@@ -52,23 +52,34 @@ EMBEDDING_MODEL_NAME = "all-mpnet-base-v2"
 @pandas_udf(ArrayType(FloatType()))
 def predict_embeddings(series: pd.Series) -> pd.Series:
     """
-    Pandas UDF that runs on Databricks Worker nodes.
-    Each node downloads the Hugging Face model and computes 768-D vectors in parallel batches.
+    Distributed AI Embedding Generation UDF via PySpark Pandas UDF (Apache Arrow Vectorized).
+
+    📌 HOW IT WORKS:
+    1. Apache Arrow streams string batches into worker processes with zero-copy memory transfer.
+    2. Each worker process loads Hugging Face SentenceTransformer once into RAM/GPU VRAM.
+    3. Encodes text into 768-D dense vectors in parallel batches (batch_size=32).
+    4. Computes L2 Normalization so Dot Product in pgvector equals Cosine Similarity.
+
+    📥 INPUT EXAMPLE:
+    pd.Series(["Inception | Action, Sci-Fi | A thief who steals corporate secrets..."])
+
+    📤 OUTPUT EXAMPLE:
+    pd.Series([[0.0124, -0.0451, 0.0892, ..., 0.0019]])  # 768-dimensional Float vector array
     """
     from sentence_transformers import SentenceTransformer
     # Load model (downloads once per worker process, then cached in memory)
     model = SentenceTransformer(EMBEDDING_MODEL_NAME)
-    
-    # Generate embeddings
+
+    # Generate embeddings in parallel GPU/CPU batches
     embeddings = model.encode(series.tolist(), batch_size=32, show_progress_bar=False, convert_to_numpy=True)
-    
-    # L2 Normalize for fast Cosine Similarity in pgvector
+
+    # L2 Normalize vectors: v_norm = v / max(||v||_2, 1e-10)
+    # L2 Normalization guarantees that pgvector Inner Product (<#>) is identical to Cosine Similarity!
     norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-    # Avoid division by zero
     norms = np.where(norms == 0, 1e-10, norms)
     embeddings = embeddings / norms
-    
-    # Return as a Pandas Series of lists (which Spark converts to ArrayType)
+
+    # Return as a Pandas Series of lists (Spark converts to ArrayType(FloatType()))
     return pd.Series(list(embeddings))
 
 # ----------------------------------------------------------------------
@@ -77,8 +88,17 @@ def predict_embeddings(series: pd.Series) -> pd.Series:
 @pandas_udf(StringType())
 def extract_llm_features(overview_series: pd.Series) -> pd.Series:
     """
-    Simulated GenAI Feature Extractor UDF.
-    Extracts semantic metadata (mood, pacing, tropes) from movie plot overviews.
+    GenAI Metadata Extraction UDF (LLM-in-the-Loop Feature Engineering).
+
+    📌 HOW IT WORKS:
+    - Runs in parallel across worker nodes analyzing plot overviews.
+    - Extracts implicit semantic metadata (mood, pacing, tropes) to enrich vector representations.
+
+    📥 INPUT EXAMPLE:
+    pd.Series(["A thief who steals corporate secrets through dream-sharing technology..."])
+
+    📤 OUTPUT EXAMPLE:
+    pd.Series(["Mood: Tense | Pacing: Fast | Tropes: Unreliable Narrator"])
     """
     results = []
     for text in overview_series:
@@ -146,9 +166,20 @@ def load_gold_data(spark):
     incoming_df = incoming_df.withColumn("embedding", predict_embeddings(col("tags")))
     
     # ----------------------------------------------------------------------
-    # 4. SCD TYPE 2 LOGIC (Data Lakehouse standard)
+    # 4. SCD TYPE 2 LOGIC (Data Lakehouse Standard)
     # ----------------------------------------------------------------------
-    # Add SCD tracking columns to incoming data
+    # 📌 VISUAL EXAMPLE OF SCD TYPE 2 MERGE STATE EVOLUTION:
+    #
+    # Existing Gold Table Record:
+    # id='101' | title='Inception' | tags='Old Tag' | is_current=True  | effective_start='2026-08-01' | effective_end='9999-12-31'
+    #
+    # Incoming Updated Record:
+    # id='101' | title='Inception' | tags='New Tag'
+    #
+    # Resulting Gold Table After MERGE:
+    # Row 1 (Historical): id='101' | tags='Old Tag' | is_current=False | effective_start='2026-08-01' | effective_end='2026-08-10'
+    # Row 2 (Active New): id='101' | tags='New Tag' | is_current=True  | effective_start='2026-08-10' | effective_end='9999-12-31'
+    # Add SCD tracking columns to incoming dataset
     incoming_df = incoming_df.withColumn("is_current", lit(True)) \
                              .withColumn("effective_start_at", current_timestamp()) \
                              .withColumn("effective_end_at", to_timestamp(lit("9999-12-31 23:59:59")))
