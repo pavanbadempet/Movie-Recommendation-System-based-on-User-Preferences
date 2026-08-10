@@ -1,0 +1,65 @@
+{
+  "name": "Movie_Recommendation_Pipeline_DAG",
+  "email_notifications": {
+    "on_failure": [
+      "admin@example.com"
+    ]
+  },
+  "timeout_seconds": 3600,
+  "max_concurrent_runs": 1,
+  "tasks": [
+    {
+      "task_key": "00_kaggle_download",
+      "notebook_task": {
+        "notebook_path": "databricks_notebooks/00_kaggle_download",
+        "source": "GIT",
+        "base_parameters": {
+          "ENVIRONMENT": "dev"
+        }
+      },
+      "timeout_seconds": 1200,
+      "max_retries": 2
+    },
+    {
+      "task_key": "01_pyspark_etl",
+      "depends_on": [
+        {
+          "task_key": "00_kaggle_download"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "databricks_notebooks/01_pyspark_etl",
+        "source": "GIT"
+      },
+      "timeout_seconds": 1800,
+      "max_retries": 1
+    },
+    {
+      "task_key": "02_export_to_neon",
+      "depends_on": [
+        {
+          "task_key": "01_pyspark_etl"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "databricks_notebooks/02_export_to_neon",
+        "source": "GIT",
+        "base_parameters": {
+          "ENVIRONMENT": "dev"
+        }
+      },
+      "timeout_seconds": 900,
+      "max_retries": 2
+    }
+  ],
+  "git_source": {
+    "git_url": "https://github.com/pavanbadempet/AI-Recommendation-System.git",
+    "git_provider": "gitHub",
+    "git_branch": "main"
+  },
+  "schedule": {
+    "quartz_cron_expression": "0 0 2 * * ?",
+    "timezone_id": "UTC",
+    "pause_status": "UNPAUSED"
+  }
+}
