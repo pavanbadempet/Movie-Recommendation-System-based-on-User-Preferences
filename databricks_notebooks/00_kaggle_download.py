@@ -25,7 +25,15 @@ try:
     dbutils.widgets.text("DOPPLER_TOKEN", "", "Doppler Service Token")
     doppler_token = dbutils.widgets.get("DOPPLER_TOKEN")
     
-    # 2. Try Local Workspace File (Most reliable since DBFS and Unity Catalog are locked)
+    # 2. Try Unity Catalog Volume (Using your 'apex' catalog!)
+    if not doppler_token:
+        try:
+            with open("/Volumes/apex/default/secrets/doppler_token.txt", "r") as f:
+                doppler_token = f.read().strip()
+        except FileNotFoundError:
+            pass
+            
+    # 3. Try Local Workspace File (Fallback)
     if not doppler_token:
         # Check multiple common Databricks working directories
         for path in ["doppler_token.txt", "databricks_notebooks/doppler_token.txt", "../doppler_token.txt"]:
@@ -37,7 +45,7 @@ try:
             
     if not doppler_token:
         cwd = os.getcwd()
-        raise ValueError(f"DOPPLER_TOKEN is missing! It was not found in the widget, and the local file 'doppler_token.txt' could not be found (Current working directory: {cwd}). Please make sure you pasted the token inside the file!")
+        raise ValueError(f"DOPPLER_TOKEN is missing! Please create a Volume at apex.default.secrets and upload doppler_token.txt there.")
         
     response = requests.get(
         "https://api.doppler.com/v3/configs/config/secrets",
@@ -108,7 +116,7 @@ pandas_df = pd.read_csv(csv_files[0], dtype=str)
 spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
 df = spark.createDataFrame(pandas_df)
 
-print("Saving to Managed Table 'default.tmdb_raw_data'...")
-df.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("default.tmdb_raw_data")
+print("Saving to Managed Table 'apex.default.tmdb_raw_data'...")
+df.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("apex.default.tmdb_raw_data")
 
 print("Data Ingestion Complete! The raw data is ready for the Medallion ETL.")
