@@ -12,6 +12,7 @@ import os
 import pandas as pd
 from sqlalchemy import create_engine
 import requests
+from pyspark.sql.functions import col
 
 # COMMAND ----------
 # Define the Neon Database URL (Configure this in Doppler)
@@ -72,13 +73,21 @@ print(f"Reading Gold table from {gold_table_name}...")
 # Load the Delta table into a Spark DataFrame
 df_spark = spark.table(gold_table_name)
 if "is_current" in df_spark.columns:
-    df_spark = df_spark.filter(df_spark.is_current == True)
+    df_spark = df_spark.filter(col("is_current") == True)
 
 df_pandas = df_spark.toPandas()
 
 # COMMAND ----------
 print(f"Connecting to Neon Postgres...")
 engine = create_engine(DATABASE_URL)
+
+# Ensure vector embeddings are serialized to JSON strings for PostgreSQL compatibility
+if "embedding" in df_pandas.columns:
+    import json
+    import numpy as np
+    df_pandas["embedding"] = df_pandas["embedding"].apply(
+        lambda x: json.dumps(x.tolist() if isinstance(x, np.ndarray) else x) if x is not None else None
+    )
 
 print(f"Exporting {len(df_pandas)} rows to Postgres table 'movies'...")
 df_pandas.to_sql("movies", engine, if_exists="replace", index=False)

@@ -15,9 +15,9 @@ from pyspark.sql.functions import col, from_json
 
 # COMMAND ----------
 # The location where Cloudflare Workers drops the JSON event logs
-raw_events_path = "dbfs:/FileStore/apex/data/raw/events/"
-checkpoint_path = "dbfs:/FileStore/apex/data/checkpoints/events_silver/"
-silver_events_path = "dbfs:/FileStore/apex/data/silver/user_events"
+raw_events_path = "/Volumes/apex/default/secrets/events_raw/"
+checkpoint_path = "/Volumes/apex/default/secrets/checkpoints/events_silver/"
+silver_table_name = "apex.default.user_events"
 
 # Define the schema expected from the FastAPI/Cloudflare webhook
 event_schema = StructType([
@@ -48,9 +48,8 @@ streaming_df = (
 
 # 2. Write Stream to Delta Lake (Silver Layer)
 def merge_microbatch(microBatchDF, batchId):
-    # In a full setup, this would MERGE into a Delta Table.
-    # For this script, we just append to the Silver event log.
-    microBatchDF.write.format("delta").mode("append").save(silver_events_path)
+    # Append incoming real-time interaction events to the Delta Managed Table
+    microBatchDF.write.format("delta").mode("append").saveAsTable(silver_table_name)
     
 query = (
     streaming_df.writeStream

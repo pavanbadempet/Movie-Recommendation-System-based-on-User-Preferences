@@ -17,8 +17,8 @@ import pandas as pd
 from datetime import datetime
 from delta.tables import DeltaTable
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, lit, current_timestamp, concat_ws, pandas_udf, coalesce
-from pyspark.sql.types import ArrayType, FloatType
+from pyspark.sql.functions import col, lit, current_timestamp, concat_ws, pandas_udf, coalesce, expr
+from pyspark.sql.types import ArrayType, FloatType, StringType
 
 logger = logging.getLogger(__name__)
 
