@@ -19,13 +19,17 @@ import requests
 try:
     # 1. Try to get it from the Job Parameter / Widget first
     dbutils.widgets.text("DOPPLER_TOKEN", "", "Doppler Service Token")
+    dbutils.widgets.text("ENVIRONMENT", "dev", "Deployment Environment (dev, stg, prd)")
+    
     doppler_token = dbutils.widgets.get("DOPPLER_TOKEN")
+    env = dbutils.widgets.get("ENVIRONMENT")
     
     # 2. Try Unity Catalog Volume (Using your 'apex' catalog!)
     if not doppler_token:
         try:
             # On Serverless, standard Python open() is sometimes restricted. We use Spark to read the volume.
-            df_token = spark.read.text("/Volumes/apex/default/secrets/doppler_token.txt")
+            token_path = f"/Volumes/apex/default/secrets/{env}_doppler_token.txt"
+            df_token = spark.read.text(token_path)
             doppler_token = df_token.collect()[0][0].strip()
         except Exception:
             pass
