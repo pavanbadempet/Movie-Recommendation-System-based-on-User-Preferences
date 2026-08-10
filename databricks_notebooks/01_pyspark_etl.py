@@ -79,6 +79,12 @@ def load_gold_data(spark):
     # Standardize ID to string for Vector DB compatibility
     incoming_df = incoming_df.withColumn("id", col("id").cast("string"))
 
+    # Ensure Lineage Metadata Columns exist
+    if "_ingested_at" not in incoming_df.columns:
+        incoming_df = incoming_df.withColumn("_ingested_at", current_timestamp())
+    if "_source_file" not in incoming_df.columns:
+        incoming_df = incoming_df.withColumn("_source_file", lit("unknown"))
+
     # ----------------------------------------------------------------------
     # 2.5 GEN AI FEATURE EXTRACTION (PEAK / BEYOND SOTA)
     # ----------------------------------------------------------------------

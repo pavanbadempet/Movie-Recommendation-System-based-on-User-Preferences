@@ -97,6 +97,12 @@ df = spark.read.format("csv") \
     .option("escape", "\"") \
     .load(f"{volume_raw_dir}/*.csv")
 
+from pyspark.sql.functions import input_file_name, current_timestamp
+
+# Add Data Lineage & Provenance metadata columns
+df = df.withColumn("_ingested_at", current_timestamp()) \
+       .withColumn("_source_file", input_file_name())
+
 print("Appending raw snapshot directly to Bronze Delta Lake Table 'apex.default.tmdb_raw_data'...")
 df.write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable("apex.default.tmdb_raw_data")
 
