@@ -121,13 +121,24 @@ def load_gold_data(spark):
     
     # 1. Read the incoming raw dataset
     incoming_df = spark.table(raw_table)
+
+    # EDGE CASE 1: Empty Raw Dataset Check
+    # - IF raw dataset has 0 rows: Exit cleanly without consuming expensive GPU compute resources.
+    if incoming_df.rdd.isEmpty():
+        print("Incoming raw table is empty. Skipping ETL pipeline execution.")
+        return True
     
     # ----------------------------------------------------------------------
     # 2. DATA QUALITY GATES & SCHEMA VALIDATION
     # ----------------------------------------------------------------------
     print("Running Data Quality Gates...")
-    # Drop rows with critical missing keys
+    # Drop rows with critical missing primary keys
     incoming_df = incoming_df.filter(col("id").isNotNull())
+
+    # EDGE CASE 2: Intra-Batch Primary Key Deduplication
+    # - Deduplicates incoming batch on 'id' to prevent Delta MERGE exception:
+    #   'ON search condition matched multiple target rows'
+    incoming_df = incoming_df.dropDuplicates(["id"])
 
     # CONDITION 1: Validate rating range [0.0, 10.0] if 'vote_average' exists
     # - IF 'vote_average' exists: Safely cast text to DOUBLE using try_cast (corrupt text -> NULL), then keep valid ratings.
