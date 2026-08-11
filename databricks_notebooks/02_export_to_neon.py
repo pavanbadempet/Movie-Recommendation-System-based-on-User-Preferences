@@ -184,13 +184,24 @@ else:
         gc.collect()
 
     # -------------------------------------------------------------------------
-    # POSTGRESQL POST-SYNC COVERING INDEXES (Sub-Millisecond Query Speed)
+    # POSTGRESQL POST-SYNC COVERING INDEXES & VECTOR SEARCH OPTIMIZATION
     # -------------------------------------------------------------------------
     print("Building PostgreSQL performance indexes on table 'movies'...")
     with engine.begin() as ddl_conn:
         try:
+            # 1. Primary & B-Tree Indexes for Fast Metadata Filtering
             ddl_conn.execute("CREATE INDEX IF NOT EXISTS idx_movies_id ON movies (id);")
             ddl_conn.execute("CREATE INDEX IF NOT EXISTS idx_movies_release_date ON movies (release_date DESC);")
+
+            # 2. Enable pgvector extension and build HNSW vector index
+            try:
+                ddl_conn.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+                ddl_conn.execute("ALTER TABLE movies ALTER COLUMN embedding TYPE vector USING embedding::vector;")
+                ddl_conn.execute("CREATE INDEX IF NOT EXISTS idx_movies_embedding_hnsw ON movies USING hnsw (embedding vector_cosine_ops);")
+                print("PostgreSQL HNSW Vector Index created successfully!")
+            except Exception as v_err:
+                print(f"pgvector Extension Notice: {v_err}")
+
             print("PostgreSQL primary covering indexes created successfully!")
         except Exception as idx_err:
             print(f"PostgreSQL Index Notice: {idx_err}")
