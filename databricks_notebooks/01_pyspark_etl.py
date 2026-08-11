@@ -300,7 +300,7 @@ load_gold_data(spark)
 
 # COMMAND ----------
 # MAGIC %sql
-# MAGIC SELECT id, title, genres, vote_average, is_current, effective_start_at, effective_end_at, substring(tags, 1, 60) AS tags_preview
+# MAGIC SELECT id, title, genres, vote_average, length(tags) AS full_tags_char_length, tags
 # MAGIC FROM apex.default.tmdb_gold_data
 # MAGIC WHERE is_current = True
 # MAGIC ORDER BY effective_start_at DESC
