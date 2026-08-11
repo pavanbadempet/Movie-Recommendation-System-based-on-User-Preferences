@@ -228,8 +228,8 @@ def load_gold_data(spark):
                              .withColumn("effective_start_at", current_timestamp()) \
                              .withColumn("effective_end_at", to_timestamp(lit("9999-12-31 23:59:59")))
 
-    # Ensure incoming_df is a pure metadata DataFrame (embedding is generated in isolated 01c_gpu_embeddings task)
-    incoming_df = incoming_df.drop("embedding")
+    # Provide typed null array<float> placeholder for embedding column so all DF operations match target table schema 100%
+    incoming_df = incoming_df.withColumn("embedding", expr("cast(null as array<float>)"))
 
     print(f"Merging enriched data into Gold Table: {gold_table_name}...")
     
@@ -254,15 +254,6 @@ def load_gold_data(spark):
             expr(update_condition)
         ).selectExpr("updates.*")
         
-        # Build explicit defensive column mapping dictionary matching target table schema 100%
-        target_cols = [c.name for c in gold_table.toDF().schema]
-        insert_exprs = {}
-        for col_name in target_cols:
-            if col_name in incoming_df.columns:
-                insert_exprs[col_name] = f"updates.{col_name}"
-            elif col_name == "embedding":
-                insert_exprs[col_name] = "cast(null as array<float>)"
-
         gold_table.alias("gold").merge(
             source=incoming_df.alias("updates"),
             condition="gold.id = updates.id AND gold.is_current = True"
@@ -272,7 +263,7 @@ def load_gold_data(spark):
                 "is_current": "False",
                 "effective_end_at": "current_timestamp()"
             }
-        ).whenNotMatchedInsert(values=insert_exprs).execute()
+        ).whenNotMatchedInsertAll().execute()
         
         # Step 3: Append new active version records of updated rows to complete history chain
         staged_updates.write.format("delta").mode("append").saveAsTable(gold_table_name)
