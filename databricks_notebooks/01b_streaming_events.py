@@ -15,15 +15,15 @@
 # MAGIC 2. **Checkpointing:** Tracks processed file offsets in `/Volumes/apex/default/secrets/checkpoints/` ensuring **exactly-once processing semantics**.
 # MAGIC 3. **Delta Micro-Batching (`availableNow=True`):** Processes incoming interaction logs into the Silver table `apex.default.user_events` and exits cleanly.
 
-import os
-from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType, StructField, StringType, MapType
-from pyspark.sql.functions import col, from_json, current_timestamp
-
 # COMMAND ----------
 # MAGIC %run ./doppler_config
 
 # COMMAND ----------
+import os
+from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, StringType, MapType, IntegerType, LongType, DoubleType
+from pyspark.sql.functions import col, from_json, current_timestamp
+
 try:
     dbutils.widgets.text("DOPPLER_TOKEN", "", "Doppler Service Token")
     dbutils.widgets.text("ENVIRONMENT", "dev", "Deployment Environment (dev, stg, prd)")
