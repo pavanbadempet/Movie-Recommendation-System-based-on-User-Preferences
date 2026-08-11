@@ -80,24 +80,42 @@ else:
     # - IF 'embedding' vector column exists: Use PySpark native to_json() to format 768-D array into JSON string.
     #   📥 ARRAY PAYLOAD:  [0.0124, -0.0451, 0.0892, ...]
     #   📤 JSON STRING:   "[0.0124, -0.0451, 0.0892, ...]" (Parsed natively by pgvector in Neon Postgres)
+    # CONDITION 2: Vector Embedding Serialization
     if "embedding" in df_spark.columns:
         df_spark = df_spark.withColumn("embedding", to_json(col("embedding")))
 
-    print(f"Converting Spark DataFrame to Pandas for PostgreSQL bulk export...")
-    df_pandas = df_spark.toPandas()
+    # Select serving columns required for recommendations & vector search
+    serving_cols = [c for c in ["id", "title", "genres", "vote_average", "vote_count", "release_date", "overview", "tags", "embedding"] if c in df_spark.columns]
+    df_spark = df_spark.select(*serving_cols)
+
+    total_records = df_spark.count()
+    print(f"Total active Gold records to export: {total_records}")
 
     # -------------------------------------------------------------------------
-    # NEON POSTGRESQL SYNC
+    # NEON POSTGRESQL MEMORY-SAFE BATCHED SYNC
     # -------------------------------------------------------------------------
     print(f"Connecting to Neon Postgres...")
-    # EDGE CASE 2: SSL Mode Requirement for Serverless Postgres Connections
     engine = create_engine(
         DATABASE_URL,
         connect_args={"sslmode": "require"},
         pool_pre_ping=True
     )
 
-    print(f"Exporting {len(df_pandas)} active records to Postgres table 'movies'...")
-    df_pandas.to_sql("movies", engine, if_exists="replace", index=False)
+    # Memory-Safe Batch Export (prevents spark.driver.maxResultSize OOM)
+    batch_size = 2500
+    num_batches = (total_records + batch_size - 1) // batch_size
+
+    print(f"Exporting {total_records} records to Neon Postgres 'movies' table across {num_batches} memory-safe batches...")
+
+    for batch_idx in range(num_batches):
+        offset = batch_idx * batch_size
+        print(f"Syncing Batch {batch_idx + 1}/{num_batches} (offset {offset} to {offset + batch_size})...")
+
+        # Pull single batch into driver RAM
+        batch_rows = df_spark.limit(offset + batch_size).tail(batch_size) if batch_idx > 0 else df_spark.limit(batch_size).collect()
+        batch_pandas = pd.DataFrame([row.asDict() for row in batch_rows])
+
+        if_exists_mode = "replace" if batch_idx == 0 else "append"
+        batch_pandas.to_sql("movies", engine, if_exists=if_exists_mode, index=False, chunksize=500)
 
     print("Export Complete! Neon PostgreSQL serving table 'movies' is now updated and ready for 24/7 web apps.")
