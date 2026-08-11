@@ -34,56 +34,18 @@ try:
     dbutils.widgets.text("ENVIRONMENT", "dev", "Deployment Environment (dev, stg, prd)")
     
     env = dbutils.widgets.get("ENVIRONMENT")
-    doppler_token = None
 
     # -------------------------------------------------------------------------
-    # ZERO-TRUST TOKEN RESOLUTION (3-TIER ENTERPRISE FALLBACK)
+    # CENTRALIZED DOPPLER SECRET RESOLUTION
     # -------------------------------------------------------------------------
-    # Tier 1: Check Unity Catalog Volume Storage (RBAC Protected Volume File)
-    for token_name in [f"{env}_doppler_token.txt", "doppler_token.txt"]:
-        try:
-            token_path = f"/Volumes/apex/default/secrets/{token_name}"
-            doppler_token = dbutils.fs.head(token_path).strip()
-            if doppler_token:
-                print(f"Loaded secret from Unity Catalog Volume: {token_path}")
-                break
-        except Exception:
-            pass
-
-    # Tier 2: Check Databricks Secret Scope (Azure Key Vault / AWS KMS Backed)
-    if not doppler_token:
-        try:
-            doppler_token = dbutils.secrets.get(scope="apex_secrets", key="doppler_token").strip()
-            if doppler_token:
-                print("Loaded secret from Databricks Secret Scope: apex_secrets/doppler_token")
-        except Exception:
-            pass
-
-    # Tier 3: Fallback to Databricks Job Parameter Widget
-    if not doppler_token:
-        doppler_token = dbutils.widgets.get("DOPPLER_TOKEN").strip()
-
-    # ZERO-TRUST GUARD: Ensure token is present before external API request
-    if not doppler_token:
-        raise ValueError(f"DOPPLER_TOKEN is missing! Upload '{env}_doppler_token.txt' to /Volumes/apex/default/secrets/ or configure secret scope 'apex_secrets'.")
-        
-    response = requests.get(
-        "https://api.doppler.com/v3/configs/config/secrets",
-        headers={"Authorization": f"Bearer {doppler_token}", "Accept": "application/json"}
-    )
-    response.raise_for_status()
-    secrets = response.json()["secrets"]
+    from doppler_config import load_centralized_doppler_secrets
+    secrets = load_centralized_doppler_secrets(dbutils=dbutils, env=env)
     
-    os.environ['KAGGLE_USERNAME'] = secrets.get("KAGGLE_USERNAME", {}).get("computed")
-    os.environ['KAGGLE_KEY'] = secrets.get("KAGGLE_KEY", {}).get("computed")
-    
-    if not os.environ['KAGGLE_USERNAME'] or not os.environ['KAGGLE_KEY']:
+    if not os.environ.get('KAGGLE_USERNAME') or not os.environ.get('KAGGLE_KEY'):
         raise ValueError("Kaggle credentials not found in Doppler secrets payload!")
         
 except Exception as e:
-    # Redact error details to prevent secret leakage in Databricks job logs
-    sanitized_err = str(e).replace(str(doppler_token), "***REDACTED***") if doppler_token else str(e)
-    raise ValueError(f"Failed to retrieve secrets from Doppler API: {sanitized_err}")
+    raise ValueError(f"Failed to load Kaggle credentials from Doppler: {e}")
 
 # COMMAND ----------
 # MAGIC %md
