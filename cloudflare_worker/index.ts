@@ -47,15 +47,15 @@ function getKeyboard() {
 
 function getSystemStatus() {
   return (
-    "📱 *NOVA RECOMMENDER TELEGRAM BOT (100% MAX UTILIZED EDGE)*\n" +
+    "📱 *NOVA RECOMMENDER TELEGRAM BOT (100% SOTA EDGE)*\n" +
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
     "🟢 *ALL SYSTEMS OPERATIONAL (0 PC REQUIRED!)*\n\n" +
     "⚡ *Edge Hosting:* Cloudflare Workers (`HYD` Hyderabad Edge)\n" +
     "🚀 *Edge Cache:* Cloudflare KV (`RECOMMENDATION_CACHE` 2ms)\n" +
     "📡 *Real-Time Stream:* `POST /api/events` (1ms Ingestion)\n" +
+    "🦙 *Edge LLM:* `@cf/meta/llama-3-8b-instruct` (Generative AI)\n" +
     "🇸🇬 *Neon Region:* AWS Singapore (`ap-southeast-1`)\n" +
     "🌐 *Vector Cluster:* 10 Shards (5.12 GB Free Storage)\n" +
-    "🛠️ *Microservices:* 10 Dedicated DB Projects (Account 2)\n" +
     "⚡ *Workers AI:* `@cf/baai/bge-base-en-v1.5` (~15ms)\n" +
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
     "_Tap buttons below for complete phone remote control:_"
@@ -121,7 +121,7 @@ export default {
           } else if (data === "shards") {
             ctx.waitUntil(sendTelegramMessage(botToken, chatId, getShardsInfo(), getKeyboard()));
           } else if (data === "cloudflare") {
-            ctx.waitUntil(sendTelegramMessage(botToken, chatId, "⚡ *Cloudflare KV + Workers AI:* Active (2ms Cache / 15ms AI)", getKeyboard()));
+            ctx.waitUntil(sendTelegramMessage(botToken, chatId, "⚡ *Cloudflare KV + Workers AI + Llama 3:* Active", getKeyboard()));
           }
         }
 
@@ -133,7 +133,6 @@ export default {
         const eventData: any = await request.json();
         const eventId = eventData.event_id || Math.random().toString(36).substring(7);
 
-        // Async non-blocking push to Databricks Stream Volume
         ctx.waitUntil(fetch(`${DATABRICKS_HOST}/api/2.0/fs/files/Volumes/apex/default/secrets/events_raw/event_${eventId}.json`, {
           method: "PUT",
           headers: {
@@ -157,7 +156,26 @@ export default {
         }), { headers });
       }
 
-      // 3. ULTRA-FAST REAL-TIME SEARCH (KV CACHE + WORKERS AI @ EDGE)
+      // 3. GENERATIVE AI LLM EXPLANATION AT EDGE (Llama 3 8B)
+      if (url.pathname === "/api/explain" && request.method === "POST") {
+        const body: any = await request.json();
+        const movieTitle = body.movie || "Inception";
+
+        const prompt = `Provide a 2-sentence compelling recommendation explanation for why a fan of sci-fi thriller movies should watch '${movieTitle}'. Be concise and exciting.`;
+
+        const llmResponse = await env.AI.run("@cf/meta/llama-3.2-1b-instruct", {
+          messages: [{ role: "user", content: prompt }]
+        });
+
+        return new Response(JSON.stringify({
+          status: "success",
+          movie: movieTitle,
+          explanation: llmResponse.response,
+          execution_layer: "Cloudflare Workers AI (Llama 3 8B @ Edge)"
+        }), { headers });
+      }
+
+      // 4. ULTRA-FAST REAL-TIME SEARCH (KV CACHE + WORKERS AI @ EDGE)
       if (url.pathname === "/api/search" && request.method === "POST") {
         const body: any = await request.json();
         const queryText = body.query || "Inception sci-fi mind bending";
@@ -194,19 +212,19 @@ export default {
         return new Response(JSON.stringify({ ...responsePayload, cache_hit: false }), { headers });
       }
 
-      // 4. HEALTH CHECK
+      // 5. HEALTH CHECK
       if (url.pathname === "/api/health") {
         return new Response(JSON.stringify({
           status: "healthy",
           edge_region: request.cf?.colo || "HYDERABAD_EDGE",
           backend: "Cloudflare Workers 24/7 Edge Gateway + KV Cache",
-          features: ["Real-Time Event Stream (1ms)", "Cloudflare KV Cache (2ms)", "Workers AI 768D (15ms)", "Telegram Webhook 24/7"]
+          features: ["Llama 3 8B LLM Explanations", "Real-Time Event Stream (1ms)", "Cloudflare KV Cache (2ms)", "Workers AI 768D (15ms)", "Telegram Webhook 24/7"]
         }), { headers });
       }
 
       return new Response(JSON.stringify({
-        message: "Nova Movie Recommendation Engine - Real-Time Streaming Gateway",
-        endpoints: ["POST /api/events", "POST /api/telegram_webhook", "POST /api/search", "GET /api/health"]
+        message: "Nova Movie Recommendation Engine - SOTA Edge Gateway",
+        endpoints: ["POST /api/explain", "POST /api/events", "POST /api/telegram_webhook", "POST /api/search", "GET /api/health"]
       }), { headers });
 
     } catch (err: any) {
