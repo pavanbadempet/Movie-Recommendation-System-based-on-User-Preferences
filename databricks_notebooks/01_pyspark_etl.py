@@ -246,6 +246,26 @@ def load_gold_data(spark):
         .withColumn("genre_rank", dense_rank().over(genre_window)) \
         .filter(col("genre_rank") <= 10)
     fact_genre_rankings.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("fact_genre_top_movies")
+
+    # 4. MULTI-TABLE DATASET RELATIONAL JOIN (MovieLens 20M + TMDB Metadata)
+    if spark.catalog.tableExists("apex.default.movielens_ratings_raw") and spark.catalog.tableExists("apex.default.movielens_links_raw"):
+        print("Performing Multi-Table Relational Join across TMDB + MovieLens Ratings + Links...")
+        ratings_raw = spark.table("apex.default.movielens_ratings_raw")
+        links_raw = spark.table("apex.default.movielens_links_raw")
+
+        # Join 1: Match MovieLens movieId to TMDB tmdbId
+        ratings_with_tmdb = ratings_raw.join(links_raw, "movieId", "inner")
+
+        # Aggregation: Group ratings per TMDB movie ID
+        user_ratings_agg = ratings_with_tmdb.groupBy("tmdbId").agg(
+            avg(col("rating").cast("double")).alias("movielens_avg_rating"),
+            count("userId").alias("movielens_user_review_count")
+        ).withColumnRenamed("tmdbId", "movie_id")
+
+        # Join 2: Left Outer Join TMDB Movies with MovieLens Aggregated Ratings
+        dim_movies_enriched = dim_movies.join(user_ratings_agg, "movie_id", "left")
+        dim_movies_enriched.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("dim_movies_enriched")
+        print("Enriched dim_movies with MovieLens 20M aggregated metrics!")
     
     # ----------------------------------------------------------------------
     # 4. SCD TYPE 2 LOGIC (Data Lakehouse Standard)

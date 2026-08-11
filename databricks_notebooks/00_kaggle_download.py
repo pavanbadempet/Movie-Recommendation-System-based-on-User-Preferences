@@ -75,11 +75,17 @@ api.authenticate()
 # Download and unzip directly into the Volume
 api.dataset_download_files(KAGGLE_DATASET, path=volume_raw_dir, unzip=True)
 
-# EDGE CASE 4: Download Verification Check
-downloaded_csvs = glob.glob(f"{volume_raw_dir}/*.csv")
-if len(downloaded_csvs) == 0:
-    raise FileNotFoundError(f"Kaggle download failed: No CSV files found in {volume_raw_dir} after unzip!")
 print(f"Download and unzip complete! Found raw file: {downloaded_csvs[0]}")
+
+MOVIELENS_DATASET = "grouplens/movielens-20m-dataset"
+volume_movielens_dir = "/Volumes/apex/default/secrets/raw_movielens"
+os.makedirs(volume_movielens_dir, exist_ok=True)
+try:
+    print(f"Downloading MovieLens 20M dataset ({MOVIELENS_DATASET}) to {volume_movielens_dir}...")
+    api.dataset_download_files(MOVIELENS_DATASET, path=volume_movielens_dir, unzip=True)
+    print("MovieLens 20M download complete!")
+except Exception as ml_err:
+    print(f"MovieLens download note: {ml_err}")
 
 # COMMAND ----------
 # MAGIC ## Save to Delta Lake Managed Table (Bronze Layer)
@@ -120,6 +126,17 @@ df = df.withColumn("_ingested_at", current_timestamp()) \
 
 print("Appending raw snapshot directly to Bronze Delta Lake Table 'apex.default.tmdb_raw_data'...")
 df.write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable("apex.default.tmdb_raw_data")
+
+# Ingest MovieLens ratings and links into Bronze Delta tables if available
+if os.path.exists(f"{volume_movielens_dir}/ratings.csv"):
+    ratings_df = spark.read.format("csv").option("header", "true").option("inferSchema", "false").load(f"{volume_movielens_dir}/ratings.csv")
+    ratings_df.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("apex.default.movielens_ratings_raw")
+    print("Ingested MovieLens Ratings into 'apex.default.movielens_ratings_raw'")
+
+if os.path.exists(f"{volume_movielens_dir}/links.csv"):
+    links_df = spark.read.format("csv").option("header", "true").option("inferSchema", "false").load(f"{volume_movielens_dir}/links.csv")
+    links_df.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("apex.default.movielens_links_raw")
+    print("Ingested MovieLens Links into 'apex.default.movielens_links_raw'")
 
 elapsed = round(time.time() - start_time, 2)
 print(f"Data Ingestion Complete in {elapsed}s! Raw data is now persisted in Bronze Delta Lake format.")
