@@ -91,6 +91,13 @@ else:
     total_records = df_spark.count()
     print(f"Total active Gold records to export: {total_records}")
 
+    # Add sequential row index for memory-safe range filtering
+    from pyspark.sql.window import Window
+    from pyspark.sql.functions import row_number
+
+    w = Window.orderBy("id")
+    df_indexed = df_spark.withColumn("row_num", row_number().over(w))
+
     # -------------------------------------------------------------------------
     # NEON POSTGRESQL MEMORY-SAFE BATCHED SYNC
     # -------------------------------------------------------------------------
@@ -101,18 +108,20 @@ else:
         pool_pre_ping=True
     )
 
-    # Memory-Safe Batch Export (prevents spark.driver.maxResultSize OOM)
-    batch_size = 2500
+    batch_size = 2000
     num_batches = (total_records + batch_size - 1) // batch_size
 
     print(f"Exporting {total_records} records to Neon Postgres 'movies' table across {num_batches} memory-safe batches...")
 
     for batch_idx in range(num_batches):
-        offset = batch_idx * batch_size
-        print(f"Syncing Batch {batch_idx + 1}/{num_batches} (offset {offset} to {offset + batch_size})...")
+        start_row = batch_idx * batch_size + 1
+        end_row = (batch_idx + 1) * batch_size
+        print(f"Syncing Batch {batch_idx + 1}/{num_batches} (rows {start_row} to {end_row})...")
 
-        # Pull single batch into driver RAM
-        batch_rows = df_spark.limit(offset + batch_size).tail(batch_size) if batch_idx > 0 else df_spark.limit(batch_size).collect()
+        # Filter range rows (evaluated in parallel by Spark execution engine)
+        batch_spark_df = df_indexed.filter((col("row_num") >= start_row) & (col("row_num") <= end_row)).drop("row_num")
+        batch_rows = batch_spark_df.collect()
+
         batch_pandas = pd.DataFrame([row.asDict() for row in batch_rows])
 
         if_exists_mode = "replace" if batch_idx == 0 else "append"
