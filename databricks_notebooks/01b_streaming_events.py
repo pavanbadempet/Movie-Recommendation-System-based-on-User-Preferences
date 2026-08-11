@@ -15,12 +15,23 @@
 # MAGIC 2. **Checkpointing:** Tracks processed file offsets in `/Volumes/apex/default/secrets/checkpoints/` ensuring **exactly-once processing semantics**.
 # MAGIC 3. **Delta Micro-Batching (`availableNow=True`):** Processes incoming interaction logs into the Silver table `apex.default.user_events` and exits cleanly.
 
-# COMMAND ----------
-# COMMAND ----------
 import os
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, MapType
 from pyspark.sql.functions import col, from_json, current_timestamp
+
+# COMMAND ----------
+# MAGIC %run ./doppler_config
+
+# COMMAND ----------
+try:
+    dbutils.widgets.text("DOPPLER_TOKEN", "", "Doppler Service Token")
+    dbutils.widgets.text("ENVIRONMENT", "dev", "Deployment Environment (dev, stg, prd)")
+    env = dbutils.widgets.get("ENVIRONMENT")
+    secrets = load_centralized_doppler_secrets(dbutils=dbutils, env=env)
+    events_db_url = secrets.get("DATABASE_URL_EVENTS")
+except Exception:
+    events_db_url = None
 
 # COMMAND ----------
 # MAGIC %md
@@ -80,6 +91,40 @@ def merge_microbatch(microBatchDF, batchId):
 
     print(f"Micro-batch {batchId}: Appending incoming streaming interaction events to {silver_table_name}...")
     microBatchDF.write.format("delta").mode("append").saveAsTable(silver_table_name)
+
+    # Optional Sync to Neon Clickstream DB (Account 2)
+    if events_db_url:
+        try:
+            print(f"Micro-batch {batchId}: Syncing events to Neon Clickstream DB...")
+            import psycopg2
+            from psycopg2.extras import execute_values
+            rows = microBatchDF.select("user_id", "movie_id", "interaction_type", "timestamp", "metadata").collect()
+            if rows:
+                conn = psycopg2.connect(events_db_url)
+                cur = conn.cursor()
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS user_events (
+                        id SERIAL PRIMARY KEY,
+                        user_id VARCHAR(100),
+                        movie_id VARCHAR(100),
+                        interaction_type VARCHAR(100),
+                        timestamp VARCHAR(100),
+                        metadata TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    );
+                """)
+                insert_query = """
+                    INSERT INTO user_events (user_id, movie_id, interaction_type, timestamp, metadata)
+                    VALUES %s;
+                """
+                data_tuples = [(r.user_id, r.movie_id, r.interaction_type, r.timestamp, r.metadata) for r in rows]
+                execute_values(cur, insert_query, data_tuples)
+                conn.commit()
+                cur.close()
+                conn.close()
+                print(f"Synced {len(data_tuples)} events to Neon Clickstream DB.")
+        except Exception as e:
+            print(f"Warning: Could not sync events to Neon: {e}")
 
 query = (
     streaming_df.writeStream
