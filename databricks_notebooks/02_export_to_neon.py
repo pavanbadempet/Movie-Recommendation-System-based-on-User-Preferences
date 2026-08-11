@@ -129,7 +129,7 @@ else:
     import gc
 
     # toLocalIterator() streams partition-by-partition with constant O(1) driver RAM overhead
-    row_iterator = df_spark.toLocalIterator(prefetch=1)
+    row_iterator = df_spark.toLocalIterator(prefetchPartitions=True)
 
     batch_buffer = []
     batch_count = 0
