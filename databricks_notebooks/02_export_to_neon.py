@@ -91,15 +91,8 @@ else:
     total_records = df_spark.count()
     print(f"Total active Gold records to export: {total_records}")
 
-    # Add sequential row index for memory-safe range filtering
-    from pyspark.sql.window import Window
-    from pyspark.sql.functions import row_number
-
-    w = Window.orderBy("id")
-    df_indexed = df_spark.withColumn("row_num", row_number().over(w))
-
     # -------------------------------------------------------------------------
-    # NEON POSTGRESQL MEMORY-SAFE BATCHED SYNC
+    # NEON POSTGRESQL ZERO-OOM STREAMING SYNC (toLocalIterator)
     # -------------------------------------------------------------------------
     print(f"Connecting to Neon Postgres...")
     engine = create_engine(
@@ -108,23 +101,34 @@ else:
         pool_pre_ping=True
     )
 
-    batch_size = 2000
-    num_batches = (total_records + batch_size - 1) // batch_size
+    print(f"Streaming {total_records} records to Neon Postgres 'movies' table...")
 
-    print(f"Exporting {total_records} records to Neon Postgres 'movies' table across {num_batches} memory-safe batches...")
+    # toLocalIterator() streams partition-by-partition with constant O(1) driver RAM overhead
+    row_iterator = df_spark.toLocalIterator(prefetch=2)
 
-    for batch_idx in range(num_batches):
-        start_row = batch_idx * batch_size + 1
-        end_row = (batch_idx + 1) * batch_size
-        print(f"Syncing Batch {batch_idx + 1}/{num_batches} (rows {start_row} to {end_row})...")
+    batch_buffer = []
+    batch_count = 0
+    total_synced = 0
+    batch_size = 1000
 
-        # Filter range rows (evaluated in parallel by Spark execution engine)
-        batch_spark_df = df_indexed.filter((col("row_num") >= start_row) & (col("row_num") <= end_row)).drop("row_num")
-        batch_rows = batch_spark_df.collect()
+    for row in row_iterator:
+        batch_buffer.append(row.asDict())
+        if len(batch_buffer) >= batch_size:
+            batch_pandas = pd.DataFrame(batch_buffer)
+            if_exists_mode = "replace" if total_synced == 0 else "append"
+            batch_pandas.to_sql("movies", engine, if_exists=if_exists_mode, index=False, chunksize=250)
 
-        batch_pandas = pd.DataFrame([row.asDict() for row in batch_rows])
+            total_synced += len(batch_buffer)
+            batch_count += 1
+            print(f"Synced Batch {batch_count}: {total_synced}/{total_records} records uploaded to Neon...")
+            batch_buffer = []
 
-        if_exists_mode = "replace" if batch_idx == 0 else "append"
-        batch_pandas.to_sql("movies", engine, if_exists=if_exists_mode, index=False, chunksize=500)
+    # Process final remaining batch
+    if len(batch_buffer) > 0:
+        batch_pandas = pd.DataFrame(batch_buffer)
+        if_exists_mode = "replace" if total_synced == 0 else "append"
+        batch_pandas.to_sql("movies", engine, if_exists=if_exists_mode, index=False, chunksize=250)
+        total_synced += len(batch_buffer)
+        print(f"Synced Final Batch: Total {total_synced}/{total_records} records uploaded successfully!")
 
     print("Export Complete! Neon PostgreSQL serving table 'movies' is now updated and ready for 24/7 web apps.")
