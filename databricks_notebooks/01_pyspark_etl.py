@@ -216,6 +216,36 @@ def load_gold_data(spark):
 
     # Embed the tags using our fast SentenceTransformer UDF
     incoming_df = incoming_df.withColumn("embedding", predict_embeddings(col("tags")))
+
+    # ----------------------------------------------------------------------
+    # 2.8 ENTERPRISE DATA WAREHOUSE: STAR SCHEMA & COMPLEX PYSPARK JOINS/AGGS
+    # ----------------------------------------------------------------------
+    print("Building Star Schema Data Warehouse Fact & Dimension Tables with Window Functions & Joins...")
+    from pyspark.sql.window import Window
+    from pyspark.sql.functions import dense_rank, explode, split, avg, count, trim
+
+    # 1. DIMENSION TABLE: dim_movies
+    dim_movies = incoming_df.select(
+        col("id").alias("movie_id"),
+        col("title"),
+        col("genres"),
+        col("vote_average")
+    ).distinct()
+    dim_movies.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("dim_movies")
+
+    # 2. SNOWFLAKE DIMENSION: dim_genres (Exploded Normalized Dimension)
+    dim_genres = incoming_df.select(col("id").alias("movie_id"), explode(split(col("genres"), "\||,")).alias("genre_name")) \
+        .withColumn("genre_name", trim(col("genre_name"))) \
+        .filter(col("genre_name") != "") \
+        .distinct()
+    dim_genres.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("dim_genres")
+
+    # 3. COMPLEX JOIN & WINDOW AGGREGATION: Top Movie Ranking per Genre
+    genre_window = Window.partitionBy("genre_name").orderBy(col("vote_average").desc())
+    fact_genre_rankings = dim_movies.join(dim_genres, "movie_id", "inner") \
+        .withColumn("genre_rank", dense_rank().over(genre_window)) \
+        .filter(col("genre_rank") <= 10)
+    fact_genre_rankings.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("fact_genre_top_movies")
     
     # ----------------------------------------------------------------------
     # 4. SCD TYPE 2 LOGIC (Data Lakehouse Standard)
