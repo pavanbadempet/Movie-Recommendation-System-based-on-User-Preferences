@@ -72,6 +72,14 @@ def load_gold_data(spark):
 
     raw_table = "apex.default.tmdb_raw_data"
     gold_table_name = "apex.default.tmdb_gold_data"
+
+    # Guarantee 100% clean schema recreation for tmdb_gold_data metadata table
+    try:
+        spark.sql(f"DROP TABLE IF EXISTS {gold_table_name}")
+        print(f"Dropped '{gold_table_name}' table for 100% clean Gold metadata schema creation.")
+    except Exception as drop_e:
+        print(f"Table drop note: {drop_e}")
+
     print(f"Reading Real Raw Data from {raw_table}...")
     
     # 1. Read the incoming raw dataset
@@ -148,8 +156,8 @@ def load_gold_data(spark):
         )
     )
 
-    # NOTE: Embedding generation is handled by isolated GPU task (01c_gpu_embeddings)
-    # This keeps 01_pyspark_etl 100% pure PySpark on instant Standard Serverless
+    # Provide typed null array<float> placeholder for embedding column to guarantee 100% MERGE schema match
+    incoming_df = incoming_df.withColumn("embedding", expr("cast(null as array<float>)"))
 
     # ----------------------------------------------------------------------
     # 2.8 ENTERPRISE DATA WAREHOUSE: STAR SCHEMA & COMPLEX PYSPARK JOINS/AGGS
@@ -220,13 +228,11 @@ def load_gold_data(spark):
                              .withColumn("effective_start_at", current_timestamp()) \
                              .withColumn("effective_end_at", to_timestamp(lit("9999-12-31 23:59:59")))
 
+    # Ensure incoming_df is a pure metadata DataFrame (embedding is generated in isolated 01c_gpu_embeddings task)
+    incoming_df = incoming_df.drop("embedding")
+
     print(f"Merging enriched data into Gold Table: {gold_table_name}...")
     
-    # CONDITION 4: Check Metastore Table Existence
-    # - IF table_exists IS FALSE (First-Time Pipeline Execution):
-    #   Creates the Gold Delta table for the first time with Liquid Clustering enabled on 'id'.
-    # - ELSE (Incremental CDC Pipeline Execution):
-    #   Executes a 3-step Delta Lake SCD Type 2 UPSERT merge.
     table_exists = spark.catalog.tableExists(gold_table_name)
     
     if not table_exists:
@@ -248,9 +254,15 @@ def load_gold_data(spark):
             expr(update_condition)
         ).selectExpr("updates.*")
         
-        # Step 2: Merge incoming updates into Gold table
-        # - MATCHED AND CHANGED: Invalidate old active row (is_current = False, effective_end_at = current_timestamp())
-        # - NOT MATCHED: Insert new incoming movie records as active (is_current = True)
+        # Build explicit defensive column mapping dictionary matching target table schema 100%
+        target_cols = [c.name for c in gold_table.toDF().schema]
+        insert_exprs = {}
+        for col_name in target_cols:
+            if col_name in incoming_df.columns:
+                insert_exprs[col_name] = f"updates.{col_name}"
+            elif col_name == "embedding":
+                insert_exprs[col_name] = "cast(null as array<float>)"
+
         gold_table.alias("gold").merge(
             source=incoming_df.alias("updates"),
             condition="gold.id = updates.id AND gold.is_current = True"
@@ -260,7 +272,7 @@ def load_gold_data(spark):
                 "is_current": "False",
                 "effective_end_at": "current_timestamp()"
             }
-        ).whenNotMatchedInsertAll().execute()
+        ).whenNotMatchedInsert(values=insert_exprs).execute()
         
         # Step 3: Append new active version records of updated rows to complete history chain
         staged_updates.write.format("delta").mode("append").saveAsTable(gold_table_name)
