@@ -27,8 +27,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("IngestionPipeline")
 
 start_time = time.time()
-logger.info("Initializing Kaggle Data Ingestion Pipeline...")
+# COMMAND ----------
+# MAGIC %run ./doppler_config
 
+# COMMAND ----------
 try:
     dbutils.widgets.text("DOPPLER_TOKEN", "", "Doppler Service Token")
     dbutils.widgets.text("ENVIRONMENT", "dev", "Deployment Environment (dev, stg, prd)")
@@ -38,7 +40,6 @@ try:
     # -------------------------------------------------------------------------
     # CENTRALIZED DOPPLER SECRET RESOLUTION
     # -------------------------------------------------------------------------
-    from doppler_config import load_centralized_doppler_secrets
     secrets = load_centralized_doppler_secrets(dbutils=dbutils, env=env)
     
     if not os.environ.get('KAGGLE_USERNAME') or not os.environ.get('KAGGLE_KEY'):

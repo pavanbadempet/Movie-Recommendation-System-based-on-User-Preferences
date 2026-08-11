@@ -24,6 +24,10 @@ from pyspark.sql.functions import col
 # COMMAND ----------
 # Define the Neon Database URL (Configure this in Doppler)
 
+# COMMAND ----------
+# MAGIC %run ./doppler_config
+
+# COMMAND ----------
 try:
     dbutils.widgets.text("DOPPLER_TOKEN", "", "Doppler Service Token")
     dbutils.widgets.text("ENVIRONMENT", "dev", "Deployment Environment (dev, stg, prd)")
@@ -33,7 +37,6 @@ try:
     # -------------------------------------------------------------------------
     # CENTRALIZED DOPPLER SECRET RESOLUTION
     # -------------------------------------------------------------------------
-    from doppler_config import load_centralized_doppler_secrets
     secrets = load_centralized_doppler_secrets(dbutils=dbutils, env=env)
     
     DATABASE_URL = secrets.get("DATABASE_URL")
