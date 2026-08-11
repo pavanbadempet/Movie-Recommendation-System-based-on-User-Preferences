@@ -65,7 +65,7 @@ def main():
     run_script("hf_upload.py")
 
     log_step(13, "Deploy 100% Max-Utilized Cloudflare Workers AI + KV Gateway")
-    subprocess.run(["npx", "wrangler", "deploy"], capture_output=True, text=True)
+    subprocess.run("npx wrangler deploy", shell=True, capture_output=True, text=True)
 
     elapsed = time.time() - start_time
     print(f"\n==================================================")
