@@ -85,9 +85,10 @@ MOVIELENS_DATASET = "grouplens/movielens-20m-dataset"
 volume_movielens_dir = "/Volumes/apex/default/secrets/raw_movielens"
 os.makedirs(volume_movielens_dir, exist_ok=True)
 try:
-    print(f"Downloading MovieLens 20M dataset ({MOVIELENS_DATASET}) to {volume_movielens_dir}...")
-    api.dataset_download_files(MOVIELENS_DATASET, path=volume_movielens_dir, unzip=True)
-    print("MovieLens 20M download complete!")
+    if 'api' in locals() and api is not None:
+        print(f"Downloading MovieLens 20M dataset ({MOVIELENS_DATASET}) to {volume_movielens_dir}...")
+        api.dataset_download_files(MOVIELENS_DATASET, path=volume_movielens_dir, unzip=True)
+        print("MovieLens 20M download complete!")
 except Exception as ml_err:
     print(f"MovieLens download note: {ml_err}")
 
