@@ -128,25 +128,33 @@ else:
     print(f"Total active Gold records to export: {total_records}")
 
     # -------------------------------------------------------------------------
-    # NEON POSTGRESQL HIGH-THROUGHPUT BULK SYNC (psycopg2 execute_values)
+    # MULTI-SHARD NEON RESOLUTION (Supports 1 to 10 Shards via Doppler)
     # -------------------------------------------------------------------------
-    print(f"Connecting to Neon Postgres...")
-    engine = create_engine(
-        DATABASE_URL,
-        connect_args={"sslmode": "require"},
-        pool_pre_ping=True
-    )
+    shard_urls = []
+    for i in range(10):
+        s_url = secrets.get(f"DATABASE_URL_SHARD_{i}") or secrets.get(f"DATABASE_URL_{i}")
+        if s_url:
+            if s_url.startswith("postgres://"):
+                s_url = s_url.replace("postgres://", "postgresql://", 1)
+            shard_urls.append(s_url)
 
-    print(f"Streaming {total_records} records to Neon Postgres 'movies' table via fast bulk protocol...")
+    if not shard_urls:
+        p_url = secrets.get("DATABASE_URL")
+        if p_url:
+            if p_url.startswith("postgres://"):
+                p_url = p_url.replace("postgres://", "postgresql://", 1)
+            shard_urls = [p_url]
 
+    num_shards = len(shard_urls)
+    print(f"Detected {num_shards} active Neon Database Shard(s) in Doppler!")
+
+    # -------------------------------------------------------------------------
+    # MULTI-SHARD STREAMING EXPORT ENGINE
+    # -------------------------------------------------------------------------
     import gc
     from psycopg2.extras import execute_values
 
     def psycopg2_fast_insert(table, conn, keys, data_iter):
-        """
-        ⚡ SOTA High-Performance Bulk Insert callback for pandas to_sql.
-        Uses PostgreSQL native execute_values to accelerate writes by 5x-10x.
-        """
         dbapi_conn = conn.connection
         with dbapi_conn.cursor() as cur:
             string_data = [tuple(x) for x in data_iter]
@@ -155,68 +163,76 @@ else:
             sql = f'INSERT INTO "{table_name}" ("{columns}") VALUES %s'
             execute_values(cur, sql, string_data)
 
-    # toLocalIterator() streams partition-by-partition with constant O(1) driver RAM overhead
-    row_iterator = df_spark.toLocalIterator(prefetchPartitions=True)
+    for shard_idx, db_url in enumerate(shard_urls):
+        print(f"\n========================================================")
+        print(f"🚀 PROCESSING SHARD {shard_idx + 1}/{num_shards} ({db_url.split('@')[-1]})")
+        print(f"========================================================")
 
-    batch_buffer = []
-    batch_count = 0
-    total_synced = 0
-    batch_size = 500  # Fast bulk batch size
+        # Filter shard records using deterministic modulo hash
+        if num_shards > 1:
+            df_shard = df_spark.filter(col("id") % num_shards == shard_idx)
+        else:
+            df_shard = df_spark
 
-    for row in row_iterator:
-        batch_buffer.append(row.asDict())
-        if len(batch_buffer) >= batch_size:
+        shard_records = df_shard.count()
+        print(f"Shard {shard_idx + 1} contains {shard_records} records.")
+
+        if shard_records == 0:
+            continue
+
+        engine = create_engine(db_url, connect_args={"sslmode": "require"}, pool_pre_ping=True)
+        row_iterator = df_shard.toLocalIterator(prefetchPartitions=True)
+
+        batch_buffer = []
+        batch_count = 0
+        total_synced = 0
+        batch_size = 500
+
+        for row in row_iterator:
+            batch_buffer.append(row.asDict())
+            if len(batch_buffer) >= batch_size:
+                batch_pandas = pd.DataFrame(batch_buffer)
+                if_exists_mode = "replace" if total_synced == 0 else "append"
+                try:
+                    batch_pandas.to_sql("movies", engine, if_exists=if_exists_mode, index=False, method=psycopg2_fast_insert)
+                except Exception:
+                    batch_pandas.to_sql("movies", engine, if_exists=if_exists_mode, index=False, method="multi", chunksize=100)
+
+                total_synced += len(batch_buffer)
+                batch_count += 1
+                print(f"Shard {shard_idx + 1} - Synced Batch {batch_count}: {total_synced}/{shard_records} records...")
+
+                batch_buffer = []
+                del batch_pandas
+                gc.collect()
+
+        if len(batch_buffer) > 0:
             batch_pandas = pd.DataFrame(batch_buffer)
             if_exists_mode = "replace" if total_synced == 0 else "append"
             try:
                 batch_pandas.to_sql("movies", engine, if_exists=if_exists_mode, index=False, method=psycopg2_fast_insert)
             except Exception:
-                # Fallback to standard multi-insert if execute_values encounters custom type constraints
                 batch_pandas.to_sql("movies", engine, if_exists=if_exists_mode, index=False, method="multi", chunksize=100)
 
             total_synced += len(batch_buffer)
-            batch_count += 1
-            print(f"Synced Batch {batch_count}: {total_synced}/{total_records} records uploaded to Neon...")
-
-            batch_buffer = []
+            print(f"Shard {shard_idx + 1} - Final Batch Completed: Total {total_synced}/{shard_records} records synced!")
             del batch_pandas
             gc.collect()
 
-    # Process final remaining batch
-    if len(batch_buffer) > 0:
-        batch_pandas = pd.DataFrame(batch_buffer)
-        if_exists_mode = "replace" if total_synced == 0 else "append"
-        try:
-            batch_pandas.to_sql("movies", engine, if_exists=if_exists_mode, index=False, method=psycopg2_fast_insert)
-        except Exception:
-            batch_pandas.to_sql("movies", engine, if_exists=if_exists_mode, index=False, method="multi", chunksize=100)
-
-        total_synced += len(batch_buffer)
-        print(f"Synced Final Batch: Total {total_synced}/{total_records} records uploaded successfully!")
-        del batch_pandas
-        gc.collect()
-
-    # -------------------------------------------------------------------------
-    # POSTGRESQL POST-SYNC COVERING INDEXES & VECTOR SEARCH OPTIMIZATION
-    # -------------------------------------------------------------------------
-    print("Building PostgreSQL performance indexes on table 'movies'...")
-    with engine.begin() as ddl_conn:
-        try:
-            # 1. Primary & B-Tree Indexes for Fast Metadata Filtering
-            ddl_conn.execute("CREATE INDEX IF NOT EXISTS idx_movies_id ON movies (id);")
-            ddl_conn.execute("CREATE INDEX IF NOT EXISTS idx_movies_release_date ON movies (release_date DESC);")
-
-            # 2. Enable pgvector extension and build HNSW vector index
+        # Build Post-Sync Covering Indexes for this Shard
+        print(f"Building PostgreSQL performance indexes on Shard {shard_idx + 1}...")
+        with engine.begin() as ddl_conn:
             try:
-                ddl_conn.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-                ddl_conn.execute("ALTER TABLE movies ALTER COLUMN embedding TYPE vector USING embedding::vector;")
-                ddl_conn.execute("CREATE INDEX IF NOT EXISTS idx_movies_embedding_hnsw ON movies USING hnsw (embedding vector_cosine_ops);")
-                print("PostgreSQL HNSW Vector Index created successfully!")
-            except Exception as v_err:
-                print(f"pgvector Extension Notice: {v_err}")
+                ddl_conn.execute("CREATE INDEX IF NOT EXISTS idx_movies_id ON movies (id);")
+                ddl_conn.execute("CREATE INDEX IF NOT EXISTS idx_movies_release_date ON movies (release_date DESC);")
+                try:
+                    ddl_conn.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+                    ddl_conn.execute("ALTER TABLE movies ALTER COLUMN embedding TYPE vector USING embedding::vector;")
+                    ddl_conn.execute("CREATE INDEX IF NOT EXISTS idx_movies_embedding_hnsw ON movies USING hnsw (embedding vector_cosine_ops);")
+                    print(f"Shard {shard_idx + 1} HNSW Vector Index created successfully!")
+                except Exception as v_err:
+                    print(f"Shard {shard_idx + 1} pgvector Notice: {v_err}")
+            except Exception as idx_err:
+                print(f"Shard {shard_idx + 1} Index Notice: {idx_err}")
 
-            print("PostgreSQL primary covering indexes created successfully!")
-        except Exception as idx_err:
-            print(f"PostgreSQL Index Notice: {idx_err}")
-
-    print("Export Complete! Neon PostgreSQL serving table 'movies' is now updated, indexed, and ready for 24/7 web apps.")
+    print("\n🎉 Multi-Shard Export Complete! All Neon Database Shards are updated, indexed, and live!")
