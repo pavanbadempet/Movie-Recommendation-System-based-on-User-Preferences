@@ -10,6 +10,7 @@ NOTEBOOKS = [
     "00_kaggle_download",
     "01_pyspark_etl",
     "01b_streaming_events",
+    "01c_gpu_embeddings",
     "02_export_to_neon",
     "doppler_config"
 ]

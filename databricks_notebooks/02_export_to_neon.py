@@ -86,8 +86,10 @@ if DATABASE_URL.startswith("postgres://"):
 # COMMAND ----------
 # MAGIC ## 3. Read Active Records from Gold Table & Export to PostgreSQL
 # COMMAND ----------
-
-gold_table_name = "apex.default.tmdb_gold_data"
+gold_table_name = "apex.default.tmdb_gold_with_embeddings"
+# Fallback to base gold table if embeddings table doesn't exist yet
+if not spark.catalog.tableExists(gold_table_name):
+    gold_table_name = "apex.default.tmdb_gold_data"
 print(f"Reading Gold table from {gold_table_name}...")
 
 from pyspark.sql.functions import col, to_json

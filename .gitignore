@@ -127,3 +127,6 @@ scratch/
 apex.db-shm
 apex.db-wal
 doppler_token.txt
+test/
+test2/
+.wrangler/

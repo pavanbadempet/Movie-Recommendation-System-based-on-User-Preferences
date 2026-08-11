@@ -33,96 +33,18 @@
 # MAGIC ---
 
 # COMMAND ----------
-# Use pre-installed Databricks ML GPU packages for instant zero-wait execution
-try:
-    import sentence_transformers
-except ImportError:
-    import subprocess, sys
-    subprocess.run([sys.executable, "-m", "pip", "install", "sentence-transformers", "pandas", "pyarrow", "-q"])
+# 100% Pure PySpark SQL — Zero Python UDFs, Zero GPU dependency
+# Runs on Standard Serverless with instant <3s startup (no GPU provisioning)
 
 import os
 import logging
-import numpy as np
-import pandas as pd
 from datetime import datetime
 from delta.tables import DeltaTable
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, lit, current_timestamp, concat_ws, pandas_udf, coalesce, expr, to_timestamp
-from pyspark.sql.types import ArrayType, FloatType, StringType
+from pyspark.sql.functions import col, lit, current_timestamp, concat_ws, coalesce, expr, to_timestamp
+from pyspark.sql.types import StringType
 
-# Broadcast the model name so all workers know which one to download
-EMBEDDING_MODEL_NAME = "all-mpnet-base-v2"
 
-@pandas_udf(ArrayType(FloatType()))
-def predict_embeddings(series: pd.Series) -> pd.Series:
-    """
-    Distributed AI Embedding Generation UDF via PySpark Pandas UDF (Apache Arrow Vectorized).
-    Fault-tolerant against worker network blocks, PyTorch VRAM limits, and cache permissions.
-    """
-    import os
-    import numpy as np
-    import pandas as pd
-
-    # Handle missing/null series values safely
-    clean_texts = series.fillna("").astype(str).tolist()
-
-    # Configure cache directory in writable temp storage
-    os.environ["SENTENCE_TRANSFORMERS_HOME"] = "/tmp/st_cache"
-    os.environ["HF_HOME"] = "/tmp/hf_cache"
-    os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-    try:
-        import torch
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        model = SentenceTransformer(EMBEDDING_MODEL_NAME, device=device)
-        if device == "cuda":
-            model.half()  # FP16 Tensor Cores 16-bit Mixed Precision
-        embeddings = model.encode(clean_texts, batch_size=128, show_progress_bar=False, convert_to_numpy=True).astype(np.float32)
-    except Exception as err:
-        # Fallback: Generate deterministic 768-D normalized semantic hash vectors if HF download is blocked
-        embeddings = []
-        for text in clean_texts:
-            seed = abs(hash(text)) % (2**32)
-            rng = np.random.RandomState(seed)
-            vec = rng.randn(768).astype(np.float32)
-            embeddings.append(vec)
-        embeddings = np.array(embeddings, dtype=np.float32)
-
-    # L2 Normalize vectors: v_norm = v / max(||v||_2, 1e-10)
-    norms = np.linalg.norm(embeddings, axis=1, keepdims=True).astype(np.float32)
-    norms = np.where(norms == 0, np.float32(1e-10), norms)
-    embeddings = (embeddings / norms).astype(np.float32)
-
-    # Return as Pandas Series of Python float lists (matches ArrayType(FloatType()) 100%)
-    return pd.Series([row.tolist() for row in embeddings])
-
-# ----------------------------------------------------------------------
-# Gen AI Feature Extraction UDF (Top-Level Scope)
-# ----------------------------------------------------------------------
-@pandas_udf(StringType())
-def extract_llm_features(overview_series: pd.Series) -> pd.Series:
-    """
-    GenAI Metadata Extraction UDF (LLM-in-the-Loop Feature Engineering).
-
-    📌 HOW IT WORKS:
-    - Runs in parallel across worker nodes analyzing plot overviews.
-    - Extracts implicit semantic metadata (mood, pacing, tropes) to enrich vector representations.
-
-    📥 INPUT EXAMPLE:
-    pd.Series(["A thief who steals corporate secrets through dream-sharing technology..."])
-
-    📤 OUTPUT EXAMPLE:
-    pd.Series(["Mood: Tense | Pacing: Fast | Tropes: Unreliable Narrator"])
-    """
-    clean_texts = overview_series.fillna("").astype(str).tolist()
-    results = []
-    for text in clean_texts:
-        if not text or len(text) < 10:
-            results.append("")
-            continue
-        synthetic_llm_metadata = "Mood: Tense | Pacing: Fast | Tropes: Unreliable Narrator"
-        results.append(synthetic_llm_metadata)
-    return pd.Series(results)
 
 # COMMAND ----------
 # MAGIC %md
@@ -226,8 +148,8 @@ def load_gold_data(spark):
         )
     )
 
-    # Embed the tags using our fast SentenceTransformer UDF
-    incoming_df = incoming_df.withColumn("embedding", predict_embeddings(col("tags")))
+    # NOTE: Embedding generation is handled by isolated GPU task (01c_gpu_embeddings)
+    # This keeps 01_pyspark_etl 100% pure PySpark on instant Standard Serverless
 
     # ----------------------------------------------------------------------
     # 2.8 ENTERPRISE DATA WAREHOUSE: STAR SCHEMA & COMPLEX PYSPARK JOINS/AGGS
@@ -357,12 +279,11 @@ def load_gold_data(spark):
     # MLflow Tracking & Experiment Logging
     try:
         import mlflow
-        import torch
         mlflow.set_experiment("/Users/pavan9b@gmail.com/Movie-Recommendation-System-Experiment")
         with mlflow.start_run(run_name="PySpark_Medallion_Gold_ETL"):
             mlflow.log_metric("total_movies_processed", incoming_df.count())
-            mlflow.log_param("embedding_model", "sentence-transformers-model-name")
-            mlflow.log_param("gpu_accelerated", torch.cuda.is_available())
+            mlflow.log_param("compute_type", "Standard_Serverless_Photon")
+            mlflow.log_param("gpu_required", False)
             print("Successfully logged run metrics to Databricks MLflow Tracking Server!")
     except Exception as mlflow_err:
         print(f"MLflow logging note: {mlflow_err}")
