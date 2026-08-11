@@ -12,6 +12,7 @@
 
 # COMMAND ----------
 # MAGIC %pip install psycopg2-binary sqlalchemy pandas
+# MAGIC %restart_python
 
 # COMMAND ----------
 import os

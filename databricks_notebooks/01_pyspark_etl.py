@@ -33,7 +33,8 @@
 # MAGIC ---
 
 # COMMAND ----------
-%pip install sentence-transformers pandas pyarrow
+# MAGIC %pip install sentence-transformers pandas pyarrow
+# MAGIC %restart_python
 
 # COMMAND ----------
 import os
