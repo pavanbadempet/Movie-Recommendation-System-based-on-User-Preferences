@@ -1,9 +1,16 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # 02 - Export Gold Features to Neon PostgreSQL (Serving Layer Sync)
+# MAGIC # 02 - Export Gold Vector Dataset to Neon PostgreSQL (Multi-Shard Cluster)
 # MAGIC
-# MAGIC ## 📌 Overview & Serving Architecture
-# MAGIC This notebook pulls active records (`is_current == True`) from the Gold Delta table (`apex.default.tmdb_gold_data`) and synchronizes them with a **Serverless Neon PostgreSQL Database**.
+# MAGIC ## 🏛️ Enterprise Multi-Tier Storage Architecture:
+# MAGIC
+# MAGIC 1. **Databricks Delta Lake (Unlimited Historical Source of Truth & Lakehouse):**
+# MAGIC    - **100% Full History:** Stores all raw datasets, incremental micro-batches, and versioned embeddings in Delta format (`apex.default.movies_gold`, `apex.default.user_events`).
+# MAGIC    - **ACID Transactions & Time Travel:** Preserves full version history (`VERSION AS OF`) for auditability, point-in-time recovery, and offline ML model retraining.
+# MAGIC
+# MAGIC 2. **Neon PostgreSQL (Ultra-Fast Online Serving Layer ~5ms Latency):**
+# MAGIC    - **Multi-Shard Distribution:** Hashes records across 10 Neon project shards in AWS Singapore (`aws-ap-southeast-1`).
+# MAGIC    - **Serving State:** Holds the latest serving snapshot of Top movies with covering B-Tree indexes and `pgvector` HNSW indexes for instant web application vector similarity queries.
 # MAGIC
 # MAGIC ### 💡 Core Serving Patterns:
 # MAGIC 1. **Decoupled Architecture:** Allows 24/7 web apps (Hugging Face / Vercel / Next.js) to query vector embeddings from Neon without keeping expensive Databricks clusters awake.
