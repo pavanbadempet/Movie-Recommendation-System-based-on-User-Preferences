@@ -165,18 +165,27 @@ def load_gold_data(spark):
     # ----------------------------------------------------------------------
     # 2. DATA QUALITY GATES & SCHEMA VALIDATION
     # ----------------------------------------------------------------------
-    print("Running Data Quality Gates...")
+    print("Running Data Quality Gates & Dead-Letter Quarantine Checks...")
+
+    # Identify and quarantine corrupted/invalid rows (NULL id or malformed ratings)
+    if "vote_average" in incoming_df.columns:
+        corrupted_df = incoming_df.filter(
+            col("id").isNull() |
+            (expr("try_cast(vote_average as double)").isNull()) |
+            (expr("try_cast(vote_average as double)") < 0.0) |
+            (expr("try_cast(vote_average as double)") > 10.0)
+        )
+        if corrupted_df.limit(1).count() > 0:
+            print("Quarantining corrupted raw rows into Delta Table 'apex.default.corrupted_data_quarantine'...")
+            corrupted_df.withColumn("_quarantined_at", current_timestamp()) \
+                .write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable("apex.default.corrupted_data_quarantine")
+
     # Drop rows with critical missing primary keys
     incoming_df = incoming_df.filter(col("id").isNotNull())
 
     # EDGE CASE 2: Intra-Batch Primary Key Deduplication
-    # - Deduplicates incoming batch on 'id' to prevent Delta MERGE exception:
-    #   'ON search condition matched multiple target rows'
     incoming_df = incoming_df.dropDuplicates(["id"])
 
-    # CONDITION 1: Validate rating range [0.0, 10.0] if 'vote_average' exists
-    # - IF 'vote_average' exists: Safely cast text to DOUBLE using try_cast (corrupt text -> NULL), then keep valid ratings.
-    # - IMPLICIT ELSE: Skip rating filtering if column is absent in raw payload.
     if "vote_average" in incoming_df.columns:
         incoming_df = incoming_df.withColumn("vote_average", expr("try_cast(vote_average as double)"))
         incoming_df = incoming_df.filter((col("vote_average") >= 0.0) & (col("vote_average") <= 10.0))
