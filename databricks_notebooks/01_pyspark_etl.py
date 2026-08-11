@@ -33,10 +33,13 @@
 # MAGIC ---
 
 # COMMAND ----------
-# MAGIC %pip install sentence-transformers pandas pyarrow
-# MAGIC %restart_python
+# Use pre-installed Databricks ML GPU packages for instant zero-wait execution
+try:
+    import sentence_transformers
+except ImportError:
+    import subprocess, sys
+    subprocess.run([sys.executable, "-m", "pip", "install", "sentence-transformers", "pandas", "pyarrow", "-q"])
 
-# COMMAND ----------
 import os
 import logging
 import numpy as np
