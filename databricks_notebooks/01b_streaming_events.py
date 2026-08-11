@@ -86,5 +86,14 @@ query = (
 )
 
 print(f"Streaming job initialized successfully. Auto Loader is watching {raw_events_path}...")
-# Note: Do not awaitTermination() here if running as a Databricks Job, 
-# unless the job is specifically configured as a Continuous cluster.
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## 📊 Visual Verification & Querying (Silver Streaming Events Table)
+
+# COMMAND ----------
+# MAGIC %sql
+# MAGIC SELECT _ingested_at, user_id, movie_id, interaction_type, timestamp
+# MAGIC FROM apex.default.user_events
+# MAGIC ORDER BY _ingested_at DESC
+# MAGIC LIMIT 10;
