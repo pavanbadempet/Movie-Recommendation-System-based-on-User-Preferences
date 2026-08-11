@@ -67,20 +67,22 @@ def predict_embeddings(series: pd.Series) -> pd.Series:
     pd.Series([[0.0124, -0.0451, 0.0892, ..., 0.0019]])  # 768-dimensional Float vector array
     """
     from sentence_transformers import SentenceTransformer
+    # Handle missing/null series values safely
+    clean_texts = series.fillna("").astype(str).tolist()
+
     # Load model (downloads once per worker process, then cached in memory)
     model = SentenceTransformer(EMBEDDING_MODEL_NAME)
 
-    # Generate embeddings in parallel GPU/CPU batches
-    embeddings = model.encode(series.tolist(), batch_size=32, show_progress_bar=False, convert_to_numpy=True)
+    # Generate embeddings in parallel GPU/CPU batches (explicit float32 type)
+    embeddings = model.encode(clean_texts, batch_size=32, show_progress_bar=False, convert_to_numpy=True).astype(np.float32)
 
     # L2 Normalize vectors: v_norm = v / max(||v||_2, 1e-10)
-    # L2 Normalization guarantees that pgvector Inner Product (<#>) is identical to Cosine Similarity!
-    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-    norms = np.where(norms == 0, 1e-10, norms)
-    embeddings = embeddings / norms
+    norms = np.linalg.norm(embeddings, axis=1, keepdims=True).astype(np.float32)
+    norms = np.where(norms == 0, np.float32(1e-10), norms)
+    embeddings = (embeddings / norms).astype(np.float32)
 
-    # Return as a Pandas Series of lists (Spark converts to ArrayType(FloatType()))
-    return pd.Series(list(embeddings))
+    # Return as Pandas Series of Python float lists (matches ArrayType(FloatType()) exactly)
+    return pd.Series([row.tolist() for row in embeddings])
 
 # ----------------------------------------------------------------------
 # Gen AI Feature Extraction UDF (Top-Level Scope)
@@ -100,8 +102,9 @@ def extract_llm_features(overview_series: pd.Series) -> pd.Series:
     📤 OUTPUT EXAMPLE:
     pd.Series(["Mood: Tense | Pacing: Fast | Tropes: Unreliable Narrator"])
     """
+    clean_texts = overview_series.fillna("").astype(str).tolist()
     results = []
-    for text in overview_series:
+    for text in clean_texts:
         if not text or len(text) < 10:
             results.append("")
             continue
