@@ -64,13 +64,13 @@ streaming_df = (
 # 2. Write Micro-Batch Stream to Delta Lake Managed Table
 def merge_microbatch(microBatchDF, batchId):
     """
-    Processes each 10-second micro-batch stream partition.
+    Processes each micro-batch stream partition cleanly.
 
     📌 EDGE CASE 2: Empty Micro-Batch Check
     - IF microBatchDF is empty (0 new JSON events dropped): Skip transaction write to avoid creating empty 0-record Delta commits.
     - ELSE: Append non-empty event batch to Silver Delta table 'apex.default.user_events'.
     """
-    if microBatchDF.rdd.isEmpty():
+    if microBatchDF.limit(1).count() == 0:
         print(f"Micro-batch {batchId}: 0 new events. Skipping write.")
         return
 
@@ -81,7 +81,7 @@ query = (
     streaming_df.writeStream
     .foreachBatch(merge_microbatch)
     .option("checkpointLocation", checkpoint_path)
-    .trigger(processingTime="10 seconds")  # Real-time 10-second micro-batches
+    .trigger(availableNow=True)  # Databricks Serverless native batch trigger
     .start()
 )
 
