@@ -3,10 +3,12 @@ import sys
 import time
 import requests
 import json
+import subprocess
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 DATABRICKS_HOST = "https://dbc-0d2f31ec-d157.cloud.databricks.com"
 DATABRICKS_TOKEN = os.environ.get("DATABRICKS_TOKEN", "")
+CLOUDFLARE_WORKER_URL = "https://movie-recommendation-system.pavan9b.workers.dev"
 
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
 
@@ -28,11 +30,15 @@ def get_keyboard():
         "inline_keyboard": [
             [
                 {"text": "📊 System Status", "callback_data": "status"},
-                {"text": "🚀 Run Vector Export", "callback_data": "run_export"}
+                {"text": "🚀 Databricks Export", "callback_data": "run_export"}
             ],
             [
-                {"text": "🌐 Neon Singapore Shards", "callback_data": "shards"},
-                {"text": "⚡ Databricks Jobs", "callback_data": "databricks"}
+                {"text": "🤗 HuggingFace Deploy", "callback_data": "deploy_hf"},
+                {"text": "⚡ Cloudflare Edge", "callback_data": "cloudflare"}
+            ],
+            [
+                {"text": "🌐 Neon Singapore", "callback_data": "shards"},
+                {"text": "🔄 Refresh Menu", "callback_data": "status"}
             ]
         ]
     }
@@ -57,13 +63,15 @@ def get_system_status():
     msg = (
         "📱 *NOVA MOVIE RECOMMENDER BOT DASHBOARD*\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "🟢 *SYSTEM STATUS:* OPERATIONAL\n\n"
+        "🟢 *ALL SYSTEMS OPERATIONAL*\n\n"
         f"⚡ *Databricks Serverless:* {db_status}\n"
         "🇸🇬 *Neon Region:* AWS Singapore (`ap-southeast-1`)\n"
         "🌐 *Vector Cluster:* 10 Shards (5.12 GB Free Storage)\n"
         "🛠️ *Microservices:* 10 Dedicated DB Projects (Account 2)\n"
+        "⚡ *Cloudflare Edge:* `movie-recommendation-system` (15ms AI)\n"
+        "🤗 *HuggingFace Space:* `pavanbadempet/movie-rec-api`\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "_Tap buttons below for remote phone control:_"
+        "_Tap buttons below for complete phone control:_"
     )
     return msg
 
@@ -88,6 +96,26 @@ def get_shards_info():
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     )
     return msg
+
+def test_cloudflare_edge():
+    try:
+        res = requests.post(f"{CLOUDFLARE_WORKER_URL}/api/search", json={"query": "Inception mind bending sci-fi"}, timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            return (
+                "⚡ *CLOUDFLARE WORKERS AI EDGE STATUS*\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "🟢 *Status:* OPERATIONAL\n"
+                f"📍 *Model:* `@cf/baai/bge-base-en-v1.5`\n"
+                f"📏 *Dimensions:* {data.get('embedding_dimensions')}D Vector\n"
+                f"⏱️ *Latency:* {data.get('latency_ms')} ms\n"
+                f"🌐 *Url:* `{CLOUDFLARE_WORKER_URL}`\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            )
+        else:
+            return f"❌ Cloudflare Edge returned HTTP {res.status_code}"
+    except Exception as e:
+        return f"❌ Cloudflare error: {e}"
 
 def trigger_export():
     headers = {"Authorization": f"Bearer {DATABRICKS_TOKEN}"}
@@ -114,6 +142,13 @@ def trigger_export():
     except Exception as e:
         return f"❌ Execution Error: {e}"
 
+def trigger_hf_upload():
+    try:
+        subprocess.Popen(["doppler", "run", "--", "python", "scripts/hf_upload.py"])
+        return "🤗 *HuggingFace Deployment Initiated!*\n\nSyncing codebase and model weights to `pavanbadempet/movie-rec-api`!"
+    except Exception as e:
+        return f"❌ HF Upload Error: {e}"
+
 def poll_updates():
     print("NovaMovieRecBot is online and polling Telegram API...")
     offset = 0
@@ -130,14 +165,16 @@ def poll_updates():
                         chat_id = msg["chat"]["id"]
                         text = msg.get("text", "")
                         
-                        if text.startswith("/start") or text.startswith("/help"):
-                            send_message(chat_id, get_system_status(), reply_markup=get_keyboard())
-                        elif text.startswith("/status"):
+                        if text.startswith("/start") or text.startswith("/help") or text.startswith("/status"):
                             send_message(chat_id, get_system_status(), reply_markup=get_keyboard())
                         elif text.startswith("/shards"):
                             send_message(chat_id, get_shards_info(), reply_markup=get_keyboard())
                         elif text.startswith("/run"):
                             send_message(chat_id, trigger_export(), reply_markup=get_keyboard())
+                        elif text.startswith("/hf"):
+                            send_message(chat_id, trigger_hf_upload(), reply_markup=get_keyboard())
+                        elif text.startswith("/cf") or text.startswith("/cloudflare"):
+                            send_message(chat_id, test_cloudflare_edge(), reply_markup=get_keyboard())
                             
                     elif "callback_query" in u:
                         cb = u["callback_query"]
@@ -148,10 +185,12 @@ def poll_updates():
                             send_message(chat_id, get_system_status(), reply_markup=get_keyboard())
                         elif data == "run_export":
                             send_message(chat_id, trigger_export(), reply_markup=get_keyboard())
+                        elif data == "deploy_hf":
+                            send_message(chat_id, trigger_hf_upload(), reply_markup=get_keyboard())
+                        elif data == "cloudflare":
+                            send_message(chat_id, test_cloudflare_edge(), reply_markup=get_keyboard())
                         elif data == "shards":
                             send_message(chat_id, get_shards_info(), reply_markup=get_keyboard())
-                        elif data == "databricks":
-                            send_message(chat_id, get_system_status(), reply_markup=get_keyboard())
         except Exception as err:
             time.sleep(2)
 

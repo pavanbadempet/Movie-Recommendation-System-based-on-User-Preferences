@@ -5,6 +5,7 @@ compatibility_date = "2026-08-01"
 [ai]
 binding = "AI"
 
-[[r2_buckets]]
-binding = "DATASET_BUCKET"
-bucket_name = "movie-rec-dataset"
+# Enable R2 bucket in Cloudflare dashboard to activate R2 binding:
+# [[r2_buckets]]
+# binding = "DATASET_BUCKET"
+# bucket_name = "movie-rec-dataset"
