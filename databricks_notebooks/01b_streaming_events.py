@@ -2,14 +2,18 @@
 # MAGIC %md
 # MAGIC # 01b - Real-Time Streaming Ingest (Auto Loader & Micro-Batching)
 # MAGIC
-# MAGIC ## 📌 Overview & Streaming Architecture
-# MAGIC This notebook runs 24/7 (or on micro-batch schedule) using **Spark Structured Streaming**.
-# MAGIC It watches Unity Catalog Volume storage (`/Volumes/apex/default/secrets/events_raw/`) for JSON event logs dropped by external APIs/webhooks (e.g. Cloudflare Workers / FastAPI).
+# MAGIC ## Overview & Message Provenance Architecture
 # MAGIC
-# MAGIC ### 💡 Core Streaming Patterns:
-# MAGIC 1. **Databricks Auto Loader (`cloudFiles`):** Natively discovers and ingests new files as they arrive with automatic schema inference and evolution.
-# MAGIC 2. **Checkpointing:** Tracks processed offsets in `/Volumes/apex/default/secrets/checkpoints/` ensuring **exactly-once processing semantics** across cluster restarts.
-# MAGIC 3. **Delta Micro-Batching:** Streams incoming interaction logs directly into the managed Delta table `apex.default.user_events`.
+# MAGIC ### 📥 WHO BRINGS THE MESSAGES & HOW HUGGING FACE SPACES CONNECTS:
+# MAGIC 1. **Message Source (Hugging Face Spaces UI):** When a user clicks, rates, or searches for a movie on HF Spaces, the frontend web server (FastAPI/Node) creates a JSON event payload:
+# MAGIC    `{"user_id": "usr_9921", "movie_id": "101", "interaction_type": "click", "timestamp": "2026-08-11T13:25:00Z"}`
+# MAGIC 2. **Zero-Broker Volume Ingestion (REST API):** HF Spaces calls the Databricks Files REST API (`POST /api/2.0/fs/files/Volumes/apex/default/secrets/events_raw/event_{uuid}.json`) to drop the JSON event into Unity Catalog Volume storage without requiring an expensive Kafka cluster.
+# MAGIC 3. **Auto Loader Ingestion (`cloudFiles`):** This notebook's Auto Loader stream automatically detects new `.json` files in `/Volumes/apex/default/secrets/events_raw/` and appends them to `apex.default.user_events`.
+# MAGIC
+# MAGIC ### Core Streaming Design:
+# MAGIC 1. **Databricks Auto Loader (`cloudFiles`):** Natively discovers and ingests new files as they arrive with automatic schema inference.
+# MAGIC 2. **Checkpointing:** Tracks processed file offsets in `/Volumes/apex/default/secrets/checkpoints/` ensuring **exactly-once processing semantics**.
+# MAGIC 3. **Delta Micro-Batching (`availableNow=True`):** Processes incoming interaction logs into the Silver table `apex.default.user_events` and exits cleanly.
 
 # COMMAND ----------
 # COMMAND ----------
