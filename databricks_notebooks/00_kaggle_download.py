@@ -124,13 +124,19 @@ print(f"Download and unzip complete! Found raw file: {downloaded_csvs[0]}")
 print(f"Reading raw CSV directly with PySpark from {volume_raw_dir}...")
 
 # ----------------------------------------------------------------------
-# ⚡ HIGH-PERFORMANCE SPARK CONFIGURATIONS (DATABRICKS FREE TIER TUNED)
+# ⚡ HIGH-PERFORMANCE SPARK CONFIGURATIONS (SAFE SERVERLESS TUNING)
 # ----------------------------------------------------------------------
-spark.conf.set("spark.sql.adaptive.enabled", "true")
-spark.conf.set("spark.sql.adaptive.coalescePartitions.enabled", "true")
-spark.conf.set("spark.databricks.delta.optimizeWrite.enabled", "true")
-spark.conf.set("spark.databricks.delta.autoCompact.enabled", "true")
-spark.conf.set("spark.sql.files.maxPartitionBytes", "134217728")
+for conf_key, conf_val in [
+    ("spark.sql.adaptive.enabled", "true"),
+    ("spark.sql.adaptive.coalescePartitions.enabled", "true"),
+    ("spark.databricks.delta.optimizeWrite.enabled", "true"),
+    ("spark.databricks.delta.autoCompact.enabled", "true"),
+    ("spark.sql.files.maxPartitionBytes", "134217728")
+]:
+    try:
+        spark.conf.set(conf_key, conf_val)
+    except Exception:
+        pass  # Databricks Serverless manages these configurations natively
 
 # 1-Pass Fast Ingestion (inferSchema=false saves 50% CPU overhead)
 df = spark.read.format("csv") \

@@ -119,23 +119,22 @@ def extract_llm_features(overview_series: pd.Series) -> pd.Series:
 # COMMAND ----------
 def load_gold_data(spark):
     # ----------------------------------------------------------------------
-    # ⚡ HIGH-PERFORMANCE SPARK CONFIGURATIONS (DATABRICKS FREE TIER TUNED)
+    # ⚡ HIGH-PERFORMANCE SPARK CONFIGURATIONS (SAFE SERVERLESS TUNING)
     # ----------------------------------------------------------------------
-    # 1. Enable Apache Arrow Vectorized Execution (10x-20x speedup for Pandas UDFs)
-    spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
-    spark.conf.set("spark.sql.execution.arrow.pyspark.fallback.enabled", "true")
-
-    # 2. Adaptive Query Execution (AQE) - Dynamically coalesces shuffle partitions to avoid wasting CPU
-    spark.conf.set("spark.sql.adaptive.enabled", "true")
-    spark.conf.set("spark.sql.adaptive.coalescePartitions.enabled", "true")
-    spark.conf.set("spark.sql.adaptive.skewJoin.enabled", "true")
-
-    # 3. Delta Lake Auto-Compaction & Optimize Write (Solves Small-Files Problem automatically)
-    spark.conf.set("spark.databricks.delta.optimizeWrite.enabled", "true")
-    spark.conf.set("spark.databricks.delta.autoCompact.enabled", "true")
-
-    # 4. Optimal Max Partition Bytes (128 MB chunks for fast I/O)
-    spark.conf.set("spark.sql.files.maxPartitionBytes", "134217728")
+    for conf_key, conf_val in [
+        ("spark.sql.execution.arrow.pyspark.enabled", "true"),
+        ("spark.sql.execution.arrow.pyspark.fallback.enabled", "true"),
+        ("spark.sql.adaptive.enabled", "true"),
+        ("spark.sql.adaptive.coalescePartitions.enabled", "true"),
+        ("spark.sql.adaptive.skewJoin.enabled", "true"),
+        ("spark.databricks.delta.optimizeWrite.enabled", "true"),
+        ("spark.databricks.delta.autoCompact.enabled", "true"),
+        ("spark.sql.files.maxPartitionBytes", "134217728")
+    ]:
+        try:
+            spark.conf.set(conf_key, conf_val)
+        except Exception:
+            pass  # Databricks Serverless manages these configurations natively
 
     raw_table = "apex.default.tmdb_raw_data"
     gold_table_name = "apex.default.tmdb_gold_data"
