@@ -190,43 +190,26 @@ else:
             continue
 
         engine = create_engine(db_url, connect_args={"sslmode": "require"}, pool_pre_ping=True)
-        row_iterator = df_shard.toLocalIterator(prefetchPartitions=True)
+        # Use Arrow-accelerated toPandas() to prevent PySpark socket stream kernel crashes
+        print(f"Converting Shard {shard_idx + 1} DataFrame to Pandas using PyArrow...")
+        pdf = df_shard.toPandas()
 
-        batch_buffer = []
-        batch_count = 0
+        batch_size = 1000
         total_synced = 0
-        batch_size = 500
 
-        for row in row_iterator:
-            batch_buffer.append(row.asDict())
-            if len(batch_buffer) >= batch_size:
-                batch_pandas = pd.DataFrame(batch_buffer)
-                if_exists_mode = "replace" if total_synced == 0 else "append"
-                try:
-                    batch_pandas.to_sql("movies", engine, if_exists=if_exists_mode, index=False, method=psycopg2_fast_insert)
-                except Exception:
-                    batch_pandas.to_sql("movies", engine, if_exists=if_exists_mode, index=False, method="multi", chunksize=100)
-
-                total_synced += len(batch_buffer)
-                batch_count += 1
-                print(f"Shard {shard_idx + 1} - Synced Batch {batch_count}: {total_synced}/{shard_records} records...")
-
-                batch_buffer = []
-                del batch_pandas
-                gc.collect()
-
-        if len(batch_buffer) > 0:
-            batch_pandas = pd.DataFrame(batch_buffer)
-            if_exists_mode = "replace" if total_synced == 0 else "append"
+        for start_idx in range(0, len(pdf), batch_size):
+            batch_df = pdf.iloc[start_idx:start_idx + batch_size]
+            if_exists_mode = "replace" if start_idx == 0 else "append"
             try:
-                batch_pandas.to_sql("movies", engine, if_exists=if_exists_mode, index=False, method=psycopg2_fast_insert)
+                batch_df.to_sql("movies", engine, if_exists=if_exists_mode, index=False, method=psycopg2_fast_insert)
             except Exception:
-                batch_pandas.to_sql("movies", engine, if_exists=if_exists_mode, index=False, method="multi", chunksize=100)
+                batch_df.to_sql("movies", engine, if_exists=if_exists_mode, index=False, method="multi", chunksize=100)
 
-            total_synced += len(batch_buffer)
-            print(f"Shard {shard_idx + 1} - Final Batch Completed: Total {total_synced}/{shard_records} records synced!")
-            del batch_pandas
-            gc.collect()
+            total_synced += len(batch_df)
+            print(f"Shard {shard_idx + 1} - Synced {total_synced}/{shard_records} records...")
+
+        del pdf
+        gc.collect()
 
         # Build Post-Sync Clustered Primary Key, Covering, and HNSW Vector Indexes
         print(f"Building PostgreSQL performance indexes on Shard {shard_idx + 1}...")
