@@ -22,6 +22,29 @@ import requests
 from pyspark.sql.functions import col
 
 # COMMAND ----------
+# ----------------------------------------------------------------------
+# ⚡ HIGH-PERFORMANCE SPARK CONFIGURATIONS (SOTA SERVERLESS TUNING)
+# ----------------------------------------------------------------------
+for conf_key, conf_val in [
+    ("spark.sql.execution.arrow.pyspark.enabled", "true"),
+    ("spark.sql.execution.arrow.pyspark.fallback.enabled", "true"),
+    ("spark.sql.adaptive.enabled", "true"),
+    ("spark.sql.adaptive.coalescePartitions.enabled", "true"),
+    ("spark.sql.adaptive.skewJoin.enabled", "true"),
+    ("spark.sql.adaptive.localShuffleReader.enabled", "true"),
+    ("spark.databricks.delta.optimizeWrite.enabled", "true"),
+    ("spark.databricks.delta.autoCompact.enabled", "true"),
+    ("spark.sql.files.maxPartitionBytes", "134217728"),
+    ("spark.sql.shuffle.partitions", "200"),
+    ("spark.sql.inMemoryColumnarStorage.compressed", "true"),
+    ("spark.sql.execution.vectorized.enabled", "true")
+]:
+    try:
+        spark.conf.set(conf_key, conf_val)
+    except Exception:
+        pass  # Serverless compute manages these configurations natively
+
+# COMMAND ----------
 # Define the Neon Database URL (Configure this in Doppler)
 
 # COMMAND ----------
