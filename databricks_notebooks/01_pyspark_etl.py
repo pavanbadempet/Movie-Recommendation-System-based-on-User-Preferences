@@ -72,10 +72,12 @@ def predict_embeddings(series: pd.Series) -> pd.Series:
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
     try:
-        from sentence_transformers import SentenceTransformer
-        # Load model on CPU explicitly to prevent CUDA initialization errors on CPU nodes
-        model = SentenceTransformer(EMBEDDING_MODEL_NAME, device="cpu")
-        embeddings = model.encode(clean_texts, batch_size=32, show_progress_bar=False, convert_to_numpy=True).astype(np.float32)
+        import torch
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model = SentenceTransformer(EMBEDDING_MODEL_NAME, device=device)
+        if device == "cuda":
+            model.half()  # FP16 Tensor Cores 16-bit Mixed Precision
+        embeddings = model.encode(clean_texts, batch_size=128, show_progress_bar=False, convert_to_numpy=True).astype(np.float32)
     except Exception as err:
         # Fallback: Generate deterministic 768-D normalized semantic hash vectors if HF download is blocked
         embeddings = []
