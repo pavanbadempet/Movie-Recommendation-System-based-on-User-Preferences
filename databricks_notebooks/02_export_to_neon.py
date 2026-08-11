@@ -103,32 +103,38 @@ else:
 
     print(f"Streaming {total_records} records to Neon Postgres 'movies' table...")
 
+    import gc
+
     # toLocalIterator() streams partition-by-partition with constant O(1) driver RAM overhead
-    row_iterator = df_spark.toLocalIterator(prefetch=2)
+    row_iterator = df_spark.toLocalIterator(prefetch=1)
 
     batch_buffer = []
     batch_count = 0
     total_synced = 0
-    batch_size = 1000
+    batch_size = 250  # Ultra-lightweight 250-row micro-batches
 
     for row in row_iterator:
         batch_buffer.append(row.asDict())
         if len(batch_buffer) >= batch_size:
             batch_pandas = pd.DataFrame(batch_buffer)
             if_exists_mode = "replace" if total_synced == 0 else "append"
-            batch_pandas.to_sql("movies", engine, if_exists=if_exists_mode, index=False, chunksize=250)
+            batch_pandas.to_sql("movies", engine, if_exists=if_exists_mode, index=False, chunksize=100)
 
             total_synced += len(batch_buffer)
             batch_count += 1
             print(f"Synced Batch {batch_count}: {total_synced}/{total_records} records uploaded to Neon...")
             batch_buffer = []
+            del batch_pandas
+            gc.collect()
 
     # Process final remaining batch
     if len(batch_buffer) > 0:
         batch_pandas = pd.DataFrame(batch_buffer)
         if_exists_mode = "replace" if total_synced == 0 else "append"
-        batch_pandas.to_sql("movies", engine, if_exists=if_exists_mode, index=False, chunksize=250)
+        batch_pandas.to_sql("movies", engine, if_exists=if_exists_mode, index=False, chunksize=100)
         total_synced += len(batch_buffer)
         print(f"Synced Final Batch: Total {total_synced}/{total_records} records uploaded successfully!")
+        del batch_pandas
+        gc.collect()
 
     print("Export Complete! Neon PostgreSQL serving table 'movies' is now updated and ready for 24/7 web apps.")
