@@ -111,6 +111,19 @@ else:
     serving_cols = [c for c in ["id", "title", "genres", "vote_average", "vote_count", "release_date", "overview", "tags", "embedding"] if c in df_spark.columns]
     df_spark = df_spark.select(*serving_cols)
 
+    # -------------------------------------------------------------------------
+    # FREE TIER STORAGE QUOTA PROTECTION (Neon 512MB Storage Capacity)
+    # -------------------------------------------------------------------------
+    try:
+        dbutils.widgets.text("EXPORT_LIMIT", "30000", "Max Records to Export (Neon 512MB Limit)")
+        export_limit = int(dbutils.widgets.get("EXPORT_LIMIT"))
+    except Exception:
+        export_limit = 30000
+
+    if export_limit > 0 and "vote_count" in df_spark.columns:
+        print(f"Filtering Top {export_limit} highest-voted movies to fit inside Neon Free Tier 512MB storage limit...")
+        df_spark = df_spark.orderBy(col("vote_count").desc()).limit(export_limit)
+
     total_records = df_spark.count()
     print(f"Total active Gold records to export: {total_records}")
 
