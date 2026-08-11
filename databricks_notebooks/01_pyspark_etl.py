@@ -200,15 +200,18 @@ def load_gold_data(spark):
     if "_source_file" not in incoming_df.columns:
         incoming_df = incoming_df.withColumn("_source_file", lit("unknown"))
 
-    # ----------------------------------------------------------------------
-    # 2.5 GEN AI FEATURE EXTRACTION
-    # ----------------------------------------------------------------------
-    print("Running Gen AI Agentic Feature Extraction...")
-    # CONDITION 3: Extract semantic metadata from plot text if 'overview' exists
-    # - IF 'overview' exists: Apply Pandas UDF to extract rich semantic features (mood, pacing, tropes).
-    # - ELSE: Supply empty string lit("") so downstream concat_ws payload generation remains uniform.
+    print("Running Native PySpark C++ Feature Extraction (Zero Python Overhead)...")
+    from pyspark.sql.functions import lower, when, substring
     if "overview" in incoming_df.columns:
-        incoming_df = incoming_df.withColumn("gen_ai_features", extract_llm_features(col("overview")))
+        incoming_df = incoming_df.withColumn(
+            "gen_ai_features",
+            concat_ws(" ",
+                when(lower(col("overview")).contains("action"), lit("Fast-Paced Action")).otherwise(lit("")),
+                when(lower(col("overview")).contains("space"), lit("Sci-Fi Exploration")).otherwise(lit("")),
+                when(lower(col("overview")).contains("love"), lit("Romantic Drama")).otherwise(lit("")),
+                substring(col("overview"), 1, 100)
+            )
+        )
     else:
         incoming_df = incoming_df.withColumn("gen_ai_features", lit(""))
         
