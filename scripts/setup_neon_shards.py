@@ -3,7 +3,7 @@ import time
 import requests
 import subprocess
 
-NEON_API_KEY = "napi_j3funhi62vyzslmo2wz0x1h536i14hcuhnhb4jfqc2vnjgon49dmrc8e0be7o1a7"
+NEON_API_KEY = os.environ.get("NEON_ACCOUNT_1_API_KEY") or os.environ.get("NEON_API_KEY", "")
 HEADERS = {
     "Authorization": f"Bearer {NEON_API_KEY}",
     "Accept": "application/json",

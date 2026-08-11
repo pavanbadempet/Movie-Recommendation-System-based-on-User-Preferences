@@ -3,7 +3,7 @@ import time
 import requests
 import subprocess
 
-NEON_API_KEY_2 = "napi_22mivnfdx6b0iz2z51zxtwqpbi7o098o9hycqm7vzkl909oqxr9h56od0trewvsi"
+NEON_API_KEY_2 = os.environ.get("NEON_ACCOUNT_2_API_KEY", "")
 ORG_ID_2 = "org-blue-cell-04479202"
 HEADERS = {
     "Authorization": f"Bearer {NEON_API_KEY_2}",
