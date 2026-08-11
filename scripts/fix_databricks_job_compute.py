@@ -8,8 +8,8 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
-def set_gpu_a10_compute(job_id=303494851952917):
-    print(f"Configuring Databricks Job {job_id} for Serverless GPU (A10) on Step 1 & Step 2...")
+def fix_native_serverless_gpu(job_id=303494851952917):
+    print(f"Fixing Databricks Job {job_id} for Native Serverless GPU compute...")
 
     reset_url = f"{DATABRICKS_HOST}/api/2.1/jobs/reset"
     payload = {
@@ -32,7 +32,6 @@ def set_gpu_a10_compute(job_id=303494851952917):
                 {
                     "task_key": "step_01_pyspark_etl",
                     "depends_on": [{"task_key": "step_00_kaggle_download"}],
-                    "environment_key": "gpu_a10_env",
                     "notebook_task": {
                         "notebook_path": "/Users/pavan9b@gmail.com/Movie-Recommendation-System/databricks_notebooks/01_pyspark_etl",
                         "source": "WORKSPACE"
@@ -41,18 +40,9 @@ def set_gpu_a10_compute(job_id=303494851952917):
                 {
                     "task_key": "step_02_export_to_neon",
                     "depends_on": [{"task_key": "step_01_pyspark_etl"}],
-                    "environment_key": "gpu_a10_env",
                     "notebook_task": {
                         "notebook_path": "/Users/pavan9b@gmail.com/Movie-Recommendation-System/databricks_notebooks/02_export_to_neon",
                         "source": "WORKSPACE"
-                    }
-                }
-            ],
-            "environments": [
-                {
-                    "environment_key": "gpu_a10_env",
-                    "spec": {
-                        "client": "1"
                     }
                 }
             ]
@@ -64,7 +54,7 @@ def set_gpu_a10_compute(job_id=303494851952917):
 
     run_url = f"{DATABRICKS_HOST}/api/2.1/jobs/run-now"
     run_res = requests.post(run_url, headers=HEADERS, json={"job_id": job_id})
-    print(f"New GPU A10 Run Triggered: {run_res.status_code} - {run_res.text}")
+    print(f"New Native Serverless Run Triggered: {run_res.status_code} - {run_res.text}")
 
 if __name__ == "__main__":
-    set_gpu_a10_compute()
+    fix_native_serverless_gpu()
