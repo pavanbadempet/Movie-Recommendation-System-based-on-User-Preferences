@@ -219,12 +219,19 @@ else:
             del batch_pandas
             gc.collect()
 
-        # Build Post-Sync Covering Indexes for this Shard
+        # Build Post-Sync Clustered Primary Key, Covering, and HNSW Vector Indexes
         print(f"Building PostgreSQL performance indexes on Shard {shard_idx + 1}...")
         with engine.begin() as ddl_conn:
             try:
-                ddl_conn.execute("CREATE INDEX IF NOT EXISTS idx_movies_id ON movies (id);")
+                # 1. Primary Key Clustered B-Tree Index
+                try:
+                    ddl_conn.execute("ALTER TABLE movies ADD PRIMARY KEY (id);")
+                except Exception:
+                    ddl_conn.execute("CREATE INDEX IF NOT EXISTS idx_movies_id ON movies (id);")
+                # 2. High-Throughput Covering Index for Index-Only Metadata Scans
+                ddl_conn.execute("CREATE INDEX IF NOT EXISTS idx_movies_serving_covering ON movies (id) INCLUDE (title, genres, vote_average, vote_count, release_date);")
                 ddl_conn.execute("CREATE INDEX IF NOT EXISTS idx_movies_release_date ON movies (release_date DESC);")
+                # 3. Deferred HNSW Cosine Similarity Vector Index
                 try:
                     ddl_conn.execute("CREATE EXTENSION IF NOT EXISTS vector;")
                     ddl_conn.execute("ALTER TABLE movies ALTER COLUMN embedding TYPE vector USING embedding::vector;")
