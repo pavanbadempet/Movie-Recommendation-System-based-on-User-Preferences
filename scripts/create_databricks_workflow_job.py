@@ -47,16 +47,12 @@ def update_job_split_pipeline():
                     }
                 },
                 {
-                    # Task 3: GPU Embeddings → Serverless GPU (only this pays cold start)
+                    # Task 3: Embeddings Generation → Standard Serverless (instant execution, 0 GPU DBUs)
                     "task_key": "step_01c_gpu_embeddings",
                     "depends_on": [{"task_key": "step_01_pyspark_etl"}],
                     "notebook_task": {
                         "notebook_path": "databricks_notebooks/01c_gpu_embeddings",
                         "source": "GIT"
-                    },
-                    "environment_key": "gpu_env",
-                    "compute": {
-                        "hardware_accelerator": "GPU_1xA10"
                     }
                 },
                 {
@@ -66,14 +62,6 @@ def update_job_split_pipeline():
                     "notebook_task": {
                         "notebook_path": "databricks_notebooks/02_export_to_neon",
                         "source": "GIT"
-                    }
-                }
-            ],
-            "environments": [
-                {
-                    "environment_key": "gpu_env",
-                    "spec": {
-                        "environment_version": "5"
                     }
                 }
             ]
