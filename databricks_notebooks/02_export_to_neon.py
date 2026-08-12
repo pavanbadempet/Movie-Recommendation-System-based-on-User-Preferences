@@ -18,15 +18,10 @@
 # MAGIC 3. **Doppler Environment Resolution:** Fetches the target `DATABASE_URL` dynamically based on the deployment environment parameter (`dev`, `stg`, `prd`).
 
 # COMMAND ----------
-# MAGIC %pip install psycopg2-binary sqlalchemy pandas
-# MAGIC %restart_python
-
-# COMMAND ----------
 import os
-import pandas as pd
-from sqlalchemy import create_engine
+import gc
 import requests
-from pyspark.sql.functions import col
+from pyspark.sql.functions import col, to_json, lit, spark_partition_id, pmod, spark_hash
 
 # COMMAND ----------
 # ----------------------------------------------------------------------
@@ -161,16 +156,6 @@ else:
     # MULTI-SHARD STREAMING EXPORT ENGINE
     # -------------------------------------------------------------------------
     import gc
-    from psycopg2.extras import execute_values
-
-    def psycopg2_fast_insert(table, conn, keys, data_iter):
-        dbapi_conn = conn.connection
-        with dbapi_conn.cursor() as cur:
-            string_data = [tuple(x) for x in data_iter]
-            columns = '", "'.join(keys)
-            table_name = table.name
-            sql = f'INSERT INTO "{table_name}" ("{columns}") VALUES %s'
-            execute_values(cur, sql, string_data)
 
     for shard_idx, db_url in enumerate(shard_urls):
         print(f"\n========================================================")
@@ -197,9 +182,7 @@ else:
         elif jdbc_url.startswith("postgres://"):
             jdbc_url = jdbc_url.replace("postgres://", "jdbc:postgresql://", 1)
 
-        engine = create_engine(db_url, connect_args={"sslmode": "require"}, pool_pre_ping=True)
-
-        print(f"Streaming Shard {shard_idx + 1} DataFrame directly to Neon via Spark JDBC Engine...")
+        print(f"Streaming Shard {shard_idx + 1} DataFrame directly to Neon via Native Spark JDBC Engine...")
         try:
             df_shard.write.format("jdbc") \
                 .option("url", jdbc_url) \
@@ -210,43 +193,38 @@ else:
                 .save()
             print(f"Shard {shard_idx + 1} - Spark JDBC Sync Successful!")
         except Exception as jdbc_err:
-            print(f"Spark JDBC Notice ({jdbc_err}). Falling back to chunked pandas export...")
-            pdf = df_shard.toPandas()
-            batch_size = 1000
-            total_synced = 0
-            for start_idx in range(0, len(pdf), batch_size):
-                batch_df = pdf.iloc[start_idx:start_idx + batch_size]
-                if_exists_mode = "replace" if start_idx == 0 else "append"
-                try:
-                    batch_df.to_sql("movies", engine, if_exists=if_exists_mode, index=False, method=psycopg2_fast_insert)
-                except Exception:
-                    batch_df.to_sql("movies", engine, if_exists=if_exists_mode, index=False, method="multi", chunksize=100)
-                total_synced += len(batch_df)
-                print(f"Shard {shard_idx + 1} - Synced {total_synced}/{shard_records} records...")
-            del pdf
-            gc.collect()
+            print(f"Spark JDBC Error on Shard {shard_idx + 1}: {jdbc_err}")
+            raise jdbc_err
 
-        # Build Post-Sync Clustered Primary Key, Covering, and HNSW Vector Indexes
-        print(f"Building PostgreSQL performance indexes on Shard {shard_idx + 1}...")
-        with engine.begin() as ddl_conn:
+        # Build Post-Sync Clustered Primary Key, Covering, and HNSW Vector Indexes via JVM JDBC Connection
+        print(f"Building PostgreSQL performance indexes on Shard {shard_idx + 1} via JVM JDBC Connection...")
+        try:
+            driver_manager = spark._sc._gateway.jvm.java.sql.DriverManager
+            jdbc_conn = driver_manager.getConnection(jdbc_url)
+            stmt = jdbc_conn.createStatement()
+            
+            # 1. Primary Key Clustered B-Tree Index
             try:
-                # 1. Primary Key Clustered B-Tree Index
-                try:
-                    ddl_conn.execute("ALTER TABLE movies ADD PRIMARY KEY (id);")
-                except Exception:
-                    ddl_conn.execute("CREATE INDEX IF NOT EXISTS idx_movies_id ON movies (id);")
-                # 2. High-Throughput Covering Index for Index-Only Metadata Scans
-                ddl_conn.execute("CREATE INDEX IF NOT EXISTS idx_movies_serving_covering ON movies (id) INCLUDE (title, genres, vote_average, vote_count, release_date);")
-                ddl_conn.execute("CREATE INDEX IF NOT EXISTS idx_movies_release_date ON movies (release_date DESC);")
-                # 3. Deferred HNSW Cosine Similarity Vector Index (100% Uncompressed Full Float32 Precision)
-                try:
-                    ddl_conn.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-                    ddl_conn.execute("ALTER TABLE movies ALTER COLUMN embedding TYPE vector USING embedding::vector;")
-                    ddl_conn.execute("CREATE INDEX IF NOT EXISTS idx_movies_embedding_hnsw ON movies USING hnsw (embedding vector_cosine_ops);")
-                    print(f"Shard {shard_idx + 1} HNSW 100% Full Precision Float32 Vector Index created successfully!")
-                except Exception as v_err:
-                    print(f"Shard {shard_idx + 1} pgvector Notice: {v_err}")
-            except Exception as idx_err:
-                print(f"Shard {shard_idx + 1} Index Notice: {idx_err}")
+                stmt.execute("ALTER TABLE movies ADD PRIMARY KEY (id)")
+            except Exception:
+                stmt.execute("CREATE INDEX IF NOT EXISTS idx_movies_id ON movies (id)")
+
+            # 2. High-Throughput Covering Index for Index-Only Metadata Scans
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_movies_serving_covering ON movies (id) INCLUDE (title, genres, vote_average, vote_count, release_date)")
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_movies_release_date ON movies (release_date DESC)")
+
+            # 3. Deferred HNSW Cosine Similarity Vector Index (100% Uncompressed Full Float32 Precision)
+            try:
+                stmt.execute("CREATE EXTENSION IF NOT EXISTS vector")
+                stmt.execute("ALTER TABLE movies ALTER COLUMN embedding TYPE vector(768) USING embedding::vector(768)")
+                stmt.execute("CREATE INDEX IF NOT EXISTS idx_movies_embedding_hnsw ON movies USING hnsw (embedding vector_cosine_ops)")
+                print(f"Shard {shard_idx + 1} HNSW 100% Full Precision Float32 Vector Index created successfully!")
+            except Exception as v_err:
+                print(f"Shard {shard_idx + 1} pgvector Notice: {v_err}")
+
+            stmt.close()
+            jdbc_conn.close()
+        except Exception as idx_err:
+            print(f"Shard {shard_idx + 1} Index Notice: {idx_err}")
 
     print("\n🎉 Multi-Shard Export Complete! All Neon Database Shards are updated, indexed, and live!")
