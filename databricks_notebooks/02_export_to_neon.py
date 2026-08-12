@@ -194,7 +194,6 @@ else:
                     .option("user", db_user) \
                     .option("password", db_pass) \
                     .option("dbtable", "movies") \
-                    .option("sslmode", "require") \
                     .mode("overwrite") \
                     .save()
                 print(f"Shard {shard_idx + 1} - Databricks PostgreSQL Sync Successful!")
