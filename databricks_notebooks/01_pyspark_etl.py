@@ -97,10 +97,11 @@ def load_gold_data(spark):
     # ----------------------------------------------------------------------
     print("Running Data Quality Gates & Dead-Letter Quarantine Checks...")
 
-    # Identify and quarantine corrupted/invalid rows (NULL id or malformed ratings)
+    # Identify and quarantine corrupted/invalid rows (NULL id, non-numeric shifted id, or malformed ratings)
     if "vote_average" in incoming_df.columns:
         corrupted_df = incoming_df.filter(
             col("id").isNull() |
+            (expr("try_cast(id as long)").isNull()) |
             (expr("try_cast(vote_average as double)").isNull()) |
             (expr("try_cast(vote_average as double)") < 0.0) |
             (expr("try_cast(vote_average as double)") > 10.0)
@@ -110,8 +111,8 @@ def load_gold_data(spark):
             corrupted_df.withColumn("_quarantined_at", current_timestamp()) \
                 .write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable("apex.default.corrupted_data_quarantine")
 
-    # Drop rows with critical missing primary keys
-    incoming_df = incoming_df.filter(col("id").isNotNull())
+    # Drop rows with critical missing or malformed primary keys
+    incoming_df = incoming_df.filter(col("id").isNotNull() & (expr("try_cast(id as long)").isNotNull()))
 
     # EDGE CASE 2: Intra-Batch Primary Key Deduplication
     incoming_df = incoming_df.dropDuplicates(["id"])

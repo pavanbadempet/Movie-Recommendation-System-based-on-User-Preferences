@@ -1,6 +1,7 @@
 import requests
 import json
 import time
+import os
 
 DATABRICKS_HOST = "https://dbc-0d2f31ec-d157.cloud.databricks.com"
 DATABRICKS_TOKEN = os.environ.get("DATABRICKS_TOKEN", "")

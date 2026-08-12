@@ -124,13 +124,13 @@ else:
     # FREE TIER STORAGE QUOTA PROTECTION (Neon 512MB Storage Capacity)
     # -------------------------------------------------------------------------
     try:
-        dbutils.widgets.text("EXPORT_LIMIT", "0", "Max Records to Export (0 = Unlimited Full Dataset)")
+        dbutils.widgets.text("EXPORT_LIMIT", "30000", "Max Records to Export (0 = Unlimited Full Dataset)")
         export_limit = int(dbutils.widgets.get("EXPORT_LIMIT"))
     except Exception:
-        export_limit = 0
+        export_limit = 30000
 
     if export_limit > 0 and "vote_count" in df_spark.columns:
-        print(f"Filtering Top {export_limit} highest-voted movies to fit inside Neon Free Tier 512MB storage limit...")
+        print(f"Filtering Top {export_limit} highest-voted movies to fit inside Neon Free Tier 512MB storage limit and Serverless RAM...")
         df_spark = df_spark.orderBy(col("vote_count").desc()).limit(export_limit)
 
     total_records = df_spark.count()
@@ -178,8 +178,9 @@ else:
         print(f"========================================================")
 
         # Filter shard records using deterministic modulo hash
+        from pyspark.sql.functions import pmod, hash as spark_hash
         if num_shards > 1:
-            df_shard = df_spark.filter(col("id") % num_shards == shard_idx)
+            df_shard = df_spark.filter(pmod(spark_hash(col("id")), num_shards) == shard_idx)
         else:
             df_shard = df_spark
 
@@ -195,6 +196,8 @@ else:
             jdbc_url = jdbc_url.replace("postgresql://", "jdbc:postgresql://", 1)
         elif jdbc_url.startswith("postgres://"):
             jdbc_url = jdbc_url.replace("postgres://", "jdbc:postgresql://", 1)
+
+        engine = create_engine(db_url, connect_args={"sslmode": "require"}, pool_pre_ping=True)
 
         print(f"Streaming Shard {shard_idx + 1} DataFrame directly to Neon via Spark JDBC Engine...")
         try:
@@ -225,7 +228,6 @@ else:
 
         # Build Post-Sync Clustered Primary Key, Covering, and HNSW Vector Indexes
         print(f"Building PostgreSQL performance indexes on Shard {shard_idx + 1}...")
-        engine = create_engine(db_url, connect_args={"sslmode": "require"}, pool_pre_ping=True)
         with engine.begin() as ddl_conn:
             try:
                 # 1. Primary Key Clustered B-Tree Index
