@@ -124,15 +124,17 @@ def train_sasrec(data: dict):
 
     num_items = data["num_items"]
     max_seq_len = 50
-    hidden_dim = 16  # Match ensemble_engine emb_dim
+    hidden_dim = 64  # Upgraded to 64-D for SOTA neural representation capacity
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model = SASRec(num_items=num_items + 1, max_seq_len=max_seq_len, hidden_dim=hidden_dim)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-5)
+    model = SASRec(num_items=num_items + 1, max_seq_len=max_seq_len, hidden_dim=hidden_dim).to(device)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50)
 
     sequences = data["user_sequences"]
     user_list = [u for u, seq in sequences.items() if len(seq) >= 3]
 
-    num_epochs = 20
+    num_epochs = 50
     for epoch in range(num_epochs):
         model.train()
         total_loss = 0
@@ -198,10 +200,11 @@ def train_lightgcn(data: dict):
 
     num_users = data["num_users"]
     num_items = data["num_items"]
-    emb_dim = 16
+    emb_dim = 64  # Upgraded to 64-D for high-dimensional graph embeddings
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model = LightGCN(num_users=num_users, num_items=num_items, embedding_dim=emb_dim, num_layers=3)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-5)
+    model = LightGCN(num_users=num_users, num_items=num_items, embedding_dim=emb_dim, num_layers=4).to(device)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
 
     # Build adjacency matrix
     train = data["train_df"]
@@ -225,14 +228,14 @@ def train_lightgcn(data: dict):
     coo = norm_adj.tocoo()
     indices = torch.LongTensor(np.vstack([coo.row, coo.col]))
     values = torch.FloatTensor(coo.data)
-    adj_tensor = torch.sparse_coo_tensor(indices, values, torch.Size(coo.shape)).coalesce()
+    adj_tensor = torch.sparse_coo_tensor(indices, values, torch.Size(coo.shape)).coalesce().to(device)
 
     # Training
     user_indices = train["user_idx"].values
     pos_indices = train["item_idx"].values
 
-    num_epochs = 20
-    batch_size = 1024
+    num_epochs = 50
+    batch_size = 2048  # Increased batch size for GPU acceleration
 
     for epoch in range(num_epochs):
         model.train()
