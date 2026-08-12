@@ -21,7 +21,7 @@
 import os
 import gc
 import requests
-from pyspark.sql.functions import col, to_json, lit, spark_partition_id, pmod, spark_hash
+from pyspark.sql.functions import col, to_json, lit, spark_partition_id, pmod, hash as spark_hash
 
 # COMMAND ----------
 # ----------------------------------------------------------------------
