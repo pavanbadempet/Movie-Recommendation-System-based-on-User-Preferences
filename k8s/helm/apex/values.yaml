@@ -1,0 +1,167 @@
+# Default values for the APEX Recommendation API Helm chart.
+# Override any value using --set or a custom values file (-f myvalues.yaml).
+# See DEPLOYMENT.md for tier-specific configuration examples.
+
+# ---------------------------------------------------------------------------
+# Replica count
+# ---------------------------------------------------------------------------
+replicaCount: 2
+
+# ---------------------------------------------------------------------------
+# Container image
+# ---------------------------------------------------------------------------
+image:
+  repository: ghcr.io/pavanbadempet/apex-backend
+  pullPolicy: IfNotPresent
+  # Pin to a specific tag in production — never use "latest" in prod
+  tag: "2.1.0"
+
+# ---------------------------------------------------------------------------
+# Service
+# ---------------------------------------------------------------------------
+service:
+  type: ClusterIP
+  port: 8000
+  annotations: {}
+
+# ---------------------------------------------------------------------------
+# Ingress
+# ---------------------------------------------------------------------------
+ingress:
+  enabled: false
+  className: "nginx"
+  host: apex.example.com
+  # TLS — list of {secretName, hosts} objects
+  tls: []
+  annotations: {}
+
+# ---------------------------------------------------------------------------
+# Resource requests and limits
+# Tier1 (GPU): bump memory to "16Gi" and add nvidia.com/gpu: 1 limit
+# Tier2 (ONNX CPU): default values below are appropriate
+# Tier3 (FAISS): can reduce to 512Mi / 1Gi
+# ---------------------------------------------------------------------------
+resources:
+  requests:
+    cpu: "500m"
+    memory: "2Gi"
+  limits:
+    cpu: "2000m"
+    memory: "6Gi"
+
+# ---------------------------------------------------------------------------
+# APEX serving tier — controls which ML stack is loaded at startup
+# tier1: GPU + full 6-model PyTorch ensemble + online learning
+# tier2: ONNX CPU quantized inference (requires externally published ONNX artifacts)
+# tier3: FAISS + TF-IDF only (reproducible default)
+# ---------------------------------------------------------------------------
+servingTier: "tier3"
+servingProfile: "lite"
+
+# ---------------------------------------------------------------------------
+# Differential Privacy — Gaussian ε-DP applied to user embeddings at serving
+# Lower epsilon = more privacy, slightly less accuracy
+# ---------------------------------------------------------------------------
+dpEpsilon: "1.0"
+
+# ---------------------------------------------------------------------------
+# Online learning coordinator (Tier1 only)
+# Enabled automatically when servingTier=tier1
+# ---------------------------------------------------------------------------
+onlineLearning:
+  enabled: true
+
+# ---------------------------------------------------------------------------
+# HorizontalPodAutoscaler
+# ---------------------------------------------------------------------------
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  # Scale up quickly (2s window), scale down slowly (5m stabilization)
+  scaleUpStabilizationWindowSeconds: 0
+  scaleDownStabilizationWindowSeconds: 300
+
+# ---------------------------------------------------------------------------
+# Pod Disruption Budget — ensures at least 1 pod is always available
+# during node drains and rolling deployments
+# ---------------------------------------------------------------------------
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# ---------------------------------------------------------------------------
+# Kubernetes Secret key references for sensitive environment variables.
+# Set these to the key name inside a Secret named "apex-secrets".
+# Leave empty ("") to skip mounting (use external secret operator instead).
+# ---------------------------------------------------------------------------
+secretRefs:
+  jwtSecretKey: ""        # Key holding JWT_SECRET_KEY
+  tmdbApiKey: ""          # Key holding TMDB_API_KEY
+  adminToken: ""          # Key holding NOVA_ADMIN_TOKEN
+  openrouterApiKey: ""    # Key holding OPENROUTER_API_KEY (LLM explanations)
+  sentryDsn: ""           # Key holding SENTRY_DSN (error monitoring)
+  redisUrl: ""            # Key holding REDIS_URL (feature store)
+  databaseUrl: ""         # Key holding DATABASE_URL (event store Postgres)
+
+# ---------------------------------------------------------------------------
+# Liveness, readiness, and startup probes
+# Startup probe allows up to 120s for model warmup before liveness kicks in
+# ---------------------------------------------------------------------------
+probes:
+  startup:
+    path: /health
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    failureThreshold: 12       # 10 + 12×10 = 130s max startup time
+    timeoutSeconds: 5
+  liveness:
+    path: /health
+    initialDelaySeconds: 0
+    periodSeconds: 30
+    failureThreshold: 3
+    timeoutSeconds: 5
+  readiness:
+    path: /v1/platform/readiness
+    initialDelaySeconds: 0
+    periodSeconds: 10
+    failureThreshold: 3
+    timeoutSeconds: 5
+
+# ---------------------------------------------------------------------------
+# Pod security context
+# ---------------------------------------------------------------------------
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false   # false: model files written to /app/models at runtime
+  capabilities:
+    drop:
+      - ALL
+
+# ---------------------------------------------------------------------------
+# Graceful shutdown — allow in-flight recommendations to complete
+# ---------------------------------------------------------------------------
+terminationGracePeriodSeconds: 60
+
+# ---------------------------------------------------------------------------
+# Prometheus ServiceMonitor (requires prometheus-operator)
+# ---------------------------------------------------------------------------
+serviceMonitor:
+  enabled: false
+  namespace: ""
+  interval: "30s"
+  scrapeTimeout: "10s"
+  labels: {}
+
+# ---------------------------------------------------------------------------
+# Extra environment variables (passed as plain key/value pairs)
+# ---------------------------------------------------------------------------
+extraEnv: {}
+#   NOVA_SLO_WINDOW_SECONDS: "3600"
+#   NOVA_TFIDF_MAX_FEATURES: "50000"

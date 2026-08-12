@@ -1,0 +1,26 @@
+{
+  "name": "Recommender Performance & Drift Agent",
+  "status": "completed",
+  "duration_seconds": 0.0,
+  "cost_usd": 4.5e-05,
+  "timestamp": "2026-06-12T14:03:24.704232+00:00",
+  "scope_hours": 24,
+  "metrics": {
+    "recommendations_served": 0,
+    "clicks": 0,
+    "searches": 0,
+    "ctr": 0.0,
+    "baseline_ctr": 0.12,
+    "drift_detected": true,
+    "avg_rating": 0.0
+  },
+  "suggested_hyperparameters": {
+    "ensemble_weights": {
+      "sasrec": 0.5,
+      "lightgcn": 0.3,
+      "kan": 0.2
+    },
+    "diversity_alpha": 0.55,
+    "online_learning_rate": 0.002
+  }
+}

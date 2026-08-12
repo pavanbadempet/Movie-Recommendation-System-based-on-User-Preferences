@@ -1,0 +1,17 @@
+apiVersion: v2
+name: apex
+description: "APEX Recommendation API — production-grade 6-model ensemble with online learning, differential privacy, and 3-tier adaptive serving"
+type: application
+version: 1.1.0
+appVersion: "2.1.0"
+keywords:
+  - recommendation
+  - machine-learning
+  - pytorch
+  - faiss
+home: https://github.com/pavanbadempet/Movie-Recommendation-System
+sources:
+  - https://github.com/pavanbadempet/Movie-Recommendation-System
+maintainers:
+  - name: APEX Project
+    url: https://github.com/pavanbadempet/Movie-Recommendation-System
