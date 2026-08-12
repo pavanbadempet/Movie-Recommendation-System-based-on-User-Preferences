@@ -1,0 +1,13 @@
+{
+  "embedding_rows": 75253,
+  "movie_id_map_rows": 75253,
+  "movie_id_sha256": "2dbfea2e1075778cc39f18838c89a21e2754a67273c02ba99c4fd06b69c71ea5",
+  "movie_rows": 75253,
+  "run_date": "2026-08-11",
+  "run_id": "backfill-20260811T184435Z",
+  "semantic_twin_avg_confidence": 0.950969,
+  "semantic_twin_rows": 75253,
+  "serving_rows": 75253,
+  "source": "serving_metadata_backfill",
+  "turbovec_index_size": 75253
+}
