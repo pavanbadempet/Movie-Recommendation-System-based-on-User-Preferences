@@ -236,18 +236,12 @@ else:
                 # 2. High-Throughput Covering Index for Index-Only Metadata Scans
                 ddl_conn.execute("CREATE INDEX IF NOT EXISTS idx_movies_serving_covering ON movies (id) INCLUDE (title, genres, vote_average, vote_count, release_date);")
                 ddl_conn.execute("CREATE INDEX IF NOT EXISTS idx_movies_release_date ON movies (release_date DESC);")
-                # 3. Deferred HNSW Cosine Similarity Vector Index (50% Memory Compressed HalfVec 16-bit Float Quantization)
+                # 3. Deferred HNSW Cosine Similarity Vector Index (100% Uncompressed Full Float32 Precision)
                 try:
                     ddl_conn.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-                    try:
-                        ddl_conn.execute("ALTER TABLE movies ALTER COLUMN embedding TYPE halfvec(768) USING embedding::halfvec(768);")
-                        ddl_conn.execute("CREATE INDEX IF NOT EXISTS idx_movies_embedding_hnsw ON movies USING hnsw (embedding halfvec_cosine_ops);")
-                        print(f"Shard {shard_idx + 1} HNSW HalfVec(768) Vector Index created successfully!")
-                    except Exception as hv_err:
-                        print(f"HalfVec notice ({hv_err}), using standard float32 vector...")
-                        ddl_conn.execute("ALTER TABLE movies ALTER COLUMN embedding TYPE vector USING embedding::vector;")
-                        ddl_conn.execute("CREATE INDEX IF NOT EXISTS idx_movies_embedding_hnsw ON movies USING hnsw (embedding vector_cosine_ops);")
-                        print(f"Shard {shard_idx + 1} HNSW Float32 Vector Index created successfully!")
+                    ddl_conn.execute("ALTER TABLE movies ALTER COLUMN embedding TYPE vector USING embedding::vector;")
+                    ddl_conn.execute("CREATE INDEX IF NOT EXISTS idx_movies_embedding_hnsw ON movies USING hnsw (embedding vector_cosine_ops);")
+                    print(f"Shard {shard_idx + 1} HNSW 100% Full Precision Float32 Vector Index created successfully!")
                 except Exception as v_err:
                     print(f"Shard {shard_idx + 1} pgvector Notice: {v_err}")
             except Exception as idx_err:

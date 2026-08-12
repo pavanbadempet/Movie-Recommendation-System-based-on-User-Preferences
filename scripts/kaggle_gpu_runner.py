@@ -98,14 +98,14 @@ try:
             with dbapi_conn.cursor() as cur:
                 update_query = """
                     UPDATE movies AS m SET 
-                        embedding = v.embedding::halfvec(768)
+                        embedding = v.embedding::vector
                     FROM (VALUES %s) AS v(id, embedding)
                     WHERE m.id = v.id;
                 """
                 tuples_to_update = list(zip(df["id"].astype(int), df["embedding"]))
                 execute_values(cur, update_query, tuples_to_update, template=None, page_size=1000)
                 dbapi_conn.commit()
-                print("Successfully updated 768-D halfvec(768) vectors in Neon PostgreSQL!")
+                print("Successfully updated 768-D 100% full precision Float32 vectors in Neon PostgreSQL!")
         finally:
             dbapi_conn.close()
 
