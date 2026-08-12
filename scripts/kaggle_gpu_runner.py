@@ -18,8 +18,8 @@ def create_kaggle_gpu_kernel_package():
 
     # 1. Kernel Metadata Manifest (configures NVIDIA T4 GPU + Python environment)
     kernel_metadata = {
-        "id": f"{os.environ.get('KAGGLE_USERNAME', 'pavanbadempet')}/apex-movie-rec-gpu-pipeline",
-        "title": "APEX Movie Rec System - GPU Training & Vector Embedding Pipeline",
+        "id": f"{os.environ.get('KAGGLE_USERNAME', 'flameemperor')}/apex-movie-rec-gpu-pipeline",
+        "title": "Apex Movie Rec Gpu Pipeline",
         "code_file": "main.py",
         "language": "python",
         "kernel_type": "script",
@@ -123,16 +123,29 @@ print("--> Kaggle GPU Execution Complete!")
 def push_and_run_kaggle_gpu():
     """Pushes kernel to Kaggle API and triggers execution."""
     create_kaggle_gpu_kernel_package()
-    
-    username = os.environ.get("KAGGLE_USERNAME")
-    key = os.environ.get("KAGGLE_KEY")
 
-    if not username or not key:
-        print("[NOTICE] KAGGLE_USERNAME or KAGGLE_KEY not set in environment. Package generated locally!")
+    # Support both new-format KGAT tokens and legacy username+key auth.
+    # New tokens (KGAT...) must be set as KAGGLE_API_TOKEN.
+    # Doppler stores the token under KAGGLE_KEY; GitHub Actions uses KAGGLE_API_TOKEN.
+    kaggle_token = os.environ.get("KAGGLE_API_TOKEN") or os.environ.get("KAGGLE_KEY")
+    username = os.environ.get("KAGGLE_USERNAME")
+
+    if not kaggle_token:
+        print("[NOTICE] KAGGLE_KEY or KAGGLE_API_TOKEN not set in environment. Package generated locally!")
         return
 
     print("Authenticating with Kaggle API...")
     try:
+        if kaggle_token.startswith("KGAT"):
+            # New-format token: set KAGGLE_API_TOKEN and clear legacy vars
+            os.environ["KAGGLE_API_TOKEN"] = kaggle_token
+            os.environ.pop("KAGGLE_USERNAME", None)
+            os.environ.pop("KAGGLE_KEY", None)
+        elif username:
+            # Legacy format: username + raw hex key
+            os.environ["KAGGLE_USERNAME"] = username
+            os.environ["KAGGLE_KEY"] = kaggle_token
+
         from kaggle.api.kaggle_api_extended import KaggleApi
         api = KaggleApi()
         api.authenticate()
