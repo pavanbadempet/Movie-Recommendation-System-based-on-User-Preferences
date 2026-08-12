@@ -175,26 +175,44 @@ else:
         if shard_records == 0:
             continue
 
-        # Use Native Spark JDBC Writer for zero-memory driver overhead and maximum throughput
-        jdbc_url = db_url
-        if jdbc_url.startswith("postgresql://"):
-            jdbc_url = jdbc_url.replace("postgresql://", "jdbc:postgresql://", 1)
-        elif jdbc_url.startswith("postgres://"):
-            jdbc_url = jdbc_url.replace("postgres://", "jdbc:postgresql://", 1)
+        # Parse PostgreSQL connection details
+        import urllib.parse
+        parsed = urllib.parse.urlparse(db_url)
+        db_user = urllib.parse.unquote(parsed.username or "")
+        db_pass = urllib.parse.unquote(parsed.password or "")
+        db_host = parsed.hostname or ""
+        db_port = str(parsed.port or 5432)
+        db_name = parsed.path.lstrip("/") or "neondb"
 
-        print(f"Streaming Shard {shard_idx + 1} DataFrame directly to Neon via Native Spark JDBC Engine...")
+        print(f"Streaming Shard {shard_idx + 1} DataFrame directly to Neon via Databricks Native PostgreSQL Engine...")
         try:
-            df_shard.write.format("jdbc") \
-                .option("url", jdbc_url) \
-                .option("dbtable", "movies") \
-                .option("driver", "org.postgresql.Driver") \
-                .option("batchsize", "5000") \
-                .mode("overwrite") \
-                .save()
-            print(f"Shard {shard_idx + 1} - Spark JDBC Sync Successful!")
-        except Exception as jdbc_err:
-            print(f"Spark JDBC Error on Shard {shard_idx + 1}: {jdbc_err}")
-            raise jdbc_err
+            try:
+                df_shard.write.format("postgresql") \
+                    .option("host", db_host) \
+                    .option("port", db_port) \
+                    .option("database", db_name) \
+                    .option("user", db_user) \
+                    .option("password", db_pass) \
+                    .option("dbtable", "movies") \
+                    .option("sslmode", "require") \
+                    .mode("overwrite") \
+                    .save()
+                print(f"Shard {shard_idx + 1} - Databricks PostgreSQL Sync Successful!")
+            except Exception as pg_err:
+                print(f"format('postgresql') Notice ({pg_err}). Trying format('jdbc')...")
+                df_shard.write.format("jdbc") \
+                    .option("url", jdbc_url) \
+                    .option("dbtable", "movies") \
+                    .option("driver", "org.postgresql.Driver") \
+                    .option("user", db_user) \
+                    .option("password", db_pass) \
+                    .option("batchsize", "5000") \
+                    .mode("overwrite") \
+                    .save()
+                print(f"Shard {shard_idx + 1} - Spark JDBC Sync Successful!")
+        except Exception as export_err:
+            print(f"Spark Export Error on Shard {shard_idx + 1}: {export_err}")
+            raise export_err
 
         # Build Post-Sync Clustered Primary Key, Covering, and HNSW Vector Indexes via JVM JDBC Connection
         print(f"Building PostgreSQL performance indexes on Shard {shard_idx + 1} via JVM JDBC Connection...")
