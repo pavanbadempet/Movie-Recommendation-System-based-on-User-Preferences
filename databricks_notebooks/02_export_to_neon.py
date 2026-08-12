@@ -189,30 +189,43 @@ else:
         if shard_records == 0:
             continue
 
-        engine = create_engine(db_url, connect_args={"sslmode": "require"}, pool_pre_ping=True)
-        # Use Arrow-accelerated toPandas() to prevent PySpark socket stream kernel crashes
-        print(f"Converting Shard {shard_idx + 1} DataFrame to Pandas using PyArrow...")
-        pdf = df_shard.toPandas()
+        # Use Native Spark JDBC Writer for zero-memory driver overhead and maximum throughput
+        jdbc_url = db_url
+        if jdbc_url.startswith("postgresql://"):
+            jdbc_url = jdbc_url.replace("postgresql://", "jdbc:postgresql://", 1)
+        elif jdbc_url.startswith("postgres://"):
+            jdbc_url = jdbc_url.replace("postgres://", "jdbc:postgresql://", 1)
 
-        batch_size = 1000
-        total_synced = 0
-
-        for start_idx in range(0, len(pdf), batch_size):
-            batch_df = pdf.iloc[start_idx:start_idx + batch_size]
-            if_exists_mode = "replace" if start_idx == 0 else "append"
-            try:
-                batch_df.to_sql("movies", engine, if_exists=if_exists_mode, index=False, method=psycopg2_fast_insert)
-            except Exception:
-                batch_df.to_sql("movies", engine, if_exists=if_exists_mode, index=False, method="multi", chunksize=100)
-
-            total_synced += len(batch_df)
-            print(f"Shard {shard_idx + 1} - Synced {total_synced}/{shard_records} records...")
-
-        del pdf
-        gc.collect()
+        print(f"Streaming Shard {shard_idx + 1} DataFrame directly to Neon via Spark JDBC Engine...")
+        try:
+            df_shard.write.format("jdbc") \
+                .option("url", jdbc_url) \
+                .option("dbtable", "movies") \
+                .option("driver", "org.postgresql.Driver") \
+                .option("batchsize", "5000") \
+                .mode("overwrite") \
+                .save()
+            print(f"Shard {shard_idx + 1} - Spark JDBC Sync Successful!")
+        except Exception as jdbc_err:
+            print(f"Spark JDBC Notice ({jdbc_err}). Falling back to chunked pandas export...")
+            pdf = df_shard.toPandas()
+            batch_size = 1000
+            total_synced = 0
+            for start_idx in range(0, len(pdf), batch_size):
+                batch_df = pdf.iloc[start_idx:start_idx + batch_size]
+                if_exists_mode = "replace" if start_idx == 0 else "append"
+                try:
+                    batch_df.to_sql("movies", engine, if_exists=if_exists_mode, index=False, method=psycopg2_fast_insert)
+                except Exception:
+                    batch_df.to_sql("movies", engine, if_exists=if_exists_mode, index=False, method="multi", chunksize=100)
+                total_synced += len(batch_df)
+                print(f"Shard {shard_idx + 1} - Synced {total_synced}/{shard_records} records...")
+            del pdf
+            gc.collect()
 
         # Build Post-Sync Clustered Primary Key, Covering, and HNSW Vector Indexes
         print(f"Building PostgreSQL performance indexes on Shard {shard_idx + 1}...")
+        engine = create_engine(db_url, connect_args={"sslmode": "require"}, pool_pre_ping=True)
         with engine.begin() as ddl_conn:
             try:
                 # 1. Primary Key Clustered B-Tree Index
