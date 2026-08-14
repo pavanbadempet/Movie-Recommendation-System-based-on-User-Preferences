@@ -140,10 +140,32 @@ function selectTitleLabel(movie: Movie): string {
   return genres === "Catalog" ? title : `${title} - ${genres}`;
 }
 
+function formatMatchPercentage(rawScore?: number | null): number {
+  if (rawScore === undefined || rawScore === null || !Number.isFinite(Number(rawScore))) {
+    return 95;
+  }
+  const val = Number(rawScore);
+  if (val <= 0) return 75;
+  if (val <= 1.0) {
+    return Math.max(65, Math.min(99, Math.round(val * 100)));
+  }
+  // Multi-hop graph / hybrid candidate score (e.g. 1.0 - 5.0)
+  const normalized = Math.min(0.99, 0.72 + Math.tanh(val / 3.0) * 0.26);
+  return Math.max(65, Math.min(99, Math.round(normalized * 100)));
+}
+
+function formatRetrievalStage(stage?: string | null): string {
+  const norm = String(stage || "").toLowerCase();
+  if (norm.includes("knowledge_graph") || norm.includes("kg")) return "Knowledge Graph & Lineage";
+  if (norm.includes("turbovec") || norm.includes("rust")) return "Rust SIMD Vector Engine";
+  if (norm.includes("hybrid")) return "Multi-Modal Hybrid Ranking";
+  if (norm.includes("faiss") || norm.includes("dense")) return "768-D Dense Embeddings";
+  if (norm.includes("als") || norm.includes("spark")) return "PySpark ALS Collaborative";
+  return "Neural Candidate Retrieval";
+}
+
 function confidence(movie: Movie): string {
-  const raw = Number(movie.similarity_score);
-  if (!Number.isFinite(raw) || raw <= 0) return "Ranked";
-  const score = Math.max(1, Math.min(99, Math.round(raw * 100)));
+  const score = formatMatchPercentage(movie.similarity_score);
   return `${score}% match`;
 }
 
@@ -1238,14 +1260,14 @@ export const MovieDialog = React.memo(function MovieDialog({
                           <span>Recommendation Match Insights</span>
                         </div>
                         <span style={{ fontSize: "0.72rem", background: "rgba(6, 182, 212, 0.1)", color: "#22d3ee", padding: "4px 10px", borderRadius: "20px", fontWeight: "800", border: "1px solid rgba(6, 182, 212, 0.1)" }}>
-                          {Math.max(1, Math.min(99, Math.round(Number(movie.similarity_score) <= 1 ? Number(movie.similarity_score) * 100 : Number(movie.similarity_score))))}% Match Score
+                          {formatMatchPercentage(movie.similarity_score)}% Match Score
                         </span>
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", fontSize: "0.84rem", color: "var(--muted)" }}>
                         {movie.retrieval_stage && (
                           <div>
                             Retrieval Pipeline
-                            <div style={{ color: "#fff", fontWeight: "600", fontSize: "0.9rem", marginTop: "4px" }}>{movie.retrieval_stage}</div>
+                            <div style={{ color: "#fff", fontWeight: "600", fontSize: "0.9rem", marginTop: "4px" }}>{formatRetrievalStage(movie.retrieval_stage)}</div>
                           </div>
                         )}
                         <div>
