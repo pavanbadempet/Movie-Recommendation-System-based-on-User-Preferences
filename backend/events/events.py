@@ -25,12 +25,15 @@ import uuid
 try:
     import orjson as _json_mod
 
+    _ORJSON_AVAILABLE = True
+
     def _json_dumps(obj) -> str:
         return _json_mod.dumps(obj, option=_json_mod.OPT_SORT_KEYS).decode()
 
     def _json_loads(s):
         return _json_mod.loads(s)
 except ImportError:
+    _ORJSON_AVAILABLE = False
 
     def _json_dumps(obj) -> str:
         return json.dumps(obj, sort_keys=True, ensure_ascii=True)
@@ -219,14 +222,19 @@ def normalize_event(event: dict[str, Any]) -> dict[str, Any]:
 
 
 def _append_event_jsonl(normalized: dict[str, Any], event_path: str | Path | None = None) -> Path:
-    """Append one normalized event to the JSONL event log (thread-safe)."""
+    """Append one normalized event to the JSONL event log (thread-safe, zero-copy binary write)."""
     path = get_events_path(event_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
     file_lock = _get_jsonl_lock(path)
-    with file_lock, path.open("a", encoding="utf-8") as fh:
-        fh.write(_json_dumps(normalized))
-        fh.write("\n")
+    if _ORJSON_AVAILABLE:
+        payload = _json_mod.dumps(normalized, option=_json_mod.OPT_SORT_KEYS) + b"\n"
+        with file_lock, path.open("ab") as fh:
+            fh.write(payload)
+    else:
+        with file_lock, path.open("a", encoding="utf-8") as fh:
+            fh.write(_json_dumps(normalized))
+            fh.write("\n")
 
     return path
 
