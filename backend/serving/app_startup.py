@@ -195,8 +195,13 @@ async def startup(
                 # 2. Warm up query encoder (loads SentenceTransformer / ONNX model in background before user clicks)
                 rec.search_movies("Spider-Man", limit=5)
                 # 3. Warm up item-to-item recommendation pipeline and candidate caches
-                rec.recommend_for_item(movie_id=550, top_k=5)
-                logger.info("Recommender model, query encoder, and vector cache pre-warmed successfully for zero-latency serving.")
+                rec.recommend_by_id(movie_id=550, n=5)
+                # 4. Freeze static weights and DataFrame memory to eliminate Python cyclic GC scan overhead
+                import gc
+                gc.collect()
+                if hasattr(gc, "freeze"):
+                    gc.freeze()
+                logger.info("Recommender model, query encoder, and vector cache pre-warmed & GC frozen for zero-latency serving.")
         except Exception as err:
             logger.warning("Recommender pre-warming note: %s", err)
 

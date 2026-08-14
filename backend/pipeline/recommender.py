@@ -285,7 +285,8 @@ class Recommender:
         self._collection_to_indices = {}
         if self._movies is None or "id" not in self._movies.columns:
             return
-        self._movie_records = self._movies.to_dict(orient="records")
+        raw_records = self._movies.to_dict(orient="records")
+        self._movie_records = [self._clean_response_record(r) for r in raw_records]
         ids = pd.to_numeric(self._movies["id"], errors="coerce")
         for pos, mid in enumerate(ids):
             if not pd.isna(mid):
@@ -620,9 +621,9 @@ class Recommender:
         return self.get_movie_by_index(movie_idx)
 
     def get_movie_by_index(self, idx: int) -> dict:
-        """Get movie details by DataFrame index."""
-        if self._movie_records and idx < len(self._movie_records):
-            return self._clean_response_record(self._movie_records[idx])
+        """Get movie details by DataFrame index (sub-microsecond pre-cleaned record)."""
+        if self._movie_records and 0 <= idx < len(self._movie_records):
+            return self._movie_records[idx]
         return self._clean_response_record(self._movies.iloc[idx].to_dict())
 
     def get_all_titles(self, limit: int = 100000) -> list[dict]:
