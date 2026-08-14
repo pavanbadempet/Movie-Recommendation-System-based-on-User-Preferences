@@ -71,6 +71,7 @@ const SignupPage = React.lazy(() => import("./pages/Signup").then(m => ({ defaul
 const PricingPage = React.lazy(() => import("./pages/Pricing").then(m => ({ default: m.PricingPage })));
 const GettingStartedPage = React.lazy(() => import("./pages/GettingStarted").then(m => ({ default: m.GettingStartedPage })));
 const StatusPage = React.lazy(() => import("./pages/Status").then(m => ({ default: m.StatusPage })));
+const VectorSpace = React.lazy(() => import("./VectorSpace").then(m => ({ default: m.VectorSpace })));
 
 function SuspenseFallback() {
   return (
@@ -86,7 +87,7 @@ const RECENT_STORAGE_KEY = "nova_recent_movies_v2";
 const SESSION_STORAGE_KEY = "nova_session_id_v1";
 const TITLE_CATALOG_LIMIT = 5000;
 
-type AppPage = "home" | "search" | "profile" | "dashboard" | "knowledge-graph" | "evaluation" | "admin" | "landing" | "signup" | "pricing" | "getting-started" | "status";
+type AppPage = "home" | "search" | "vector-space" | "profile" | "dashboard" | "knowledge-graph" | "evaluation" | "admin" | "landing" | "signup" | "pricing" | "getting-started" | "status";
 type SearchMode = "title" | "semantic";
 type CatalogState = "booting" | "warming" | "ready" | "error";
 type ResultsKind = "idle" | "search" | "recommendations";
@@ -2204,7 +2205,7 @@ function App() {
 
   const catalogValue = platform?.movie_count || titles.length;
   const rankerValue = platform?.ranker?.available ? "Learned" : "Hybrid";
-  const innerPages: AppPage[] = ["dashboard", "knowledge-graph", "evaluation", "profile", "admin"];
+  const innerPages: AppPage[] = ["vector-space", "dashboard", "knowledge-graph", "evaluation", "profile", "admin"];
   const isAppPage = ["home", "search", ...innerPages].includes(page);
 
   // ── Full-screen marketing pages (no app shell) ───────────────────────────
@@ -2700,6 +2701,7 @@ function App() {
     const navLinks = [
       { id: "home", label: "Browse" },
       { id: "search", label: "Search" },
+      { id: "vector-space", label: "3D Galaxy" },
       { id: "dashboard", label: "Dashboard" },
       { id: "knowledge-graph", label: "Knowledge Graph" },
       { id: "evaluation", label: "Evaluation" },
@@ -3293,6 +3295,7 @@ function App() {
           )}
 
           <React.Suspense fallback={<SuspenseFallback />}>
+            {page === "vector-space" && <main className="app-shell inner-shell"><ErrorBoundary><VectorSpace /></ErrorBoundary></main>}
             {page === "dashboard" && <main className="app-shell inner-shell"><ErrorBoundary><Dashboard /></ErrorBoundary></main>}
             {page === "knowledge-graph" && <main className="app-shell inner-shell"><ErrorBoundary><KnowledgeGraphPage titles={titles} /></ErrorBoundary></main>}
             {page === "evaluation" && <main className="app-shell inner-shell"><ErrorBoundary><EvaluationPage /></ErrorBoundary></main>}
