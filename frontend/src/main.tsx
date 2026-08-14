@@ -875,46 +875,25 @@ function TrailerFrame({ movie }: { movie: Movie }) {
         </>
       ) : trailerKey ? (
         isMobile ? (
-          /* Mobile: YouTube iframe embed with muted autoplay */
-          <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden" }}>
+          /* Mobile: YouTube iframe embed with proper widescreen fitting */
+          <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", background: "#000" }}>
             <iframe
-              src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&controls=0&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&fs=0&playsinline=1`}
-              title="Movie Trailer"
+              src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&controls=1&modestbranding=1&rel=0&playsinline=1`}
+              title={`${movie.title} Trailer`}
               frameBorder="0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
-              style={{
-                position: "absolute",
-                top: "-15%",
-                left: "-15%",
-                width: "130%",
-                height: "130%",
-                objectFit: "cover",
-                display: "block",
-                border: "none",
-                opacity: showFallbackIframe ? 1 : 0,
-                transition: "opacity 0.8s ease-in-out",
-                pointerEvents: "none",
-              }}
-            />
-            <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", zIndex: 10, background: "transparent" }} />
-            <img
-              src={backdropUrl(movie.poster_path)}
-              alt=""
               style={{
                 position: "absolute",
                 top: 0,
                 left: 0,
                 width: "100%",
                 height: "100%",
-                objectFit: "cover",
-                zIndex: 5,
-                opacity: showFallbackIframe ? 0 : 1,
-                transition: "opacity 0.8s ease-in-out",
-                pointerEvents: "none",
+                display: "block",
+                border: "none",
+                zIndex: 3,
               }}
             />
-            <div className="trailer-overlay" />
           </div>
         ) : (
           /* Desktop: cached video first, YouTube iframe fallback */
@@ -923,42 +902,22 @@ function TrailerFrame({ movie }: { movie: Movie }) {
               <Loader2 className="spin" size={24} />
             </div>
           ) : (!isCached || videoError) ? (
-            <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden" }}>
+            <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", background: "#000" }}>
               <iframe
-                src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&controls=0&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&fs=0`}
-                title="Movie Trailer Fallback"
+                src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&controls=1&modestbranding=1&rel=0&playsinline=1`}
+                title={`${movie.title} Trailer`}
                 frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
-                style={{
-                  position: "absolute",
-                  top: "-15%",
-                  left: "-15%",
-                  width: "130%",
-                  height: "130%",
-                  objectFit: "cover",
-                  display: "block",
-                  border: "none",
-                  opacity: showFallbackIframe ? 1 : 0,
-                  transition: "opacity 0.8s ease-in-out",
-                  pointerEvents: "none",
-                }}
-              />
-              <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", zIndex: 10, background: "transparent" }} />
-              <img
-                src={backdropUrl(movie.poster_path)}
-                alt=""
                 style={{
                   position: "absolute",
                   top: 0,
                   left: 0,
                   width: "100%",
                   height: "100%",
-                  objectFit: "cover",
-                  zIndex: 5,
-                  opacity: showFallbackIframe ? 0 : 1,
-                  transition: "opacity 0.8s ease-in-out",
-                  pointerEvents: "none",
+                  display: "block",
+                  border: "none",
+                  zIndex: 3,
                 }}
               />
             </div>

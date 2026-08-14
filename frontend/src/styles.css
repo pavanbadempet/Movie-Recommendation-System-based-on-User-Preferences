@@ -2063,52 +2063,53 @@ input:focus-visible {
 }
 .movie-dialog {
   position: relative;
-  width: min(1600px, 95vw);
-  height: min(900px, calc(100vh - 48px));
-  border-radius: 24px;
+  width: min(1280px, 94vw);
+  max-height: calc(100vh - 40px);
+  border-radius: 20px;
   background: #090a10;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.8),
-              0 0 50px rgba(99, 102, 241, 0.15);
-  animation: dialogOpen 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.9),
+              0 0 40px rgba(6, 182, 212, 0.1);
+  animation: dialogOpen 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .dialog-close {
   position: absolute;
-  top: 20px;
-  right: 20px;
-  z-index: 10;
-  width: 40px;
-  height: 40px;
+  top: 16px;
+  right: 16px;
+  z-index: 20;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.65);
   backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   color: #fff;
   display: grid;
   place-items: center;
   cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s ease;
 }
 .dialog-close:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.3);
-  transform: rotate(90deg);
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: scale(1.05);
 }
 
 .dialog-media {
-  flex: 0 0 42%;
-  height: 42%;
+  flex: 0 0 340px;
+  height: 340px;
   position: relative;
+  background: #000;
+  overflow: hidden;
 }
 .dialog-media::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(to top, #090a10 0%, rgba(9, 10, 16, 0.3) 60%, transparent 100%),
-              linear-gradient(to right, rgba(9, 10, 16, 0.4) 0%, transparent 40%);
+  background: linear-gradient(to top, #090a10 0%, rgba(9, 10, 16, 0.1) 40%, transparent 100%);
   pointer-events: none;
   z-index: 2;
 }
