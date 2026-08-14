@@ -1,21 +1,26 @@
 {
-  "short_name": "Nova",
-  "name": "Nova Movie Recommender",
+  "short_name": "AI RecSys",
+  "name": "AI Recommendation System & Lakehouse",
+  "description": "Production-grade AI recommendation engine and Databricks PySpark Delta Lakehouse processing 21M+ records with 10-shard pgvector HNSW vector search.",
+  "categories": ["entertainment", "utilities", "productivity"],
   "icons": [
     {
-      "src": "https://placehold.co/192x192/141418/a78bfa?text=Nova",
+      "src": "https://placehold.co/192x192/0a0a1a/6366f1?text=AI+RecSys",
       "type": "image/png",
-      "sizes": "192x192"
+      "sizes": "192x192",
+      "purpose": "any maskable"
     },
     {
-      "src": "https://placehold.co/512x512/141418/a78bfa?text=Nova",
+      "src": "https://placehold.co/512x512/0a0a1a/6366f1?text=AI+RecSys",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "512x512",
+      "purpose": "any maskable"
     }
   ],
   "start_url": "/",
+  "scope": "/",
   "background_color": "#050508",
   "theme_color": "#0a0a1a",
   "display": "standalone",
-  "orientation": "portrait"
+  "orientation": "any"
 }
