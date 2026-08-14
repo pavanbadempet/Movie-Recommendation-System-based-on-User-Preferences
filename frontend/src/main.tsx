@@ -3346,7 +3346,7 @@ function App() {
           )}
 
           <React.Suspense fallback={<SuspenseFallback />}>
-            {page === "vector-space" && <main className="app-shell inner-shell"><ErrorBoundary><VectorSpace /></ErrorBoundary></main>}
+            {page === "vector-space" && <main className="app-shell inner-shell"><ErrorBoundary><VectorSpace onSelectMovie={(movie) => setDialogMovie(movie)} titles={titles} /></ErrorBoundary></main>}
             {page === "dashboard" && <main className="app-shell inner-shell"><ErrorBoundary><Dashboard /></ErrorBoundary></main>}
             {page === "knowledge-graph" && <main className="app-shell inner-shell"><ErrorBoundary><KnowledgeGraphPage titles={titles} /></ErrorBoundary></main>}
             {page === "evaluation" && <main className="app-shell inner-shell"><ErrorBoundary><EvaluationPage /></ErrorBoundary></main>}
