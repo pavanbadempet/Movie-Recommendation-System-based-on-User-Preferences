@@ -1,5 +1,5 @@
 # 🏆 Master FAANG Data Engineering & AI/ML Interview Guide
-## *End-to-End System Design, Architectural Defense, & Scenario Handbook Based on the APEX Movie Recommendation System*
+## *End-to-End System Design, Architectural Defense, & Scenario Handbook Based on the AI Recommendation System*
 
 ---
 
