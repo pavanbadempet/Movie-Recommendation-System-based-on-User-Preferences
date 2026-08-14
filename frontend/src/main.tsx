@@ -1135,30 +1135,6 @@ export const MovieDialog = React.memo(function MovieDialog({
         </div>
 
         <div className="dialog-content">
-          <div className="dialog-tabs-header">
-            <button
-              type="button"
-              className={`dialog-tab-btn ${activeTab === "overview" ? "active" : ""}`}
-              onClick={() => setActiveTab("overview")}
-            >
-              Overview
-            </button>
-            <button
-              type="button"
-              className={`dialog-tab-btn ${activeTab === "credits" ? "active" : ""}`}
-              onClick={() => setActiveTab("credits")}
-            >
-              Details & Cast
-            </button>
-            <button
-              type="button"
-              className={`dialog-tab-btn ${activeTab === "insights" ? "active" : ""}`}
-              onClick={() => setActiveTab("insights")}
-            >
-              AI & Match
-            </button>
-          </div>
-
           <div className="dialog-grid">
             <div className="dialog-main">
               <div className="dialog-title-row">
@@ -1183,139 +1159,44 @@ export const MovieDialog = React.memo(function MovieDialog({
                     <span>{g}</span>
                   </span>
                 ))}
+                {movie.similarity_score !== undefined && movie.similarity_score !== null && (
+                  <span className="meta-badge" style={{ background: "rgba(6, 182, 212, 0.15)", color: "#22d3ee", border: "1px solid rgba(6, 182, 212, 0.25)" }}>
+                    <Sparkles size={13} />
+                    <span>{formatMatchPercentage(movie.similarity_score)}% Match</span>
+                  </span>
+                )}
               </div>
 
-              {activeTab === "overview" && (
-                <>
-                  <p className="dialog-overview">{overview}</p>
-                  {explanation && movie.similarity_score !== undefined && movie.similarity_score !== null && (
-                    <div className="dialog-vibe-card">
-                      <div className="vibe-header">
-                        <div className="vibe-title">
-                          <Compass size={14} />
-                          <span>Recommendation Context</span>
-                        </div>
-                        <span className="vibe-tag">Neural Match</span>
-                      </div>
-                      <p className="vibe-text">{explanation}</p>
-                    </div>
-                  )}
-                </>
-              )}
+              <p className="dialog-overview" style={{ fontSize: "0.95rem", lineHeight: 1.6, color: "#cbd5e1", margin: "14px 0 0 0" }}>
+                {overview}
+              </p>
 
-              {activeTab === "credits" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                  {(director || cast || movie.release_date || movie.popularity || movie.vote_count) ? (
-                    <div className="credits-tab-grid" style={{ display: "grid", gridTemplateColumns: "1fr", gap: "12px" }}>
-                      {director && (
-                        <div className="detail-item">
-                          <span className="detail-label">Director</span>
-                          <span className="detail-value" style={{ fontSize: "0.9rem", color: "#fff", fontWeight: "600" }}>{director}</span>
-                        </div>
-                      )}
-                      {cast && (
-                        <div className="detail-item">
-                          <span className="detail-label">Cast</span>
-                          <span className="detail-value" style={{ fontSize: "0.9rem", color: "#cbd5e1" }}>{cast}</span>
-                        </div>
-                      )}
-                      {movie.release_date && (
-                        <div className="detail-item">
-                          <span className="detail-label">Released</span>
-                          <span className="detail-value" style={{ fontSize: "0.9rem", color: "#fff" }}>{formatDate(movie.release_date)}</span>
-                        </div>
-                      )}
-                      {movie.popularity !== undefined && movie.popularity !== null && (
-                        <div className="detail-item">
-                          <span className="detail-label">Popularity Score</span>
-                          <span className="detail-value" style={{ fontSize: "0.9rem", color: "#fff" }}>{Number(movie.popularity).toFixed(1)}</span>
-                        </div>
-                      )}
-                      {movie.vote_count !== undefined && movie.vote_count !== null && movie.vote_count > 0 && (
-                        <div className="detail-item">
-                          <span className="detail-label">Vote Count</span>
-                          <span className="detail-value" style={{ fontSize: "0.9rem", color: "#fff" }}>{movie.vote_count.toLocaleString()} votes</span>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div style={{ color: "var(--quiet)", fontSize: "0.85rem" }}>No cast or crew details are available for this catalog item.</div>
-                  )}
+              {explanation && (
+                <div className="dialog-vibe-card" style={{ marginTop: "16px", padding: "14px 18px", borderRadius: "12px", background: "rgba(255, 255, 255, 0.04)", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                  <div className="vibe-header" style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                    <Sparkles size={14} style={{ color: "var(--cyan)" }} />
+                    <span style={{ fontSize: "0.8rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--cyan)" }}>
+                      Why You'll Love This
+                    </span>
+                  </div>
+                  <p className="vibe-text" style={{ margin: 0, fontSize: "0.88rem", color: "#e2e8f0", lineHeight: 1.5 }}>
+                    {explanation}
+                  </p>
                 </div>
               )}
 
-              {activeTab === "insights" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                  {(movie.similarity_score !== undefined && movie.similarity_score !== null) ? (
-                    <div style={{
-                      padding: "20px",
-                      background: "rgba(6, 182, 212, 0.04)",
-                      border: "1px solid rgba(6, 182, 212, 0.15)",
-                      borderRadius: "16px",
-                      boxShadow: "0 8px 32px rgba(6, 182, 212, 0.04)"
-                    }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.8rem", fontWeight: "900", textTransform: "uppercase", letterSpacing: "1px", color: "var(--cyan)" }}>
-                          <Activity size={16} />
-                          <span>Recommendation Match Insights</span>
-                        </div>
-                        <span style={{ fontSize: "0.72rem", background: "rgba(6, 182, 212, 0.1)", color: "#22d3ee", padding: "4px 10px", borderRadius: "20px", fontWeight: "800", border: "1px solid rgba(6, 182, 212, 0.1)" }}>
-                          {formatMatchPercentage(movie.similarity_score)}% Match Score
-                        </span>
-                      </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", fontSize: "0.84rem", color: "var(--muted)" }}>
-                        {movie.retrieval_stage && (
-                          <div>
-                            Retrieval Pipeline
-                            <div style={{ color: "#fff", fontWeight: "600", fontSize: "0.9rem", marginTop: "4px" }}>{formatRetrievalStage(movie.retrieval_stage)}</div>
-                          </div>
-                        )}
-                        <div>
-                          Quality Tier
-                          <div style={{ color: "#fff", fontWeight: "600", fontSize: "0.9rem", marginTop: "4px" }}>{movie.quality_bucket || "Tier 1 High-Confidence"}</div>
-                        </div>
-                      </div>
+              {(director || cast) && (
+                <div style={{ marginTop: "18px", paddingTop: "14px", borderTop: "1px solid rgba(255, 255, 255, 0.08)", display: "flex", flexDirection: "column", gap: "8px", fontSize: "0.85rem" }}>
+                  {director && (
+                    <div>
+                      <span style={{ color: "var(--muted)", marginRight: "8px" }}>Director</span>
+                      <strong style={{ color: "#fff" }}>{director}</strong>
                     </div>
-                  ) : (
-                    <div style={{
-                      padding: "20px",
-                      background: "rgba(6, 182, 212, 0.03)",
-                      border: "1px solid rgba(6, 182, 212, 0.12)",
-                      borderRadius: "16px",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "16px"
-                    }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.8rem", fontWeight: "900", textTransform: "uppercase", letterSpacing: "1px", color: "var(--cyan)" }}>
-                          <Sparkles size={16} />
-                          <span>Catalog Seed & Neural Profile</span>
-                        </div>
-                        <span style={{ fontSize: "0.72rem", background: "rgba(16, 185, 129, 0.1)", color: "#10b981", padding: "4px 10px", borderRadius: "20px", fontWeight: "800", border: "1px solid rgba(16, 185, 129, 0.2)" }}>
-                          Seed Vector Active
-                        </span>
-                      </div>
-                      <p style={{ margin: 0, fontSize: "0.86rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
-                        This title serves as the primary reference seed. The 6-model neural ensemble (SASRec, KAN, LightGCN, Diffusion, Quantum-Fluid, Hyperbolic) projects this movie into 768-D vector space to retrieve and rank similar titles in real time.
-                      </p>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "0.82rem", color: "var(--muted)", paddingTop: "8px", borderTop: "1px solid rgba(255, 255, 255, 0.05)" }}>
-                        <div>
-                          Embedding Vector
-                          <div style={{ color: "#fff", fontWeight: "600", fontSize: "0.88rem", marginTop: "2px" }}>768-D SBERT (L2-Norm)</div>
-                        </div>
-                        <div>
-                          Active Ensemble
-                          <div style={{ color: "#fff", fontWeight: "600", fontSize: "0.88rem", marginTop: "2px" }}>6 Neural Models + Bandits</div>
-                        </div>
-                        <div>
-                          Quality Tier
-                          <div style={{ color: "#fff", fontWeight: "600", fontSize: "0.88rem", marginTop: "2px" }}>{movie.quality_bucket || "Tier 1 High-Quality"}</div>
-                        </div>
-                        <div>
-                          Retrieval Latency
-                          <div style={{ color: "#22d3ee", fontWeight: "600", fontSize: "0.88rem", marginTop: "2px" }}>&lt; 5ms (Rust SIMD)</div>
-                        </div>
-                      </div>
+                  )}
+                  {cast && (
+                    <div>
+                      <span style={{ color: "var(--muted)", marginRight: "8px" }}>Starring</span>
+                      <span style={{ color: "#cbd5e1" }}>{cast}</span>
                     </div>
                   )}
                 </div>
@@ -2750,14 +2631,10 @@ function App() {
   // ── App Shell Pages (Browse, Search, Dashboard, KG, Eval, Profile, Admin) ─
   if (isAppPage) {
     const navLinks = [
-      { id: "home", label: "Browse" },
+      { id: "home", label: "Explore" },
       { id: "search", label: "Search" },
       { id: "vector-space", label: "3D Galaxy" },
-      { id: "dashboard", label: "Dashboard" },
-      { id: "knowledge-graph", label: "Knowledge Graph" },
-      { id: "evaluation", label: "Evaluation" },
-      { id: "profile", label: "Profile" },
-      { id: "admin", label: "Admin" },
+      { id: "profile", label: "Watchlist" },
     ];
 
     return (
@@ -2878,33 +2755,6 @@ function App() {
                 </button>
               )}
             </div>
-            <StatusBadge state={catalogState} backend={backend} />
-            <button
-              className="icon-button"
-              type="button"
-              onClick={() => {
-                void bootstrap(true);
-                if (catalogState === "ready") loadOperationalSignals();
-              }}
-              title="Refresh catalog"
-            >
-              <RefreshCw size={16} />
-            </button>
-            {!isMobileViewport && (
-              <button
-                className="icon-button"
-                type="button"
-                onClick={() => setIsMobileSimulated(!isMobileSimulated)}
-                title={isMobileSimulated ? "Switch to Widescreen Dashboard" : "Simulate Mobile App UI"}
-                style={{
-                  borderColor: isMobileSimulated ? "var(--secondary)" : "var(--line)",
-                  color: isMobileSimulated ? "var(--secondary)" : "var(--muted)",
-                  background: isMobileSimulated ? "rgba(236, 72, 153, 0.08)" : "var(--panel)"
-                }}
-              >
-                <Activity size={16} />
-              </button>
-            )}
             {username ? (
               <div className="user-profile-menu">
                 <button className="profile-btn" type="button" onClick={() => setPage("profile")}>
