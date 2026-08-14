@@ -99,12 +99,30 @@ export function backendLabel(url: string): string {
   }
 }
 
+interface ClientCacheEntry<T> {
+  data: T;
+  baseUrl: string;
+  timestamp: number;
+}
+const _clientCache = new Map<string, ClientCacheEntry<any>>();
+const CACHE_TTL_MS = 120_000; // 2 minutes fresh
+const CACHE_MAX_ITEMS = 256;
+
 export async function apiGet<T>(
   path: string,
   params: Record<string, string | number | boolean | undefined> = {},
   timeoutMs = 15000,
 ): Promise<BackendResult<T>> {
   const suffix = buildSuffix(path, params);
+  const cacheKey = suffix;
+
+  // 1. Check in-memory fast client cache
+  const cached = _clientCache.get(cacheKey);
+  const now = Date.now();
+  if (cached && (now - cached.timestamp) < CACHE_TTL_MS) {
+    return { data: cached.data as T, baseUrl: cached.baseUrl };
+  }
+
   const errors: string[] = [];
 
   for (const baseUrl of candidateBackends()) {
@@ -124,12 +142,26 @@ export async function apiGet<T>(
         continue;
       }
       activeBackend = baseUrl;
-      return { data: (await response.json()) as T, baseUrl };
+      const data = (await response.json()) as T;
+      
+      // Store in memory cache
+      if (_clientCache.size >= CACHE_MAX_ITEMS) {
+        const oldestKey = _clientCache.keys().next().value;
+        if (oldestKey) _clientCache.delete(oldestKey);
+      }
+      _clientCache.set(cacheKey, { data, baseUrl, timestamp: Date.now() });
+
+      return { data, baseUrl };
     } catch (error) {
       errors.push(`${backendLabel(baseUrl)} ${errorMessage(error)}`);
     } finally {
       timeout.cancel();
     }
+  }
+
+  // Fallback to stale cached data if network failed
+  if (cached) {
+    return { data: cached.data as T, baseUrl: cached.baseUrl };
   }
 
   throw new Error(errors.join(" | ") || "No backend available");

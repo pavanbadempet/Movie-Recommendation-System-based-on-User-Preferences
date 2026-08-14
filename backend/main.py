@@ -410,7 +410,24 @@ app.add_middleware(
 
 from fastapi.middleware.gzip import GZipMiddleware
 
-app.add_middleware(GZipMiddleware, minimum_size=1000)
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
+
+@app.middleware("http")
+async def wire_cache_control_middleware(request: Request, call_next):
+    """Set optimal wire Cache-Control and ETag headers on immutable/read-heavy GET endpoints."""
+    response = await call_next(request)
+    if request.method == "GET" and response.status_code == 200:
+        path = request.url.path
+        if path.startswith("/v1/showcase") or path.startswith("/v1/titles"):
+            response.headers["Cache-Control"] = "public, max-age=300, s-maxage=600, stale-while-revalidate=1800"
+        elif path.startswith("/v1/recommendations/id/"):
+            response.headers["Cache-Control"] = "public, max-age=60, s-maxage=300, stale-while-revalidate=600"
+        elif path.startswith("/v1/movies/"):
+            response.headers["Cache-Control"] = "public, max-age=120, s-maxage=600, stale-while-revalidate=1200"
+        elif path.startswith("/ui/") or path.startswith("/assets/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
 
 # Enterprise rate limiting (token bucket via Redis)
 try:
