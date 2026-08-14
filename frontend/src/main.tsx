@@ -1756,9 +1756,12 @@ function App() {
     const eventPayload: EventPayload = {
       ...payload,
       session_id: payload.session_id || sessionId,
+      user_id: payload.user_id || username || undefined,
       metadata: {
         client: "react",
         surface: "web",
+        auth_state: username ? "authenticated" : "anonymous",
+        username: username || undefined,
         ...(payload.metadata || {}),
       },
     };
