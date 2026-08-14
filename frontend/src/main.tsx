@@ -8,7 +8,9 @@ import {
   Calendar,
   CheckCircle2,
   Clock3,
+  Compass,
   Database,
+  ExternalLink,
   Film,
   Gauge,
   Loader2,
@@ -1162,14 +1164,14 @@ export const MovieDialog = React.memo(function MovieDialog({
               {activeTab === "overview" && (
                 <>
                   <p className="dialog-overview">{overview}</p>
-                  {explanation && (
+                  {explanation && movie.similarity_score !== undefined && movie.similarity_score !== null && (
                     <div className="dialog-vibe-card">
                       <div className="vibe-header">
                         <div className="vibe-title">
-                          <Sparkles size={14} className="vibe-sparkle" />
-                          <span>CineBot Vibe Check</span>
+                          <Compass size={14} />
+                          <span>Recommendation Context</span>
                         </div>
-                        <span className="vibe-tag">AI Insights</span>
+                        <span className="vibe-tag">Neural Match</span>
                       </div>
                       <p className="vibe-text">{explanation}</p>
                     </div>
@@ -1390,16 +1392,18 @@ export const MovieDialog = React.memo(function MovieDialog({
                 {movie.trailer_key && (
                   <a className="dialog-action-btn primary" href={`https://www.youtube.com/watch?v=${movie.trailer_key}`} target="_blank" rel="noreferrer">
                     <Play size={16} fill="currentColor" />
-                    <span>Play Trailer</span>
+                    <span>Watch Full Trailer</span>
                   </a>
                 )}
                 <a
                   className="dialog-action-btn secondary"
-                  href={`https://www.google.com/search?q=${encodeURIComponent(movie.title + " " + movieYear(movie) + " movie")}`}
+                  href={`https://www.themoviedb.org/movie/${movie.id}`}
                   target="_blank"
                   rel="noreferrer"
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
                 >
-                  <span>Search Google</span>
+                  <ExternalLink size={14} />
+                  <span>View on TMDB</span>
                 </a>
               </div>
             </div>
