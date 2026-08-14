@@ -1031,11 +1031,13 @@ export const MovieDialog = React.memo(function MovieDialog({
   onClose,
   feedback,
   onFeedback,
+  onRating,
 }: {
   movie: Movie;
   onClose: () => void;
   feedback?: "positive" | "negative";
   onFeedback?: (movie: Movie, value: "positive" | "negative") => void;
+  onRating?: (movie: Movie, stars: number) => void;
 }) {
   const director = directorLabel(movie);
   const cast = movie.cast || "";
@@ -1339,7 +1341,10 @@ export const MovieDialog = React.memo(function MovieDialog({
                       onMouseLeave={() => setHoverRating(0)}
                       onClick={() => {
                         setUserRating(star);
-                        showToast(`Rated ${star} Star${star > 1 ? "s" : ""}!`);
+                        if (onRating) {
+                          onRating(movie, star);
+                        }
+                        showToast(`Rated ${star} Star${star > 1 ? "s" : ""}! Real-time signal synced.`);
                       }}
                       aria-label={`Rate ${star} stars`}
                     >
@@ -1913,6 +1918,26 @@ function App() {
         title: movie.title,
         source_title: sourceMovie?.title,
         sentiment: value,
+        results_kind: resultsKind,
+        retrieval_stage: movie.retrieval_stage,
+        similarity_score: movie.similarity_score,
+      },
+    });
+  }
+
+  function recordRating(movie: Movie, stars: number) {
+    const sourceMovie = resultsKind === "recommendations" ? recommendationSource || selectedMovie : selectedMovie;
+    emitBehaviorEvent({
+      event_type: "rating",
+      movie_id: movie.id,
+      source_content_id: sourceMovie && sourceMovie.id !== movie.id ? String(sourceMovie.id) : undefined,
+      rating: stars,
+      request_id: lastRecommendationRequestId,
+      metadata: {
+        title: movie.title,
+        source_title: sourceMovie?.title,
+        sentiment: stars >= 4 ? "positive" : stars <= 2 ? "negative" : "neutral",
+        stars,
         results_kind: resultsKind,
         retrieval_stage: movie.retrieval_stage,
         similarity_score: movie.similarity_score,
@@ -2641,6 +2666,7 @@ function App() {
             movie={dialogMovie}
             feedback={feedbackByMovieId[dialogMovie.id]}
             onFeedback={recordFeedback}
+            onRating={recordRating}
             onClose={() => setDialogMovie(null)}
           />
         )}
@@ -3308,6 +3334,7 @@ function App() {
             movie={dialogMovie}
             feedback={feedbackByMovieId[dialogMovie.id]}
             onFeedback={recordFeedback}
+            onRating={recordRating}
             onClose={() => setDialogMovie(null)}
           />
         )}
