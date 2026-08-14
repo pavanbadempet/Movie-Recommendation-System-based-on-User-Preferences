@@ -77,6 +77,16 @@ class RustworkxGraphWrapper:
             if not self._graph.has_edge(u_idx, v_idx):
                 self._graph.add_edge(u_idx, v_idx, kwargs)
 
+    def has_node(self, node_id) -> bool:
+        return node_id in self._id_to_idx
+
+    def has_edge(self, u, v) -> bool:
+        u_idx = self._id_to_idx.get(u)
+        v_idx = self._id_to_idx.get(v)
+        if u_idx is None or v_idx is None:
+            return False
+        return self._graph.has_edge(u_idx, v_idx)
+
     def __contains__(self, node_id):
         return node_id in self._id_to_idx
 

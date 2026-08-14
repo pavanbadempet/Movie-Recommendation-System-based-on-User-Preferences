@@ -110,6 +110,10 @@ class MultiModalFusionIndex:
         logger.info("Multi-Modal TurboVec Index built and saved successfully!")
         return True
 
+    def load(self) -> bool:
+        """Alias for load_fusion_index."""
+        return self.load_fusion_index()
+
     def load_fusion_index(self):
         """Load the pre-built multi-modal index for serving."""
         index_path = MODELS_DIR / "multimodal_turbovec.tq"
