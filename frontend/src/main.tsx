@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import {
   Activity,
   AlertTriangle,
+  ArrowRight,
   BarChart3,
   Bookmark,
   Calendar,
@@ -74,6 +75,7 @@ const PricingPage = React.lazy(() => import("./pages/Pricing").then(m => ({ defa
 const GettingStartedPage = React.lazy(() => import("./pages/GettingStarted").then(m => ({ default: m.GettingStartedPage })));
 const StatusPage = React.lazy(() => import("./pages/Status").then(m => ({ default: m.StatusPage })));
 const VectorSpace = React.lazy(() => import("./VectorSpace").then(m => ({ default: m.VectorSpace })));
+const DataEngineeringPage = React.lazy(() => import("./pages/DataEngineering").then(m => ({ default: m.DataEngineeringPage })));
 
 function SuspenseFallback() {
   return (
@@ -89,7 +91,7 @@ const RECENT_STORAGE_KEY = "nova_recent_movies_v2";
 const SESSION_STORAGE_KEY = "nova_session_id_v1";
 const TITLE_CATALOG_LIMIT = 5000;
 
-type AppPage = "home" | "search" | "vector-space" | "profile" | "dashboard" | "knowledge-graph" | "evaluation" | "admin" | "landing" | "signup" | "pricing" | "getting-started" | "status";
+type AppPage = "home" | "search" | "vector-space" | "data-platform" | "profile" | "dashboard" | "knowledge-graph" | "evaluation" | "admin" | "landing" | "signup" | "pricing" | "getting-started" | "status";
 type SearchMode = "title" | "semantic";
 type CatalogState = "booting" | "warming" | "ready" | "error";
 type ResultsKind = "idle" | "search" | "recommendations";
@@ -1342,6 +1344,7 @@ const HomePage = React.memo(function HomePage({
   latestLoading,
   homeMode,
   onToggleMode,
+  onNavigate,
 }: {
   movies: Movie[];
   heroIndex: number;
@@ -1356,6 +1359,7 @@ const HomePage = React.memo(function HomePage({
   latestLoading: boolean;
   homeMode: "foryou" | "latest" | "trending";
   onToggleMode: (mode: "foryou" | "latest" | "trending") => void;
+  onNavigate?: (page: AppPage) => void;
 }) {
   const hasForYou = recentMovies.length > 0 || forYouMovies.length > 0;
   const activeMovies = homeMode === "foryou" && hasForYou ? forYouMovies : homeMode === "latest" ? latestMovies : movies;
@@ -1466,6 +1470,43 @@ const HomePage = React.memo(function HomePage({
                     <img src={posterUrl(movie.poster_path)} alt={movie.title} loading="lazy" />
                   </button>
                 ))}
+              </div>
+            </div>
+
+            {/* Data Engineering Architecture Provenance Banner */}
+            <div
+              onClick={() => onNavigate?.("data-platform")}
+              style={{
+                cursor: "pointer",
+                margin: "32px 0 16px 0",
+                padding: "20px 24px",
+                borderRadius: "16px",
+                background: "linear-gradient(135deg, rgba(6, 182, 212, 0.08) 0%, rgba(59, 130, 246, 0.08) 100%)",
+                border: "1px solid rgba(6, 182, 212, 0.25)",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "16px",
+                boxShadow: "0 8px 32px rgba(6, 182, 212, 0.04)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                <div style={{ width: "42px", height: "42px", borderRadius: "10px", background: "rgba(6, 182, 212, 0.18)", display: "flex", alignItems: "center", justifyContent: "center", color: "#22d3ee" }}>
+                  <Database size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: "0 0 4px 0", fontSize: "1.05rem", color: "#ffffff", fontWeight: "700" }}>
+                    Engineered with PySpark 4.2 & Databricks Delta Lakehouse
+                  </h3>
+                  <p style={{ margin: 0, fontSize: "0.84rem", color: "var(--muted)" }}>
+                    Processing 21M+ records with SCD Type 2 dimension versioning & 10-shard Neon pgvector HNSW indexing.
+                  </p>
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#22d3ee", fontSize: "0.85rem", fontWeight: "700" }}>
+                <span>Explore Data Platform</span>
+                <ArrowRight size={16} />
               </div>
             </div>
           </div>
@@ -2634,6 +2675,7 @@ function App() {
       { id: "home", label: "Explore" },
       { id: "search", label: "Search" },
       { id: "vector-space", label: "3D Galaxy" },
+      { id: "data-platform", label: "Data Platform" },
       { id: "profile", label: "Watchlist" },
     ];
 
@@ -2800,6 +2842,7 @@ function App() {
               latestLoading={latestLoading}
               homeMode={homeMode}
               onToggleMode={setHomeMode}
+              onNavigate={(p) => setPage(p as AppPage)}
             />
           )}
 
@@ -3197,6 +3240,7 @@ function App() {
 
           <React.Suspense fallback={<SuspenseFallback />}>
             {page === "vector-space" && <main className="app-shell inner-shell"><ErrorBoundary><VectorSpace onSelectMovie={(movie) => setDialogMovie(movie)} titles={titles} /></ErrorBoundary></main>}
+            {page === "data-platform" && <main className="app-shell inner-shell"><ErrorBoundary><DataEngineeringPage /></ErrorBoundary></main>}
             {page === "dashboard" && <main className="app-shell inner-shell"><ErrorBoundary><Dashboard /></ErrorBoundary></main>}
             {page === "knowledge-graph" && <main className="app-shell inner-shell"><ErrorBoundary><KnowledgeGraphPage titles={titles} /></ErrorBoundary></main>}
             {page === "evaluation" && <main className="app-shell inner-shell"><ErrorBoundary><EvaluationPage /></ErrorBoundary></main>}
