@@ -1746,6 +1746,13 @@ function App() {
       ? `Recommendations similar to ${(recommendationSource || selectedMovie)?.title || "this title"}`
       : "Search matches";
 
+  const prefetchSetRef = React.useRef<Set<number>>(new Set());
+  const prefetchMovieIntent = React.useCallback((movieId?: number) => {
+    if (!movieId || prefetchSetRef.current.has(movieId)) return;
+    prefetchSetRef.current.add(movieId);
+    void getRecommendations(movieId, 8, 5000).catch(() => {});
+  }, []);
+
   function rememberMovie(movie: Movie) {
     const next = dedupeMovies([movie, ...recentMovies]).slice(0, 6);
     setRecentMovies(next);

@@ -74,26 +74,29 @@ export function VectorSpace() {
 
     const generatedNodes: MovieNode[] = [];
     
-    // Create 150 movie nodes in clusters
-    for (let i = 0; i < 150; i++) {
+    // Create 180 movie nodes projected along Hyperbolic Poincaré geodesics
+    for (let i = 0; i < 180; i++) {
       const genreIdx = i % GENRES.length;
       const genre = GENRES[genreIdx];
       const color = GENRE_COLORS[genreIdx];
 
-      // Cluster position based on genre
-      const clusterAngle = (genreIdx / GENRES.length) * Math.PI * 2;
-      const clusterX = Math.cos(clusterAngle) * 120;
-      const clusterZ = Math.sin(clusterAngle) * 120;
+      // Hyperbolic radial curvature: R * tanh(dist / sigma)
+      const rawDist = 40 + (i / 180) * 140;
+      const hyperbolicRadius = 150 * Math.tanh(rawDist / 90);
+      const clusterAngle = (genreIdx / GENRES.length) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
 
-      // Random offset within cluster
-      const x = clusterX + (Math.random() - 0.5) * 80;
-      const y = (Math.random() - 0.5) * 100;
-      const z = clusterZ + (Math.random() - 0.5) * 80;
+      const clusterX = Math.cos(clusterAngle) * hyperbolicRadius;
+      const clusterZ = Math.sin(clusterAngle) * hyperbolicRadius;
 
-      // Assign a real movie title if it matches sample index, otherwise generate dummy
+      // Geodesic vertical fluctuation
+      const x = clusterX + (Math.random() - 0.5) * 45;
+      const y = Math.sin(clusterAngle * 3 + i) * 60 + (Math.random() - 0.5) * 30;
+      const z = clusterZ + (Math.random() - 0.5) * 45;
+
+      // Assign title
       const title = i < SAMPLE_MOVIES.length
         ? SAMPLE_MOVIES[i].title
-        : `${genre} Recommendation #${i - SAMPLE_MOVIES.length + 1}`;
+        : `${genre} Vector Twin #${i - SAMPLE_MOVIES.length + 1}`;
 
       generatedNodes.push({
         id: i,

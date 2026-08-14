@@ -393,6 +393,19 @@ def append_event(event: dict[str, Any], event_path: str | Path | None = None) ->
         _append_event_jsonl(normalized, event_path)
         wrote_jsonl = True
 
+    # Update Contextual Bandit reward distribution
+    try:
+        from backend.intelligence.contextual_bandit import get_bandit_engine
+        bandit = get_bandit_engine()
+        mid = normalized.get("movie_id")
+        if mid is not None:
+            rating_val = normalized.get("rating")
+            event_type = str(normalized.get("event_type", "")).lower()
+            is_positive = (rating_val is not None and float(rating_val) >= 3.5) or event_type in {"click", "like", "watchlist"}
+            bandit.update_reward(int(mid), clicked=is_positive)
+    except Exception as exc:
+        logger.debug("Contextual bandit online reward update notice: %s", exc)
+
     result = dict(normalized)
     result["event_store"] = "postgres" if wrote_postgres and not wrote_jsonl else mode
     result["durable"] = wrote_postgres
