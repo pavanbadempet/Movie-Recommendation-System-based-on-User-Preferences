@@ -877,14 +877,13 @@ function TrailerFrame({ movie }: { movie: Movie }) {
         </>
       ) : trailerKey ? (
         isMobile ? (
-          /* Mobile: YouTube iframe embed with proper widescreen fitting */
-          <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", background: "#000" }}>
+          /* Mobile: YouTube iframe embed with no controls */
+          <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", background: "#000", pointerEvents: "none" }}>
             <iframe
-              src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&controls=1&modestbranding=1&rel=0&playsinline=1`}
+              src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&controls=0&modestbranding=1&rel=0&playsinline=1&iv_load_policy=3&disablekb=1&fs=0&loop=1&playlist=${trailerKey}`}
               title={`${movie.title} Trailer`}
               frameBorder="0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
               style={{
                 position: "absolute",
                 top: 0,
@@ -894,6 +893,7 @@ function TrailerFrame({ movie }: { movie: Movie }) {
                 display: "block",
                 border: "none",
                 zIndex: 3,
+                pointerEvents: "none",
               }}
             />
           </div>
@@ -904,13 +904,12 @@ function TrailerFrame({ movie }: { movie: Movie }) {
               <Loader2 className="spin" size={24} />
             </div>
           ) : (!isCached || videoError) ? (
-            <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", background: "#000" }}>
+            <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", background: "#000", pointerEvents: "none" }}>
               <iframe
-                src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&controls=1&modestbranding=1&rel=0&playsinline=1`}
+                src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&controls=0&modestbranding=1&rel=0&playsinline=1&iv_load_policy=3&disablekb=1&fs=0&loop=1&playlist=${trailerKey}`}
                 title={`${movie.title} Trailer`}
                 frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
                 style={{
                   position: "absolute",
                   top: 0,
@@ -920,6 +919,7 @@ function TrailerFrame({ movie }: { movie: Movie }) {
                   display: "block",
                   border: "none",
                   zIndex: 3,
+                  pointerEvents: "none",
                 }}
               />
             </div>
