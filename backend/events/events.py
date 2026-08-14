@@ -96,10 +96,11 @@ def get_events_path(event_path: str | Path | None = None) -> Path:
 
 def get_event_store_mode() -> str:
     """Return the configured behavior-event store mode."""
-    mode = os.getenv("NOVA_EVENT_STORE", "jsonl").strip().lower()
+    default_mode = "dual" if get_event_database_url() else "jsonl"
+    mode = os.getenv("NOVA_EVENT_STORE", default_mode).strip().lower()
     if mode not in EVENT_STORE_MODES:
-        logger.warning("Invalid NOVA_EVENT_STORE=%s; falling back to jsonl", mode)
-        return "jsonl"
+        logger.warning("Invalid NOVA_EVENT_STORE=%s; falling back to %s", mode, default_mode)
+        return default_mode
     return mode
 
 
@@ -242,19 +243,24 @@ def _append_event_jsonl(normalized: dict[str, Any], event_path: str | Path | Non
 def _get_psycopg():
     try:
         import psycopg
+        return psycopg
+    except ImportError:
+        pass
+    try:
+        import psycopg2
+        return psycopg2
     except ImportError as exc:
         raise RuntimeError(
-            "Postgres event storage requires psycopg. Install requirements.txt or run `pip install psycopg[binary]`."
+            "Postgres event storage requires psycopg or psycopg2. Install requirements.txt or run `pip install psycopg2-binary`."
         ) from exc
-    return psycopg
 
 
 def _connect_postgres(database_url: str):
-    psycopg = _get_psycopg()
+    mod = _get_psycopg()
     cleaned_url = database_url
     if cleaned_url.startswith("postgresql+"):
         cleaned_url = "postgresql://" + cleaned_url.split("://", 1)[1]
-    return psycopg.connect(cleaned_url)
+    return mod.connect(cleaned_url)
 
 
 def _ensure_postgres_events_table(conn: Any, table_name: str) -> None:
