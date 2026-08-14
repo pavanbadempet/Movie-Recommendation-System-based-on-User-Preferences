@@ -1,0 +1,38 @@
+# User-agent directives for AI Recommendation System
+User-agent: *
+Allow: /
+Allow: /docs/
+Allow: /health
+Allow: /assets/
+Allow: /api/
+
+# Explicitly welcome Search Engine & Social Media Bots
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Slurp
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: Baiduspider
+Allow: /
+
+User-agent: YandexBot
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: LinkedInBot
+Allow: /
+
+# Sitemap Location
+Sitemap: https://pavanbadempet.github.io/AI-Recommendation-System/sitemap.xml
