@@ -26,6 +26,9 @@ except ImportError:
     # Safe fallbacks for container/serverless runtimes where etl is omitted
     class _FallbackPaths:
         lakehouse_dir = PROJECT_ROOT / "data" / "lakehouse"
+        bronze_data = PROJECT_ROOT / "data" / "lakehouse" / "bronze"
+        silver_data = PROJECT_ROOT / "data" / "lakehouse" / "silver"
+        gold_data = PROJECT_ROOT / "data" / "lakehouse" / "gold"
     paths = _FallbackPaths()
     SCD_CURRENT_COL = "is_current"
     as_of_scd = None
@@ -123,15 +126,25 @@ def summarize_scd_table(
         return summary
 
     history = load_table_version(base_path, table_name)
-    current_rows = int(history[SCD_CURRENT_COL].astype(bool).sum()) if SCD_CURRENT_COL in history.columns else 0
-    scd_summary: dict[str, Any] = {
-        "current_rows": current_rows,
-        "historical_versions": int(len(history) - current_rows),
-        "total_versions": len(history),
-        "business_keys": int(history["id"].nunique()) if "id" in history.columns else None,
-        "as_of": None,
-        "comparison": None,
-    }
+    if hasattr(history, "columns"):
+        current_rows = int(history[SCD_CURRENT_COL].astype(bool).sum()) if SCD_CURRENT_COL in history.columns else 0
+        scd_summary: dict[str, Any] = {
+            "current_rows": current_rows,
+            "historical_versions": int(len(history) - current_rows),
+            "total_versions": len(history),
+            "business_keys": int(history["id"].nunique()) if "id" in history.columns else None,
+            "as_of": None,
+            "comparison": None,
+        }
+    else:
+        scd_summary: dict[str, Any] = {
+            "current_rows": 0,
+            "historical_versions": 0,
+            "total_versions": 0,
+            "business_keys": None,
+            "as_of": None,
+            "comparison": None,
+        }
 
     if as_of_ts:
         as_of_view = as_of_scd(history, as_of_ts)
