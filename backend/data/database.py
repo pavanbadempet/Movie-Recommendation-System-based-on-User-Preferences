@@ -26,8 +26,12 @@ except ImportError:
     # Fallback if pgvector is not installed locally
     from sqlalchemy.types import UserDefinedType
     class Vector(UserDefinedType):
-        def get_col_spec(self):
-            return "VECTOR"
+        def __init__(self, dim=None, *args, **kwargs):
+            self.dim = dim
+            super().__init__(*args, **kwargs)
+
+        def get_col_spec(self, **kw):
+            return f"VECTOR({self.dim})" if self.dim else "VECTOR"
 
 # PostgreSQL Connection String (Fallback to SQLite if no PGSQL)
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///apex.db")

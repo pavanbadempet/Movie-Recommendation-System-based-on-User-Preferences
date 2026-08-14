@@ -13,14 +13,25 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from etl.config import paths
-from etl.lakehouse import (
-    SCD_CURRENT_COL,
-    as_of_scd,
-    compare_scd_as_of,
-    list_table_versions,
-    load_table_version,
-)
+try:
+    from etl.config import paths
+    from etl.lakehouse import (
+        SCD_CURRENT_COL,
+        as_of_scd,
+        compare_scd_as_of,
+        list_table_versions,
+        load_table_version,
+    )
+except ImportError:
+    # Safe fallbacks for container/serverless runtimes where etl is omitted
+    class _FallbackPaths:
+        lakehouse_dir = PROJECT_ROOT / "data" / "lakehouse"
+    paths = _FallbackPaths()
+    SCD_CURRENT_COL = "is_current"
+    as_of_scd = None
+    compare_scd_as_of = None
+    list_table_versions = lambda *a, **kw: []
+    load_table_version = lambda *a, **kw: {}
 
 DEFAULT_TABLES = (
     ("bronze", "movies_raw", "bronze_data"),
