@@ -476,7 +476,9 @@ async def request_slo_middleware(request: Request, call_next):
 # =====================================================================
 if (FRONTEND_DIST_DIR / "index.html").exists():
     app.mount("/ui", StaticFiles(directory=FRONTEND_DIST_DIR, html=True), name="frontend")
-    logger.info("Mounted React frontend at /ui/ from %s", FRONTEND_DIST_DIR)
+    if (FRONTEND_DIST_DIR / "assets").exists():
+        app.mount("/assets", StaticFiles(directory=FRONTEND_DIST_DIR / "assets"), name="assets")
+    logger.info("Mounted React frontend at /ui/ and /assets/ from %s", FRONTEND_DIST_DIR)
 
 
 @app.get("/")

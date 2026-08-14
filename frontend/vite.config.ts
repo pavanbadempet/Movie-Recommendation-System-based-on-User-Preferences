@@ -4,7 +4,7 @@ import react from "@vitejs/plugin-react";
 import viteCompression from "vite-plugin-compression";
 
 export default defineConfig({
-  base: process.env.VITE_BASE_PATH || "/",
+  base: process.env.VITE_BASE_PATH || "./",
   plugins: [
     react(),
     viteCompression({ algorithm: "brotliCompress", ext: ".br" }),
