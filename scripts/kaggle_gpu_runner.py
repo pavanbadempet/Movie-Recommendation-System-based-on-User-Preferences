@@ -35,7 +35,9 @@ def create_kaggle_gpu_kernel_package():
         json.dump(kernel_metadata, f, indent=2)
 
     # 2. Main GPU Execution Script (PyTorch FP16 Tensor Cores + SentenceTransformers)
-    script_content = '''import os
+    # Inject DATABASE_URL from Doppler at push time so all secrets stay in one place
+    database_url = os.environ.get("DATABASE_URL", "")
+    script_content = f'''import os
 import sys
 import json
 import numpy as np
@@ -47,14 +49,14 @@ from sentence_transformers import SentenceTransformer
 from sqlalchemy import create_engine
 from psycopg2.extras import execute_values
 
-print(f"CUDA Available: {torch.cuda.is_available()}")
+print(f"CUDA Available: {{torch.cuda.is_available()}}")
 if torch.cuda.is_available():
-    print(f"GPU Device: {torch.cuda.get_device_name(0)}")
+    print(f"GPU Device: {{torch.cuda.get_device_name(0)}}")
 
-# Load Database URL from Kaggle Secrets or Doppler
-DATABASE_URL = os.environ.get("DATABASE_URL")
+# Secrets injected from Doppler at push time (kernel is private, code visible only to owner)
+DATABASE_URL = "{database_url}"
 if not DATABASE_URL:
-    print("DATABASE_URL environment variable is required to stream embeddings to Neon!")
+    print("DATABASE_URL not available. Ensure Doppler has DATABASE_URL set before pushing.")
     sys.exit(0)
 
 if DATABASE_URL.startswith("postgres://"):
@@ -64,16 +66,23 @@ if DATABASE_URL.startswith("postgres://"):
 # 1. GPU VECTOR EMBEDDING GENERATION (SentenceTransformers FP16)
 # -------------------------------------------------------------------------
 print("Loading Gold movies dataset from Neon PostgreSQL...")
-engine = create_engine(DATABASE_URL, connect_args={"sslmode": "require"})
+engine = create_engine(DATABASE_URL, connect_args={{"sslmode": "require"}})
 
 try:
     df = pd.read_sql("SELECT id, title, overview, tags FROM movies WHERE tags IS NOT NULL", engine)
-    print(f"Loaded {len(df)} active movie records from Neon PostgreSQL.")
+    print(f"Loaded {{len(df)}} active movie records from Neon PostgreSQL.")
 
     if not df.empty:
         EMBEDDING_MODEL_NAME = "all-mpnet-base-v2"
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"Initializing {EMBEDDING_MODEL_NAME} on {device}...")
+        device = "cpu"
+        if torch.cuda.is_available():
+            cap = torch.cuda.get_device_capability(0)
+            if cap[0] >= 7:
+                device = "cuda"
+                print(f"GPU {{torch.cuda.get_device_name(0)}} (sm_{{cap[0]}}{{cap[1]}}) is compatible!")
+            else:
+                print(f"GPU {{torch.cuda.get_device_name(0)}} (sm_{{cap[0]}}{{cap[1]}}) incompatible with PyTorch, using CPU.")
+        print(f"Initializing {{EMBEDDING_MODEL_NAME}} on {{device}}...")
         model = SentenceTransformer(EMBEDDING_MODEL_NAME, device=device)
         
         if device == "cuda":
@@ -110,7 +119,7 @@ try:
             dbapi_conn.close()
 
 except Exception as err:
-    print(f"Kaggle GPU Execution Note: {err}")
+    print(f"Kaggle GPU Execution Note: {{err}}")
 
 print("--> Kaggle GPU Execution Complete!")
 '''
