@@ -109,11 +109,13 @@ describe("buildSuffix (via apiGet query params)", () => {
 // ─── apiGet – fallback on 5xx ─────────────────────────────────────────────────
 
 describe("apiGet – 5xx fallback behaviour", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.stubGlobal("window", {
       ...globalThis.window,
       localStorage: { getItem: () => null },
     });
+    const { clearApiCache } = await import("../api");
+    clearApiCache();
   });
 
   afterEach(() => {

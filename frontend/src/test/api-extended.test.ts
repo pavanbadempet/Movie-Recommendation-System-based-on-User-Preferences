@@ -62,10 +62,13 @@ import {
   getVisualRecommendations,
   getKGRecommendations,
   checkVideoCacheStatus,
+  clearApiCache,
 } from "../api";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockFetch.mockReset();
+  clearApiCache();
 });
 
 // ─── Wrapper functions ────────────────────────────────────────────────────────
@@ -141,7 +144,7 @@ describe("API wrapper functions", () => {
   });
 
   it("getMovieEnriched returns immediately if enriched endpoint has trailer", async () => {
-    mockFetch.mockResolvedValueOnce(okJson({ id: 1, trailer_key: "abc" }));
+    mockFetch.mockResolvedValue(okJson({ id: 1, trailer_key: "abc" }));
     const result = await getMovieEnriched(1);
     expect(result.data.trailer_key).toBe("abc");
   });
@@ -149,7 +152,7 @@ describe("API wrapper functions", () => {
   it("getMovieEnriched falls back and fetches trailer via proxy if enriched fails", async () => {
     mockFetch.mockImplementation(async (input: RequestInfo | URL) => {
       const url = input.toString();
-      if (url.includes("/enriched")) return failResponse(404);
+      if (url.includes("/movie/1/enriched")) return failResponse(404);
       if (url.includes("/trailer")) return okJson({ trailer_key: "proxy-key" });
       if (url.includes("/movie/1")) return okJson({ id: 1, title: "Base" });
       return failResponse(404);
@@ -163,7 +166,7 @@ describe("API wrapper functions", () => {
   it("getMovieEnriched falls back to recs endpoint if proxy fails", async () => {
     mockFetch.mockImplementation(async (input: RequestInfo | URL) => {
       const url = input.toString();
-      if (url.endsWith("/enriched")) return failResponse(404); // the direct movie enriched
+      if (url.includes("/movie/1/enriched")) return failResponse(404);
       if (url.includes("/trailer")) return failResponse(404);
       if (url.includes("/recommendations/id/1/enriched")) return okJson({ query_movie: { trailer_key: "rec-key" } });
       if (url.includes("/movie/1")) return okJson({ id: 1, title: "Base" });

@@ -108,6 +108,10 @@ const _clientCache = new Map<string, ClientCacheEntry<any>>();
 const CACHE_TTL_MS = 120_000; // 2 minutes fresh
 const CACHE_MAX_ITEMS = 256;
 
+export function clearApiCache(): void {
+  _clientCache.clear();
+}
+
 export async function apiGet<T>(
   path: string,
   params: Record<string, string | number | boolean | undefined> = {},

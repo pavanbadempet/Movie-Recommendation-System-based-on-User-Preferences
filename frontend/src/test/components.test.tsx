@@ -447,36 +447,10 @@ describe("MovieDialog", () => {
     expect(screen.getByText("Sci-Fi")).toBeInTheDocument();
     expect(screen.getByText("Because you like futuristic space adventures.")).toBeInTheDocument();
 
-    // Credits should NOT render in Overview tab
-    expect(screen.queryByText("Jane Director")).not.toBeInTheDocument();
-  });
-
-  it("renders credits and tech stats in Details & Cast tab", async () => {
-    const onCloseMock = vi.fn();
-    render(<MovieDialog movie={mockMovie} onClose={onCloseMock} />);
-
-    // Click on Details & Cast tab
-    const detailsTab = screen.getByRole("button", { name: /details & cast/i });
-    fireEvent.click(detailsTab);
-
+    // Credits and director render cleanly in the unified layout
     expect(screen.getByText("Jane Director")).toBeInTheDocument();
     expect(screen.getByText("Jane Doe, John Smith")).toBeInTheDocument();
-    expect(screen.getByText("June 22, 2026")).toBeInTheDocument();
-    expect(screen.getByText("98.2")).toBeInTheDocument();
-    expect(screen.getByText("1,420 votes")).toBeInTheDocument();
-  });
-
-  it("renders algorithm similarity and logs in AI & Match tab", async () => {
-    const onCloseMock = vi.fn();
-    render(<MovieDialog movie={mockMovie} onClose={onCloseMock} />);
-
-    // Click on AI & Match tab
-    const insightsTab = screen.getByRole("button", { name: /ai & match/i });
-    fireEvent.click(insightsTab);
-
-    expect(screen.getByText("94% Similarity Match")).toBeInTheDocument();
-    expect(screen.getByText("vector_recall")).toBeInTheDocument();
-    expect(screen.getByText("tier_1")).toBeInTheDocument();
+    expect(screen.getByText("94% Match")).toBeInTheDocument();
   });
 
   it("triggers onClose when clicking the close button", () => {
@@ -510,7 +484,8 @@ describe("MovieDialog", () => {
   });
 
   it("allows interactive rating and watchlist actions", () => {
-    render(<MovieDialog movie={mockMovie} onClose={vi.fn()} />);
+    const onRatingMock = vi.fn();
+    render(<MovieDialog movie={mockMovie} onClose={vi.fn()} onRating={onRatingMock} />);
 
     // Watchlist toggle
     const watchlistBtn = screen.getByRole("button", { name: /watchlist/i });
@@ -523,6 +498,6 @@ describe("MovieDialog", () => {
     // Star rating
     const starBtn = screen.getByRole("button", { name: /rate 4 stars/i });
     fireEvent.click(starBtn);
-    expect(screen.getByText("Rated 4 Stars!")).toBeInTheDocument();
+    expect(onRatingMock).toHaveBeenCalledWith(mockMovie, 4);
   });
 });

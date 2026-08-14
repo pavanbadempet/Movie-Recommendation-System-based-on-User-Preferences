@@ -16,19 +16,27 @@ describe("VectorSpace Component", () => {
     vi.useRealTimers();
   });
 
-  test("renders 3D embedding title and controls", () => {
+  test("renders 3D Neural Vector Galaxy title and controls", () => {
     vi.useFakeTimers();
     render(<VectorSpace />);
-    expect(screen.getByText("APEX 3D Movie Embedding Space")).toBeInTheDocument();
-    expect(screen.getByText("Pause Auto-Rotate")).toBeInTheDocument();
+    expect(screen.getByText("3D Neural Vector Galaxy")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Search movie...")).toBeInTheDocument();
   });
 
-  test("can toggle auto-rotate state", () => {
+  test("can interact with zoom controls and search", () => {
     render(<VectorSpace />);
-    const button = screen.getByText("Pause Auto-Rotate");
-    expect(button).toBeInTheDocument();
+    const searchInput = screen.getByPlaceholderText("Search movie...");
+    expect(searchInput).toBeInTheDocument();
     
-    fireEvent.click(button);
-    expect(screen.getByText("Auto-Rotate")).toBeInTheDocument();
+    fireEvent.change(searchInput, { target: { value: "Inception" } });
+    expect(searchInput).toHaveValue("Inception");
+
+    const zoomInBtn = screen.getByTitle("Zoom In");
+    expect(zoomInBtn).toBeInTheDocument();
+    fireEvent.click(zoomInBtn);
+
+    const zoomOutBtn = screen.getByTitle("Zoom Out");
+    expect(zoomOutBtn).toBeInTheDocument();
+    fireEvent.click(zoomOutBtn);
   });
 });

@@ -127,8 +127,8 @@ scratch/
 apex.db-shm
 apex.db-wal
 doppler_token.txt
-test/
-test2/
+/test/
+/test2/
 .wrangler/
 # Kaggle generated packages and output logs
 kaggle_gpu_kernel/
