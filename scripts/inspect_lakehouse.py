@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 import json
 from pathlib import Path
 import sys
@@ -21,7 +21,6 @@ from etl.lakehouse import (
     list_table_versions,
     load_table_version,
 )
-
 
 DEFAULT_TABLES = (
     ("bronze", "movies_raw", "bronze_data"),
