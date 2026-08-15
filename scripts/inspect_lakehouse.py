@@ -13,38 +13,14 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-try:
-    from etl.config import paths
-    from etl.lakehouse import (
-        SCD_CURRENT_COL,
-        as_of_scd,
-        compare_scd_as_of,
-        list_table_versions,
-        load_table_version,
-    )
-except ImportError:
-    # Safe fallbacks for container/serverless runtimes where etl is omitted
-    class _FallbackPaths:
-        lakehouse_dir = PROJECT_ROOT / "data" / "lakehouse"
-        bronze_data = PROJECT_ROOT / "data" / "lakehouse" / "bronze"
-        silver_data = PROJECT_ROOT / "data" / "lakehouse" / "silver"
-        gold_data = PROJECT_ROOT / "data" / "lakehouse" / "gold"
-
-    paths = _FallbackPaths()  # type: ignore[no-redef]
-    SCD_CURRENT_COL = "is_current"
-    as_of_scd = None  # type: ignore[no-redef]
-    compare_scd_as_of = None  # type: ignore[no-redef]
-
-    def list_table_versions(base_path: Path | str, table_name: str) -> list[dict[str, Any]]:
-        return []
-
-    def load_table_version(
-        base_path: Path | str,
-        table_name: str,
-        run_id: str | None = None,
-        as_of_date: str | date | datetime | None = None,
-    ) -> Any:
-        return {}
+from etl.config import paths
+from etl.lakehouse import (
+    SCD_CURRENT_COL,
+    as_of_scd,
+    compare_scd_as_of,
+    list_table_versions,
+    load_table_version,
+)
 
 
 DEFAULT_TABLES = (
