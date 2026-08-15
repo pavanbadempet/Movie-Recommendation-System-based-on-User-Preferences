@@ -20,9 +20,9 @@
 
 # COMMAND ----------
 import os
-from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType, StructField, StringType, MapType, IntegerType, LongType, DoubleType
-from pyspark.sql.functions import col, from_json, current_timestamp
+
+from pyspark.sql.functions import current_timestamp
+from pyspark.sql.types import StringType, StructField, StructType
 
 try:
     dbutils.widgets.text("DOPPLER_TOKEN", "", "Doppler Service Token")
@@ -50,13 +50,15 @@ os.makedirs(checkpoint_path, exist_ok=True)
 # Define expected schema from FastAPI / Cloudflare Worker webhook payload
 # 📥 STREAM INPUT EXAMPLE (JSON):
 # {"user_id": "usr_9921", "movie_id": "101", "interaction_type": "click", "timestamp": "2026-08-10T22:00:00Z"}
-event_schema = StructType([
-    StructField("user_id", StringType(), True),
-    StructField("movie_id", StringType(), True),
-    StructField("interaction_type", StringType(), True),
-    StructField("timestamp", StringType(), True),
-    StructField("metadata", StringType(), True)  # JSON string payload
-])
+event_schema = StructType(
+    [
+        StructField("user_id", StringType(), True),
+        StructField("movie_id", StringType(), True),
+        StructField("interaction_type", StringType(), True),
+        StructField("timestamp", StringType(), True),
+        StructField("metadata", StringType(), True),  # JSON string payload
+    ]
+)
 
 # COMMAND ----------
 # MAGIC %md
@@ -67,14 +69,14 @@ print(f"Starting Auto Loader Stream on {raw_events_path}...")
 
 # 1. Read Stream using Databricks Auto Loader (cloudFiles)
 streaming_df = (
-    spark.readStream
-    .format("cloudFiles")
+    spark.readStream.format("cloudFiles")
     .option("cloudFiles.format", "json")
     .option("cloudFiles.schemaLocation", checkpoint_path + "schema")
     .schema(event_schema)
     .load(raw_events_path)
     .withColumn("_ingested_at", current_timestamp())
 )
+
 
 # 2. Write Micro-Batch Stream to Delta Lake Managed Table
 def merge_microbatch(microBatchDF, batchId):
@@ -98,6 +100,7 @@ def merge_microbatch(microBatchDF, batchId):
             print(f"Micro-batch {batchId}: Syncing events to Neon Clickstream DB...")
             import psycopg2
             from psycopg2.extras import execute_values
+
             rows = microBatchDF.select("user_id", "movie_id", "interaction_type", "timestamp", "metadata").collect()
             if rows:
                 conn = psycopg2.connect(events_db_url)
@@ -126,9 +129,9 @@ def merge_microbatch(microBatchDF, batchId):
         except Exception as e:
             print(f"Warning: Could not sync events to Neon: {e}")
 
+
 query = (
-    streaming_df.writeStream
-    .foreachBatch(merge_microbatch)
+    streaming_df.writeStream.foreachBatch(merge_microbatch)
     .option("checkpointLocation", checkpoint_path)
     .trigger(availableNow=True)  # Databricks Serverless native batch trigger
     .start()

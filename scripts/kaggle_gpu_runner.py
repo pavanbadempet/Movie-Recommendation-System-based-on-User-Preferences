@@ -1,12 +1,11 @@
-import os
 import json
-import time
-import requests
+import os
 from pathlib import Path
+
 
 def create_kaggle_gpu_kernel_package():
     """
-    Builds a standalone Kaggle GPU Kernel package that runs heavy AI model training 
+    Builds a standalone Kaggle GPU Kernel package that runs heavy AI model training
     and vector embedding generation on Kaggle's FREE NVIDIA T4 16GB GPU (30 hrs/week).
     """
     print("==================================================================")
@@ -25,10 +24,10 @@ def create_kaggle_gpu_kernel_package():
         "kernel_type": "script",
         "is_private": "true",
         "enable_gpu": "true",  # Enables FREE NVIDIA T4 / P100 GPU
-        "enable_internet": "true", # Enables HTTP access to Neon PostgreSQL & Hugging Face
+        "enable_internet": "true",  # Enables HTTP access to Neon PostgreSQL & Hugging Face
         "dataset_sources": [],
         "competition_sources": [],
-        "kernel_sources": []
+        "kernel_sources": [],
     }
 
     with open(kaggle_dir / "kernel-metadata.json", "w", encoding="utf-8") as f:
@@ -84,7 +83,7 @@ try:
                 print(f"GPU {{torch.cuda.get_device_name(0)}} (sm_{{cap[0]}}{{cap[1]}}) incompatible with PyTorch, using CPU.")
         print(f"Initializing {{EMBEDDING_MODEL_NAME}} on {{device}}...")
         model = SentenceTransformer(EMBEDDING_MODEL_NAME, device=device)
-        
+
         if device == "cuda":
             model.half()  # Enable 16-bit FP16 Tensor Cores speedup
 
@@ -106,7 +105,7 @@ try:
         try:
             with dbapi_conn.cursor() as cur:
                 update_query = """
-                    UPDATE movies AS m SET 
+                    UPDATE movies AS m SET
                         embedding = v.embedding::vector
                     FROM (VALUES %s) AS v(id, embedding)
                     WHERE m.id = v.id;
@@ -128,6 +127,7 @@ print("--> Kaggle GPU Execution Complete!")
         f.write(script_content)
 
     print(f"Generated Kaggle GPU Kernel package in '{kaggle_dir.resolve()}'")
+
 
 def push_and_run_kaggle_gpu():
     """Pushes kernel to Kaggle API and triggers execution."""
@@ -156,6 +156,7 @@ def push_and_run_kaggle_gpu():
             os.environ["KAGGLE_KEY"] = kaggle_token
 
         from kaggle.api.kaggle_api_extended import KaggleApi
+
         api = KaggleApi()
         api.authenticate()
 
@@ -166,6 +167,7 @@ def push_and_run_kaggle_gpu():
 
     except Exception as e:
         print(f"Kaggle API trigger note: {e}")
+
 
 if __name__ == "__main__":
     push_and_run_kaggle_gpu()

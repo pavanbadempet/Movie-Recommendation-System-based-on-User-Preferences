@@ -1,14 +1,17 @@
-import sys
-import os
-import time
 import subprocess
+import sys
+import time
+
 
 def log_step(step_num, step_name):
-    print(f"\n==================================================")
+    print("\n==================================================")
     print(f" STEP {step_num}: {step_name}")
-    print(f"==================================================\n")
+    print("==================================================\n")
 
-def run_script(script_name, args=[]):
+
+def run_script(script_name, args=None):
+    if args is None:
+        args = []
     cmd = [sys.executable, f"scripts/{script_name}"] + args
     print(f"Executing: {' '.join(cmd)}")
     res = subprocess.run(cmd, capture_output=True, text=True)
@@ -17,6 +20,7 @@ def run_script(script_name, args=[]):
         print(f"Warning in {script_name}: {res.stderr[:300]}")
     else:
         print(f"DONE: {script_name} completed successfully!")
+
 
 def main():
     print("STARTING ULTIMATE ALL-IN-ONE END-TO-END SYSTEM PIPELINE...")
@@ -65,12 +69,13 @@ def main():
     run_script("hf_upload.py")
 
     log_step(13, "Deploy 100% Max-Utilized Cloudflare Workers AI + KV Gateway")
-    subprocess.run("npx wrangler deploy", shell=True, capture_output=True, text=True)
+    subprocess.run(["npx", "wrangler", "deploy"], capture_output=True, text=True)
 
     elapsed = time.time() - start_time
-    print(f"\n==================================================")
+    print("\n==================================================")
     print(f" ALL-IN-ONE PIPELINE COMPLETED IN {elapsed:.1f} SECONDS!")
-    print(f"==================================================\n")
+    print("==================================================\n")
+
 
 if __name__ == "__main__":
     main()

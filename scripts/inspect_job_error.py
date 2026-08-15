@@ -1,4 +1,5 @@
 import os
+
 import requests
 
 DATABRICKS_HOST = "https://dbc-0d2f31ec-d157.cloud.databricks.com"
@@ -27,8 +28,8 @@ for t in tasks:
     task_run_id = t.get("run_id")
     task_key = t.get("task_key")
     t_state = t.get("state", {})
-    life = t_state.get('life_cycle_state')
-    result = t_state.get('result_state')
+    life = t_state.get("life_cycle_state")
+    result = t_state.get("result_state")
     print(f"TASK: {task_key:<25} | LifeCycle: {life:<15} | Result: {result}")
     out_res = requests.get(f"{DATABRICKS_HOST}/api/2.1/jobs/runs/get-output?run_id={task_run_id}", headers=HEADERS)
     out_data = out_res.json()

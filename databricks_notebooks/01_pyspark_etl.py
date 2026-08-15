@@ -36,19 +36,12 @@
 # 100% Pure PySpark SQL — Zero Python UDFs, Zero GPU dependency
 # Runs on Standard Serverless with instant <3s startup (no GPU provisioning)
 
-import os
-import logging
-from datetime import datetime
-from delta.tables import DeltaTable
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, lit, current_timestamp, concat_ws, coalesce, expr, to_timestamp
-from pyspark.sql.types import StringType
-
-
+from pyspark.sql.functions import coalesce, col, concat_ws, current_timestamp, expr, lit, to_timestamp
 
 # COMMAND ----------
 # MAGIC %md
 # MAGIC ## Data Quality & Merge Logic (Gold Layer)
+
 
 # COMMAND ----------
 def load_gold_data(spark):
@@ -63,7 +56,7 @@ def load_gold_data(spark):
         ("spark.sql.adaptive.skewJoin.enabled", "true"),
         ("spark.databricks.delta.optimizeWrite.enabled", "true"),
         ("spark.databricks.delta.autoCompact.enabled", "true"),
-        ("spark.sql.files.maxPartitionBytes", "134217728")
+        ("spark.sql.files.maxPartitionBytes", "134217728"),
     ]:
         try:
             spark.conf.set(conf_key, conf_val)
@@ -81,7 +74,7 @@ def load_gold_data(spark):
         print(f"Table drop note: {drop_e}")
 
     print(f"Reading Real Raw Data from {raw_table}...")
-    
+
     # 1. Read the incoming raw dataset
     incoming_df = spark.table(raw_table)
 
@@ -91,7 +84,7 @@ def load_gold_data(spark):
     if incoming_df.limit(1).count() == 0:
         print("Incoming raw table is empty. Skipping ETL pipeline execution.")
         return True
-    
+
     # ----------------------------------------------------------------------
     # 2. DATA QUALITY GATES & SCHEMA VALIDATION
     # ----------------------------------------------------------------------
@@ -100,16 +93,17 @@ def load_gold_data(spark):
     # Identify and quarantine corrupted/invalid rows (NULL id, non-numeric shifted id, or malformed ratings)
     if "vote_average" in incoming_df.columns:
         corrupted_df = incoming_df.filter(
-            col("id").isNull() |
-            (expr("try_cast(id as long)").isNull()) |
-            (expr("try_cast(vote_average as double)").isNull()) |
-            (expr("try_cast(vote_average as double)") < 0.0) |
-            (expr("try_cast(vote_average as double)") > 10.0)
+            col("id").isNull()
+            | (expr("try_cast(id as long)").isNull())
+            | (expr("try_cast(vote_average as double)").isNull())
+            | (expr("try_cast(vote_average as double)") < 0.0)
+            | (expr("try_cast(vote_average as double)") > 10.0)
         )
         if corrupted_df.limit(1).count() > 0:
             print("Quarantining corrupted raw rows into Delta Table 'apex.default.corrupted_data_quarantine'...")
-            corrupted_df.withColumn("_quarantined_at", current_timestamp()) \
-                .write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable("apex.default.corrupted_data_quarantine")
+            corrupted_df.withColumn("_quarantined_at", current_timestamp()).write.format("delta").mode("append").option(
+                "mergeSchema", "true"
+            ).saveAsTable("apex.default.corrupted_data_quarantine")
 
     # Drop rows with critical missing or malformed primary keys
     incoming_df = incoming_df.filter(col("id").isNotNull() & (expr("try_cast(id as long)").isNotNull()))
@@ -120,7 +114,7 @@ def load_gold_data(spark):
     if "vote_average" in incoming_df.columns:
         incoming_df = incoming_df.withColumn("vote_average", expr("try_cast(vote_average as double)"))
         incoming_df = incoming_df.filter((col("vote_average") >= 0.0) & (col("vote_average") <= 10.0))
-        
+
     # Standardize ID to string for Vector DB compatibility
     incoming_df = incoming_df.withColumn("id", col("id").cast("string"))
 
@@ -132,29 +126,32 @@ def load_gold_data(spark):
         incoming_df = incoming_df.withColumn("_source_file", lit("unknown"))
 
     print("Running Native PySpark C++ Feature Extraction (Zero Python Overhead)...")
-    from pyspark.sql.functions import lower, when, substring
+    from pyspark.sql.functions import lower, substring, when
+
     if "overview" in incoming_df.columns:
         incoming_df = incoming_df.withColumn(
             "gen_ai_features",
-            concat_ws(" ",
+            concat_ws(
+                " ",
                 when(lower(col("overview")).contains("action"), lit("Fast-Paced Action")).otherwise(lit("")),
                 when(lower(col("overview")).contains("space"), lit("Sci-Fi Exploration")).otherwise(lit("")),
                 when(lower(col("overview")).contains("love"), lit("Romantic Drama")).otherwise(lit("")),
-                substring(col("overview"), 1, 100)
-            )
+                substring(col("overview"), 1, 100),
+            ),
         )
     else:
         incoming_df = incoming_df.withColumn("gen_ai_features", lit(""))
-        
+
     # Create a dense 'tags' column representing the movie (Title + Genres + Overview + GEN AI FEATURES)
     incoming_df = incoming_df.withColumn(
         "tags",
-        concat_ws(" | ", 
+        concat_ws(
+            " | ",
             coalesce(col("title"), lit("")),
             coalesce(col("genres"), lit("")),
             coalesce(col("overview"), lit("")),
-            coalesce(col("gen_ai_features"), lit(""))
-        )
+            coalesce(col("gen_ai_features"), lit("")),
+        ),
     )
 
     # Provide typed null array<float> placeholder for embedding column to guarantee 100% MERGE schema match
@@ -164,34 +161,39 @@ def load_gold_data(spark):
     # 2.8 ENTERPRISE DATA WAREHOUSE: STAR SCHEMA & COMPLEX PYSPARK JOINS/AGGS
     # ----------------------------------------------------------------------
     print("Building Star Schema Data Warehouse Fact & Dimension Tables with Window Functions & Joins...")
+    from pyspark.sql.functions import avg, count, dense_rank, explode, split, trim
     from pyspark.sql.window import Window
-    from pyspark.sql.functions import dense_rank, explode, split, avg, count, trim
 
     # 1. DIMENSION TABLE: dim_movies
     dim_movies = incoming_df.select(
-        col("id").alias("movie_id"),
-        col("title"),
-        col("genres"),
-        col("vote_average")
+        col("id").alias("movie_id"), col("title"), col("genres"), col("vote_average")
     ).distinct()
     dim_movies.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("dim_movies")
 
     # 2. SNOWFLAKE DIMENSION: dim_genres (Exploded Normalized Dimension)
-    dim_genres = incoming_df.select(col("id").alias("movie_id"), explode(split(col("genres"), "\||,")).alias("genre_name")) \
-        .withColumn("genre_name", trim(col("genre_name"))) \
-        .filter(col("genre_name") != "") \
+    dim_genres = (
+        incoming_df.select(col("id").alias("movie_id"), explode(split(col("genres"), r"\||,")).alias("genre_name"))
+        .withColumn("genre_name", trim(col("genre_name")))
+        .filter(col("genre_name") != "")
         .distinct()
+    )
     dim_genres.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("dim_genres")
 
     # 3. COMPLEX JOIN & WINDOW AGGREGATION: Top Movie Ranking per Genre
     genre_window = Window.partitionBy("genre_name").orderBy(col("vote_average").desc())
-    fact_genre_rankings = dim_movies.join(dim_genres, "movie_id", "inner") \
-        .withColumn("genre_rank", dense_rank().over(genre_window)) \
+    fact_genre_rankings = (
+        dim_movies.join(dim_genres, "movie_id", "inner")
+        .withColumn("genre_rank", dense_rank().over(genre_window))
         .filter(col("genre_rank") <= 10)
-    fact_genre_rankings.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("fact_genre_top_movies")
+    )
+    fact_genre_rankings.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable(
+        "fact_genre_top_movies"
+    )
 
     # 4. MULTI-TABLE DATASET RELATIONAL JOIN (MovieLens 20M + TMDB Metadata)
-    if spark.catalog.tableExists("apex.default.movielens_ratings_raw") and spark.catalog.tableExists("apex.default.movielens_links_raw"):
+    if spark.catalog.tableExists("apex.default.movielens_ratings_raw") and spark.catalog.tableExists(
+        "apex.default.movielens_links_raw"
+    ):
         print("Performing Multi-Table Relational Join across TMDB + MovieLens Ratings + Links...")
         ratings_raw = spark.table("apex.default.movielens_ratings_raw")
         links_raw = spark.table("apex.default.movielens_links_raw")
@@ -200,16 +202,22 @@ def load_gold_data(spark):
         ratings_with_tmdb = ratings_raw.join(links_raw, "movieId", "inner")
 
         # Aggregation: Group ratings per TMDB movie ID
-        user_ratings_agg = ratings_with_tmdb.groupBy("tmdbId").agg(
-            avg(col("rating").cast("double")).alias("movielens_avg_rating"),
-            count("userId").alias("movielens_user_review_count")
-        ).withColumnRenamed("tmdbId", "movie_id")
+        user_ratings_agg = (
+            ratings_with_tmdb.groupBy("tmdbId")
+            .agg(
+                avg(col("rating").cast("double")).alias("movielens_avg_rating"),
+                count("userId").alias("movielens_user_review_count"),
+            )
+            .withColumnRenamed("tmdbId", "movie_id")
+        )
 
         # Join 2: Left Outer Join TMDB Movies with MovieLens Aggregated Ratings
         dim_movies_enriched = dim_movies.join(user_ratings_agg, "movie_id", "left")
-        dim_movies_enriched.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("dim_movies_enriched")
+        dim_movies_enriched.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable(
+            "dim_movies_enriched"
+        )
         print("Enriched dim_movies with MovieLens 20M aggregated metrics!")
-    
+
     # ----------------------------------------------------------------------
     # 4. SCD TYPE 2 LOGIC (Data Lakehouse Standard)
     # ----------------------------------------------------------------------
@@ -225,47 +233,50 @@ def load_gold_data(spark):
     # Row 1 (Historical): id='101' | tags='Old Tag' | is_current=False | effective_start='2026-08-01' | effective_end='2026-08-10'
     # Row 2 (Active New): id='101' | tags='New Tag' | is_current=True  | effective_start='2026-08-10' | effective_end='9999-12-31'
     # Add SCD tracking columns to incoming dataset
-    incoming_df = incoming_df.withColumn("is_current", lit(True)) \
-                             .withColumn("effective_start_at", current_timestamp()) \
-                             .withColumn("effective_end_at", to_timestamp(lit("9999-12-31 23:59:59")))
+    incoming_df = (
+        incoming_df.withColumn("is_current", lit(True))
+        .withColumn("effective_start_at", current_timestamp())
+        .withColumn("effective_end_at", to_timestamp(lit("9999-12-31 23:59:59")))
+    )
 
     # Provide typed null array<float> placeholder for embedding column so all DF operations match target table schema 100%
     incoming_df = incoming_df.withColumn("embedding", expr("cast(null as array<float>)"))
 
     print(f"Merging enriched data into Gold Table: {gold_table_name}...")
-    
+
     table_exists = spark.catalog.tableExists(gold_table_name)
-    
+
     if not table_exists:
-        print("Gold table does not exist. Creating it for the first time with Liquid Clustering and Change Data Feed (CDF)...")
+        print(
+            "Gold table does not exist. Creating it for the first time with Liquid Clustering and Change Data Feed (CDF)..."
+        )
         # Enable Liquid Clustering on 'id' and Change Data Feed for 10x faster incremental CDC sync
-        incoming_df.write.format("delta").option("delta.enableChangeDataFeed", "true").clusterBy("id").saveAsTable(gold_table_name)
+        incoming_df.write.format("delta").option("delta.enableChangeDataFeed", "true").clusterBy("id").saveAsTable(
+            gold_table_name
+        )
     else:
         print("Gold table exists. Performing SCD Type 2 UPSERT Merge...")
         from delta.tables import DeltaTable
-        
+
         gold_table = DeltaTable.forName(spark, gold_table_name)
-        
+
         # Identify rows where ID matches but tags content has changed
         update_condition = "gold.id = updates.id AND gold.tags != updates.tags AND gold.is_current = True"
-        
+
         # Step 1: Stage updated records to insert as new active versions later
-        staged_updates = incoming_df.alias("updates").join(
-            gold_table.toDF().alias("gold"),
-            expr(update_condition)
-        ).selectExpr("updates.*")
-        
+        staged_updates = (
+            incoming_df.alias("updates")
+            .join(gold_table.toDF().alias("gold"), expr(update_condition))
+            .selectExpr("updates.*")
+        )
+
         gold_table.alias("gold").merge(
-            source=incoming_df.alias("updates"),
-            condition="gold.id = updates.id AND gold.is_current = True"
+            source=incoming_df.alias("updates"), condition="gold.id = updates.id AND gold.is_current = True"
         ).whenMatchedUpdate(
             condition="gold.tags != updates.tags",
-            set={
-                "is_current": "False",
-                "effective_end_at": "current_timestamp()"
-            }
+            set={"is_current": "False", "effective_end_at": "current_timestamp()"},
         ).whenNotMatchedInsertAll().execute()
-        
+
         # Step 3: Append new active version records of updated rows to complete history chain
         staged_updates.write.format("delta").mode("append").saveAsTable(gold_table_name)
 
@@ -283,6 +294,7 @@ def load_gold_data(spark):
     # MLflow Tracking & Experiment Logging
     try:
         import mlflow
+
         mlflow.set_experiment("/Users/pavan9b@gmail.com/Movie-Recommendation-System-Experiment")
         with mlflow.start_run(run_name="PySpark_Medallion_Gold_ETL"):
             mlflow.log_metric("total_movies_processed", incoming_df.count())
@@ -293,6 +305,7 @@ def load_gold_data(spark):
         print(f"MLflow logging note: {mlflow_err}")
 
     return True
+
 
 # COMMAND ----------
 # MAGIC %md

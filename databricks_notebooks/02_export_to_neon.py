@@ -18,10 +18,8 @@
 # MAGIC 3. **Doppler Environment Resolution:** Fetches the target `DATABASE_URL` dynamically based on the deployment environment parameter (`dev`, `stg`, `prd`).
 
 # COMMAND ----------
-import os
-import gc
-import requests
-from pyspark.sql.functions import col, to_json, lit, spark_partition_id, pmod, hash as spark_hash
+from pyspark.sql.functions import col, pmod, to_json
+from pyspark.sql.functions import hash as spark_hash
 
 # COMMAND ----------
 # ----------------------------------------------------------------------
@@ -39,7 +37,7 @@ for conf_key, conf_val in [
     ("spark.sql.files.maxPartitionBytes", "134217728"),
     ("spark.sql.shuffle.partitions", "200"),
     ("spark.sql.inMemoryColumnarStorage.compressed", "true"),
-    ("spark.sql.execution.vectorized.enabled", "true")
+    ("spark.sql.execution.vectorized.enabled", "true"),
 ]:
     try:
         spark.conf.set(conf_key, conf_val)
@@ -56,18 +54,18 @@ for conf_key, conf_val in [
 try:
     dbutils.widgets.text("DOPPLER_TOKEN", "", "Doppler Service Token")
     dbutils.widgets.text("ENVIRONMENT", "dev", "Deployment Environment (dev, stg, prd)")
-    
+
     env = dbutils.widgets.get("ENVIRONMENT")
 
     # -------------------------------------------------------------------------
     # CENTRALIZED DOPPLER SECRET RESOLUTION
     # -------------------------------------------------------------------------
     secrets = load_centralized_doppler_secrets(dbutils=dbutils, env=env)
-    
+
     DATABASE_URL = secrets.get("DATABASE_URL")
     if not DATABASE_URL:
         raise ValueError("DATABASE_URL not found in Doppler secrets payload!")
-        
+
 except Exception as e:
     raise ValueError(f"Failed to load DATABASE_URL from Doppler: {e}")
 
@@ -87,7 +85,6 @@ if not spark.catalog.tableExists(gold_table_name):
     gold_table_name = "apex.default.tmdb_gold_data"
 print(f"Reading Gold table from {gold_table_name}...")
 
-from pyspark.sql.functions import col, to_json
 
 # 1. Load Gold Delta Table
 df_spark = spark.table(gold_table_name)
@@ -112,7 +109,21 @@ else:
         df_spark = df_spark.withColumn("embedding", to_json(col("embedding")))
 
     # Select serving columns required for recommendations & vector search
-    serving_cols = [c for c in ["id", "title", "genres", "vote_average", "vote_count", "release_date", "overview", "tags", "embedding"] if c in df_spark.columns]
+    serving_cols = [
+        c
+        for c in [
+            "id",
+            "title",
+            "genres",
+            "vote_average",
+            "vote_count",
+            "release_date",
+            "overview",
+            "tags",
+            "embedding",
+        ]
+        if c in df_spark.columns
+    ]
     df_spark = df_spark.select(*serving_cols)
 
     # -------------------------------------------------------------------------
@@ -125,7 +136,9 @@ else:
         export_limit = 30000
 
     if export_limit > 0 and "vote_count" in df_spark.columns:
-        print(f"Filtering Top {export_limit} highest-voted movies to fit inside Neon Free Tier 512MB storage limit and Serverless RAM...")
+        print(
+            f"Filtering Top {export_limit} highest-voted movies to fit inside Neon Free Tier 512MB storage limit and Serverless RAM..."
+        )
         df_spark = df_spark.orderBy(col("vote_count").desc()).limit(export_limit)
 
     total_records = df_spark.count()
@@ -155,15 +168,16 @@ else:
     # -------------------------------------------------------------------------
     # MULTI-SHARD STREAMING EXPORT ENGINE
     # -------------------------------------------------------------------------
-    import gc
 
     for shard_idx, db_url in enumerate(shard_urls):
-        print(f"\n========================================================")
+        print("\n========================================================")
         print(f"🚀 PROCESSING SHARD {shard_idx + 1}/{num_shards} ({db_url.split('@')[-1]})")
-        print(f"========================================================")
+        print("========================================================")
 
         # Filter shard records using deterministic modulo hash
-        from pyspark.sql.functions import pmod, hash as spark_hash
+        from pyspark.sql.functions import hash as spark_hash
+        from pyspark.sql.functions import pmod
+
         if num_shards > 1:
             df_shard = df_spark.filter(pmod(spark_hash(col("id")), num_shards) == shard_idx)
         else:
@@ -177,6 +191,7 @@ else:
 
         # Parse PostgreSQL connection details
         import urllib.parse
+
         parsed = urllib.parse.urlparse(db_url)
         db_user = urllib.parse.unquote(parsed.username or "")
         db_pass = urllib.parse.unquote(parsed.password or "")
@@ -187,27 +202,19 @@ else:
         print(f"Streaming Shard {shard_idx + 1} DataFrame directly to Neon via Databricks Native PostgreSQL Engine...")
         try:
             try:
-                df_shard.write.format("postgresql") \
-                    .option("host", db_host) \
-                    .option("port", db_port) \
-                    .option("database", db_name) \
-                    .option("user", db_user) \
-                    .option("password", db_pass) \
-                    .option("dbtable", "movies") \
-                    .mode("overwrite") \
-                    .save()
+                df_shard.write.format("postgresql").option("host", db_host).option("port", db_port).option(
+                    "database", db_name
+                ).option("user", db_user).option("password", db_pass).option("dbtable", "movies").mode(
+                    "overwrite"
+                ).save()
                 print(f"Shard {shard_idx + 1} - Databricks PostgreSQL Sync Successful!")
             except Exception as pg_err:
                 print(f"format('postgresql') Notice ({pg_err}). Trying format('jdbc')...")
-                df_shard.write.format("jdbc") \
-                    .option("url", jdbc_url) \
-                    .option("dbtable", "movies") \
-                    .option("driver", "org.postgresql.Driver") \
-                    .option("user", db_user) \
-                    .option("password", db_pass) \
-                    .option("batchsize", "5000") \
-                    .mode("overwrite") \
-                    .save()
+                df_shard.write.format("jdbc").option("url", jdbc_url).option("dbtable", "movies").option(
+                    "driver", "org.postgresql.Driver"
+                ).option("user", db_user).option("password", db_pass).option("batchsize", "5000").mode(
+                    "overwrite"
+                ).save()
                 print(f"Shard {shard_idx + 1} - Spark JDBC Sync Successful!")
         except Exception as export_err:
             print(f"Spark Export Error on Shard {shard_idx + 1}: {export_err}")
@@ -219,7 +226,7 @@ else:
             driver_manager = spark._sc._gateway.jvm.java.sql.DriverManager
             jdbc_conn = driver_manager.getConnection(jdbc_url)
             stmt = jdbc_conn.createStatement()
-            
+
             # 1. Primary Key Clustered B-Tree Index
             try:
                 stmt.execute("ALTER TABLE movies ADD PRIMARY KEY (id)")
@@ -227,14 +234,18 @@ else:
                 stmt.execute("CREATE INDEX IF NOT EXISTS idx_movies_id ON movies (id)")
 
             # 2. High-Throughput Covering Index for Index-Only Metadata Scans
-            stmt.execute("CREATE INDEX IF NOT EXISTS idx_movies_serving_covering ON movies (id) INCLUDE (title, genres, vote_average, vote_count, release_date)")
+            stmt.execute(
+                "CREATE INDEX IF NOT EXISTS idx_movies_serving_covering ON movies (id) INCLUDE (title, genres, vote_average, vote_count, release_date)"
+            )
             stmt.execute("CREATE INDEX IF NOT EXISTS idx_movies_release_date ON movies (release_date DESC)")
 
             # 3. Deferred HNSW Cosine Similarity Vector Index (100% Uncompressed Full Float32 Precision)
             try:
                 stmt.execute("CREATE EXTENSION IF NOT EXISTS vector")
                 stmt.execute("ALTER TABLE movies ALTER COLUMN embedding TYPE vector(768) USING embedding::vector(768)")
-                stmt.execute("CREATE INDEX IF NOT EXISTS idx_movies_embedding_hnsw ON movies USING hnsw (embedding vector_cosine_ops)")
+                stmt.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_movies_embedding_hnsw ON movies USING hnsw (embedding vector_cosine_ops)"
+                )
                 print(f"Shard {shard_idx + 1} HNSW 100% Full Precision Float32 Vector Index created successfully!")
             except Exception as v_err:
                 print(f"Shard {shard_idx + 1} pgvector Notice: {v_err}")

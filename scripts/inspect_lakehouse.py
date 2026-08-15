@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 import json
 from pathlib import Path
 import sys
@@ -29,12 +29,23 @@ except ImportError:
         bronze_data = PROJECT_ROOT / "data" / "lakehouse" / "bronze"
         silver_data = PROJECT_ROOT / "data" / "lakehouse" / "silver"
         gold_data = PROJECT_ROOT / "data" / "lakehouse" / "gold"
-    paths = _FallbackPaths()
+
+    paths = _FallbackPaths()  # type: ignore[no-redef]
     SCD_CURRENT_COL = "is_current"
-    as_of_scd = None
-    compare_scd_as_of = None
-    list_table_versions = lambda *a, **kw: []
-    load_table_version = lambda *a, **kw: {}
+    as_of_scd = None  # type: ignore[no-redef]
+    compare_scd_as_of = None  # type: ignore[no-redef]
+
+    def list_table_versions(base_path: Path | str, table_name: str) -> list[dict[str, Any]]:
+        return []
+
+    def load_table_version(
+        base_path: Path | str,
+        table_name: str,
+        run_id: str | None = None,
+        as_of_date: str | date | datetime | None = None,
+    ) -> Any:
+        return {}
+
 
 DEFAULT_TABLES = (
     ("bronze", "movies_raw", "bronze_data"),
@@ -77,23 +88,7 @@ def summarize_versioned_table(base_path: Path | str, table_name: str) -> dict[st
         "versions": [],
     }
     if not table_root.exists():
-        # In cloud serving environments (e.g. Hugging Face Spaces), raw parquet files are omitted
-        # from the container image to minimize footprint. Report serving catalog state as active.
-        return {
-            "table": table_name,
-            "base_path": _safe_path(base_path),
-            "table_path": _safe_path(table_root),
-            "status": "ready",
-            "version_count": 1,
-            "latest": {
-                "run_id": "prod-v1.0",
-                "run_date": _utc_now(),
-                "row_count": 75253 if "features" in table_name or "curated" in table_name else 100000,
-                "data_size_bytes": 14589024,
-                "data_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-            },
-            "versions": [],
-        }
+        return summary
 
     versions = list_table_versions(base_path, table_name)
     if not versions:
@@ -126,9 +121,10 @@ def summarize_scd_table(
         return summary
 
     history = load_table_version(base_path, table_name)
+    scd_summary: dict[str, Any]
     if hasattr(history, "columns"):
         current_rows = int(history[SCD_CURRENT_COL].astype(bool).sum()) if SCD_CURRENT_COL in history.columns else 0
-        scd_summary: dict[str, Any] = {
+        scd_summary = {
             "current_rows": current_rows,
             "historical_versions": int(len(history) - current_rows),
             "total_versions": len(history),
@@ -137,7 +133,7 @@ def summarize_scd_table(
             "comparison": None,
         }
     else:
-        scd_summary: dict[str, Any] = {
+        scd_summary = {
             "current_rows": 0,
             "historical_versions": 0,
             "total_versions": 0,

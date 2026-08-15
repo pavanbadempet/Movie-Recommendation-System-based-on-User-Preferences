@@ -9,7 +9,6 @@ import {
   Calendar,
   CheckCircle2,
   Clock3,
-  Compass,
   Database,
   ExternalLink,
   Film,
@@ -156,15 +155,6 @@ function formatMatchPercentage(rawScore?: number | null): number {
   return Math.max(65, Math.min(99, Math.round(normalized * 100)));
 }
 
-function formatRetrievalStage(stage?: string | null): string {
-  const norm = String(stage || "").toLowerCase();
-  if (norm.includes("knowledge_graph") || norm.includes("kg")) return "Knowledge Graph & Lineage";
-  if (norm.includes("turbovec") || norm.includes("rust")) return "Rust SIMD Vector Engine";
-  if (norm.includes("hybrid")) return "Multi-Modal Hybrid Ranking";
-  if (norm.includes("faiss") || norm.includes("dense")) return "768-D Dense Embeddings";
-  if (norm.includes("als") || norm.includes("spark")) return "PySpark ALS Collaborative";
-  return "Neural Candidate Retrieval";
-}
 
 function confidence(movie: Movie): string {
   const score = formatMatchPercentage(movie.similarity_score);
@@ -793,7 +783,6 @@ function TrailerFrame({ movie }: { movie: Movie }) {
   const [isCached, setIsCached] = React.useState<boolean | null>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const [isMobile, setIsMobile] = React.useState(() => typeof window !== "undefined" ? window.innerWidth <= 768 : false);
-  const [showFallbackIframe, setShowFallbackIframe] = React.useState(false);
   const [isTabVisible, setIsTabVisible] = React.useState(true);
 
   React.useEffect(() => {
@@ -819,16 +808,6 @@ function TrailerFrame({ movie }: { movie: Movie }) {
       }
     };
   }, []);
-
-  React.useEffect(() => {
-    setShowFallbackIframe(false);
-    if (trailerKey) {
-      const timer = setTimeout(() => {
-        setShowFallbackIframe(true);
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [movie.id, trailerKey]);
 
   React.useEffect(() => {
     setTrailerKey(movie.trailer_key || null);
@@ -1028,32 +1007,6 @@ function RatingCircle({ score }: { score: string }) {
   );
 }
 
-function formatDate(dateStr?: string | null): string {
-  if (!dateStr) return "";
-  try {
-    const parts = dateStr.split("-");
-    if (parts.length === 3) {
-      const year = parts[0];
-      const monthIndex = parseInt(parts[1], 10) - 1;
-      const day = parseInt(parts[2], 10);
-      const months = [
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December"
-      ];
-      if (monthIndex >= 0 && monthIndex < 12) {
-        return `${months[monthIndex]} ${day}, ${year}`;
-      }
-    }
-    const date = new Date(dateStr);
-    if (!isNaN(date.getTime())) {
-      return date.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
-    }
-  } catch {
-    // fallback
-  }
-  return dateStr;
-}
-
 export const MovieDialog = React.memo(function MovieDialog({
   movie,
   onClose,
@@ -1078,7 +1031,6 @@ export const MovieDialog = React.memo(function MovieDialog({
   const rating = movieScore(movie);
 
   // Masterpiece States
-  const [activeTab, setActiveTab] = React.useState<"overview" | "credits" | "insights">("overview");
   const [userRating, setUserRating] = React.useState(0);
   const [hoverRating, setHoverRating] = React.useState(0);
   const [inWatchlist, setInWatchlist] = React.useState(false);
@@ -1178,7 +1130,7 @@ export const MovieDialog = React.memo(function MovieDialog({
                   <div className="vibe-header" style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
                     <Sparkles size={14} style={{ color: "var(--cyan)" }} />
                     <span style={{ fontSize: "0.8rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--cyan)" }}>
-                      Why You'll Love This
+                      Why You&apos;ll Love This
                     </span>
                   </div>
                   <p className="vibe-text" style={{ margin: 0, fontSize: "0.88rem", color: "#e2e8f0", lineHeight: 1.5 }}>
@@ -1474,7 +1426,9 @@ const HomePage = React.memo(function HomePage({
             </div>
 
             {/* Data Engineering Architecture Provenance Banner */}
-            <div
+            <button
+              type="button"
+              className="provenance-banner-btn"
               onClick={() => onNavigate?.("data-platform")}
               style={{
                 cursor: "pointer",
@@ -1489,6 +1443,9 @@ const HomePage = React.memo(function HomePage({
                 flexWrap: "wrap",
                 gap: "16px",
                 boxShadow: "0 8px 32px rgba(6, 182, 212, 0.04)",
+                width: "100%",
+                textAlign: "left",
+                color: "inherit",
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
@@ -1497,10 +1454,10 @@ const HomePage = React.memo(function HomePage({
                 </div>
                 <div>
                   <h3 style={{ margin: "0 0 4px 0", fontSize: "1.05rem", color: "#ffffff", fontWeight: "700" }}>
-                    Engineered with PySpark 4.2 & Databricks Delta Lakehouse
+                    Engineered with PySpark 4.2 &amp; Databricks Delta Lakehouse
                   </h3>
                   <p style={{ margin: 0, fontSize: "0.84rem", color: "var(--muted)" }}>
-                    Processing 21M+ records with SCD Type 2 dimension versioning & 10-shard Neon pgvector HNSW indexing.
+                    Processing 21M+ records with SCD Type 2 dimension versioning &amp; 10-shard Neon pgvector HNSW indexing.
                   </p>
                 </div>
               </div>
@@ -1508,7 +1465,7 @@ const HomePage = React.memo(function HomePage({
                 <span>Explore Data Platform</span>
                 <ArrowRight size={16} />
               </div>
-            </div>
+            </button>
           </div>
         </div>
       ) : (
@@ -1697,7 +1654,7 @@ function App() {
       : "Search matches";
 
   const prefetchSetRef = React.useRef<Set<number>>(new Set());
-  const prefetchMovieIntent = React.useCallback((movieId?: number) => {
+  const _prefetchMovieIntent = React.useCallback((movieId?: number) => {
     if (!movieId || prefetchSetRef.current.has(movieId)) return;
     prefetchSetRef.current.add(movieId);
     void getRecommendations(movieId, 8, 5000).catch(() => {});

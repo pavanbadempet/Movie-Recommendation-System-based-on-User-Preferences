@@ -1,9 +1,10 @@
-import os
-import httpx
 import logging
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+import os
+
+from fastapi import APIRouter, BackgroundTasks
+import httpx
 from pydantic import BaseModel
-from typing import Optional
+
 from backend.intelligence.contextual_bandit import get_bandit_engine
 
 router = APIRouter(prefix="/events", tags=["events"])
@@ -14,12 +15,14 @@ logger = logging.getLogger(__name__)
 ZEROBUS_REST_URL = os.getenv("DATABRICKS_ZEROBUS_URL")
 ZEROBUS_TOKEN = os.getenv("DATABRICKS_TOKEN")
 
+
 class UserInteractionEvent(BaseModel):
     user_id: str
     movie_id: str
     interaction_type: str  # e.g., "click", "like", "watch", "hover"
     timestamp: str
-    metadata: Optional[dict] = {}
+    metadata: dict | None = {}
+
 
 async def send_to_zerobus(event: UserInteractionEvent):
     """
@@ -30,23 +33,16 @@ async def send_to_zerobus(event: UserInteractionEvent):
         logger.warning("Databricks Zerobus URL or Token not configured. Skipping ingest.")
         return
 
-    headers = {
-        "Authorization": f"Bearer {ZEROBUS_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    
+    headers = {"Authorization": f"Bearer {ZEROBUS_TOKEN}", "Content-Type": "application/json"}
+
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(
-                ZEROBUS_REST_URL, 
-                json=event.dict(), 
-                headers=headers,
-                timeout=5.0
-            )
+            response = await client.post(ZEROBUS_REST_URL, json=event.dict(), headers=headers, timeout=5.0)
             response.raise_for_status()
             logger.info(f"Successfully streamed {event.interaction_type} event to Databricks.")
         except Exception as e:
             logger.error(f"Failed to stream event to Zerobus: {e}")
+
 
 @router.post("/ingest")
 async def ingest_event(event: UserInteractionEvent, background_tasks: BackgroundTasks):
@@ -59,7 +55,7 @@ async def ingest_event(event: UserInteractionEvent, background_tasks: Background
         try:
             get_bandit_engine().update_reward(int(event.movie_id), clicked=(event.interaction_type == "like"))
         except ValueError:
-            pass # ignore invalid movie ids
+            pass  # ignore invalid movie ids
 
     # 2. Delegate to a background task so the UI doesn't block waiting for Databricks
     background_tasks.add_task(send_to_zerobus, event)

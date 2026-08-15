@@ -50,12 +50,12 @@ A production-grade, enterprise-scale **AI Data Engineering & Recommendation Plat
 - **Uncompromised 100% Full Precision Float32 `pgvector` Indexing:**
   ```sql
   -- 100% Uncompressed Single-Precision Float32 Vector Storage
-  ALTER TABLE movies 
-    ALTER COLUMN embedding TYPE vector 
+  ALTER TABLE movies
+    ALTER COLUMN embedding TYPE vector
     USING embedding::vector;
 
   -- High-Throughput HNSW Cosine Similarity Index
-  CREATE INDEX IF NOT EXISTS idx_movies_embedding_hnsw 
+  CREATE INDEX IF NOT EXISTS idx_movies_embedding_hnsw
     ON movies USING hnsw (embedding vector_cosine_ops);
   ```
 

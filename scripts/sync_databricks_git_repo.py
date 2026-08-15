@@ -1,9 +1,11 @@
 import os
+
 import requests
 
 DATABRICKS_HOST = "https://dbc-0d2f31ec-d157.cloud.databricks.com"
 DATABRICKS_TOKEN = os.environ.get("DATABRICKS_TOKEN", "")
 HEADERS = {"Authorization": f"Bearer {DATABRICKS_TOKEN}", "Content-Type": "application/json"}
+
 
 def sync_databricks_workspace_repo():
     print("Fetching Databricks Workspace Git Repos...")
@@ -29,8 +31,11 @@ def sync_databricks_workspace_repo():
     print("\nRe-triggering Real-Time Continuous Streaming Job (Job ID: 772367112113846)...")
     requests.post(f"{DATABRICKS_HOST}/api/2.1/jobs/runs/cancel", headers=HEADERS, json={"run_id": 136400498247464})
 
-    run_res = requests.post(f"{DATABRICKS_HOST}/api/2.1/jobs/run-now", headers=HEADERS, json={"job_id": 772367112113846})
+    run_res = requests.post(
+        f"{DATABRICKS_HOST}/api/2.1/jobs/run-now", headers=HEADERS, json={"job_id": 772367112113846}
+    )
     print(f"New Run Triggered: {run_res.status_code} - {run_res.text}")
+
 
 if __name__ == "__main__":
     sync_databricks_workspace_repo()

@@ -25,6 +25,7 @@ try:
 except ImportError:
     # Fallback if pgvector is not installed locally
     from sqlalchemy.types import UserDefinedType
+
     class Vector(UserDefinedType):
         def __init__(self, dim=None, *args, **kwargs):
             self.dim = dim
@@ -32,6 +33,7 @@ except ImportError:
 
         def get_col_spec(self, **kw):
             return f"VECTOR({self.dim})" if self.dim else "VECTOR"
+
 
 # PostgreSQL Connection String (Fallback to SQLite if no PGSQL)
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///apex.db")
@@ -160,6 +162,7 @@ class Movie(Base):
     Gold Layer Movie Features exported from Databricks ETL.
     Includes pgvector embeddings for Stage 1 Cascade Retrieval.
     """
+
     __tablename__ = "movies"
     id = Column(String(100), primary_key=True)
     title = Column(String(255))

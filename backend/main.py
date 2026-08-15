@@ -77,11 +77,11 @@ from backend.api.admin_tests import router as admin_router
 from backend.api.artifact_routes import create_artifact_router
 from backend.api.auth_routes import router as auth_router
 from backend.api.billing_routes import router as billing_router
-from backend.api.events_routes import router as events_router
 from backend.api.browse_routes import create_browse_router
 from backend.api.catalog_routes import create_catalog_router
 from backend.api.chat import generate_chat_response
 from backend.api.evaluation_routes import create_evaluation_router
+from backend.api.events_routes import router as events_router
 from backend.api.experiment_routes import create_experiment_router
 from backend.api.pipeline_routes import create_pipeline_router
 from backend.api.recommendation_routes import (
@@ -428,6 +428,7 @@ async def wire_cache_control_middleware(request: Request, call_next):
         elif path.startswith("/ui/") or path.startswith("/assets/"):
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     return response
+
 
 # Enterprise rate limiting (token bucket via Redis)
 try:

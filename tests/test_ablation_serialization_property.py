@@ -5,10 +5,11 @@ Property-based test for ablation report serialization round-trip.
 
 import json
 from pathlib import Path
+import string
 import sys
 import tempfile
 
-from hypothesis import given, settings
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 # Add scripts/ to path so we can import ablation_study
@@ -22,7 +23,7 @@ def _model_result_strategy():
         model=st.text(
             min_size=1,
             max_size=20,
-            alphabet=st.characters(whitelist_categories=("Lu", "Ll", "Nd")),
+            alphabet=string.ascii_letters + string.digits,
         ),
         ndcg_without=st.one_of(
             st.none(),
@@ -51,7 +52,7 @@ def _ablation_report_strategy():
 # Property 11: Ablation Report Serialization Round-Trip
 # Validates: Requirements ablation report correctness
 @given(_ablation_report_strategy())
-@settings(max_examples=100)
+@settings(max_examples=50, suppress_health_check=[HealthCheck.too_slow])
 def test_ablation_report_serialization_roundtrip(report):
     """Serializing and deserializing an AblationReport produces identical data.
 

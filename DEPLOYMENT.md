@@ -35,7 +35,7 @@ graph TD
 
 1. Sign up for the [Databricks Free Edition](https://databricks.com/try-databricks).
 2. Log into your Databricks Workspace URL (e.g. `https://<your-workspace-id>.cloud.databricks.com`).
-3. Go to **Workspace**, click on your user profile, and select **Create Git folder**. 
+3. Go to **Workspace**, click on your user profile, and select **Create Git folder**.
 4. Paste your GitHub repository URL.
 5. You do NOT need to create a cluster! When you open a notebook, just select **Serverless** from the connect dropdown in the top right.
 5. Create a new **Job** to sequence the notebooks located in `databricks_notebooks/`:
@@ -71,7 +71,7 @@ graph TD
 ---
 
 ## Conclusion
-With this setup, you have deployed a true **Modern Data Stack + Generative AI** pipeline for **$0/month**. 
+With this setup, you have deployed a true **Modern Data Stack + Generative AI** pipeline for **$0/month**.
 - Databricks handles the big data and heavy machine learning compute.
 - Neon handles the vector mathematics.
 - Hugging Face handles the real-time API.

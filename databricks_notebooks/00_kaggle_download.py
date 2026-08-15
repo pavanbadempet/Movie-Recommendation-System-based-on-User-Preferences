@@ -34,7 +34,7 @@ start_time = time.time()
 try:
     dbutils.widgets.text("DOPPLER_TOKEN", "", "Doppler Service Token")
     dbutils.widgets.text("ENVIRONMENT", "dev", "Deployment Environment (dev, stg, prd)")
-    
+
     env = dbutils.widgets.get("ENVIRONMENT")
 
     # -------------------------------------------------------------------------

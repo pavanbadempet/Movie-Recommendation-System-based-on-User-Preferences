@@ -242,8 +242,9 @@ class RetrievalPipeline:
         # Step 1: Primary Vector ANN Retrieval (PGVector or TurboVec)
         # ----------------------------------------------------------------
         import os
+
         db_url = os.getenv("DATABASE_URL", "")
-        
+
         if "postgres" in db_url:
             pg_candidates = self._retrieve_pgvector(query_embedding)
             all_candidates.extend(pg_candidates)
@@ -362,19 +363,20 @@ class RetrievalPipeline:
     def _retrieve_pgvector(self, query_embedding: np.ndarray) -> list[CandidateItem]:
         """Query the Neon Postgres pgvector index for candidates."""
         import os
+
         from sqlalchemy import create_engine, text
-        
+
         try:
             db_url = os.getenv("DATABASE_URL")
             if db_url.startswith("postgres://"):
                 db_url = db_url.replace("postgres://", "postgresql://", 1)
-                
+
             engine = create_engine(db_url)
             k = self.config.turbovec_k
-            
+
             # Format numpy array for pgvector literal: "[0.1, 0.2, ...]"
             vector_str = "[" + ",".join(map(str, query_embedding.flatten().tolist())) + "]"
-            
+
             candidates: list[CandidateItem] = []
             with engine.connect() as conn:
                 query = text("""
@@ -384,7 +386,7 @@ class RetrievalPipeline:
                     LIMIT :k
                 """)
                 result = conn.execute(query, {"vec": vector_str, "k": k}).fetchall()
-                
+
                 for row in result:
                     # Convert distance to similarity score
                     score = 1.0 - float(row[2])
@@ -392,11 +394,11 @@ class RetrievalPipeline:
                         CandidateItem(
                             movie_id=str(row[0]),
                             retrieval_score=score,
-                            retrieval_source="pgvector", # type: ignore
-                            metadata={"title": row[1]}
+                            retrieval_source="pgvector",  # type: ignore
+                            metadata={"title": row[1]},
                         )
                     )
-                    
+
             logger.debug("PGVector retrieval returned %d candidates.", len(candidates))
             return candidates
         except Exception as exc:

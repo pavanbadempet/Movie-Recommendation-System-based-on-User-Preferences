@@ -11,10 +11,13 @@
 try:
     import sentence_transformers
 except ImportError:
-    import subprocess, sys
+    import subprocess
+    import sys
+
     subprocess.run([sys.executable, "-m", "pip", "install", "sentence-transformers", "pandas", "pyarrow", "-q"])
 
 import os
+
 import numpy as np
 import pandas as pd
 from pyspark.sql.functions import col, pandas_udf
@@ -22,14 +25,13 @@ from pyspark.sql.types import ArrayType, FloatType
 
 EMBEDDING_MODEL_NAME = "all-mpnet-base-v2"
 
+
 @pandas_udf(ArrayType(FloatType()))
 def predict_embeddings(series: pd.Series) -> pd.Series:
     """
     Distributed AI Embedding Generation UDF via PySpark Pandas UDF (Apache Arrow Vectorized).
     Fault-tolerant against worker network blocks, PyTorch VRAM limits, and cache permissions.
     """
-    import os
-    import numpy as np
     import pandas as pd
 
     clean_texts = series.fillna("").astype(str).tolist()
@@ -39,14 +41,17 @@ def predict_embeddings(series: pd.Series) -> pd.Series:
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
     try:
-        import torch
         from sentence_transformers import SentenceTransformer
+        import torch
+
         device = "cuda" if torch.cuda.is_available() else "cpu"
         model = SentenceTransformer(EMBEDDING_MODEL_NAME, device=device)
         if device == "cuda":
             model.half()  # FP16 Tensor Cores 16-bit Mixed Precision
-        embeddings = model.encode(clean_texts, batch_size=128, show_progress_bar=False, convert_to_numpy=True).astype(np.float32)
-    except Exception as err:
+        embeddings = model.encode(clean_texts, batch_size=128, show_progress_bar=False, convert_to_numpy=True).astype(
+            np.float32
+        )
+    except Exception:
         # Fallback: Generate deterministic 768-D normalized semantic hash vectors
         embeddings = []
         for text in clean_texts:
@@ -62,6 +67,7 @@ def predict_embeddings(series: pd.Series) -> pd.Series:
     embeddings = (embeddings / norms).astype(np.float32)
 
     return pd.Series([row.tolist() for row in embeddings])
+
 
 # COMMAND ----------
 # MAGIC %md
@@ -83,8 +89,10 @@ if "tags" in df.columns:
     df_with_embeddings = df.withColumn("embedding", predict_embeddings(col("tags")))
 
     # Write embeddings back to a dedicated serving table
-    df_with_embeddings.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("apex.default.tmdb_gold_with_embeddings")
-    print(f"Embeddings written to 'apex.default.tmdb_gold_with_embeddings'!")
+    df_with_embeddings.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable(
+        "apex.default.tmdb_gold_with_embeddings"
+    )
+    print("Embeddings written to 'apex.default.tmdb_gold_with_embeddings'!")
 else:
     print("No 'tags' column found. Skipping embedding generation.")
 
@@ -92,6 +100,7 @@ else:
 try:
     import mlflow
     import torch
+
     mlflow.set_experiment("/Users/pavan9b@gmail.com/Movie-Recommendation-System-Experiment")
     with mlflow.start_run(run_name="GPU_Embedding_Generation"):
         mlflow.log_metric("total_records_embedded", df.count())

@@ -1,0 +1,17 @@
+APEX has been deployed.
+
+1. Get the application URL:
+{{- if .Values.ingress.enabled }}
+  https://{{ .Values.ingress.host }}
+{{- else }}
+  kubectl port-forward svc/{{ .Release.Name }}-apex 8000:8000
+  http://localhost:8000
+{{- end }}
+
+2. Verify the deployment:
+  curl http://<API_URL>/health
+
+3. View API docs:
+  http://<API_URL>/docs
+
+4. Active serving tier: {{ .Values.servingTier }}

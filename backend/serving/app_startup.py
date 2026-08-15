@@ -198,10 +198,13 @@ async def startup(
                 rec.recommend_by_id(movie_id=550, n=5)
                 # 4. Freeze static weights and DataFrame memory to eliminate Python cyclic GC scan overhead
                 import gc
+
                 gc.collect()
                 if hasattr(gc, "freeze"):
                     gc.freeze()
-                logger.info("Recommender model, query encoder, and vector cache pre-warmed & GC frozen for zero-latency serving.")
+                logger.info(
+                    "Recommender model, query encoder, and vector cache pre-warmed & GC frozen for zero-latency serving."
+                )
         except Exception as err:
             logger.warning("Recommender pre-warming note: %s", err)
 

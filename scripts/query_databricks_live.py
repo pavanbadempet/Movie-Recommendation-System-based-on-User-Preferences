@@ -1,11 +1,11 @@
 import os
 import sys
-import requests
-import json
 
-if sys.stdout.encoding != 'utf-8':
+import requests
+
+if sys.stdout.encoding != "utf-8":
     try:
-        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stdout.reconfigure(encoding="utf-8")
     except Exception:
         pass
 
@@ -17,12 +17,13 @@ HEADERS = {
     "Content-Type": "application/json",
 }
 
+
 def query_databricks_live():
     print("=" * 60)
     print("LIVE DATABRICKS API & LAKEHOUSE INSPECTOR")
     print("=" * 60)
     print(f"Connecting to Host: {DATABRICKS_HOST}")
-    
+
     # 1. Check Jobs
     r_jobs = requests.get(f"{DATABRICKS_HOST}/api/2.1/jobs/list", headers=HEADERS)
     print(f"\nDatabricks Jobs (HTTP {r_jobs.status_code}):")
@@ -30,7 +31,9 @@ def query_databricks_live():
         jobs = r_jobs.json().get("jobs", [])
         print(f"Total Configured Workflow Jobs: {len(jobs)}")
         for j in jobs:
-            print(f"  * Job ID: {j.get('job_id')} | Name: '{j.get('settings', {}).get('name')}' | Created: {j.get('created_time')}")
+            print(
+                f"  * Job ID: {j.get('job_id')} | Name: '{j.get('settings', {}).get('name')}' | Created: {j.get('created_time')}"
+            )
     else:
         print(f"  Error: {r_jobs.text}")
 
@@ -42,7 +45,9 @@ def query_databricks_live():
         print(f"Total Recent Runs: {len(runs)}")
         for r in runs:
             state = r.get("state", {})
-            print(f"  * Run ID: {r.get('run_id')} | Job: {r.get('job_id')} | State: {state.get('life_cycle_state')} | Result: {state.get('result_state', 'IN_PROGRESS')}")
+            print(
+                f"  * Run ID: {r.get('run_id')} | Job: {r.get('job_id')} | State: {state.get('life_cycle_state')} | Result: {state.get('result_state', 'IN_PROGRESS')}"
+            )
     else:
         print(f"  Error: {r_runs.text}")
 
@@ -70,6 +75,7 @@ def query_databricks_live():
     print("\n" + "=" * 60)
     print("DATABRICKS LIVE QUERY COMPLETED")
     print("=" * 60)
+
 
 if __name__ == "__main__":
     query_databricks_live()

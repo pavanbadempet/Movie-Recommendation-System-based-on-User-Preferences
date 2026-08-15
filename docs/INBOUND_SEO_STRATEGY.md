@@ -57,7 +57,7 @@ Data & AI Engineer | Databricks PySpark & Delta Lake | Vector DBs (pgvector/HNSW
 
 ### 2. "About" Section (Copy & Paste):
 ```
-I engineer distributed data systems, Lakehouse architectures, and real-time AI recommendation engines. 
+I engineer distributed data systems, Lakehouse architectures, and real-time AI recommendation engines.
 
 Core focus areas:
 • Distributed Data Engineering: Databricks Serverless, PySpark 4.2, Delta Lake Medallion (Bronze/Silver/Gold), SCD Type 2, Liquid Clustering, Auto Loader streaming.

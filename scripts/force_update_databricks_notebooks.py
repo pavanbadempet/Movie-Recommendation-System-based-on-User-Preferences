@@ -1,5 +1,6 @@
-import os
 import base64
+import os
+
 import requests
 
 DATABRICKS_HOST = "https://dbc-0d2f31ec-d157.cloud.databricks.com"
@@ -12,8 +13,9 @@ NOTEBOOKS = [
     "01b_streaming_events",
     "01c_gpu_embeddings",
     "02_export_to_neon",
-    "doppler_config"
+    "doppler_config",
 ]
+
 
 def force_update_notebooks():
     print("Force updating Databricks Workspace Notebooks via REST API...")
@@ -23,7 +25,7 @@ def force_update_notebooks():
         workspace_path = f"/Users/pavan9b@gmail.com/Movie-Recommendation-System/databricks_notebooks/{nb}"
 
         if os.path.exists(local_path):
-            with open(local_path, "r", encoding="utf-8") as f:
+            with open(local_path, encoding="utf-8") as f:
                 content = f.read()
 
             b64_content = base64.b64encode(content.encode("utf-8")).decode("utf-8")
@@ -34,7 +36,7 @@ def force_update_notebooks():
                 "format": "SOURCE",
                 "language": "PYTHON",
                 "content": b64_content,
-                "overwrite": True
+                "overwrite": True,
             }
 
             res = requests.post(import_url, headers=HEADERS, json=payload)
@@ -42,8 +44,11 @@ def force_update_notebooks():
 
     print("\nTriggering fresh run of Streaming Job (Job ID: 772367112113846)...")
     requests.post(f"{DATABRICKS_HOST}/api/2.1/jobs/runs/cancel", headers=HEADERS, json={"run_id": 136400498247464})
-    run_res = requests.post(f"{DATABRICKS_HOST}/api/2.1/jobs/run-now", headers=HEADERS, json={"job_id": 772367112113846})
+    run_res = requests.post(
+        f"{DATABRICKS_HOST}/api/2.1/jobs/run-now", headers=HEADERS, json={"job_id": 772367112113846}
+    )
     print(f"Fresh Run Status: {run_res.status_code} - {run_res.text}")
+
 
 if __name__ == "__main__":
     force_update_notebooks()

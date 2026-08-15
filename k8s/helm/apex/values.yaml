@@ -1,0 +1,38 @@
+# APEX Helm Chart default values
+replicaCount: 1
+
+image:
+  repository: ghcr.io/your-username/apex-backend
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  port: 8000
+
+ingress:
+  enabled: false
+  host: apex.example.com
+  tls: []
+
+resources:
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+  limits:
+    cpu: "2000m"
+    memory: "4Gi"
+
+# Serving tier configuration (tier1=GPU/TensorRT, tier2=ONNX CPU/C++, tier3=Pure PyTorch Lite)
+servingTier: "tier3"
+servingProfile: "lite"
+
+autoscaling:
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+secretRefs:
+  jwtSecretKey: ""
+  tmdbApiKey: ""
+  adminToken: ""

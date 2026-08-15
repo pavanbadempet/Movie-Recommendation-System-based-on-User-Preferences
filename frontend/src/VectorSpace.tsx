@@ -1,5 +1,5 @@
-import React, { useRef, useEffect, useState, useCallback, useMemo } from "react";
-import { Sparkles, RotateCcw, Compass, Zap, Search, Plus, Minus, Film, ExternalLink, Filter } from "lucide-react";
+import React, { useRef, useEffect, useState, useCallback } from "react";
+import { RotateCcw, Compass, Search, Plus, Minus, Film } from "lucide-react";
 import type { Movie, MovieTitle } from "./types";
 
 interface MovieNode {
@@ -259,15 +259,6 @@ export function VectorSpace({ onSelectMovie }: VectorSpaceProps) {
     setNodes(generated);
   }, []);
 
-  // Filtered nodes based on genre & search query
-  const filteredNodes = useMemo(() => {
-    return nodes.filter((n) => {
-      const matchesGenre = selectedGenre === "ALL" || n.genre === selectedGenre;
-      const matchesSearch = !searchQuery.trim() || n.title.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesGenre && matchesSearch;
-    });
-  }, [nodes, selectedGenre, searchQuery]);
-
   // High-DPI Canvas Sizing
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -289,17 +280,6 @@ export function VectorSpace({ onSelectMovie }: VectorSpaceProps) {
     window.addEventListener("resize", resizeCanvas);
     return () => window.removeEventListener("resize", resizeCanvas);
   }, [resizeCanvas]);
-
-  // Smoothly Focus/Orbit to a searched movie
-  const flyToMovie = (movie: MovieNode) => {
-    setSelectedNode(movie);
-    setAutoRotate(false);
-    // Calculate polar angle to point camera directly at movie
-    const angle = Math.atan2(movie.x, movie.z);
-    rotY.current = angle - Math.PI / 2;
-    rotX.current = 0.2;
-    zoom.current = 1.35;
-  };
 
   // Main 3D Rendering Engine
   useEffect(() => {
@@ -847,7 +827,8 @@ export function VectorSpace({ onSelectMovie }: VectorSpaceProps) {
             Genre Clusters
           </span>
           {GENRES.map((g) => (
-            <div
+            <button
+              type="button"
               key={g}
               onClick={() => setSelectedGenre(selectedGenre === g ? "ALL" : g)}
               style={{
@@ -857,11 +838,15 @@ export function VectorSpace({ onSelectMovie }: VectorSpaceProps) {
                 fontSize: "0.76rem",
                 color: selectedGenre === g || selectedGenre === "ALL" ? "#e2e8f0" : "#64748b",
                 cursor: "pointer",
+                background: "transparent",
+                border: "none",
+                padding: "2px 4px",
+                textAlign: "left",
               }}
             >
               <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: GENRE_COLORS[g], boxShadow: `0 0 8px ${GENRE_COLORS[g]}` }}></span>
               <span>{g}</span>
-            </div>
+            </button>
           ))}
         </div>
       </div>

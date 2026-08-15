@@ -35,19 +35,48 @@ GENRE_ALIASES = {
 
 VIBE_PROFILES: dict[str, dict[str, Any]] = {
     "cyberpunk": {
-        "keywords": {"cyberpunk", "synthwave", "neon", "dystopia", "dystopian", "cyborg", "futuristic neon", "blade runner"},
+        "keywords": {
+            "cyberpunk",
+            "synthwave",
+            "neon",
+            "dystopia",
+            "dystopian",
+            "cyborg",
+            "futuristic neon",
+            "blade runner",
+        },
         "associated_genres": {"science fiction", "action", "thriller"},
         "description": "neon cyberpunk & dystopian futurism",
         "boost": 0.08,
     },
     "mind_bending": {
-        "keywords": {"mind bending", "mind-bending", "psychological", "surreal", "plot twist", "reality bending", "dream", "illusion", "time loop"},
+        "keywords": {
+            "mind bending",
+            "mind-bending",
+            "psychological",
+            "surreal",
+            "plot twist",
+            "reality bending",
+            "dream",
+            "illusion",
+            "time loop",
+        },
         "associated_genres": {"science fiction", "thriller", "mystery"},
         "description": "mind-bending psychological mystery",
         "boost": 0.09,
     },
     "cozy_melancholic": {
-        "keywords": {"cozy", "rainy", "melancholic", "peaceful", "comforting", "rain", "autumn", "bittersweet", "slow paced"},
+        "keywords": {
+            "cozy",
+            "rainy",
+            "melancholic",
+            "peaceful",
+            "comforting",
+            "rain",
+            "autumn",
+            "bittersweet",
+            "slow paced",
+        },
         "associated_genres": {"drama", "romance", "animation"},
         "description": "warm, contemplative & cozy atmosphere",
         "boost": 0.07,
@@ -59,7 +88,15 @@ VIBE_PROFILES: dict[str, dict[str, Any]] = {
         "boost": 0.08,
     },
     "high_octane": {
-        "keywords": {"adrenaline", "high octane", "high-octane", "action packed", "relentless", "fast paced", "explosive"},
+        "keywords": {
+            "adrenaline",
+            "high octane",
+            "high-octane",
+            "action packed",
+            "relentless",
+            "fast paced",
+            "explosive",
+        },
         "associated_genres": {"action", "thriller", "adventure"},
         "description": "relentless high-octane energy",
         "boost": 0.07,
@@ -95,7 +132,9 @@ def parse_query_intent(query: str) -> dict[str, Any]:
         "vibes": sorted(set(matched_vibes)),
         "recent": any(token in text for token in ("new", "latest", "recent", "modern", "2024", "2025", "2026")),
         "classic": any(token in text for token in ("classic", "old", "retro", "vintage", "80s", "90s", "70s")),
-        "high_quality": any(token in text for token in ("best", "top rated", "high rated", "critically acclaimed", "masterpiece")),
+        "high_quality": any(
+            token in text for token in ("best", "top rated", "high rated", "critically acclaimed", "masterpiece")
+        ),
         "family_safe": any(token in text for token in ("family", "kids", "children", "child friendly")),
     }
 

@@ -1,15 +1,17 @@
 import os
-import time
-import requests
 import subprocess
+import time
+
+import requests
 
 NEON_API_KEY_2 = os.environ.get("NEON_ACCOUNT_2_API_KEY", "")
 ORG_ID_2 = "org-blue-cell-04479202"
 HEADERS = {
     "Authorization": f"Bearer {NEON_API_KEY_2}",
     "Accept": "application/json",
-    "Content-Type": "application/json"
+    "Content-Type": "application/json",
 }
+
 
 def setup_account2_10_microservices():
     print(f"Checking Account 2 projects in Singapore (Org: {ORG_ID_2})...")
@@ -21,7 +23,9 @@ def setup_account2_10_microservices():
         s_name = f"movie-shard-{shard_id}"
         if s_name in existing_projects:
             print(f"Deleting temp vector shard '{s_name}' from Account 2...")
-            requests.delete(f"https://console.neon.tech/api/v2/projects/{existing_projects[s_name]['id']}", headers=HEADERS)
+            requests.delete(
+                f"https://console.neon.tech/api/v2/projects/{existing_projects[s_name]['id']}", headers=HEADERS
+            )
             time.sleep(1)
 
     # Re-fetch projects
@@ -38,7 +42,7 @@ def setup_account2_10_microservices():
         "search-history-db": "DATABASE_URL_SEARCH_HISTORY",
         "watchlists-db": "DATABASE_URL_WATCHLISTS",
         "billing-subscriptions-db": "DATABASE_URL_BILLING",
-        "feedback-reviews-db": "DATABASE_URL_REVIEWS"
+        "feedback-reviews-db": "DATABASE_URL_REVIEWS",
     }
 
     connection_strings = {}
@@ -50,12 +54,7 @@ def setup_account2_10_microservices():
         else:
             print(f"Creating Service Project '{name}' in Singapore (aws-ap-southeast-1)...")
             create_payload = {
-                "project": {
-                    "name": name,
-                    "pg_version": 16,
-                    "org_id": ORG_ID_2,
-                    "region_id": "aws-ap-southeast-1"
-                }
+                "project": {"name": name, "pg_version": 16, "org_id": ORG_ID_2, "region_id": "aws-ap-southeast-1"}
             }
             c_res = requests.post("https://console.neon.tech/api/v2/projects", headers=HEADERS, json=create_payload)
             if c_res.status_code not in [200, 201]:
@@ -65,7 +64,10 @@ def setup_account2_10_microservices():
             print(f"Created Service Project '{name}' in Singapore (ID: {project_id})")
 
         # Fetch connection URI
-        c_res = requests.get(f"https://console.neon.tech/api/v2/projects/{project_id}/connection_uri?database_name=neondb&role_name=neondb_owner", headers=HEADERS)
+        c_res = requests.get(
+            f"https://console.neon.tech/api/v2/projects/{project_id}/connection_uri?database_name=neondb&role_name=neondb_owner",
+            headers=HEADERS,
+        )
         if c_res.status_code == 200:
             conn_uri = c_res.json().get("uri")
             if conn_uri and conn_uri.startswith("postgres://"):
@@ -81,13 +83,22 @@ def setup_account2_10_microservices():
         cmd.append(f"{k}={v}")
 
     # Remove temporary shard keys 10..13 from Doppler if set
-    cmd_unset = ["doppler", "secrets", "unset", "DATABASE_URL_SHARD_10", "DATABASE_URL_SHARD_11", "DATABASE_URL_SHARD_12", "DATABASE_URL_SHARD_13"]
+    cmd_unset = [
+        "doppler",
+        "secrets",
+        "unset",
+        "DATABASE_URL_SHARD_10",
+        "DATABASE_URL_SHARD_11",
+        "DATABASE_URL_SHARD_12",
+        "DATABASE_URL_SHARD_13",
+    ]
     subprocess.run(cmd_unset, capture_output=True, text=True)
 
     result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     print(f"Doppler Output: {result.stdout.encode('ascii', 'ignore').decode('ascii')}")
     if result.returncode == 0:
         print("ALL 10 ACCOUNT 2 DEDICATED MICROSERVICE PROJECTS ARE 100% CONFIGURED IN DOPPLER!")
+
 
 if __name__ == "__main__":
     setup_account2_10_microservices()

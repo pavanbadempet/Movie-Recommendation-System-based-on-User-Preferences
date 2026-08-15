@@ -164,7 +164,9 @@ class TestSASRecOnlineLearner:
         learner.start()
         for _ in range(8):
             learner.enqueue(_make_click_event())
-        time.sleep(0.3)  # give the background thread time to drain
+        deadline = time.time() + 3.0
+        while time.time() < deadline and learner._events_processed == 0:
+            time.sleep(0.05)
         assert learner._events_processed > 0
         learner.stop()
 
@@ -262,7 +264,9 @@ class TestKANOnlineLearner:
         learner.start()
         for _ in range(8):
             learner.enqueue(_make_click_event())
-        time.sleep(0.3)
+        deadline = time.time() + 3.0
+        while time.time() < deadline and learner._events_processed == 0:
+            time.sleep(0.05)
         assert learner._events_processed > 0
         learner.stop()
 
@@ -350,9 +354,14 @@ class TestOnlineLearningCoordinator:
         coord.start()
         for _ in range(10):
             coord.enqueue(_make_click_event())
-        time.sleep(0.4)
-        status = coord.status()
-        total = sum(v["events_processed"] for v in status["learners"].values())
+        deadline = time.time() + 3.0
+        total = 0
+        while time.time() < deadline:
+            status = coord.status()
+            total = sum(v["events_processed"] for v in status["learners"].values())
+            if total > 0:
+                break
+            time.sleep(0.05)
         assert total > 0, "At least some events should have been processed"
         coord.stop()
 

@@ -104,7 +104,7 @@ interface ClientCacheEntry<T> {
   baseUrl: string;
   timestamp: number;
 }
-const _clientCache = new Map<string, ClientCacheEntry<any>>();
+const _clientCache = new Map<string, ClientCacheEntry<unknown>>();
 const CACHE_TTL_MS = 120_000; // 2 minutes fresh
 const CACHE_MAX_ITEMS = 256;
 

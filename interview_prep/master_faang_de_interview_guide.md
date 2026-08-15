@@ -151,7 +151,7 @@
 ### Q3: *"Explain the difference between Liquid Clustering and Z-Ordering in Delta Lake. Why choose Liquid Clustering?"*
 > **Answer:**
 > *"Z-Ordering maps multi-dimensional data into a one-dimensional space along a Space-Filling Z-Curve to achieve data skipping. However, Z-Ordering is a static clustering technique that requires a full table rewrite every time `OPTIMIZE ... ZORDER BY` is called. For tables receiving frequent streaming appends or CDC updates, Z-Ordering causes severe write-amplification.*
-> 
+>
 > *Liquid Clustering (`clusterBy`) replaces fixed partition hierarchies and Z-Ordering with dynamic, incremental clustering. As new micro-batches arrive, Spark clusters only the newly written data without rewriting historical partitions. It allows cluster keys to be redefined without rebuilding the table and speeds up query pruning by up to 10x for concurrent workloads."*
 
 ---
@@ -168,7 +168,7 @@
 ### Q5: *"Why did you choose HNSW over IVF for your pgvector index?"*
 > **Answer:**
 > *"IVF (Inverted File Index) clusters vectors into Voronoi cells using K-Means and searches only the nearest centroids. While IVF has a small memory footprint and fast build time, its recall drops significantly if query vectors lie near cluster boundaries, and it requires periodic retraining as the dataset distribution shifts.*
-> 
+>
 > *HNSW (Hierarchical Navigable Small World) constructs a multi-layer geometric graph structure. Top layers allow fast logarithmic skipping across vector space ($O(\log N)$), while bottom layers navigate fine-grained local neighborhoods. HNSW offers superior recall (>98%), sub-5ms query latency, and does not require periodic centroid retraining, making it the ideal choice for high-precision real-time recommendation retrieval."*
 
 ---
@@ -176,7 +176,7 @@
 ### Q6: *"How did you prevent out-of-memory (OOM) errors when serializing 768-D dense vectors for database export?"*
 > **Answer:**
 > *"In PySpark, running standard Python UDFs like `df.apply(lambda row: json.dumps(row.embedding))` causes severe JVM-to-Python pickling overhead, bottlenecks on the single driver node, and triggers driver OOM crashes.*
-> 
+>
 > *We solved this with two techniques:*
 > 1. **PySpark Native `to_json()`:** We serialized the `ArrayType(FloatType)` column into JSON strings using Spark's native C++ Catalyst engine (`to_json(col("embedding"))`), parallelizing serialization across all worker executors with zero Python inter-process overhead.
 > 2. **Batch JDBC Streaming:** We wrote to PostgreSQL in chunked micro-batches (`batchsize=5000`) rather than a single massive transaction, keeping memory usage constant regardless of dataset size."*
