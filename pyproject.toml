@@ -12,6 +12,7 @@ license = { text = "MIT" }
 [tool.ruff]
 target-version = "py312"
 line-length = 120
+extend-exclude = ["databricks_notebooks", "notebooks", "frontend", "k8s"]
 
 [tool.ruff.lint]
 # Rule sets enabled:
