@@ -42,10 +42,10 @@ services:
     environment:
       - VITE_API_URL=http://localhost:8000
 
-  spark-worker:
-    environment:
-      - SPARK_WORKER_MEMORY=2G
-      - SPARK_WORKER_CORES=1
+  # spark-worker:
+  #   environment:
+  #     - SPARK_WORKER_MEMORY=2G
+  #     - SPARK_WORKER_CORES=1
 
   # Disable heavy services in dev by default
   # Uncomment to enable locally:

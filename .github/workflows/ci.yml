@@ -402,6 +402,7 @@ jobs:
 
     - name: Validate Docker Compose configuration
       run: |
+        touch .env
         docker compose config
         echo "Docker orchestration validated."
 
