@@ -79,9 +79,9 @@ jobs:
           python scripts/evaluate_live_serving.py \
             --base-url "$NOVA_SERVING_URL" \
             --output reports/live_serving_quality.json \
-            --timeout 120 \
-            --retries 8 \
-            --retry-delay-seconds 20 \
+            --timeout 30 \
+            --retries 3 \
+            --retry-delay-seconds 10 \
             "${expected_args[@]}" \
             --k 10 \
             --platform-readiness-strict \
@@ -107,8 +107,8 @@ jobs:
             --base-url "$NOVA_RENDER_GATEWAY_URL" \
             --output reports/render_gateway_quality.json \
             --timeout 30 \
-            --retries 6 \
-            --retry-delay-seconds 20 \
+            --retries 3 \
+            --retry-delay-seconds 10 \
             --k 10 \
             --skip-platform-readiness \
             --skip-search-benchmark \
