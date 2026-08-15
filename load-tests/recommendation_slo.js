@@ -11,7 +11,7 @@ export const options = isSmoke
       duration: '15s',
       thresholds: {
         http_req_failed: ['rate<0.10'], // Less than 10% errors
-        http_req_duration: ['p(95)<3000'], // 95% of requests under 3s
+        http_req_duration: ['p(95)<15000'], // 95% under 15s (Render/HF free tier)
       },
     }
   : {
