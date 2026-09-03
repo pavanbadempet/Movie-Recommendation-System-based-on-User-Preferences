@@ -5,7 +5,7 @@
 # Core data processing & Apache Spark 4.x
 pandas==2.2.3
 numpy==2.4.4
-pyarrow>=18.0.0  # Parquet support — compatible with NumPy 2.x
+pyarrow==23.0.1  # Parquet support — compatible with NumPy 2.x
 polars==1.41.2   # Fast Rust-backed DataFrame library for optimized ingestion
 pyspark>=4.0.0   # Apache Spark 4.x distributed compute engine
 delta-spark>=4.0.0 # Delta Lake 4.x ACID storage engine
@@ -16,10 +16,10 @@ sentence-transformers==5.4.1  # Neural embeddings (SBERT)
 faiss-cpu==1.13.2             # Similarity search (swap for faiss-gpu on GPU hosts)
 yt-dlp>=2025.2.19             # On-demand video download
 turbovec==0.7.0                  # Fast quantized vector search index
-onnx==1.21.0                  # Model export
+onnx==1.22.0                  # Model export
 onnxruntime==1.26.0           # Lightning-fast CPU inference
-transformers==5.7.0           # CLIP Vision Encoding
-Pillow==12.2.0                # Image processing
+transformers==5.10.0           # CLIP Vision Encoding
+Pillow==12.3.0                # Image processing
 
 # Data validation
 pandera==0.31.1
@@ -48,7 +48,7 @@ httpx==0.28.1                          # Async HTTP client
 psycopg[binary]==3.3.4                 # Durable Postgres driver
 sqlalchemy==2.0.49                     # ORM and Connection Pooling
 python-jose[cryptography]==3.5.0       # JWT auth
-cryptography==48.0.1                   # Security fix for GHSA-537c-gmf6-5ccf
+cryptography==50.0.0                   # Security fix for GHSA-537c-gmf6-5ccf
 passlib[bcrypt]==1.7.4                 # Password hashing
 bcrypt==4.0.1                          # Pin to avoid passlib compatibility issue
 prometheus-client==0.25.0             # Observability metrics
@@ -60,8 +60,8 @@ rustworkx==0.16.0  # Fast Rust-backed graph library for knowledge graph traversa
 
 
 # Development & testing
-pytest==8.4.2
+pytest==9.0.3
 hypothesis==6.152.4  # Property-based testing
 
 # ML experiment tracking
-mlflow==2.18.0  # Model versioning and experiment tracking
+mlflow==3.15.0  # Model versioning and experiment tracking
