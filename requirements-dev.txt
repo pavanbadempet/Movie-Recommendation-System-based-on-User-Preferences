@@ -1,1 +1,32 @@
+# Development and CI tooling — NOT installed in production images.
+# Install with: pip install -r requirements-dev.txt
+#
+# Versions are pinned to match CI exactly, eliminating "works on CI, breaks locally" surprises.
+# Update: pip install --upgrade <pkg> && pip freeze | grep <pkg> -> update here + ci.yml
+
+# Linting & formatting
+ruff==0.15.12
+
+# Static type checking
+mypy==1.10.1
+# Type stubs that mypy needs at check time
+types-requests==2.32.0.20241016
+types-PyYAML==6.0.12.20240917
+
+# Testing
 pytest==9.0.3
+pytest-cov==6.2.1
+pytest-asyncio==1.0.0
+pytest-xdist==3.6.1
+pytest-benchmark==5.2.3
+hypothesis==6.152.4
+httpx==0.28.1           # Required by FastAPI TestClient in async mode
+
+# Mutation testing
+mutmut==2.5.1
+
+# Pre-commit
+pre-commit==4.2.0
+
+# Documentation / spec generation
+pyyaml==6.0.2
