@@ -60,7 +60,7 @@ rustworkx==0.16.0  # Fast Rust-backed graph library for knowledge graph traversa
 
 
 # Development & testing
-pytest==9.0.3
+pytest==8.4.2
 hypothesis==6.152.4  # Property-based testing
 
 # ML experiment tracking
